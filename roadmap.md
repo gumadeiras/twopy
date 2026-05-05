@@ -21,6 +21,8 @@ decided.
   `config.yml`.
 - Schema-agnostic SQLite database module for discovering DB files and
   filtering experiment rows.
+- Database code split into focused modules for catalog discovery, generic table
+  search, modeled recording search, and read-only connections.
 - Modeled database query for `stimulusPresentation` joined with `fly` metadata.
 - Script-friendly `find_recordings` API with filters for date parts, genotype,
   stimulus, sensor, cell type, hemisphere, and person.
