@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 from typing import cast
 
-from twopy.database_types import DatabaseAccess
+from twopy.database.types import DatabaseAccess
 
 __all__ = [
     "DEFAULT_DATABASE_CACHE_DIR",

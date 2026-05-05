@@ -9,7 +9,7 @@ table and column identifiers cannot be passed as SQL parameters.
 
 from collections.abc import Sequence
 
-from twopy.database_types import DatabaseTable
+from twopy.database.types import DatabaseTable
 
 __all__ = ["quote_identifier", "validate_filter_columns"]
 

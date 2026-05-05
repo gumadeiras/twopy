@@ -1,27 +1,26 @@
 """Query Clark lab experiment SQLite databases.
 
 Inputs: a DB folder. Outputs: typed table metadata and experiment records.
-This layer can discover
-tables, inspect columns, and filter rows without hard-coding experiment fields
-that we have not validated yet.
+This layer can discover tables, inspect columns, and filter rows
+without hard-coding experiment fields that we have not validated yet.
 """
 
 import sqlite3
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from twopy.database_cache import (
+from twopy.database.cache import (
     DEFAULT_DATABASE_CACHE_DIR,
 )
-from twopy.database_cache import (
+from twopy.database.cache import (
     ensure_local_database_copy as _ensure_local_database_copy,
 )
-from twopy.database_cache import (
+from twopy.database.cache import (
     validate_database_access as _validate_database_access,
 )
-from twopy.database_sql import quote_identifier as _quote_identifier
-from twopy.database_sql import validate_filter_columns as _validate_filter_columns
-from twopy.database_types import (
+from twopy.database.sql import quote_identifier as _quote_identifier
+from twopy.database.sql import validate_filter_columns as _validate_filter_columns
+from twopy.database.types import (
     DEFAULT_DATABASE_FILES,
     DatabaseAccess,
     DatabaseCatalog,
