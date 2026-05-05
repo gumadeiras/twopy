@@ -418,7 +418,9 @@ The converted `recording_data.h5` file contains:
 - `movie/mean_image`: uncompressed mean image generated during conversion. This
   is one image, so compression is unnecessary complexity.
 - `metadata`: selected acquisition fields as HDF5 attributes.
-- `run`: stimulus-run metadata from `runDetails.mat`, including `rigName`.
+- `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case
+  twopy field names such as `rig_name`, `run_number`, `fly_id`, and
+  `rig_temperature`.
 - `stimulus/timeline`: numeric stimulus timeline.
 - `stimulus/timeline_column_names`: one label per timeline column.
 - `stimulus/parameters_json`: stimulus epoch parameters.

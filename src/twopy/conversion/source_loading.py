@@ -49,11 +49,11 @@ ACQUISITION_METADATA_FIELDS = (
     "motor.absZPosition",
 )
 RUN_METADATA_FIELDS = (
-    "flyId",
-    "genotype",
-    "rigName",
-    "rigTemperature",
-    "runNumber",
+    ("flyId", "fly_id"),
+    ("genotype", "genotype"),
+    ("rigName", "rig_name"),
+    ("rigTemperature", "rig_temperature"),
+    ("runNumber", "run_number"),
 )
 
 
@@ -155,12 +155,16 @@ def _load_run_metadata(path: Path) -> RunMetadata:
     Returns:
         Run metadata with selected fields flattened.
 
-    ``rigName`` lives here in the real data and identifies which stimulus rig
-    generated the run.
+    The source file uses MATLAB-style names such as ``rigName``. twopy converts
+    them to snake_case before writing HDF5 so converted files have one naming
+    style.
     """
     return RunMetadata(
         path=path,
-        fields={key: load_scipy_variable(path, key) for key in RUN_METADATA_FIELDS},
+        fields={
+            target_key: load_scipy_variable(path, source_key)
+            for source_key, target_key in RUN_METADATA_FIELDS
+        },
     )
 
 

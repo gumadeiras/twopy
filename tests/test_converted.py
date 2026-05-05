@@ -34,7 +34,7 @@ class ConvertedRecordingTest(unittest.TestCase):
             self.assertEqual(recording.movie.path, root / "aligned_movie.h5")
             self.assertEqual(recording.movie.shape, (3, 2, 2))
             self.assertEqual(recording.acquisition_metadata["acq.frameRate"], 10.0)
-            self.assertEqual(recording.run_metadata["rigName"], "OdorRig")
+            self.assertEqual(recording.run_metadata["rig_name"], "OdorRig")
             self.assertEqual(recording.stimulus_parameters[1]["epochName"], "LR20")
             self.assertEqual(
                 recording.stimulus_timeline_column_names,
@@ -151,8 +151,8 @@ class ConvertedRecordingTest(unittest.TestCase):
             metadata_group.attrs["acq.zoomFactor"] = 2.0
 
             run_group = h5_file.create_group("run")
-            run_group.attrs["rigName"] = "OdorRig"
-            run_group.attrs["runNumber"] = 1
+            run_group.attrs["rig_name"] = "OdorRig"
+            run_group.attrs["run_number"] = 1
 
             stimulus_group = h5_file.create_group("stimulus")
             stimulus_group.attrs["clock_source"] = "stimulus presentation computer"

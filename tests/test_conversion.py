@@ -49,8 +49,8 @@ class ConversionTest(unittest.TestCase):
             )
             self.assertEqual(loaded.acquisition.fields["acq.frameRate"], 10.0)
             self.assertEqual(loaded.acquisition.fields["acq.zoomFactor"], 2.0)
-            self.assertEqual(loaded.run.fields["rigName"], "OdorRig")
-            self.assertEqual(loaded.run.fields["runNumber"], 1)
+            self.assertEqual(loaded.run.fields["rig_name"], "OdorRig")
+            self.assertEqual(loaded.run.fields["run_number"], 1)
             self.assertEqual(loaded.frame_counts.aligned_movie_frames, 3)
             self.assertEqual(loaded.frame_counts.imaging_res_pd_samples, 3)
             self.assertEqual(loaded.frame_counts.acquisition_number_of_frames, 3)
@@ -118,9 +118,9 @@ class ConversionTest(unittest.TestCase):
                 self.assertEqual(h5_file["movie/mean_image"].attrs["start_frame"], 0)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["stop_frame"], 3)
                 self.assertEqual(h5_file["metadata"].attrs["acq.frameRate"], 10.0)
-                self.assertEqual(h5_file["run"].attrs["rigName"], "OdorRig")
+                self.assertEqual(h5_file["run"].attrs["rig_name"], "OdorRig")
                 self.assertEqual(h5_file["run"].attrs["genotype"], "test_genotype")
-                self.assertEqual(h5_file["run"].attrs["runNumber"], 1)
+                self.assertEqual(h5_file["run"].attrs["run_number"], 1)
                 self.assertEqual(
                     h5_file["stimulus"].attrs["clock_source"],
                     "stimulus presentation computer",

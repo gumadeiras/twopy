@@ -67,8 +67,8 @@ decided.
   photodiode events, with mismatched event counts treated as an error.
 - Frame-window response objects for splitting ROI traces by explicit imaging
   frame boundaries.
-- Conversion now stores stimulus-run metadata from `runDetails.mat`, including
-  `rigName`.
+- Conversion now stores stimulus-run metadata from `runDetails.mat` with
+  snake_case twopy field names such as `rig_name`.
 - Conversion stores one label per stimulus timeline column. Only the first three
   columns are fully named by meaning; later labels preserve observed
   closed-loop/stimulus/flash groups.
