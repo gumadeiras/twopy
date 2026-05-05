@@ -69,3 +69,36 @@ conversion writes to the location configured by `analysis_output`; pass
 `config.yml` also controls analysis output routing. `analysis_output: source`
 writes into `recording/twopy`; a path mirrors the recording directory structure
 under that output root.
+
+## Analyze Converted Data
+
+```python
+from pathlib import Path
+
+import numpy as np
+
+from twopy import (
+    detect_recording_photodiode_events,
+    extract_roi_traces,
+    frame_windows_from_photodiode_alignment,
+    load_converted_recording,
+    make_roi_set,
+    split_traces_by_frame_windows,
+)
+
+recording = load_converted_recording(Path("/path/to/recording_data.h5"))
+mask_array = np.zeros((1, *recording.movie.shape[1:]), dtype=bool)
+mask_array[0, :10, :10] = True
+roi_set = make_roi_set(mask_array)
+traces = extract_roi_traces(recording, roi_set)
+alignment = detect_recording_photodiode_events(recording)
+windows = frame_windows_from_photodiode_alignment(
+    alignment,
+    frame_count=recording.movie.shape[0],
+)
+responses = split_traces_by_frame_windows(traces, windows)
+```
+
+Analysis starts from converted HDF5 files. ROI masks are GUI-independent, trace
+extraction streams movie chunks, and response windows come from photodiode
+events instead of nominal frame-rate assumptions.

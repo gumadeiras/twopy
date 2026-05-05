@@ -56,11 +56,26 @@ decided.
   selected TIFF tags and ScanImage recording fields.
 - Documented `imageDescription.mat` as the primary source for recording
   acquisition metadata.
+- Typed loader for converted `recording_data.h5` and `aligned_movie.h5` that
+  keeps movie frames lazy and validates the frame-resolution photodiode contract.
+- GUI-independent ROI mask storage in HDF5 with labels.
+- ROI fluorescence trace extraction from converted aligned movies using chunked
+  reads.
+- Photodiode event segmentation for converted `high_res_pd` and
+  `imaging_res_pd` signals.
+- Order-based pairing of high-resolution photodiode events to imaging-frame
+  photodiode events, with mismatched event counts treated as an error.
+- Frame-window response objects for splitting ROI traces by explicit imaging
+  frame boundaries.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
 - Real example recording converted successfully to `twopy/recording_data.h5`
   and `twopy/aligned_movie.h5`; aligned movie shape `(4168, 256, 127)`, mean
   image shape `(256, 127)`, stimulus timeline shape `(18021, 35)`.
+- Real example converted recording loaded successfully with current schema; ROI
+  trace smoke test produced shape `(5, 1)`, photodiode detection found 101
+  high-resolution and 101 imaging-resolution events, and event pairing produced
+  100 frame windows.
 - Real database query matched the example recording in both `experimentLog.db`
   and `experimentInitLog.db` with `stimulusPresentationId=20005` and
   `fly=10923`.
@@ -68,29 +83,25 @@ decided.
   genotype `gh146`, stimulus `combo_stim_singles=3s_blank=3s_intensity=20`,
   sensor `g6f`, cell type `ALPN`, hemisphere `right`, and person `Harsh`.
 - Tests for config loading, MATLAB inspection/loading, recording inspection,
-  database filtering/copy-cache behavior, valid sessions, optional
-  `savedAnalysis/`, missing files, and ambiguous raw TIFF movies.
+  database filtering/copy-cache behavior, conversion, converted-recording
+  loading, ROI storage/extraction, photodiode synchronization, response windows,
+  valid sessions, optional `savedAnalysis/`, missing files, and ambiguous raw
+  TIFF movies.
 
 ## Next
 
-- Load converted `recording_data.h5` and `aligned_movie.h5` back into typed
-  Python objects for analysis.
-- Define GUI-independent ROI storage schema for masks, shapes, labels, and
-  saved ROI sets.
-- Extract fluorescence traces from converted movies using saved ROI masks while
-  streaming movie chunks.
-- Decode photodiode events from `highResPd.mat`-derived converted data.
-- Align stimulus events to imaging frames using photodiode timing and
+- Classify photodiode flash patterns into stimulus start, trial transition, and
+  stimulus end events.
+- Align classified stimulus events to imaging frames using photodiode timing and
   `imagingResPd`.
-- Produce trial windows in imaging-frame coordinates for response analysis.
+- Connect stimulus metadata to frame windows so responses can be grouped by
+  epoch, trial, and other recording metadata.
 - Load a recording in napari.
 - Interactively draw or select ROIs in the movie.
 - Save napari-drawn ROIs through the core ROI module.
 - Inspect ROI responses.
 - Divide responses by trials.
 - Divide responses by other metadata associated with the recording.
-- Treat recording metadata as always available.
-- Convert MATLAB-derived data into Python objects that can be loaded later.
 
 ## Decisions
 

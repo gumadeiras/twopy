@@ -50,6 +50,18 @@ The correct workflow is:
 3. Map decoded stimulus events onto imaging frames.
 4. Extract ROI responses by trial or epoch from that aligned frame map.
 
+twopy now represents this in four GUI-independent layers:
+
+- `load_converted_recording(...)` loads `recording_data.h5` and keeps
+  `aligned_movie.h5` lazy.
+- ROI masks are saved as twopy-owned HDF5 files and are independent from
+  napari.
+- `detect_recording_photodiode_events(...)` segments photodiode flashes in
+  `high_res_pd` and `imaging_res_pd`, then pairs matching events by order.
+- Frame windows are made from paired photodiode event frames and used to split
+  ROI traces. Stimulus-specific flash-pattern classification is still separate
+  future work.
+
 ## Session Folder
 
 One recording is one timestamped microscope output folder.
@@ -410,6 +422,16 @@ The converted `recording_data.h5` file contains:
 The converted `aligned_movie.h5` file contains:
 
 - `movie/aligned`: copied aligned movie.
+
+The twopy ROI HDF5 file contains:
+
+- `masks`: boolean ROI masks with shape `(rois, x, y)` in aligned movie
+  coordinates.
+- `labels`: one human-readable label per ROI.
+
+ROI trace extraction reads `movie/aligned` in chunks and writes frame-by-ROI
+arrays in memory for the requested frame range. Frame-window response splitting
+uses explicit imaging-frame boundaries, usually from paired photodiode events.
 
 By default, the mean image uses the entire aligned movie. Callers can pass
 `mean_start_frame` and `mean_stop_frame` to compute it over a frame range.
