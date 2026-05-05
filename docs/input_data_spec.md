@@ -116,7 +116,8 @@ metadata. The raw TIFF metadata path is mainly for audit or raw-frame access.
 twopy will convert MATLAB-derived source data into twopy-owned HDF5 files with
 gzip compression before any analysis or processing.
 
-The conversion writes the aligned movie, acquisition metadata, stimulus
-parameters, stimulus timeline, photodiode signals, and a mean image. The mean
-image defaults to the full movie and can be computed over a requested frame
-range.
+The conversion writes the aligned movie to a separate `aligned_movie.h5` file
+because it usually dominates file size. It writes acquisition metadata, stimulus
+parameters, stimulus timeline, photodiode signals, and a mean image to
+`twopy_recording.h5`. The mean image defaults to the full movie and can be
+computed over a requested frame range.

@@ -56,6 +56,8 @@ twopy is a two-photon imaging analysis tool.
 - Always convert source recording data into twopy-owned files first; all
   analysis and processing must operate on those converted files.
 - Persist converted data as HDF5 files with gzip compression.
+- Store the aligned movie in a separate converted HDF5 file because it usually
+  dominates file size.
 - During initial conversion, generate a mean image of the aligned movie. Default
   to the full movie and allow callers to choose a frame range.
 - Keep HDF5 groups and datasets named in plain language so files remain inspectable outside twopy.
@@ -70,11 +72,14 @@ twopy is a two-photon imaging analysis tool.
 ## Configuration
 
 - Keep machine-local variables in `config.yml`.
+- Never track `config.yml`; track `config.example.yml` as the documented
+  template for creating it.
 - Load config through typed Python helpers instead of reading YAML ad hoc.
 - Initial config keys: `database_path`, `data_path`, `database_access`, and
   `analysis_output`.
 - Default `database_access` to `copy` unless a task explicitly needs direct
-  mounted DB reads.
+  mounted DB reads. This mode exists because database queries over the network
+  can be slow, while transferring the DB file locally is usually fast.
 
 ## Database
 

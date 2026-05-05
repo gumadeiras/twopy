@@ -7,7 +7,12 @@ Two-photon imaging analysis tool with a napari interface.
 ```sh
 micromamba env create -f environment.yml
 micromamba run -n twopy python -m pip install -e ".[dev,gui]"
+cp config.example.yml config.yml
 ```
+
+Edit `config.yml` after copying it. The example file describes every field in
+plain language. `config.yml` stays local to your machine and is not tracked by
+git.
 
 ## Check
 
@@ -37,7 +42,8 @@ recordings = find_recordings(
 ```
 
 `config.yml` controls whether DB queries use mounted files directly or cached
-local copies. The default is `database_access: copy`.
+local copies. The default is `database_access: copy` because database searches
+over the network can be slow, while copying the DB file locally is usually fast.
 
 ## Convert Recording
 
@@ -51,12 +57,13 @@ output_dir = recording / "twopy"
 
 converted = convert_recording_to_twopy(recording, output_dir)
 print(converted.path)
+print(converted.movie_path)
 ```
 
-Conversion writes `twopy_recording.h5`, including the aligned movie, acquisition
-metadata, stimulus tables, photodiode signals, and a mean image. By default the
-mean image uses the full movie; pass `mean_start_frame` and `mean_stop_frame` to
-use a frame range.
+Conversion writes `twopy_recording.h5` for metadata, stimulus tables,
+photodiode signals, and the mean image. The large aligned movie is written
+separately to `aligned_movie.h5`. By default the mean image uses the full movie;
+pass `mean_start_frame` and `mean_stop_frame` to use a frame range.
 
 `config.yml` also controls analysis output routing. `analysis_output: source`
 writes into `recording/twopy`; a path mirrors the recording directory structure

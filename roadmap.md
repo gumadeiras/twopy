@@ -15,6 +15,8 @@ decided.
 - Mini input data spec in `docs/input_data_spec.md`.
 - Recording file reference schema in `docs/recording_file_schema.md`.
 - YAML config file and typed loader for `database_path` and `data_path`.
+- Tracked `config.example.yml` with instructions for creating private local
+  `config.yml`.
 - Schema-agnostic SQLite database module for discovering DB files and
   filtering experiment rows.
 - Modeled database query for `stimulusPresentation` joined with `fly` metadata.
@@ -27,8 +29,9 @@ decided.
   modes.
 - MATLAB file inspection and loading layer for older MAT files and HDF5-backed
   MAT files.
-- Source-to-twopy HDF5 conversion for aligned movie, acquisition metadata,
-  stimulus parameters, stimulus timeline, photodiode signals, and mean image.
+- Source-to-twopy HDF5 conversion for acquisition metadata, stimulus
+  parameters, stimulus timeline, photodiode signals, mean image, and a separate
+  aligned movie file.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.
 - TIFF metadata extraction for Python access plus optional CSV output with
   selected TIFF tags and ScanImage recording fields.
@@ -36,6 +39,9 @@ decided.
   acquisition metadata.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
+- Real example recording converted successfully to `twopy/twopy_recording.h5`
+  and `twopy/aligned_movie.h5`; aligned movie shape `(4168, 256, 127)`, mean
+  image shape `(256, 127)`, stimulus timeline shape `(18021, 35)`.
 - Real database query matched the example recording in both `experimentLog.db`
   and `experimentInitLog.db` with `stimulusPresentationId=20005` and
   `fly=10923`.
@@ -65,6 +71,8 @@ decided.
 - Recording acquisition metadata should be loaded from `imageDescription.mat`;
   raw TIFF metadata is for audit or raw interleaved frame access.
 - Converted data format: HDF5 with gzip compression.
+- Converted aligned movie is stored in its own HDF5 file because it usually
+  dominates file size.
 - Source MATLAB and raw TIFF files are conversion inputs only. Analysis and
   processing operate on converted twopy HDF5 files.
 - Initial conversion generates a mean image. The default is the full aligned

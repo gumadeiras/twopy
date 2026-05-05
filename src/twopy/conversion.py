@@ -1,11 +1,12 @@
-"""Convert microscope source files into a twopy-owned HDF5 recording file.
+"""Convert microscope source files into twopy-owned HDF5 recording files.
 
 Inputs: one validated two-photon recording session directory.
-Outputs: a gzip-compressed HDF5 file containing twopy-owned datasets and
-metadata for later analysis.
+Outputs: gzip-compressed HDF5 files containing twopy-owned datasets and
+metadata for later analysis. The large aligned movie is stored separately from
+the smaller recording metadata file.
 
 Source MATLAB and TIFF files are read-only inputs. Analysis code should operate
-on the converted twopy HDF5 file, not directly on microscope source files.
+on converted twopy HDF5 files, not directly on microscope source files.
 """
 
 import json
@@ -33,6 +34,8 @@ __all__ = [
 ]
 
 CONVERTED_RECORDING_FILENAME = "twopy_recording.h5"
+CONVERTED_ALIGNED_MOVIE_FILENAME = "aligned_movie.h5"
+ALIGNED_MOVIE_DATASET = "movie/aligned"
 
 
 class _MatlabStruct(Protocol):
@@ -53,7 +56,7 @@ class AlignedMovieSource:
     Outputs: movie shape/dtype metadata plus methods for reading frames.
 
     This object is only for conversion. Downstream analysis should read the
-    copied movie from the twopy HDF5 file.
+    copied movie from the twopy aligned-movie HDF5 file.
     """
 
     path: Path
@@ -209,16 +212,18 @@ class SourceConversionInputs:
 
 @dataclass(frozen=True)
 class ConvertedRecording:
-    """Summary of a converted twopy recording file.
+    """Summary of converted twopy recording files.
 
     Inputs: conversion output path and source recording folder.
-    Outputs: HDF5 path plus mean-image frame range and movie shape.
+    Outputs: HDF5 paths plus mean-image frame range and movie shape.
 
-    Later analysis modules should accept this converted HDF5 path, not source
-    MATLAB file paths.
+    Later analysis modules should accept these converted HDF5 paths, not source
+    MATLAB file paths. ``path`` points at the small recording metadata file;
+    ``movie_path`` points at the large aligned movie file.
     """
 
     path: Path
+    movie_path: Path
     source_session_dir: Path
     movie_shape: tuple[int, ...]
     mean_image_start_frame: int
@@ -264,19 +269,20 @@ def convert_recording_to_twopy(
     mean_start_frame: int | None = None,
     mean_stop_frame: int | None = None,
 ) -> ConvertedRecording:
-    """Convert one recording folder into a twopy HDF5 file.
+    """Convert one recording folder into twopy HDF5 files.
 
     Args:
         session_dir: Source recording folder.
-        output_dir: Directory that will receive ``twopy_recording.h5``.
+        output_dir: Directory that will receive converted twopy HDF5 files.
         mean_start_frame: Optional first frame for the mean image.
         mean_stop_frame: Optional exclusive stop frame for the mean image.
 
     Returns:
-        Summary of the converted HDF5 file.
+        Summary of the converted HDF5 files.
 
-    The conversion copies source data into twopy-owned datasets and computes a
-    mean image during conversion so later ROI workflows can start quickly.
+    The conversion copies source data into twopy-owned datasets. The aligned
+    movie gets its own file because it dominates size, while the recording file
+    keeps metadata, stimulus, photodiode, and the quick-look mean image.
     """
     inputs = load_source_conversion_inputs(session_dir)
     start_frame, stop_frame = _normalize_frame_range(
@@ -292,13 +298,19 @@ def convert_recording_to_twopy(
     destination_dir = output_dir.expanduser()
     destination_dir.mkdir(parents=True, exist_ok=True)
     output_path = destination_dir / CONVERTED_RECORDING_FILENAME
+    movie_path = destination_dir / CONVERTED_ALIGNED_MOVIE_FILENAME
+
+    _write_aligned_movie_file(inputs, movie_path)
 
     with h5py.File(output_path, "w") as h5_file:
         h5_file.attrs["twopy_format"] = "converted-recording"
         h5_file.attrs["source_session_dir"] = str(inputs.session_files.session_dir)
 
         movie_group = h5_file.create_group("movie")
-        _copy_aligned_movie(inputs.aligned_movie, movie_group)
+        movie_group.attrs["aligned_movie_file"] = CONVERTED_ALIGNED_MOVIE_FILENAME
+        movie_group.attrs["aligned_movie_dataset"] = ALIGNED_MOVIE_DATASET
+        movie_group.attrs["aligned_movie_shape"] = inputs.aligned_movie.shape
+        movie_group.attrs["aligned_movie_dtype"] = inputs.aligned_movie.dtype
         mean_dataset = movie_group.create_dataset(
             "mean_image",
             data=mean_image,
@@ -335,6 +347,7 @@ def convert_recording_to_twopy(
 
     return ConvertedRecording(
         path=output_path,
+        movie_path=movie_path,
         source_session_dir=inputs.session_files.session_dir,
         movie_shape=inputs.aligned_movie.shape,
         mean_image_start_frame=start_frame,
@@ -486,12 +499,32 @@ def _load_photodiode_signals(
     )
 
 
+def _write_aligned_movie_file(
+    inputs: SourceConversionInputs,
+    movie_path: Path,
+) -> None:
+    """Write the large aligned movie into its own twopy HDF5 file.
+
+    Args:
+        inputs: Loaded source conversion inputs.
+        movie_path: Destination HDF5 path for aligned movie frames.
+
+    Returns:
+        None. The function writes the full aligned movie file.
+    """
+    with h5py.File(movie_path, "w") as h5_file:
+        h5_file.attrs["twopy_format"] = "aligned-movie"
+        h5_file.attrs["source_session_dir"] = str(inputs.session_files.session_dir)
+        movie_group = h5_file.create_group("movie")
+        _copy_aligned_movie(inputs.aligned_movie, movie_group)
+
+
 def _copy_aligned_movie(source: AlignedMovieSource, movie_group: h5py.Group) -> None:
-    """Copy aligned movie frames into the twopy HDF5 file in chunks.
+    """Copy aligned movie frames into an HDF5 group in chunks.
 
     Args:
         source: Lazy source movie metadata and path.
-        movie_group: Destination HDF5 group.
+        movie_group: Destination HDF5 group in the aligned movie file.
 
     Returns:
         None. The function writes ``movie/aligned``.

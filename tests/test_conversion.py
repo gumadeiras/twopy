@@ -1,7 +1,8 @@
 """Tests for converting microscope source files into twopy HDF5 files.
 
 Inputs: a tiny synthetic two-photon session folder.
-Outputs: assertions that conversion creates analysis-owned HDF5 datasets.
+Outputs: assertions that conversion creates analysis-owned HDF5 datasets, with
+the large aligned movie stored in a separate file.
 """
 
 import json
@@ -65,8 +66,8 @@ class ConversionTest(unittest.TestCase):
         """Confirm conversion writes twopy-owned datasets and mean image.
 
         Inputs: a temporary source recording and output directory.
-        Outputs: HDF5 datasets for movie, metadata, stimulus, photodiode, and
-        full-movie mean image.
+        Outputs: HDF5 datasets for metadata, stimulus, photodiode, full-movie
+        mean image, and a separate aligned movie file.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -77,13 +78,22 @@ class ConversionTest(unittest.TestCase):
             converted = convert_recording_to_twopy(session_dir, output_dir)
 
             self.assertEqual(converted.path, output_dir / "twopy_recording.h5")
+            self.assertEqual(converted.movie_path, output_dir / "aligned_movie.h5")
             self.assertEqual(converted.mean_image_start_frame, 0)
             self.assertEqual(converted.mean_image_stop_frame, 3)
             with h5py.File(converted.path, "r") as h5_file:
                 self.assertEqual(h5_file.attrs["twopy_format"], "converted-recording")
+                self.assertEqual(
+                    h5_file["movie"].attrs["aligned_movie_file"],
+                    "aligned_movie.h5",
+                )
+                self.assertEqual(
+                    h5_file["movie"].attrs["aligned_movie_dataset"],
+                    "movie/aligned",
+                )
                 np.testing.assert_array_equal(
-                    h5_file["movie/aligned"][()],
-                    np.arange(12, dtype=np.float64).reshape(3, 2, 2),
+                    h5_file["movie"].attrs["aligned_movie_shape"],
+                    np.array([3, 2, 2]),
                 )
                 np.testing.assert_array_equal(
                     h5_file["movie/mean_image"][()],
@@ -96,6 +106,14 @@ class ConversionTest(unittest.TestCase):
                 self.assertEqual(h5_file["photodiode/imaging_res_pd"].shape, (3,))
                 parameters = json.loads(h5_file["stimulus/parameters_json"][()])
                 self.assertEqual(parameters[1]["epochName"], "LR20")
+                self.assertNotIn("aligned", h5_file["movie"])
+
+            with h5py.File(converted.movie_path, "r") as h5_file:
+                self.assertEqual(h5_file.attrs["twopy_format"], "aligned-movie")
+                np.testing.assert_array_equal(
+                    h5_file["movie/aligned"][()],
+                    np.arange(12, dtype=np.float64).reshape(3, 2, 2),
+                )
 
     def test_converts_mean_image_for_requested_frame_range(self) -> None:
         """Confirm conversion can compute a range-limited mean image.

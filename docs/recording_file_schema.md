@@ -359,19 +359,23 @@ Minimum source-file load set for conversion:
 - `imagingResPd.mat`
 
 twopy reads this set with `load_source_conversion_inputs(recording_dir)` and
-writes a converted `twopy_recording.h5` with `convert_recording_to_twopy(...)`.
-The source files are read-only conversion inputs. Response analysis should use
-the converted HDF5 file rather than reading MATLAB files directly.
+writes converted HDF5 files with `convert_recording_to_twopy(...)`. The source
+files are read-only conversion inputs. Response analysis should use the
+converted HDF5 files rather than reading MATLAB files directly.
 
-The converted HDF5 file contains:
+The converted `twopy_recording.h5` file contains:
 
-- `movie/aligned`: copied aligned movie.
+- `movie`: attributes pointing to the separate aligned movie file and dataset.
 - `movie/mean_image`: mean image generated during conversion.
 - `metadata`: selected acquisition fields as HDF5 attributes.
 - `stimulus/timeline`: numeric stimulus timeline.
 - `stimulus/parameters_json`: stimulus epoch parameters.
 - `photodiode/imaging_res_pd`: frame-resolution photodiode vector.
 - `photodiode/high_res_pd`: high-resolution photodiode vector.
+
+The converted `aligned_movie.h5` file contains:
+
+- `movie/aligned`: copied aligned movie.
 
 By default, the mean image uses the entire aligned movie. Callers can pass
 `mean_start_frame` and `mean_stop_frame` to compute it over a frame range.
