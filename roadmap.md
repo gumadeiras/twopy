@@ -46,6 +46,9 @@ decided.
 - Acquisition metadata fields named in one explicit constant for easier audit.
 - Converted HDF5 files include a `frame_counts` audit group for aligned movie,
   imaging-resolution photodiode, and acquisition metadata frame counts.
+- Documented the observed ScanImage one-frame acquisition metadata offset:
+  `imagingResPd` matches aligned movie frames, while `acq.numberOfFrames` may be
+  one less.
 - Converted HDF5 synchronization metadata documenting that imaging and stimulus
   clocks are aligned through photodiode events.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.

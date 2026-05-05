@@ -239,7 +239,9 @@ def _audit_frame_counts(
 
     Random sampling of real recordings showed ``imagingResPd`` and
     ``alignedMovie`` agree exactly, while ``acq.numberOfFrames`` is commonly one
-    less than the aligned movie. That offset is documented, not hidden.
+    less than the aligned movie. Treat that as a known ScanImage metadata
+    convention, not a dropped frame. Keep the offset visible for later response
+    analysis instead of normalizing it away.
     """
     movie_frames = aligned_movie.shape[0]
     imaging_res_pd_samples = int(photodiode.imaging_res_pd.size)

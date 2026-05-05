@@ -179,9 +179,9 @@ class FrameCountAudit:
 
     The aligned movie and imaging-resolution photodiode should describe the
     same imaging frames. In sampled real recordings, ScanImage
-    ``acq.numberOfFrames`` is often one less than the aligned movie frame count,
-    so twopy records that offset instead of silently treating the fields as
-    interchangeable.
+    ``acq.numberOfFrames`` was usually one less than the aligned movie frame
+    count. twopy treats that as a known metadata convention, not as a dropped
+    frame, and records the offset so response analysis can audit it.
     """
 
     aligned_movie_frames: int

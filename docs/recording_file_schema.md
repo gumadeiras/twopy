@@ -452,11 +452,32 @@ output: /Volumes/magic/clarklab/twopy_outputs/fly/stim/2023/10_17/10_02_49
 
 Conversion writes a `frame_counts` group into `recording_data.h5`.
 
-Observed real recordings usually have:
+This group exists because ScanImage acquisition metadata uses a slightly
+different frame-count convention from the aligned movie and frame-resolution
+photodiode vector. Do not "fix" this by forcing every count to be identical.
+
+Random sampling on 2026-05-05 checked 20 candidate recordings from the mounted
+lab data paths. Among recordings whose `alignedMovie.mat` could be opened as
+HDF5, the pattern was consistent:
 
 - `aligned_movie_frames == imaging_res_pd_samples`
 - `acq.numberOfFrames == aligned_movie_frames - 1`
 
-twopy allows the exact match or this one-frame ScanImage acquisition metadata
-offset, and stores the counts and deltas so response-analysis code can audit the
-frame contract before assigning trials.
+Two sampled Dropbox recordings had `alignedMovie.mat` files that were not
+HDF5-readable by the current loader, so they were skipped for this specific
+count comparison.
+
+Interpretation:
+
+- `aligned_movie_frames` is the frame count twopy uses for ROI extraction.
+- `imaging_res_pd_samples` must match `aligned_movie_frames` exactly because it
+  is the frame-resolution photodiode vector used to map imaging frames to
+  stimulus timing.
+- `acq.numberOfFrames` may be equal to `aligned_movie_frames` or exactly one
+  less. The one-frame difference is treated as a known ScanImage metadata
+  convention, not as a dropped imaging frame.
+
+twopy stores all counts and deltas so response-analysis code can audit the frame
+contract before assigning trials. Conversion fails if `imaging_res_pd_samples`
+does not match `aligned_movie_frames`, or if `acq.numberOfFrames` differs by
+anything other than `0` or `-1`.
