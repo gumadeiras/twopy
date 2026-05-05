@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "twopy"
+version = "0.1.0"
+description = "Python project workspace."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Gustavo Madeira Santana", email = "fromweb1@gumadeiras.com" },
+]
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
