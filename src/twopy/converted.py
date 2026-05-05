@@ -188,11 +188,11 @@ def load_converted_recording(
             synchronization_metadata=_read_str_attrs(h5_file["photodiode"]),
             stimulus_timeline=cast(
                 npt.NDArray[np.float64],
-                h5_file["stimulus/timeline"][()],
+                h5_file["stimulus/data"][()],
             ),
             stimulus_timeline_column_names=_read_string_dataset(
                 h5_file,
-                "stimulus/timeline_column_names",
+                "stimulus/data_column_names",
             ),
             stimulus_parameters=_read_stimulus_parameters(h5_file),
             imaging_res_pd=cast(
@@ -284,7 +284,7 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
         != recording.stimulus_timeline.shape[1]
     ):
         msg = (
-            "stimulus timeline column names must match timeline width; "
+            "stimulus data column names must match timeline width; "
             f"got {len(recording.stimulus_timeline_column_names)} names for "
             f"{recording.stimulus_timeline.shape[1]} columns"
         )

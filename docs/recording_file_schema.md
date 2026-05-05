@@ -318,7 +318,7 @@ Observed example contents:
 - Column 35: unlabeled trailing numeric column observed in `stimData`.
 
 Use this as the primary structured stimulus timeline. twopy also stores
-expanded timeline column labels in `stimulus/timeline_column_names`. The first
+expanded data column labels in `stimulus/data_column_names`. The first
 three labels are specific. Later labels preserve the stimulus-system groups
 without pretending we know every protocol-specific value yet.
 
@@ -421,8 +421,8 @@ The converted `recording_data.h5` file contains:
 - `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case
   twopy field names such as `rig_name`, `run_number`, `fly_id`, and
   `rig_temperature`.
-- `stimulus/timeline`: numeric stimulus timeline.
-- `stimulus/timeline_column_names`: one label per timeline column.
+- `stimulus/data`: numeric stimulus timeline.
+- `stimulus/data_column_names`: one label per data column.
 - `stimulus/parameters_json`: stimulus epoch parameters.
 - `photodiode`: synchronization metadata explaining the two-computer timing
   model.

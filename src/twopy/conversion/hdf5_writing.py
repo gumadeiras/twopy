@@ -171,12 +171,12 @@ def _write_stimulus_group(
     stimulus_group = h5_file.create_group("stimulus")
     stimulus_group.attrs["clock_source"] = SYNCHRONIZATION_MODEL["stimulus_clock"]
     stimulus_group.create_dataset(
-        "timeline",
+        "data",
         data=timeline.data,
         compression="gzip",
     )
     stimulus_group.create_dataset(
-        "timeline_column_names",
+        "data_column_names",
         data=np.asarray(timeline.column_names, dtype=h5py.string_dtype("utf-8")),
     )
     stimulus_group.create_dataset(

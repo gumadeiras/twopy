@@ -125,11 +125,11 @@ class ConversionTest(unittest.TestCase):
                     h5_file["stimulus"].attrs["clock_source"],
                     "stimulus presentation computer",
                 )
-                self.assertEqual(h5_file["stimulus/timeline"].shape, (3, 3))
+                self.assertEqual(h5_file["stimulus/data"].shape, (3, 3))
                 self.assertEqual(
                     tuple(
                         value.decode("utf-8")
-                        for value in h5_file["stimulus/timeline_column_names"][()]
+                        for value in h5_file["stimulus/data_column_names"][()]
                     ),
                     ("time_seconds", "stimulus_frame_number", "epoch_number"),
                 )

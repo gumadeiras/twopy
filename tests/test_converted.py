@@ -157,13 +157,13 @@ class ConvertedRecordingTest(unittest.TestCase):
             stimulus_group = h5_file.create_group("stimulus")
             stimulus_group.attrs["clock_source"] = "stimulus presentation computer"
             stimulus_group.create_dataset(
-                "timeline",
+                "data",
                 data=np.array(
                     [[0.0, 1.0, 1.0], [0.1, 2.0, 2.0], [0.2, 3.0, 2.0]],
                 ),
             )
             stimulus_group.create_dataset(
-                "timeline_column_names",
+                "data_column_names",
                 data=np.asarray(
                     ("time_seconds", "stimulus_frame_number", "epoch_number"),
                     dtype=h5py.string_dtype("utf-8"),
