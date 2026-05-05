@@ -45,7 +45,8 @@ def find_recordings(
         hemisphere: Optional exact fly-eye value, such as ``left`` or ``right``.
         person: Optional experimenter substring from fly ``surgeon``.
         database_access: Optional override for configured DB access. ``direct``
-            queries mounted DB files directly. ``copy`` copies DB files locally.
+            queries mounted DB files directly. ``copy`` copies DB files locally
+            because network DB queries can be slow while file transfer is fast.
         database_cache_dir: Optional cache directory for local DB copies.
         limit: Maximum number of recordings to return.
         config_path: YAML config file containing ``database_path``.

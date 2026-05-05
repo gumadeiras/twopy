@@ -3,8 +3,8 @@
 Inputs: mounted SQLite DB paths and a local cache folder.
 Outputs: local DB copies plus JSON manifests that record source metadata.
 
-Copying is optional. Direct DB access is still the default, but local copies are
-useful when network-mounted volumes are slow or unreliable.
+Copying exists for performance. Database queries over network-mounted volumes
+can be slow, but transferring the database file locally is usually fast.
 """
 
 import hashlib
@@ -53,7 +53,8 @@ def ensure_local_database_copy(source_path: Path, cache_dir: Path) -> Path:
 
     The manifest stores source path, size, mtime, and SHA-256. If size and mtime
     match, twopy reuses the local copy. If metadata changed, twopy hashes source
-    and cached files and copies only when content changed.
+    and cached files and copies only when content changed. This keeps repeated
+    queries fast without repeatedly transferring unchanged DB files.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / source_path.name

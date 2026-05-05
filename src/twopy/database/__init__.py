@@ -57,7 +57,8 @@ def read_database_catalog(
     Args:
         database_dir: Folder that should contain lab SQLite DB files.
         database_access: ``direct`` reads DB files in place. ``copy`` uses local
-            cached copies.
+            cached copies because network DB queries can be slow while file
+            transfer is fast.
         cache_dir: Optional local cache directory for copied DB files.
 
     Returns:
@@ -139,7 +140,8 @@ def find_experiments(
             selected table.
         limit: Maximum number of records to return across all DB files.
         database_access: ``direct`` queries DB files in place. ``copy`` queries
-            local cached copies.
+            local cached copies because network DB queries can be slow while
+            file transfer is fast.
         cache_dir: Optional cache directory used when ``database_access`` is
             ``copy``.
 
@@ -220,7 +222,8 @@ def find_stimulus_presentations(
         person_contains: Optional substring matched against fly ``surgeon``.
         limit: Maximum number of experiments to return.
         database_access: ``direct`` queries DB files in place. ``copy`` queries
-            local cached copies.
+            local cached copies because network DB queries can be slow while
+            file transfer is fast.
         cache_dir: Optional cache directory used when ``database_access`` is
             ``copy``.
 
@@ -307,7 +310,8 @@ def find_recordings(
         person: Optional experimenter substring from fly ``surgeon``.
         limit: Maximum number of recordings to return.
         database_access: ``direct`` queries DB files in place. ``copy`` queries
-            local cached copies.
+            local cached copies because network DB queries can be slow while
+            file transfer is fast.
         cache_dir: Optional cache directory used when ``database_access`` is
             ``copy``.
 

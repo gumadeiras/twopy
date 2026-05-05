@@ -43,7 +43,7 @@ class LoadConfigTest(unittest.TestCase):
             self.assertEqual(config.analysis_output, "source")
 
     def test_database_access_defaults_to_copy(self) -> None:
-        """Confirm older config files still get safe local-copy DB access.
+        """Confirm missing DB access uses fast local-copy mode.
 
         Inputs: a temporary YAML file without ``database_access``.
         Outputs: an assertion that the loaded mode is ``copy``.

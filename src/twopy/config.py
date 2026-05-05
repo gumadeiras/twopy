@@ -154,8 +154,9 @@ def _database_access(
     Returns:
         ``copy`` or ``direct``. Missing values default to ``copy``.
 
-    The default favors local DB copies because mounted lab volumes can be slow
-    and we already verify whether a copy is stale before copying again.
+    The default favors local DB copies because database queries over the network
+    can be slow, but transferring the DB file locally is usually fast. twopy
+    verifies whether a copy is stale before copying again.
     """
     value = config.get("database_access", "copy")
     if value in {"copy", "direct"}:
