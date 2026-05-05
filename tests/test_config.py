@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from twopy.config import load_config
+from twopy.config import load_config, resolve_analysis_output_dir
 
 
 class LoadConfigTest(unittest.TestCase):
@@ -25,7 +25,8 @@ class LoadConfigTest(unittest.TestCase):
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
                 "data_path: /Volumes/magic/clarklab/2p_microscope_data\n"
-                "database_access: copy\n",
+                "database_access: copy\n"
+                "analysis_output: source\n",
                 encoding="utf-8",
             )
 
@@ -39,6 +40,7 @@ class LoadConfigTest(unittest.TestCase):
                 Path("/Volumes/magic/clarklab/2p_microscope_data"),
             )
             self.assertEqual(config.database_access, "copy")
+            self.assertEqual(config.analysis_output, "source")
 
     def test_database_access_defaults_to_copy(self) -> None:
         """Confirm older config files still get safe local-copy DB access.
@@ -50,7 +52,8 @@ class LoadConfigTest(unittest.TestCase):
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
-                "data_path: /Volumes/magic/clarklab/2p_microscope_data\n",
+                "data_path: /Volumes/magic/clarklab/2p_microscope_data\n"
+                "analysis_output: source\n",
                 encoding="utf-8",
             )
 
@@ -69,12 +72,82 @@ class LoadConfigTest(unittest.TestCase):
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
                 "data_path: /Volumes/magic/clarklab/2p_microscope_data\n"
-                "database_access: network\n",
+                "database_access: network\n"
+                "analysis_output: source\n",
                 encoding="utf-8",
             )
 
             with self.assertRaisesRegex(ValueError, "database_access"):
                 load_config(config_path)
+
+    def test_missing_analysis_output_raises_clear_error(self) -> None:
+        """Confirm output routing is explicit in config.
+
+        Inputs: a temporary YAML file without ``analysis_output``.
+        Outputs: an assertion that the error names the missing key.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.yml"
+            config_path.write_text(
+                "database_path: /Volumes/magic/clarklab/_Database\n"
+                "data_path: /Volumes/magic/clarklab/2p_microscope_data\n"
+                "database_access: copy\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "analysis_output"):
+                load_config(config_path)
+
+    def test_resolves_source_analysis_output_dir(self) -> None:
+        """Confirm ``source`` writes inside the recording folder.
+
+        Inputs: a config using ``analysis_output: source`` and a recording path.
+        Outputs: the expected ``twopy`` folder path.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "config.yml"
+            recording_dir = root / "data" / "fly" / "stim" / "2023" / "10_17"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {root / 'data'}\n"
+                "database_access: copy\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+
+            config = load_config(config_path)
+
+            self.assertEqual(
+                resolve_analysis_output_dir(config, recording_dir),
+                recording_dir / "twopy",
+            )
+
+    def test_resolves_mirrored_analysis_output_dir(self) -> None:
+        """Confirm path output mirrors the recording structure under data root.
+
+        Inputs: a config with an output root and a recording under ``data_path``.
+        Outputs: the mirrored output directory.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            output_root = root / "analysis"
+            recording_dir = root / "data" / "fly" / "stim" / "2023" / "10_17"
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {root / 'data'}\n"
+                "database_access: copy\n"
+                f"analysis_output: {output_root}\n",
+                encoding="utf-8",
+            )
+
+            config = load_config(config_path)
+
+            self.assertEqual(
+                resolve_analysis_output_dir(config, recording_dir),
+                output_root / "fly" / "stim" / "2023" / "10_17",
+            )
 
     def test_missing_required_path_raises_clear_error(self) -> None:
         """Confirm incomplete config files fail before analysis code runs.
@@ -85,7 +158,8 @@ class LoadConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
-                "database_path: /Volumes/magic/clarklab/_Database\n",
+                "database_path: /Volumes/magic/clarklab/_Database\n"
+                "analysis_output: source\n",
                 encoding="utf-8",
             )
 

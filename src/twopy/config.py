@@ -9,22 +9,29 @@ GUI easy to point at the right database and recording roots.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import yaml
 
 from twopy.database.types import DatabaseAccess
 
-__all__ = ["DEFAULT_CONFIG_PATH", "TwopyConfig", "load_config"]
+__all__ = [
+    "DEFAULT_CONFIG_PATH",
+    "AnalysisOutputMode",
+    "TwopyConfig",
+    "load_config",
+    "resolve_analysis_output_dir",
+]
 
 DEFAULT_CONFIG_PATH = Path("config.yml")
+AnalysisOutputMode = Path | Literal["source"]
 
 
 @dataclass(frozen=True)
 class TwopyConfig:
     """Machine-local paths used by twopy.
 
-    Inputs: database path, data path, and DB access mode from ``config.yml``.
+    Inputs: lab paths, DB access mode, and analysis output from ``config.yml``.
     Outputs: immutable config values that GUI and analysis code can pass around.
 
     The paths are not required to exist during parsing so tests and machines
@@ -34,6 +41,7 @@ class TwopyConfig:
     database_path: Path
     data_path: Path
     database_access: DatabaseAccess
+    analysis_output: AnalysisOutputMode
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
@@ -44,7 +52,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
             working directory.
 
     Returns:
-        A typed configuration object with paths and database access mode.
+        A typed configuration object with paths, DB access, and output mode.
 
     Raises:
         FileNotFoundError: If the config file is absent.
@@ -70,7 +78,43 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
         database_path=_required_path(raw_config, "database_path", config_path),
         data_path=_required_path(raw_config, "data_path", config_path),
         database_access=_database_access(raw_config, config_path),
+        analysis_output=_analysis_output(raw_config, config_path),
     )
+
+
+def resolve_analysis_output_dir(config: TwopyConfig, recording_dir: Path) -> Path:
+    """Resolve the output directory for one recording.
+
+    Args:
+        config: Loaded twopy configuration.
+        recording_dir: Recording folder being analyzed.
+
+    Returns:
+        Directory where twopy should write analysis output for the recording.
+
+    Raises:
+        ValueError: If ``analysis_output`` is a root path and the recording is
+            not inside ``config.data_path``.
+
+    ``analysis_output: source`` writes into ``recording_dir/twopy``. A path
+    value mirrors the recording's path relative to ``data_path`` under that
+    output root.
+    """
+    source_dir = recording_dir.expanduser()
+    if config.analysis_output == "source":
+        return source_dir / "twopy"
+
+    data_root = config.data_path.expanduser()
+    try:
+        relative_recording = source_dir.relative_to(data_root)
+    except ValueError as error:
+        msg = (
+            f"Recording {source_dir} is not inside configured data_path "
+            f"{data_root}; cannot mirror analysis output directory"
+        )
+        raise ValueError(msg) from error
+
+    return config.analysis_output / relative_recording
 
 
 def _required_path(config: dict[object, object], key: str, config_path: Path) -> Path:
@@ -121,3 +165,35 @@ def _database_access(
         f"twopy config key 'database_access' must be 'copy' or 'direct': {config_path}"
     )
     raise ValueError(msg)
+
+
+def _analysis_output(
+    config: dict[object, object],
+    config_path: Path,
+) -> AnalysisOutputMode:
+    """Read the required analysis output setting from parsed YAML.
+
+    Args:
+        config: Parsed YAML mapping.
+        config_path: Source config file path, used for clear errors.
+
+    Returns:
+        ``source`` or an expanded output root path.
+
+    Raises:
+        ValueError: If the key is absent or not a non-empty string.
+
+    Keeping this explicit avoids accidental writes to unclear locations.
+    """
+    value = config.get("analysis_output")
+    if not isinstance(value, str) or value == "":
+        msg = (
+            "twopy config key 'analysis_output' must be 'source' or a "
+            f"non-empty path string: {config_path}"
+        )
+        raise ValueError(msg)
+
+    if value == "source":
+        return "source"
+
+    return Path(value).expanduser()
