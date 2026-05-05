@@ -77,6 +77,71 @@ class ConversionTest(unittest.TestCase):
                 np.array([0.0, 1.0, 0.0]),
             )
 
+    def test_labels_stable_stimulus_data_slots_from_matlab_writer(self) -> None:
+        """Confirm ``stimData`` labels follow the backed-up MATLAB writer.
+
+        Inputs: a temporary recording with the full 35-column stimulus table
+        written by the stimulus computer.
+        Outputs: column labels for the stable columns and generic labels for
+        stimulus-specific slots that depend on the MATLAB stimulus function.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_session(session_dir, stimulus_data_column_count=35)
+
+            loaded = load_source_conversion_inputs(session_dir)
+
+            self.assertEqual(
+                loaded.stimulus_data.column_names[0:3],
+                (
+                    "time_seconds",
+                    "stimulus_frame_number",
+                    "epoch_number",
+                ),
+            )
+            self.assertEqual(
+                loaded.stimulus_data.column_names[3:13],
+                (
+                    "closed_loop_01",
+                    "closed_loop_02",
+                    "closed_loop_03",
+                    "closed_loop_04",
+                    "closed_loop_05",
+                    "closed_loop_06",
+                    "closed_loop_07",
+                    "closed_loop_08",
+                    "closed_loop_09",
+                    "closed_loop_10",
+                ),
+            )
+            self.assertEqual(
+                loaded.stimulus_data.column_names[13:35],
+                (
+                    "stimulus_specific_01",
+                    "stimulus_specific_02",
+                    "stimulus_specific_03",
+                    "stimulus_specific_04",
+                    "stimulus_specific_05",
+                    "stimulus_specific_06",
+                    "stimulus_specific_07",
+                    "stimulus_specific_08",
+                    "stimulus_specific_09",
+                    "stimulus_specific_10",
+                    "stimulus_specific_11",
+                    "stimulus_specific_12",
+                    "stimulus_specific_13",
+                    "stimulus_specific_14",
+                    "stimulus_specific_15",
+                    "stimulus_specific_16",
+                    "stimulus_specific_17",
+                    "stimulus_specific_18",
+                    "stimulus_specific_19",
+                    "stimulus_specific_20",
+                    "photodiode_flash",
+                    "trailing_empty",
+                ),
+            )
+
     def test_converts_recording_to_twopy_hdf5(self) -> None:
         """Confirm conversion writes twopy-owned datasets and mean image.
 
@@ -303,6 +368,7 @@ class ConversionTest(unittest.TestCase):
         *,
         acquisition_frame_count: int = 3,
         imaging_res_pd: np.ndarray | None = None,
+        stimulus_data_column_count: int = 3,
     ) -> None:
         """Create a minimal valid source recording fixture.
 
@@ -310,6 +376,7 @@ class ConversionTest(unittest.TestCase):
             session_dir: Temporary folder that receives fixture files.
             acquisition_frame_count: ``acq.numberOfFrames`` metadata value.
             imaging_res_pd: Optional imaging-resolution photodiode vector.
+            stimulus_data_column_count: Number of ``stimData`` columns to write.
 
         Returns:
             None. The function writes all required source files to disk.
@@ -373,9 +440,7 @@ class ConversionTest(unittest.TestCase):
         scipy.io.savemat(
             stimulus_dir / "stimdata.mat",
             {
-                "stimData": np.array(
-                    [[0.0, 1.0, 1.0], [0.1, 2.0, 2.0], [0.2, 3.0, 2.0]],
-                ),
+                "stimData": self._stimulus_data_table(stimulus_data_column_count),
             },
         )
         scipy.io.savemat(
@@ -412,6 +477,22 @@ class ConversionTest(unittest.TestCase):
             session_dir / "stimulus_name_changes_001_ch1_disinterleaved_alignment.txt"
         ).touch()
         (session_dir / "defaultAlignChannel.txt").write_text("1\n", encoding="utf-8")
+
+    def _stimulus_data_table(self, column_count: int) -> np.ndarray:
+        """Build a small ``stimData`` table with a requested column count.
+
+        Args:
+            column_count: Number of stimulus table columns to return.
+
+        Returns:
+            Three stimulus rows. The first three columns are time, stimulus
+            frame number, and epoch number; later columns are zero placeholders.
+        """
+        data = np.zeros((3, column_count), dtype=np.float64)
+        data[:, 0:3] = np.array(
+            [[0.0, 1.0, 1.0], [0.1, 2.0, 2.0], [0.2, 3.0, 2.0]],
+        )
+        return data
 
 
 if __name__ == "__main__":

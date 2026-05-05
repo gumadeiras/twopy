@@ -30,6 +30,43 @@ from twopy.session import discover_session_files
 
 __all__ = ["load_source_conversion_inputs"]
 
+STABLE_STIMULUS_DATA_COLUMNS = (
+    "time_seconds",
+    "stimulus_frame_number",
+    "epoch_number",
+    "closed_loop_01",
+    "closed_loop_02",
+    "closed_loop_03",
+    "closed_loop_04",
+    "closed_loop_05",
+    "closed_loop_06",
+    "closed_loop_07",
+    "closed_loop_08",
+    "closed_loop_09",
+    "closed_loop_10",
+    "stimulus_specific_01",
+    "stimulus_specific_02",
+    "stimulus_specific_03",
+    "stimulus_specific_04",
+    "stimulus_specific_05",
+    "stimulus_specific_06",
+    "stimulus_specific_07",
+    "stimulus_specific_08",
+    "stimulus_specific_09",
+    "stimulus_specific_10",
+    "stimulus_specific_11",
+    "stimulus_specific_12",
+    "stimulus_specific_13",
+    "stimulus_specific_14",
+    "stimulus_specific_15",
+    "stimulus_specific_16",
+    "stimulus_specific_17",
+    "stimulus_specific_18",
+    "stimulus_specific_19",
+    "stimulus_specific_20",
+    "photodiode_flash",
+    "trailing_empty",
+)
 ACQUISITION_METADATA_FIELDS = (
     "configName",
     "software.version",
@@ -213,10 +250,7 @@ def _load_stimulus_data(path: Path) -> StimulusData:
     return StimulusData(
         path=path,
         data=data,
-        column_names=_load_stimulus_data_column_names(
-            path.parent / "textStimData.csv",
-            column_count=data.shape[1],
-        ),
+        column_names=_load_stimulus_data_column_names(column_count=data.shape[1]),
         time_seconds=data[:, 0],
         frame_numbers=data[:, 1].astype(np.int64),
         epoch_numbers=data[:, 2].astype(np.int64),
@@ -224,97 +258,28 @@ def _load_stimulus_data(path: Path) -> StimulusData:
 
 
 def _load_stimulus_data_column_names(
-    csv_path: Path,
     *,
     column_count: int,
 ) -> tuple[str, ...]:
-    """Load or infer labels for ``stimData`` columns.
+    """Return code-derived labels for ``stimData`` columns.
 
     Args:
-        csv_path: Optional ``textStimData.csv`` path next to ``stimdata.mat``.
         column_count: Number of columns in the MATLAB ``stimData`` table.
 
     Returns:
         One plain-language column label per MATLAB table column.
 
-    The CSV header is the only observed source that names column groups. It has
-    blank cells for repeated group columns, so this function expands those into
-    auditable names instead of pretending every protocol-specific column is
-    fully understood.
+    ``filebackup/utils/ledUtils/WriteStimData.m`` is the source of truth for
+    the stable order. It writes time, stimulus frame, epoch, ten closed-loop
+    slots, twenty stimulus-specific slots, the photodiode flash value, then a
+    trailing comma. The stimulus-specific slots are decoded from the backed-up
+    MATLAB stimulus function selected by ``stimtype``.
     """
-    if not csv_path.is_file():
-        return _fallback_stimulus_column_names(column_count)
-
-    first_line = csv_path.read_text(encoding="utf-8").splitlines()[0]
-    raw_names = first_line.split(",")
-    if raw_names and raw_names[-1] == "":
-        raw_names = raw_names[:-1]
-
-    names = _expand_stimulus_column_header(tuple(raw_names))
-    if len(names) < column_count:
-        names = names + tuple(
-            f"unlabeled_column_{index + 1:02d}"
-            for index in range(len(names), column_count)
-        )
-    return names[:column_count]
-
-
-def _expand_stimulus_column_header(raw_names: tuple[str, ...]) -> tuple[str, ...]:
-    """Expand sparse stimulus CSV header cells into one label per column.
-
-    Args:
-        raw_names: Header cells from ``textStimData.csv``.
-
-    Returns:
-        Column labels with group names repeated and numbered.
-    """
-    names: list[str] = []
-    current_group = ""
-    group_counts: dict[str, int] = {}
-    explicit_names = {
-        "Time": "time_seconds",
-        "FrameNumber": "stimulus_frame_number",
-        "Epoch": "epoch_number",
-        "Flash": "flash",
-    }
-    grouped_names = {
-        "ClosedLoopStimulusData": "closed_loop_stimulus_data",
-        "StimulusData": "stimulus_data",
-    }
-
-    for raw_name in raw_names:
-        if raw_name in explicit_names:
-            current_group = ""
-            names.append(explicit_names[raw_name])
-            continue
-        if raw_name in grouped_names:
-            current_group = grouped_names[raw_name]
-
-        if current_group == "":
-            names.append(f"unlabeled_column_{len(names) + 1:02d}")
-            continue
-
-        group_counts[current_group] = group_counts.get(current_group, 0) + 1
-        names.append(f"{current_group}_{group_counts[current_group]:02d}")
-
-    return tuple(names)
-
-
-def _fallback_stimulus_column_names(column_count: int) -> tuple[str, ...]:
-    """Generate conservative labels when no CSV header is available.
-
-    Args:
-        column_count: Number of MATLAB ``stimData`` columns.
-
-    Returns:
-        One label per column.
-    """
-    base_names = ("time_seconds", "stimulus_frame_number", "epoch_number")
-    if column_count <= len(base_names):
-        return base_names[:column_count]
-    return base_names + tuple(
-        f"unknown_stimulus_column_{index + 1:02d}"
-        for index in range(len(base_names), column_count)
+    if column_count <= len(STABLE_STIMULUS_DATA_COLUMNS):
+        return STABLE_STIMULUS_DATA_COLUMNS[:column_count]
+    return STABLE_STIMULUS_DATA_COLUMNS + tuple(
+        f"extra_column_{index + 1:02d}"
+        for index in range(len(STABLE_STIMULUS_DATA_COLUMNS), column_count)
     )
 
 

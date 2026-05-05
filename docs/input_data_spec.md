@@ -100,6 +100,13 @@ Observed MATLAB variables in the example session:
 - `stimulusData/stimdata.mat`: older MAT file, variable `stimData`
 - `savedAnalysis/*.mat`: HDF5-backed prior MATLAB analysis files
 
+`stimulusData/stimdata.mat` uses a stable leading column contract written by
+the backed-up stimulus code: time seconds, stimulus frame number, epoch number,
+ten closed-loop slots, twenty stimulus-specific slots, photodiode flash, and a
+trailing empty field from the CSV writer. Stimulus-specific slot meanings come
+from `stimtype` -> `filebackup/paramfiles/stimulus_lookup.txt` ->
+`filebackup/stimfunctions/<name>.m`.
+
 Observed TIFF metadata in the example session:
 
 - one raw movie with one TIFF series

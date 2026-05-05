@@ -309,18 +309,68 @@ Observed example contents:
 - MATLAB variable: `stimData`.
 - Shape: `(18021, 35)`.
 - Dtype: `float64`.
-- Column 1: time in seconds.
-- Column 2: stimulus frame number.
-- Column 3: epoch number.
-- Columns 4-13: closed-loop stimulus data values from the stimulus system.
-- Columns 14-33: stimulus data values from the stimulus system.
-- Column 34: flash value from `textStimData.csv`.
-- Column 35: unlabeled trailing numeric column observed in `stimData`.
+- Column 1, `time_seconds`: stimulus-computer time in seconds, written as
+  `Q.timing.flipt - Q.timing.t0`.
+- Column 2, `stimulus_frame_number`: stimulus-computer frame number, written
+  as `Q.timing.framenumber`.
+- Column 3, `epoch_number`: current stimulus epoch number, written as
+  `Q.stims.currStimNum`.
+- Columns 4-13, `closed_loop_01` through `closed_loop_10`: closed-loop slots
+  written from `Q.stims.stimData.cl(1:10)`. They are initialized as zeros in
+  `SetupLEDStimulus.m`; whether they are meaningful depends on the stimulus
+  code used during the recording.
+- Columns 14-33, `stimulus_specific_01` through `stimulus_specific_20`:
+  stimulus-specific slots written from `Q.stims.stimData.mat(1:20)`. Their
+  meaning is defined by the MATLAB stimulus function used for that epoch.
+- Column 34, `photodiode_flash`: photodiode flash value written from
+  `Q.stims.stimData.flash`. In `RunLEDStimulus.m`, this is set high while
+  `framesSinceEpochChange < 11`, and the stimulus function can pass it to the
+  LabJack photodiode output.
+- Column 35, `trailing_empty`: trailing empty CSV field caused by
+  `WriteStimData.m` writing a final comma after `photodiode_flash`. Do not
+  interpret this as stimulus data.
 
 Use this as the primary structured stimulus data. twopy also stores
-expanded data column labels in `stimulus/data_column_names`. The first
-three labels are specific. Later labels preserve the stimulus-system groups
-without pretending we know every protocol-specific value yet.
+these code-derived labels in `stimulus/data_column_names`.
+
+The source of truth for the stable column order is the backed-up MATLAB code in
+each recording:
+
+- `stimulusData/filebackup/utils/ledUtils/RunLEDStimulus.m` initializes flash
+  events and calls the selected stimulus function.
+- `stimulusData/filebackup/utils/ledUtils/SetupLEDStimulus.m` initializes
+  `Q.stims.stimData.cl` with 10 slots and `Q.stims.stimData.mat` with 20 slots.
+- `stimulusData/filebackup/utils/ledUtils/WriteStimData.m` writes the stable
+  column order above.
+
+Stimulus-specific columns are decoded from the same backed-up code:
+
+1. Read `stimulusData/chosenparams.mat` or `stimulusData/stimParams.mat`.
+2. Use each epoch's `stimtype` number.
+3. Map that number through
+   `stimulusData/filebackup/paramfiles/stimulus_lookup.txt`.
+4. Read the matching MATLAB file in
+   `stimulusData/filebackup/stimfunctions/`.
+5. Inspect assignments to `stimData.mat(...)`.
+
+In the inspected example, `stimtype` values map as follows:
+
+- `62002`: `LEDMovingBars`
+- `62005`: `LEDMovingBarsSingleAntenna`
+- `62006`: `LEDMovingBarsBothAntenna`
+
+Those three stimulus functions assign the same first seven
+stimulus-specific slots:
+
+- `stimulus_specific_01`: configured epoch antenna, `p.antenna`.
+- `stimulus_specific_02`: configured LED intensity, `p.intensity`.
+- `stimulus_specific_03`: configured epoch duration, `p.duration`.
+- `stimulus_specific_04`: antenna value active on this stimulus frame.
+- `stimulus_specific_05`: LabJack-read left LED value, `stimRead.LEFT`.
+- `stimulus_specific_06`: LabJack-read right LED value, `stimRead.RIGHT`.
+- `stimulus_specific_07`: LabJack-read photodiode value, `stimRead.PD`.
+- `stimulus_specific_08` through `stimulus_specific_20`: unused/zero in these
+  example stimulus functions.
 
 ### `stimulusData/stimParams.mat`
 

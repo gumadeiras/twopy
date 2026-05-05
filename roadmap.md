@@ -69,9 +69,13 @@ decided.
   frame boundaries.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
   snake_case twopy field names such as `rig_name`.
-- Conversion stores one label per stimulus data column. Only the first three
-  columns are fully named by meaning; later labels preserve observed
-  closed-loop/stimulus/flash groups.
+- Conversion stores one code-derived label per stimulus data column using the
+  backed-up MATLAB writer as source of truth: time, stimulus frame, epoch, ten
+  closed-loop slots, twenty stimulus-specific slots, photodiode flash, and the
+  trailing empty field.
+- Documented how stimulus-specific data slots are decoded from
+  `stimtype` through `filebackup/paramfiles/stimulus_lookup.txt` and the
+  backed-up stimulus functions.
 - `movie/mean_image` is stored uncompressed because it is a single small image.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
