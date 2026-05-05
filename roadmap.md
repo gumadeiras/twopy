@@ -41,6 +41,7 @@ decided.
 - Conversion code split into focused modules for public workflow, source
   loading, HDF5 writing, MATLAB value conversion, frame ranges, and typed data
   objects.
+- Acquisition metadata fields named in one explicit constant for easier audit.
 - Converted HDF5 synchronization metadata documenting that imaging and stimulus
   clocks are aligned through photodiode events.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.

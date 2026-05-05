@@ -28,6 +28,25 @@ from twopy.session import discover_session_files
 
 __all__ = ["load_source_conversion_inputs"]
 
+ACQUISITION_METADATA_FIELDS = (
+    "configName",
+    "software.version",
+    "acq.linesPerFrame",
+    "acq.pixelsPerLine",
+    "acq.numberOfFrames",
+    "acq.numberOfChannelsSave",
+    "acq.frameRate",
+    "acq.zoomFactor",
+    "acq.pixelTime",
+    "acq.msPerLine",
+    "acq.zStepSize",
+    "acq.scanAngleMultiplierFast",
+    "acq.scanAngleMultiplierSlow",
+    "motor.absXPosition",
+    "motor.absYPosition",
+    "motor.absZPosition",
+)
+
 
 def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
     """Load the source inputs needed for conversion into twopy format.
@@ -103,25 +122,7 @@ def _load_acquisition_metadata(path: Path) -> AcquisitionMetadata:
     return AcquisitionMetadata(
         path=path,
         fields={
-            key: nested_matlab_field(state, key)
-            for key in (
-                "configName",
-                "software.version",
-                "acq.linesPerFrame",
-                "acq.pixelsPerLine",
-                "acq.numberOfFrames",
-                "acq.numberOfChannelsSave",
-                "acq.frameRate",
-                "acq.zoomFactor",
-                "acq.pixelTime",
-                "acq.msPerLine",
-                "acq.zStepSize",
-                "acq.scanAngleMultiplierFast",
-                "acq.scanAngleMultiplierSlow",
-                "motor.absXPosition",
-                "motor.absYPosition",
-                "motor.absZPosition",
-            )
+            key: nested_matlab_field(state, key) for key in ACQUISITION_METADATA_FIELDS
         },
     )
 
