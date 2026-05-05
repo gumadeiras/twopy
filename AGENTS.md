@@ -49,6 +49,20 @@ twopy is a two-photon imaging analysis tool.
 - Stimulus names and raw movie stems can change. Detect those files by stable patterns, not hard-coded full names.
 - `savedAnalysis/` is optional. It exists only when the session was already analyzed by the lab MATLAB package.
 
+## Timing And Synchronization
+
+- Imaging and stimulus presentation run on separate computers with separate
+  clocks and different frame rates.
+- The imaging computer records the movie at relatively low frame rate and also
+  records photodiode signals.
+- The stimulus computer presents at relatively high frame rate and flashes the
+  photodiode at key events: start, trial transitions, and end.
+- Different photodiode flash patterns or durations identify event types.
+- Response analysis must align stimulus events to imaging frames through the
+  photodiode signal. Do not assign trials from nominal frame rates alone.
+- Prefer `highResPd.mat` for precise photodiode event detection and
+  `imagingResPd.mat` for frame-resolution mapping.
+
 ## Converted Data
 
 - Read microscope source data through a MATLAB file layer.
@@ -60,6 +74,8 @@ twopy is a two-photon imaging analysis tool.
   dominates file size.
 - During initial conversion, generate a mean image of the aligned movie. Default
   to the full movie and allow callers to choose a frame range.
+- Store synchronization metadata in converted HDF5 files so response-analysis
+  code can see the timing contract.
 - Keep HDF5 groups and datasets named in plain language so files remain inspectable outside twopy.
 
 ## Environment
@@ -68,6 +84,8 @@ twopy is a two-photon imaging analysis tool.
 - When adding, removing, or changing dependencies, update `environment.yml` or a requirements file in the same change.
 - Prefer `environment.yml` for the micromamba development environment.
 - Keep one install path. Do not split dependencies into dev or GUI extras.
+- Install pre-commit hooks with
+  `micromamba run -n twopy pre-commit install` after creating the environment.
 
 ## Configuration
 
@@ -138,8 +156,7 @@ micromamba run -n twopy python -m ruff format --check .
 Run the touched-surface gate before handoff:
 
 ```sh
-micromamba run -n twopy python -m ruff check .
-micromamba run -n twopy python -m ruff format --check .
-micromamba run -n twopy python -m mypy
-micromamba run -n twopy python -m unittest discover -s tests
+micromamba run -n twopy pre-commit run --all-files
 ```
+
+The pre-commit hook runs the same gate before each commit.

@@ -11,6 +11,7 @@ decided.
 - Package metadata with one required install path for core, GUI, linting, and
   typing tools.
 - Strict ruff and mypy configuration.
+- Pre-commit hooks for ruff, mypy, and unit tests.
 - Repository rules in `AGENTS.md`.
 - Session path discovery for required microscope output files.
 - Mini input data spec in `docs/input_data_spec.md`.
@@ -33,6 +34,8 @@ decided.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus
   parameters, stimulus timeline, photodiode signals, mean image, and a separate
   aligned movie file.
+- Converted HDF5 synchronization metadata documenting that imaging and stimulus
+  clocks are aligned through photodiode events.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.
 - TIFF metadata extraction for Python access plus optional CSV output with
   selected TIFF tags and ScanImage recording fields.
@@ -40,7 +43,7 @@ decided.
   acquisition metadata.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
-- Real example recording converted successfully to `twopy/twopy_recording.h5`
+- Real example recording converted successfully to `twopy/recording_data.h5`
   and `twopy/aligned_movie.h5`; aligned movie shape `(4168, 256, 127)`, mean
   image shape `(256, 127)`, stimulus timeline shape `(18021, 35)`.
 - Real database query matched the example recording in both `experimentLog.db`
@@ -76,6 +79,9 @@ decided.
   dominates file size.
 - Source MATLAB and raw TIFF files are conversion inputs only. Analysis and
   processing operate on converted twopy HDF5 files.
+- Imaging and stimulus presentation run on separate clocks. Response analysis
+  must align stimulus events to imaging frames through photodiode decoding, not
+  nominal frame rates alone.
 - Initial conversion generates a mean image. The default is the full aligned
   movie, with optional frame-range selection.
 - Code style: simple, typed, documented, and tested.

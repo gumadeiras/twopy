@@ -33,9 +33,26 @@ __all__ = [
     "load_source_conversion_inputs",
 ]
 
-CONVERTED_RECORDING_FILENAME = "twopy_recording.h5"
+CONVERTED_RECORDING_FILENAME = "recording_data.h5"
 CONVERTED_ALIGNED_MOVIE_FILENAME = "aligned_movie.h5"
 ALIGNED_MOVIE_DATASET = "movie/aligned"
+SYNCHRONIZATION_MODEL = {
+    "imaging_clock": "imaging computer",
+    "stimulus_clock": "stimulus presentation computer",
+    "clock_relationship": (
+        "independent computers with different frame rates; align by photodiode, "
+        "not by nominal frame counts alone"
+    ),
+    "sync_signal": "photodiode",
+    "event_encoding": (
+        "stimulus computer flashes the photodiode at start, trial transitions, "
+        "and end; flash pattern or duration identifies the event type"
+    ),
+    "analysis_rule": (
+        "decode photodiode events before assigning imaging frames to stimulus "
+        "trials or computing responses"
+    ),
+}
 
 
 class _MatlabStruct(Protocol):
@@ -166,6 +183,11 @@ class StimulusTimeline:
     Inputs: MATLAB ``stimData`` table.
     Outputs: the full numeric table plus common columns as direct arrays.
 
+    The stimulus timeline comes from the stimulus presentation computer. Its
+    clock is independent from the imaging computer clock, so response analysis
+    must use photodiode synchronization before assigning imaging frames to
+    stimulus trials.
+
     The first observed columns are time, stimulus frame number, and epoch. The
     converted HDF5 file preserves the full table for later analysis.
     """
@@ -183,6 +205,11 @@ class PhotodiodeSignals:
 
     Inputs: frame-resolution and high-resolution MATLAB photodiode files.
     Outputs: NumPy arrays ready to write into the twopy HDF5 file.
+
+    Imaging and stimulus presentation run on different computers with different
+    frame rates. The stimulus computer flashes the photodiode at key timepoints
+    such as start, trial transitions, and end. These signals are the bridge
+    between clocks and must be decoded before trial-level response analysis.
     """
 
     imaging_res_path: Path
@@ -323,6 +350,7 @@ def convert_recording_to_twopy(
         _write_attrs(metadata_group, inputs.acquisition.fields)
 
         stimulus_group = h5_file.create_group("stimulus")
+        stimulus_group.attrs["clock_source"] = SYNCHRONIZATION_MODEL["stimulus_clock"]
         stimulus_group.create_dataset(
             "timeline",
             data=inputs.stimulus_timeline.data,
@@ -334,15 +362,20 @@ def convert_recording_to_twopy(
         )
 
         photodiode_group = h5_file.create_group("photodiode")
-        photodiode_group.create_dataset(
+        _write_synchronization_metadata(photodiode_group)
+        imaging_res_pd = photodiode_group.create_dataset(
             "imaging_res_pd",
             data=inputs.photodiode.imaging_res_pd,
             compression="gzip",
         )
-        photodiode_group.create_dataset(
+        imaging_res_pd.attrs["sample_domain"] = "one sample per aligned imaging frame"
+        high_res_pd = photodiode_group.create_dataset(
             "high_res_pd",
             data=inputs.photodiode.high_res_pd,
             compression="gzip",
+        )
+        high_res_pd.attrs["sample_domain"] = (
+            "high-rate photodiode signal for precise event detection"
         )
 
     return ConvertedRecording(
@@ -497,6 +530,23 @@ def _load_photodiode_signals(
             dtype=np.float64,
         ),
     )
+
+
+def _write_synchronization_metadata(group: h5py.Group) -> None:
+    """Write the timing model that makes photodiode data interpretable.
+
+    Args:
+        group: HDF5 group that receives synchronization attributes.
+
+    Returns:
+        None. The function writes human-readable HDF5 attributes.
+
+    These attributes are deliberately plain language. Later response-analysis
+    code should read them as the contract: stimulus rows and imaging frames are
+    on independent clocks until photodiode events align them.
+    """
+    for key, value in SYNCHRONIZATION_MODEL.items():
+        group.attrs[key] = value
 
 
 def _write_aligned_movie_file(

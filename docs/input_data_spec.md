@@ -29,6 +29,19 @@ Optional top-level contents:
 `savedAnalysis/` exists only when the recording was analyzed before with the lab
 MATLAB package.
 
+## Timing Model
+
+The imaging computer and stimulus computer are separate machines with separate
+clocks and different frame rates. The imaging computer records the movie at a
+relatively low frame rate and records photodiode signals. The stimulus computer
+presents stimuli at a relatively high frame rate and flashes the photodiode at
+key timepoints: start, trial transitions, and end.
+
+Different photodiode flash patterns or durations identify different event
+types. twopy must use these photodiode signals to align stimulus events to
+imaging frames before trial-level response analysis. Nominal frame rates are not
+enough by themselves.
+
 ## Observed Example Files
 
 Top-level files observed in the example session:
@@ -118,6 +131,6 @@ gzip compression before any analysis or processing.
 
 The conversion writes the aligned movie to a separate `aligned_movie.h5` file
 because it usually dominates file size. It writes acquisition metadata, stimulus
-parameters, stimulus timeline, photodiode signals, and a mean image to
-`twopy_recording.h5`. The mean image defaults to the full movie and can be
-computed over a requested frame range.
+parameters, stimulus timeline, photodiode signals, synchronization metadata, and
+a mean image to `recording_data.h5`. The mean image defaults to the full movie
+and can be computed over a requested frame range.

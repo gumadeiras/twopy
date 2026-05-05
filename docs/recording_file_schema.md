@@ -20,8 +20,35 @@ prior MATLAB analysis.
   primary stimulus metadata/timeline sources.
 - Use `imagingResPd.mat` for frame-resolution stimulus alignment and
   `highResPd.mat` when higher timing precision is needed.
+- Treat imaging frames and stimulus frames as independent clocks until the
+  photodiode signal aligns them.
 - Use `savedAnalysis/` only as optional prior MATLAB analysis output. New
   recordings may not have it.
+
+## Timing And Synchronization
+
+Imaging and stimulus presentation happen on different computers.
+
+The imaging computer records the two-photon movie at a relatively low frame
+rate. It also records a photodiode signal. In the converted data,
+`photodiode/imaging_res_pd` has one sample per aligned imaging frame, and
+`photodiode/high_res_pd` contains a higher-rate photodiode trace for more
+precise event detection.
+
+The stimulus computer presents stimuli at a relatively high frame rate. It also
+flashes the photodiode at key timepoints, including stimulus start, trial
+transitions, and stimulus end. Different flash patterns or flash durations mark
+different event types.
+
+Response analysis must use the photodiode to align the two clocks. Do not assign
+imaging frames to stimulus trials by assuming nominal frame rates are enough.
+The correct workflow is:
+
+1. Load the converted stimulus timeline and photodiode signals.
+2. Decode photodiode events from the high-resolution signal when precise timing
+   is needed.
+3. Map decoded stimulus events onto imaging frames.
+4. Extract ROI responses by trial or epoch from that aligned frame map.
 
 ## Session Folder
 
@@ -112,7 +139,8 @@ Observed example contents:
 - Dtype: `float64`.
 
 Use this for precise stimulus timing or onset detection when frame-resolution
-alignment is not enough.
+alignment is not enough. This is the preferred signal for decoding photodiode
+flash patterns and event durations.
 
 ### `imageDescription.mat`
 
@@ -155,7 +183,8 @@ Observed example contents:
 - Dtype: `float64`.
 - Row count matches `alignedMovie.mat/imgFrames_ch1`.
 
-Use this to align each imaging frame to stimulus timing.
+Use this to align each imaging frame to stimulus timing after photodiode events
+have been decoded.
 
 ## Optional Top-Level Directory
 
@@ -353,6 +382,7 @@ Use this as provenance. It is not required for twopy conversion.
 Minimum source-file load set for conversion:
 
 - `alignedMovie.mat`
+- `highResPd.mat`
 - `imageDescription.mat`
 - `stimulusData/stimParams.mat`
 - `stimulusData/stimdata.mat`
@@ -363,15 +393,19 @@ writes converted HDF5 files with `convert_recording_to_twopy(...)`. The source
 files are read-only conversion inputs. Response analysis should use the
 converted HDF5 files rather than reading MATLAB files directly.
 
-The converted `twopy_recording.h5` file contains:
+The converted `recording_data.h5` file contains:
 
 - `movie`: attributes pointing to the separate aligned movie file and dataset.
 - `movie/mean_image`: mean image generated during conversion.
 - `metadata`: selected acquisition fields as HDF5 attributes.
 - `stimulus/timeline`: numeric stimulus timeline.
 - `stimulus/parameters_json`: stimulus epoch parameters.
-- `photodiode/imaging_res_pd`: frame-resolution photodiode vector.
-- `photodiode/high_res_pd`: high-resolution photodiode vector.
+- `photodiode`: synchronization metadata explaining the two-computer timing
+  model.
+- `photodiode/imaging_res_pd`: frame-resolution photodiode vector, one sample
+  per aligned imaging frame.
+- `photodiode/high_res_pd`: high-resolution photodiode vector for precise
+  photodiode event detection.
 
 The converted `aligned_movie.h5` file contains:
 
@@ -379,10 +413,6 @@ The converted `aligned_movie.h5` file contains:
 
 By default, the mean image uses the entire aligned movie. Callers can pass
 `mean_start_frame` and `mean_stop_frame` to compute it over a frame range.
-
-Optional timing refinement:
-
-- `highResPd.mat`
 
 Optional prior-analysis shortcut:
 

@@ -77,7 +77,7 @@ class ConversionTest(unittest.TestCase):
 
             converted = convert_recording_to_twopy(session_dir, output_dir)
 
-            self.assertEqual(converted.path, output_dir / "twopy_recording.h5")
+            self.assertEqual(converted.path, output_dir / "recording_data.h5")
             self.assertEqual(converted.movie_path, output_dir / "aligned_movie.h5")
             self.assertEqual(converted.mean_image_start_frame, 0)
             self.assertEqual(converted.mean_image_stop_frame, 3)
@@ -102,8 +102,36 @@ class ConversionTest(unittest.TestCase):
                 self.assertEqual(h5_file["movie/mean_image"].attrs["start_frame"], 0)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["stop_frame"], 3)
                 self.assertEqual(h5_file["metadata"].attrs["acq.frameRate"], 10.0)
+                self.assertEqual(
+                    h5_file["stimulus"].attrs["clock_source"],
+                    "stimulus presentation computer",
+                )
                 self.assertEqual(h5_file["stimulus/timeline"].shape, (3, 3))
                 self.assertEqual(h5_file["photodiode/imaging_res_pd"].shape, (3,))
+                self.assertEqual(
+                    h5_file["photodiode"].attrs["sync_signal"],
+                    "photodiode",
+                )
+                self.assertIn(
+                    "independent computers",
+                    h5_file["photodiode"].attrs["clock_relationship"],
+                )
+                self.assertIn(
+                    "trial transitions",
+                    h5_file["photodiode"].attrs["event_encoding"],
+                )
+                self.assertIn(
+                    "decode photodiode events",
+                    h5_file["photodiode"].attrs["analysis_rule"],
+                )
+                self.assertEqual(
+                    h5_file["photodiode/imaging_res_pd"].attrs["sample_domain"],
+                    "one sample per aligned imaging frame",
+                )
+                self.assertEqual(
+                    h5_file["photodiode/high_res_pd"].attrs["sample_domain"],
+                    "high-rate photodiode signal for precise event detection",
+                )
                 parameters = json.loads(h5_file["stimulus/parameters_json"][()])
                 self.assertEqual(parameters[1]["epochName"], "LR20")
                 self.assertNotIn("aligned", h5_file["movie"])

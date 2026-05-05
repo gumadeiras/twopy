@@ -6,6 +6,7 @@ Two-photon imaging analysis tool with a napari interface.
 
 ```sh
 micromamba env create -f environment.yml
+micromamba run -n twopy pre-commit install
 cp config.example.yml config.yml
 ```
 
@@ -16,11 +17,11 @@ git.
 ## Check
 
 ```sh
-micromamba run -n twopy python -m ruff check .
-micromamba run -n twopy python -m ruff format --check .
-micromamba run -n twopy python -m mypy
-micromamba run -n twopy python -m unittest discover -s tests
+micromamba run -n twopy pre-commit run --all-files
 ```
+
+The installed pre-commit hook runs ruff, mypy, and the unit tests before each
+commit.
 
 ## Find Recordings
 
@@ -59,7 +60,7 @@ print(converted.path)
 print(converted.movie_path)
 ```
 
-Conversion writes `twopy_recording.h5` for metadata, stimulus tables,
+Conversion writes `recording_data.h5` for metadata, stimulus tables,
 photodiode signals, and the mean image. The large aligned movie is written
 separately to `aligned_movie.h5`. By default the mean image uses the full movie;
 pass `mean_start_frame` and `mean_stop_frame` to use a frame range.
