@@ -7,6 +7,7 @@ without hard-coding experiment fields that we have not validated yet.
 
 import sqlite3
 from collections.abc import Mapping, Sequence
+from contextlib import closing
 from pathlib import Path
 
 from twopy.database.cache import (
@@ -166,7 +167,7 @@ def find_experiments(
     records: list[DatabaseRecord] = []
 
     for database_path in catalog.sqlite_files:
-        with _connect_read_only(database_path) as connection:
+        with closing(_connect_read_only(database_path)) as connection:
             tables = _matching_tables(connection, database_path, table_names)
             for table in tables:
                 table_records = _query_table(
@@ -246,7 +247,7 @@ def find_stimulus_presentations(
     experiments: list[DatabaseExperiment] = []
 
     for database_path in catalog.sqlite_files:
-        with _connect_read_only(database_path) as connection:
+        with closing(_connect_read_only(database_path)) as connection:
             if not _has_tables(connection, ("stimulusPresentation", "fly")):
                 continue
 
