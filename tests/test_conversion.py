@@ -49,6 +49,8 @@ class ConversionTest(unittest.TestCase):
             )
             self.assertEqual(loaded.acquisition.fields["acq.frameRate"], 10.0)
             self.assertEqual(loaded.acquisition.fields["acq.zoomFactor"], 2.0)
+            self.assertEqual(loaded.run.fields["rigName"], "OdorRig")
+            self.assertEqual(loaded.run.fields["runNumber"], 1)
             self.assertEqual(loaded.frame_counts.aligned_movie_frames, 3)
             self.assertEqual(loaded.frame_counts.imaging_res_pd_samples, 3)
             self.assertEqual(loaded.frame_counts.acquisition_number_of_frames, 3)
@@ -61,6 +63,14 @@ class ConversionTest(unittest.TestCase):
             np.testing.assert_array_equal(
                 loaded.stimulus_timeline.epoch_numbers,
                 np.array([1, 2, 2]),
+            )
+            self.assertEqual(
+                loaded.stimulus_timeline.column_names,
+                (
+                    "time_seconds",
+                    "stimulus_frame_number",
+                    "epoch_number",
+                ),
             )
             np.testing.assert_array_equal(
                 loaded.photodiode.imaging_res_pd,
@@ -104,14 +114,25 @@ class ConversionTest(unittest.TestCase):
                     h5_file["movie/mean_image"][()],
                     np.array([[4.0, 5.0], [6.0, 7.0]]),
                 )
+                self.assertIsNone(h5_file["movie/mean_image"].compression)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["start_frame"], 0)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["stop_frame"], 3)
                 self.assertEqual(h5_file["metadata"].attrs["acq.frameRate"], 10.0)
+                self.assertEqual(h5_file["run"].attrs["rigName"], "OdorRig")
+                self.assertEqual(h5_file["run"].attrs["genotype"], "test_genotype")
+                self.assertEqual(h5_file["run"].attrs["runNumber"], 1)
                 self.assertEqual(
                     h5_file["stimulus"].attrs["clock_source"],
                     "stimulus presentation computer",
                 )
                 self.assertEqual(h5_file["stimulus/timeline"].shape, (3, 3))
+                self.assertEqual(
+                    tuple(
+                        value.decode("utf-8")
+                        for value in h5_file["stimulus/timeline_column_names"][()]
+                    ),
+                    ("time_seconds", "stimulus_frame_number", "epoch_number"),
+                )
                 self.assertEqual(h5_file["photodiode/imaging_res_pd"].shape, (3,))
                 self.assertEqual(
                     h5_file["photodiode"].attrs["sync_signal"],
@@ -356,6 +377,20 @@ class ConversionTest(unittest.TestCase):
                     [[0.0, 1.0, 1.0], [0.1, 2.0, 2.0], [0.2, 3.0, 2.0]],
                 ),
             },
+        )
+        scipy.io.savemat(
+            stimulus_dir / "runDetails.mat",
+            {
+                "flyId": 123,
+                "genotype": "test_genotype",
+                "rigName": "OdorRig",
+                "rigTemperature": 0,
+                "runNumber": 1,
+            },
+        )
+        (stimulus_dir / "textStimData.csv").write_text(
+            "Time,FrameNumber,Epoch,Flash\n0.0,1,1,1\n0.1,2,2,0\n0.2,3,2,0\n",
+            encoding="utf-8",
         )
         scipy.io.savemat(
             session_dir / "imagingResPd.mat",

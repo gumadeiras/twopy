@@ -1,7 +1,7 @@
 """Write converted twopy data into HDF5 files.
 
 Inputs: loaded source conversion objects and computed summary images.
-Outputs: gzip-compressed HDF5 files owned by twopy.
+Outputs: HDF5 files owned by twopy, using gzip for large compressible arrays.
 
 This module owns the on-disk converted layout. Source MATLAB and TIFF files are
 read-only inputs handled before these writers run.
@@ -88,6 +88,8 @@ def write_recording_data_file(
         )
         metadata_group = h5_file.create_group("metadata")
         _write_attrs(metadata_group, inputs.acquisition.fields)
+        run_group = h5_file.create_group("run")
+        _write_attrs(run_group, inputs.run.fields)
         _write_stimulus_group(
             h5_file,
             inputs.stimulus_timeline,
@@ -146,7 +148,6 @@ def _write_movie_reference_group(
     mean_dataset = movie_group.create_dataset(
         "mean_image",
         data=mean_image,
-        compression="gzip",
     )
     mean_dataset.attrs["start_frame"] = mean_start_frame
     mean_dataset.attrs["stop_frame"] = mean_stop_frame
@@ -173,6 +174,10 @@ def _write_stimulus_group(
         "timeline",
         data=timeline.data,
         compression="gzip",
+    )
+    stimulus_group.create_dataset(
+        "timeline_column_names",
+        data=np.asarray(timeline.column_names, dtype=h5py.string_dtype("utf-8")),
     )
     stimulus_group.create_dataset(
         "parameters_json",

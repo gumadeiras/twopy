@@ -128,23 +128,41 @@ class StimulusParameters:
 
 
 @dataclass(frozen=True)
+class RunMetadata:
+    """Stimulus-run metadata from ``stimulusData/runDetails.mat``.
+
+    Inputs: MATLAB run details produced by the stimulus computer.
+    Outputs: plain scalar fields such as rig name, genotype, and run number.
+
+    This is separate from acquisition metadata because it describes the
+    stimulus run and rig identity, not ScanImage acquisition settings.
+    """
+
+    path: Path
+    fields: dict[str, object]
+
+
+@dataclass(frozen=True)
 class StimulusTimeline:
     """Per-stimulus-frame timeline from ``stimdata.mat``.
 
     Inputs: MATLAB ``stimData`` table.
-    Outputs: the full numeric table plus common columns as direct arrays.
+    Outputs: the full numeric table, column labels, and common columns as
+    direct arrays.
 
     The stimulus timeline comes from the stimulus presentation computer. Its
     clock is independent from the imaging computer clock, so response analysis
     must use photodiode synchronization before assigning imaging frames to
     stimulus trials.
 
-    The first observed columns are time, stimulus frame number, and epoch. The
-    converted HDF5 file preserves the full table for later analysis.
+    The first observed columns are time, stimulus frame number, and epoch.
+    Later columns are protocol-specific closed-loop/stimulus/flash values, so
+    twopy stores auditable column labels with the full table.
     """
 
     path: Path
     data: npt.NDArray[np.float64]
+    column_names: tuple[str, ...]
     time_seconds: npt.NDArray[np.float64]
     frame_numbers: npt.NDArray[np.int64]
     epoch_numbers: npt.NDArray[np.int64]
@@ -205,6 +223,7 @@ class SourceConversionInputs:
     session_files: TwoPhotonSessionFiles
     aligned_movie: AlignedMovieSource
     acquisition: AcquisitionMetadata
+    run: RunMetadata
     stimulus_parameters: StimulusParameters
     stimulus_timeline: StimulusTimeline
     photodiode: PhotodiodeSignals

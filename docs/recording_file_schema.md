@@ -312,9 +312,15 @@ Observed example contents:
 - Column 1: time in seconds.
 - Column 2: stimulus frame number.
 - Column 3: epoch number.
-- Other columns contain closed-loop/stimulus/flash values.
+- Columns 4-13: closed-loop stimulus data values from the stimulus system.
+- Columns 14-33: stimulus data values from the stimulus system.
+- Column 34: flash value from `textStimData.csv`.
+- Column 35: unlabeled trailing numeric column observed in `stimData`.
 
-Use this as the primary structured stimulus timeline.
+Use this as the primary structured stimulus timeline. twopy also stores
+expanded timeline column labels in `stimulus/timeline_column_names`. The first
+three labels are specific. Later labels preserve the stimulus-system groups
+without pretending we know every protocol-specific value yet.
 
 ### `stimulusData/stimParams.mat`
 
@@ -396,6 +402,7 @@ Minimum source-file load set for conversion:
 - `alignedMovie.mat`
 - `highResPd.mat`
 - `imageDescription.mat`
+- `stimulusData/runDetails.mat`
 - `stimulusData/stimParams.mat`
 - `stimulusData/stimdata.mat`
 - `imagingResPd.mat`
@@ -408,9 +415,12 @@ converted HDF5 files rather than reading MATLAB files directly.
 The converted `recording_data.h5` file contains:
 
 - `movie`: attributes pointing to the separate aligned movie file and dataset.
-- `movie/mean_image`: mean image generated during conversion.
+- `movie/mean_image`: uncompressed mean image generated during conversion. This
+  is one image, so compression is unnecessary complexity.
 - `metadata`: selected acquisition fields as HDF5 attributes.
+- `run`: stimulus-run metadata from `runDetails.mat`, including `rigName`.
 - `stimulus/timeline`: numeric stimulus timeline.
+- `stimulus/timeline_column_names`: one label per timeline column.
 - `stimulus/parameters_json`: stimulus epoch parameters.
 - `photodiode`: synchronization metadata explaining the two-computer timing
   model.

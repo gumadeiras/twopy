@@ -1,8 +1,7 @@
 """Convert microscope source files into twopy-owned HDF5 files.
 
 Inputs: one validated two-photon recording session directory.
-Outputs: gzip-compressed HDF5 files containing twopy-owned datasets for later
-analysis.
+Outputs: HDF5 files containing twopy-owned datasets for later analysis.
 
 This package keeps the public conversion API small while separating source
 loading, HDF5 writing, and data-object definitions into focused modules.
@@ -16,6 +15,7 @@ from twopy.conversion.types import (
     ConvertedRecording,
     FrameCountAudit,
     PhotodiodeSignals,
+    RunMetadata,
     SourceConversionInputs,
     StimulusParameters,
     StimulusTimeline,
@@ -27,6 +27,7 @@ __all__ = [
     "ConvertedRecording",
     "FrameCountAudit",
     "PhotodiodeSignals",
+    "RunMetadata",
     "SourceConversionInputs",
     "StimulusParameters",
     "StimulusTimeline",

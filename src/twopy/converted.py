@@ -111,8 +111,9 @@ class RecordingData:
     """Loaded non-source recording data ready for analysis.
 
     Inputs: twopy-converted HDF5 files.
-    Outputs: metadata dictionaries, stimulus arrays, photodiode vectors, mean
-    image, frame-count audit values, and a lazy movie reader.
+    Outputs: metadata dictionaries, stimulus arrays with column names,
+    photodiode vectors, mean image, frame-count audit values, and a lazy movie
+    reader.
 
     This object is the analysis-facing representation of one converted
     recording. It deliberately excludes source MATLAB/TIFF ownership.
@@ -122,8 +123,10 @@ class RecordingData:
     movie: ConvertedMovie
     source_session_dir: Path
     acquisition_metadata: dict[str, object]
+    run_metadata: dict[str, object]
     synchronization_metadata: dict[str, str]
     stimulus_timeline: npt.NDArray[np.float64]
+    stimulus_timeline_column_names: tuple[str, ...]
     stimulus_parameters: tuple[dict[str, object], ...]
     imaging_res_pd: npt.NDArray[np.float64]
     high_res_pd: npt.NDArray[np.float64]
@@ -181,10 +184,15 @@ def load_converted_recording(
                 _read_str_attr(h5_file, "source_session_dir"),
             ),
             acquisition_metadata=_read_attrs(h5_file["metadata"]),
+            run_metadata=_read_attrs(h5_file["run"]),
             synchronization_metadata=_read_str_attrs(h5_file["photodiode"]),
             stimulus_timeline=cast(
                 npt.NDArray[np.float64],
                 h5_file["stimulus/timeline"][()],
+            ),
+            stimulus_timeline_column_names=_read_string_dataset(
+                h5_file,
+                "stimulus/timeline_column_names",
             ),
             stimulus_parameters=_read_stimulus_parameters(h5_file),
             imaging_res_pd=cast(
@@ -269,6 +277,16 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
         msg = (
             "imaging_res_pd must have one sample per aligned movie frame; "
             f"got {recording.imaging_res_pd.shape} for {frame_count} frames"
+        )
+        raise ValueError(msg)
+    if (
+        len(recording.stimulus_timeline_column_names)
+        != recording.stimulus_timeline.shape[1]
+    ):
+        msg = (
+            "stimulus timeline column names must match timeline width; "
+            f"got {len(recording.stimulus_timeline_column_names)} names for "
+            f"{recording.stimulus_timeline.shape[1]} columns"
         )
         raise ValueError(msg)
 
@@ -413,6 +431,34 @@ def _read_stimulus_parameters(
         parameters.append(cast(dict[str, object], item))
 
     return tuple(parameters)
+
+
+def _read_string_dataset(h5_file: h5py.File, dataset_name: str) -> tuple[str, ...]:
+    """Read a one-dimensional HDF5 string dataset.
+
+    Args:
+        h5_file: Open ``recording_data.h5`` file.
+        dataset_name: Dataset path.
+
+    Returns:
+        Tuple of decoded strings.
+    """
+    values = h5_file[dataset_name][()]
+    return tuple(_decode_string_value(value) for value in values)
+
+
+def _decode_string_value(value: object) -> str:
+    """Decode one HDF5 string scalar.
+
+    Args:
+        value: Raw scalar value from h5py.
+
+    Returns:
+        Text value.
+    """
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value)
 
 
 def _read_frame_counts(h5_file: h5py.File) -> FrameCountAudit:

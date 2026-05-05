@@ -67,6 +67,12 @@ decided.
   photodiode events, with mismatched event counts treated as an error.
 - Frame-window response objects for splitting ROI traces by explicit imaging
   frame boundaries.
+- Conversion now stores stimulus-run metadata from `runDetails.mat`, including
+  `rigName`.
+- Conversion stores one label per stimulus timeline column. Only the first three
+  columns are fully named by meaning; later labels preserve observed
+  closed-loop/stimulus/flash groups.
+- `movie/mean_image` is stored uncompressed because it is a single small image.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
 - Real example recording converted successfully to `twopy/recording_data.h5`

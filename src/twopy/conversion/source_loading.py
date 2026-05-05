@@ -21,6 +21,7 @@ from twopy.conversion.types import (
     AlignedMovieSource,
     FrameCountAudit,
     PhotodiodeSignals,
+    RunMetadata,
     SourceConversionInputs,
     StimulusParameters,
     StimulusTimeline,
@@ -46,6 +47,13 @@ ACQUISITION_METADATA_FIELDS = (
     "motor.absXPosition",
     "motor.absYPosition",
     "motor.absZPosition",
+)
+RUN_METADATA_FIELDS = (
+    "flyId",
+    "genotype",
+    "rigName",
+    "rigTemperature",
+    "runNumber",
 )
 
 
@@ -79,6 +87,7 @@ def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
         session_files=files,
         aligned_movie=aligned_movie,
         acquisition=acquisition,
+        run=_load_run_metadata(files.stimulus_data_dir / "runDetails.mat"),
         stimulus_parameters=_load_stimulus_parameters(
             files.stimulus_data_dir / "stimParams.mat",
         ),
@@ -137,6 +146,24 @@ def _load_acquisition_metadata(path: Path) -> AcquisitionMetadata:
     )
 
 
+def _load_run_metadata(path: Path) -> RunMetadata:
+    """Load stimulus-run metadata from ``runDetails.mat``.
+
+    Args:
+        path: MATLAB file containing run-level scalar metadata.
+
+    Returns:
+        Run metadata with selected fields flattened.
+
+    ``rigName`` lives here in the real data and identifies which stimulus rig
+    generated the run.
+    """
+    return RunMetadata(
+        path=path,
+        fields={key: load_scipy_variable(path, key) for key in RUN_METADATA_FIELDS},
+    )
+
+
 def _load_stimulus_parameters(path: Path) -> StimulusParameters:
     """Load stimulus epoch parameter structs.
 
@@ -182,9 +209,108 @@ def _load_stimulus_timeline(path: Path) -> StimulusTimeline:
     return StimulusTimeline(
         path=path,
         data=data,
+        column_names=_load_stimulus_timeline_column_names(
+            path.parent / "textStimData.csv",
+            column_count=data.shape[1],
+        ),
         time_seconds=data[:, 0],
         frame_numbers=data[:, 1].astype(np.int64),
         epoch_numbers=data[:, 2].astype(np.int64),
+    )
+
+
+def _load_stimulus_timeline_column_names(
+    csv_path: Path,
+    *,
+    column_count: int,
+) -> tuple[str, ...]:
+    """Load or infer labels for ``stimData`` columns.
+
+    Args:
+        csv_path: Optional ``textStimData.csv`` path next to ``stimdata.mat``.
+        column_count: Number of columns in the MATLAB ``stimData`` table.
+
+    Returns:
+        One plain-language column label per MATLAB table column.
+
+    The CSV header is the only observed source that names column groups. It has
+    blank cells for repeated group columns, so this function expands those into
+    auditable names instead of pretending every protocol-specific column is
+    fully understood.
+    """
+    if not csv_path.is_file():
+        return _fallback_stimulus_column_names(column_count)
+
+    first_line = csv_path.read_text(encoding="utf-8").splitlines()[0]
+    raw_names = first_line.split(",")
+    if raw_names and raw_names[-1] == "":
+        raw_names = raw_names[:-1]
+
+    names = _expand_stimulus_column_header(tuple(raw_names))
+    if len(names) < column_count:
+        names = names + tuple(
+            f"unlabeled_column_{index + 1:02d}"
+            for index in range(len(names), column_count)
+        )
+    return names[:column_count]
+
+
+def _expand_stimulus_column_header(raw_names: tuple[str, ...]) -> tuple[str, ...]:
+    """Expand sparse stimulus CSV header cells into one label per column.
+
+    Args:
+        raw_names: Header cells from ``textStimData.csv``.
+
+    Returns:
+        Column labels with group names repeated and numbered.
+    """
+    names: list[str] = []
+    current_group = ""
+    group_counts: dict[str, int] = {}
+    explicit_names = {
+        "Time": "time_seconds",
+        "FrameNumber": "stimulus_frame_number",
+        "Epoch": "epoch_number",
+        "Flash": "flash",
+    }
+    grouped_names = {
+        "ClosedLoopStimulusData": "closed_loop_stimulus_data",
+        "StimulusData": "stimulus_data",
+    }
+
+    for raw_name in raw_names:
+        if raw_name in explicit_names:
+            current_group = ""
+            names.append(explicit_names[raw_name])
+            continue
+        if raw_name in grouped_names:
+            current_group = grouped_names[raw_name]
+
+        if current_group == "":
+            names.append(f"unlabeled_column_{len(names) + 1:02d}")
+            continue
+
+        group_counts[current_group] = group_counts.get(current_group, 0) + 1
+        names.append(f"{current_group}_{group_counts[current_group]:02d}")
+
+    return tuple(names)
+
+
+def _fallback_stimulus_column_names(column_count: int) -> tuple[str, ...]:
+    """Generate conservative labels when no CSV header is available.
+
+    Args:
+        column_count: Number of MATLAB ``stimData`` columns.
+
+    Returns:
+        One label per column.
+    """
+    base_names = ("time_seconds", "stimulus_frame_number", "epoch_number")
+    if column_count <= len(base_names):
+        return base_names[:column_count]
+    return base_names + tuple(
+        f"unknown_stimulus_column_{index + 1:02d}"
+        for index in range(len(base_names), column_count)
     )
 
 
