@@ -1,0 +1,208 @@
+"""Typed data objects used by twopy conversion.
+
+Inputs: MATLAB/HDF5 source metadata and loaded NumPy arrays.
+Outputs: immutable Python objects passed between conversion steps.
+"""
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import cast
+
+import h5py
+import numpy as np
+import numpy.typing as npt
+
+from twopy.conversion.frame_ranges import normalize_frame_range
+from twopy.session import TwoPhotonSessionFiles
+
+
+@dataclass(frozen=True)
+class AlignedMovieSource:
+    """Lazy source for the aligned imaging movie before conversion.
+
+    Inputs: HDF5-backed MATLAB file path and dataset metadata.
+    Outputs: movie shape/dtype metadata plus methods for reading frames.
+
+    This object is only for conversion. Downstream analysis should read the
+    copied movie from the twopy aligned-movie HDF5 file.
+    """
+
+    path: Path
+    dataset_name: str
+    shape: tuple[int, ...]
+    dtype: str
+    chunks: tuple[int, ...] | None
+    compression: str | None
+
+    def read_frames(
+        self,
+        start: int | None = None,
+        stop: int | None = None,
+    ) -> npt.NDArray[np.float64]:
+        """Read a frame range from the aligned source movie.
+
+        Args:
+            start: First frame index to read. ``None`` starts at frame zero.
+            stop: Exclusive stop frame index. ``None`` reads through the end.
+
+        Returns:
+            NumPy array with shape ``(frames, x, y)`` for the requested range.
+
+        This method exists for conversion checks and small previews, not for
+        long-lived analysis workflows.
+        """
+        frame_slice = slice(start, stop)
+        with h5py.File(self.path, "r") as mat_file:
+            dataset = mat_file[self.dataset_name]
+            return cast(npt.NDArray[np.float64], dataset[frame_slice, :, :])
+
+    def mean_image(
+        self,
+        *,
+        start_frame: int | None = None,
+        stop_frame: int | None = None,
+        chunk_frames: int = 128,
+    ) -> npt.NDArray[np.float64]:
+        """Compute a mean image over a frame range without loading all frames.
+
+        Args:
+            start_frame: First frame included in the mean. ``None`` uses zero.
+            stop_frame: Exclusive stop frame. ``None`` uses the movie end.
+            chunk_frames: Number of frames read per chunk.
+
+        Returns:
+            Float64 mean image with shape ``(x, y)``.
+
+        The computation streams the movie in chunks, keeping memory use bounded
+        by ``chunk_frames`` rather than the full movie length.
+        """
+        start, stop = normalize_frame_range(
+            frame_count=self.shape[0],
+            start_frame=start_frame,
+            stop_frame=stop_frame,
+        )
+        if chunk_frames < 1:
+            msg = f"chunk_frames must be at least 1; got {chunk_frames}"
+            raise ValueError(msg)
+
+        spatial_shape = self.shape[1:]
+        accumulator = np.zeros(spatial_shape, dtype=np.float64)
+        with h5py.File(self.path, "r") as mat_file:
+            dataset = mat_file[self.dataset_name]
+            for chunk_start in range(start, stop, chunk_frames):
+                chunk_stop = min(chunk_start + chunk_frames, stop)
+                block = np.asarray(dataset[chunk_start:chunk_stop, :, :])
+                accumulator += block.sum(axis=0, dtype=np.float64)
+
+        return accumulator / float(stop - start)
+
+
+@dataclass(frozen=True)
+class AcquisitionMetadata:
+    """Recording acquisition metadata from ``imageDescription.mat``.
+
+    Inputs: MATLAB ScanImage ``state`` struct.
+    Outputs: selected scalar fields in a dictionary.
+
+    The raw MATLAB struct is not exposed because it is source-format data. The
+    converted HDF5 file stores this dictionary as HDF5 attributes.
+    """
+
+    path: Path
+    fields: dict[str, object]
+
+
+@dataclass(frozen=True)
+class StimulusParameters:
+    """Stimulus epoch definitions from ``stimParams.mat``.
+
+    Inputs: MATLAB ``stimParams`` structs.
+    Outputs: one plain dictionary per epoch.
+
+    Field names and values vary with the stimulus design, so dictionaries keep
+    the conversion auditable without inventing a premature fixed schema.
+    """
+
+    path: Path
+    epochs: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
+class StimulusTimeline:
+    """Per-stimulus-frame timeline from ``stimdata.mat``.
+
+    Inputs: MATLAB ``stimData`` table.
+    Outputs: the full numeric table plus common columns as direct arrays.
+
+    The stimulus timeline comes from the stimulus presentation computer. Its
+    clock is independent from the imaging computer clock, so response analysis
+    must use photodiode synchronization before assigning imaging frames to
+    stimulus trials.
+
+    The first observed columns are time, stimulus frame number, and epoch. The
+    converted HDF5 file preserves the full table for later analysis.
+    """
+
+    path: Path
+    data: npt.NDArray[np.float64]
+    time_seconds: npt.NDArray[np.float64]
+    frame_numbers: npt.NDArray[np.int64]
+    epoch_numbers: npt.NDArray[np.int64]
+
+
+@dataclass(frozen=True)
+class PhotodiodeSignals:
+    """Photodiode signals used to align imaging frames and stimulus frames.
+
+    Inputs: frame-resolution and high-resolution MATLAB photodiode files.
+    Outputs: NumPy arrays ready to write into the twopy HDF5 file.
+
+    Imaging and stimulus presentation run on different computers with different
+    frame rates. The stimulus computer flashes the photodiode at key timepoints
+    such as start, trial transitions, and end. These signals are the bridge
+    between clocks and must be decoded before trial-level response analysis.
+    """
+
+    imaging_res_path: Path
+    high_res_path: Path
+    imaging_res_pd: npt.NDArray[np.float64]
+    high_res_pd: npt.NDArray[np.float64]
+
+
+@dataclass(frozen=True)
+class SourceConversionInputs:
+    """All source inputs needed to create a twopy converted recording.
+
+    Inputs: one recording session directory.
+    Outputs: validated file paths and Python objects used only for conversion.
+
+    This object is the boundary between microscope source data and twopy-owned
+    analysis files.
+    """
+
+    session_files: TwoPhotonSessionFiles
+    aligned_movie: AlignedMovieSource
+    acquisition: AcquisitionMetadata
+    stimulus_parameters: StimulusParameters
+    stimulus_timeline: StimulusTimeline
+    photodiode: PhotodiodeSignals
+
+
+@dataclass(frozen=True)
+class ConvertedRecording:
+    """Summary of converted twopy recording files.
+
+    Inputs: conversion output path and source recording folder.
+    Outputs: HDF5 paths plus mean-image frame range and movie shape.
+
+    Later analysis modules should accept these converted HDF5 paths, not source
+    MATLAB file paths. ``path`` points at the small recording data file;
+    ``movie_path`` points at the large aligned movie file.
+    """
+
+    path: Path
+    movie_path: Path
+    source_session_dir: Path
+    movie_shape: tuple[int, ...]
+    mean_image_start_frame: int
+    mean_image_stop_frame: int

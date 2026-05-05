@@ -34,6 +34,9 @@ decided.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus
   parameters, stimulus timeline, photodiode signals, mean image, and a separate
   aligned movie file.
+- Conversion code split into focused modules for public workflow, source
+  loading, HDF5 writing, MATLAB value conversion, frame ranges, and typed data
+  objects.
 - Converted HDF5 synchronization metadata documenting that imaging and stimulus
   clocks are aligned through photodiode events.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.
