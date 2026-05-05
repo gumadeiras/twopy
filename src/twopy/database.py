@@ -1,23 +1,39 @@
 """Query Clark lab experiment SQLite databases.
 
-Inputs: a database folder such as ``/Volumes/magic/clarklab/_Database``.
-Outputs: typed table metadata and experiment records from SQLite query results.
-
-The database layer is intentionally schema-agnostic for now. It can discover
+Inputs: a DB folder. Outputs: typed table metadata and experiment records.
+This layer can discover
 tables, inspect columns, and filter rows without hard-coding experiment fields
 that we have not validated yet.
 """
 
-import hashlib
-import json
-import shutil
 import sqlite3
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+
+from twopy.database_cache import (
+    DEFAULT_DATABASE_CACHE_DIR,
+)
+from twopy.database_cache import (
+    ensure_local_database_copy as _ensure_local_database_copy,
+)
+from twopy.database_cache import (
+    validate_database_access as _validate_database_access,
+)
+from twopy.database_sql import quote_identifier as _quote_identifier
+from twopy.database_sql import validate_filter_columns as _validate_filter_columns
+from twopy.database_types import (
+    DEFAULT_DATABASE_FILES,
+    DatabaseAccess,
+    DatabaseCatalog,
+    DatabaseColumn,
+    DatabaseExperiment,
+    DatabaseRecord,
+    DatabaseTable,
+    DatabaseValue,
+)
 
 __all__ = [
+    "DatabaseAccess",
     "DatabaseCatalog",
     "DatabaseColumn",
     "DatabaseExperiment",
@@ -28,100 +44,6 @@ __all__ = [
     "find_recordings",
     "read_database_catalog",
 ]
-
-DatabaseValue = str | int | float | bytes | None
-DatabaseAccess = Literal["direct", "copy"]
-
-DEFAULT_DATABASE_FILES = ("experimentLog.db", "experimentInitLog.db")
-DEFAULT_DATABASE_CACHE_DIR = Path.home() / ".cache" / "twopy" / "database"
-
-
-@dataclass(frozen=True)
-class DatabaseCatalog:
-    """Known SQLite database files in the lab database folder.
-
-    Inputs: database root folder and discovered SQLite file paths.
-    Outputs: immutable paths used by query functions.
-
-    This object exists so GUI code can show which DB files are available before
-    users try to search experiments.
-    """
-
-    database_dir: Path
-    sqlite_files: tuple[Path, ...]
-
-
-@dataclass(frozen=True)
-class DatabaseColumn:
-    """Description of one SQLite table column.
-
-    Inputs: SQLite ``PRAGMA table_info`` output.
-    Outputs: column name, SQLite type text, and whether SQLite marks it as a
-    primary-key column.
-
-    Column metadata lets filtering code validate user-provided filter names
-    before building SQL.
-    """
-
-    name: str
-    sqlite_type: str
-    is_primary_key: bool
-
-
-@dataclass(frozen=True)
-class DatabaseTable:
-    """Description of one SQLite table.
-
-    Inputs: SQLite database path, table name, and discovered columns.
-    Outputs: immutable table metadata for query planning and GUI display.
-
-    This is a small schema snapshot; it does not include table rows.
-    """
-
-    database_path: Path
-    name: str
-    columns: tuple[DatabaseColumn, ...]
-
-
-@dataclass(frozen=True)
-class DatabaseRecord:
-    """One experiment-like row returned from a database query.
-
-    Inputs: SQLite source path, table name, and row values.
-    Outputs: a typed record that preserves source context with row data.
-
-    The row values remain a dictionary because the real DB schema may evolve and
-    has not yet been normalized into twopy-specific objects.
-    """
-
-    database_path: Path
-    table_name: str
-    values: dict[str, DatabaseValue]
-
-
-@dataclass(frozen=True)
-class DatabaseExperiment:
-    """Joined stimulus-presentation and fly metadata for one experiment.
-
-    Inputs: rows from ``stimulusPresentation`` and ``fly`` tables.
-    Outputs: the fields most useful for finding a recording before loading data.
-
-    This object is the first twopy-specific database view. It keeps the raw DB
-    flexible while giving the GUI a stable, typed search result.
-    """
-
-    database_path: Path
-    stimulus_presentation_id: int
-    fly_id: int
-    relative_data_path: str
-    stimulus_function: str | None
-    date: str | None
-    genotype: str | None
-    cell_type: str | None
-    fluorescent_protein: str | None
-    hemisphere: str | None
-    person: str | None
-    data_quality: int | None
 
 
 def read_database_catalog(
@@ -811,26 +733,6 @@ def _optional_int(value: object) -> int | None:
     raise TypeError(msg)
 
 
-def _validate_filter_columns(table: DatabaseTable, names: Sequence[str]) -> None:
-    """Ensure filter names are columns in the selected table.
-
-    Args:
-        table: Table being queried.
-        names: Filter column names requested by the caller.
-
-    Returns:
-        None when every name exists.
-
-    Raises:
-        ValueError: If any filter name is not a table column.
-    """
-    available = {column.name for column in table.columns}
-    missing = tuple(name for name in names if name not in available)
-    if missing:
-        msg = f"Missing column(s) in {table.name}: {', '.join(missing)}"
-        raise ValueError(msg)
-
-
 def _connect_read_only(database_path: Path) -> sqlite3.Connection:
     """Open one SQLite database in read-only mode.
 
@@ -846,159 +748,3 @@ def _connect_read_only(database_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(uri, uri=True, timeout=5)
     connection.row_factory = sqlite3.Row
     return connection
-
-
-def _quote_identifier(identifier: str) -> str:
-    """Quote a SQLite identifier.
-
-    Args:
-        identifier: Table or column name from SQLite metadata.
-
-    Returns:
-        Identifier wrapped in double quotes with embedded quotes escaped.
-
-    Values still use SQL parameters; this helper is only for table and column
-    names, which SQLite does not allow as parameters.
-    """
-    return '"' + identifier.replace('"', '""') + '"'
-
-
-def _validate_database_access(database_access: DatabaseAccess) -> None:
-    """Validate the database access mode.
-
-    Args:
-        database_access: Requested DB access mode.
-
-    Returns:
-        None when the mode is supported.
-
-    Raises:
-        ValueError: If the mode is not ``direct`` or ``copy``.
-    """
-    if database_access not in {"direct", "copy"}:
-        msg = f"database_access must be 'direct' or 'copy'; got {database_access!r}"
-        raise ValueError(msg)
-
-
-def _ensure_local_database_copy(source_path: Path, cache_dir: Path) -> Path:
-    """Return a local cached copy of a SQLite database.
-
-    Args:
-        source_path: Source SQLite database path.
-        cache_dir: Directory where local copies and manifests are stored.
-
-    Returns:
-        Local cached database path.
-
-    The manifest stores source path, size, mtime, and SHA-256. If size and mtime
-    match, twopy reuses the local copy. If metadata changed, twopy hashes source
-    and cached files and copies only when content changed.
-    """
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / source_path.name
-    manifest_path = cache_path.with_suffix(cache_path.suffix + ".manifest.json")
-    source_stat = source_path.stat()
-    source_metadata = {
-        "source_path": str(source_path),
-        "source_size": source_stat.st_size,
-        "source_mtime_ns": source_stat.st_mtime_ns,
-    }
-
-    manifest = _read_copy_manifest(manifest_path)
-    if cache_path.is_file() and _manifest_metadata_matches(manifest, source_metadata):
-        return cache_path
-
-    source_hash = _file_sha256(source_path)
-    cached_hash = _file_sha256(cache_path) if cache_path.is_file() else None
-    if source_hash != cached_hash:
-        temp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
-        shutil.copy2(source_path, temp_path)
-        temp_path.replace(cache_path)
-
-    _write_copy_manifest(
-        manifest_path,
-        {
-            **source_metadata,
-            "source_sha256": source_hash,
-        },
-    )
-    return cache_path
-
-
-def _read_copy_manifest(manifest_path: Path) -> dict[str, object] | None:
-    """Read a DB copy manifest.
-
-    Args:
-        manifest_path: Manifest JSON path.
-
-    Returns:
-        Parsed manifest dictionary or ``None`` when absent or invalid.
-
-    Invalid manifests are treated as cache misses because the source DB remains
-    the source of truth.
-    """
-    if not manifest_path.is_file():
-        return None
-
-    try:
-        loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-    if not isinstance(loaded, dict):
-        return None
-
-    return cast(dict[str, object], loaded)
-
-
-def _manifest_metadata_matches(
-    manifest: dict[str, object] | None,
-    source_metadata: dict[str, object],
-) -> bool:
-    """Check whether source file metadata matches a manifest.
-
-    Args:
-        manifest: Parsed manifest or ``None``.
-        source_metadata: Current source path, size, and mtime metadata.
-
-    Returns:
-        ``True`` when the manifest points at the same unchanged source file.
-    """
-    if manifest is None:
-        return False
-
-    return all(manifest.get(key) == value for key, value in source_metadata.items())
-
-
-def _write_copy_manifest(manifest_path: Path, manifest: dict[str, object]) -> None:
-    """Write a DB copy manifest as stable JSON.
-
-    Args:
-        manifest_path: Manifest JSON path.
-        manifest: Manifest fields to write.
-
-    Returns:
-        None.
-    """
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-
-def _file_sha256(path: Path) -> str:
-    """Compute SHA-256 for one file.
-
-    Args:
-        path: File path to hash.
-
-    Returns:
-        Hex SHA-256 digest.
-
-    The function streams chunks so database files do not need to fit in memory.
-    """
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        while chunk := file.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
