@@ -38,3 +38,26 @@ recordings = find_recordings(
 
 `config.yml` controls whether DB queries use mounted files directly or cached
 local copies. The default is `database_access: copy`.
+
+## Convert Recording
+
+```python
+from pathlib import Path
+
+from twopy import convert_recording_to_twopy
+
+recording = Path("/path/to/recording")
+output_dir = recording / "twopy"
+
+converted = convert_recording_to_twopy(recording, output_dir)
+print(converted.path)
+```
+
+Conversion writes `twopy_recording.h5`, including the aligned movie, acquisition
+metadata, stimulus tables, photodiode signals, and a mean image. By default the
+mean image uses the full movie; pass `mean_start_frame` and `mean_stop_frame` to
+use a frame range.
+
+`config.yml` also controls analysis output routing. `analysis_output: source`
+writes into `recording/twopy`; a path mirrors the recording directory structure
+under that output root.

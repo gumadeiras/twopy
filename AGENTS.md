@@ -52,8 +52,12 @@ twopy is a two-photon imaging analysis tool.
 ## Converted Data
 
 - Read microscope source data through a MATLAB file layer.
-- Convert MATLAB-derived data into Python objects for analysis.
+- Never perform analysis directly on source MATLAB or raw TIFF files.
+- Always convert source recording data into twopy-owned files first; all
+  analysis and processing must operate on those converted files.
 - Persist converted data as HDF5 files with gzip compression.
+- During initial conversion, generate a mean image of the aligned movie. Default
+  to the full movie and allow callers to choose a frame range.
 - Keep HDF5 groups and datasets named in plain language so files remain inspectable outside twopy.
 
 ## Environment
@@ -67,7 +71,8 @@ twopy is a two-photon imaging analysis tool.
 
 - Keep machine-local variables in `config.yml`.
 - Load config through typed Python helpers instead of reading YAML ad hoc.
-- Initial config keys: `database_path`, `data_path`, and `database_access`.
+- Initial config keys: `database_path`, `data_path`, `database_access`, and
+  `analysis_output`.
 - Default `database_access` to `copy` unless a task explicitly needs direct
   mounted DB reads.
 

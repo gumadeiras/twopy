@@ -13,6 +13,7 @@ decided.
 - Repository rules in `AGENTS.md`.
 - Session path discovery for required microscope output files.
 - Mini input data spec in `docs/input_data_spec.md`.
+- Recording file reference schema in `docs/recording_file_schema.md`.
 - YAML config file and typed loader for `database_path` and `data_path`.
 - Schema-agnostic SQLite database module for discovering DB files and
   filtering experiment rows.
@@ -22,11 +23,17 @@ decided.
 - DB query access modes: direct mounted DB query or local cached DB copies with
   metadata and SHA-256 change checks.
 - Configured database access mode with `copy` as the default.
+- Configured analysis output routing with source-folder and mirrored-output-root
+  modes.
 - MATLAB file inspection and loading layer for older MAT files and HDF5-backed
   MAT files.
+- Source-to-twopy HDF5 conversion for aligned movie, acquisition metadata,
+  stimulus parameters, stimulus timeline, photodiode signals, and mean image.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.
 - TIFF metadata extraction for Python access plus optional CSV output with
   selected TIFF tags and ScanImage recording fields.
+- Documented `imageDescription.mat` as the primary source for recording
+  acquisition metadata.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
 - Real database query matched the example recording in both `experimentLog.db`
@@ -55,7 +62,13 @@ decided.
 - Python: 3.13.
 - Environment: micromamba env named `twopy`.
 - Core modules stay GUI-independent; napari code calls core modules.
+- Recording acquisition metadata should be loaded from `imageDescription.mat`;
+  raw TIFF metadata is for audit or raw interleaved frame access.
 - Converted data format: HDF5 with gzip compression.
+- Source MATLAB and raw TIFF files are conversion inputs only. Analysis and
+  processing operate on converted twopy HDF5 files.
+- Initial conversion generates a mean image. The default is the full aligned
+  movie, with optional frame-range selection.
 - Code style: simple, typed, documented, and tested.
 - `savedAnalysis/`: optional; only present after prior MATLAB analysis.
 - Roadmap maintenance: update with completed progress and explicit decisions;

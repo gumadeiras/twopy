@@ -3,6 +3,9 @@
 This is the current observed input contract for one twopy recording. It is based
 on the example two-photon microscope session Gustavo provided.
 
+For detailed file-by-file contents, source-of-truth choices, and response
+analysis load recommendations, see `docs/recording_file_schema.md`.
+
 ## Session Folder
 
 A recording starts from one timestamped microscope output folder. The stimulus
@@ -104,11 +107,16 @@ Observed TIFF metadata in the example session:
 - `XResolution` and `YResolution` appear to be display DPI metadata, not
   physical microscope pixel size
 
-The recording inspector exposes TIFF tags and parsed ScanImage fields in Python
-through `TiffSummary`, and can write a selected TIFF metadata CSV for quick
-audits.
+The same ScanImage state is available as the MATLAB struct in
+`imageDescription.mat`, which should be the primary source for recording
+metadata. The raw TIFF metadata path is mainly for audit or raw-frame access.
 
 ## Converted Data
 
-twopy will convert MATLAB-derived data into Python objects for analysis and save
-converted data as HDF5 with gzip compression.
+twopy will convert MATLAB-derived source data into twopy-owned HDF5 files with
+gzip compression before any analysis or processing.
+
+The conversion writes the aligned movie, acquisition metadata, stimulus
+parameters, stimulus timeline, photodiode signals, and a mean image. The mean
+image defaults to the full movie and can be computed over a requested frame
+range.
