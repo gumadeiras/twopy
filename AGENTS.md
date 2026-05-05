@@ -9,6 +9,22 @@ twopy is a two-photon imaging analysis tool.
 - Keep data flow explicit. Avoid hidden global state, surprising side effects, and clever indirection.
 - Favor small functions with clear names over broad abstractions.
 - When tradeoffs exist, choose the path that a scientist can inspect and trust.
+- When splitting one module into related helper files, create a package
+  directory instead of sibling files with the same basename.
+- Do not add backwards-compatibility shims. Prefer one clear current API and
+  update callers/tests/docs in the same change.
+
+## Performance
+
+- Write computationally efficient code. Treat CPU time, memory use, and disk I/O
+  as real constraints because imaging data can be large.
+- Avoid unnecessary copies of large arrays. Prefer views, streaming, chunked I/O,
+  and explicit data shapes when they keep behavior simple and auditable.
+- Use vectorized NumPy/SciPy operations where they make the logic clearer and
+  faster than Python loops.
+- Use GPU acceleration when the workload is a good fit, the dependency cost is
+  justified, and there is a CPU fallback or a clear hardware requirement.
+- Benchmark or profile before adding complex optimization code.
 
 ## GUI
 
@@ -51,7 +67,9 @@ twopy is a two-photon imaging analysis tool.
 
 - Keep machine-local variables in `config.yml`.
 - Load config through typed Python helpers instead of reading YAML ad hoc.
-- Initial required config keys: `database_path` and `data_path`.
+- Initial config keys: `database_path`, `data_path`, and `database_access`.
+- Default `database_access` to `copy` unless a task explicitly needs direct
+  mounted DB reads.
 
 ## Database
 
