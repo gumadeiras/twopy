@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 MatlabFileFormat = Literal["hdf5-mat", "scipy-mat"]
+ScipyLoadAction = Literal["inspect", "load"]
 
 
 @dataclass(frozen=True)
@@ -244,16 +245,11 @@ def _inspect_scipy_mat_file(path: Path) -> MatlabFileSummary:
     SciPy loads older MAT files into Python objects. We use it only for files
     that h5py cannot open, which avoids accidentally loading large HDF5 arrays.
     """
-    try:
-        loaded = scipy.io.loadmat(path, struct_as_record=False, squeeze_me=False)
-    except (NotImplementedError, OSError, ValueError) as error:
-        msg = f"Could not inspect MATLAB file {path}: {error}"
-        raise ValueError(msg) from error
+    visible = _load_visible_scipy_variables(path, action="inspect")
 
     variables = tuple(
         _summarize_loaded_variable(name, value)
-        for name, value in sorted(loaded.items())
-        if not name.startswith("__")
+        for name, value in sorted(visible.items())
     )
 
     return MatlabFileSummary(path=path, file_format="scipy-mat", variables=variables)
@@ -276,17 +272,7 @@ def _load_scipy_mat_file(
     SciPy loads the file into memory. That is acceptable for the small metadata
     files observed so far, but large files should use HDF5-backed loading.
     """
-    try:
-        loaded = scipy.io.loadmat(path, struct_as_record=False, squeeze_me=False)
-    except (NotImplementedError, OSError, ValueError) as error:
-        msg = f"Could not load MATLAB file {path}: {error}"
-        raise ValueError(msg) from error
-
-    visible = {
-        str(name): cast(object, value)
-        for name, value in loaded.items()
-        if not name.startswith("__")
-    }
+    visible = _load_visible_scipy_variables(path, action="load")
 
     if variable_names is None:
         return MatlabLoadedFile(path=path, file_format="scipy-mat", variables=visible)
@@ -301,6 +287,36 @@ def _load_scipy_mat_file(
         file_format="scipy-mat",
         variables={name: visible[name] for name in variable_names},
     )
+
+
+def _load_visible_scipy_variables(
+    path: Path,
+    *,
+    action: ScipyLoadAction,
+) -> dict[str, object]:
+    """Load visible variables from an older MATLAB file through SciPy.
+
+    Args:
+        path: MATLAB file that SciPy can read.
+        action: Caller intent used only for the error message.
+
+    Returns:
+        Non-private MATLAB variables keyed by name.
+
+    SciPy adds private ``__header__``-style entries. twopy hides those because
+    they are file bookkeeping, not recording data.
+    """
+    try:
+        loaded = scipy.io.loadmat(path, struct_as_record=False, squeeze_me=False)
+    except (NotImplementedError, OSError, ValueError) as error:
+        msg = f"Could not {action} MATLAB file {path}: {error}"
+        raise ValueError(msg) from error
+
+    return {
+        str(name): cast(object, value)
+        for name, value in loaded.items()
+        if not name.startswith("__")
+    }
 
 
 def _summarize_loaded_variable(name: str, value: object) -> MatlabVariableSummary:

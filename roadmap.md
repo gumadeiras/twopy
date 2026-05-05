@@ -33,6 +33,8 @@ decided.
   modes.
 - MATLAB file inspection and loading layer for older MAT files and HDF5-backed
   MAT files.
+- MATLAB SciPy loading code simplified so inspect and load paths share one
+  visible-variable reader.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus
   parameters, stimulus timeline, photodiode signals, mean image, and a separate
   aligned movie file.
