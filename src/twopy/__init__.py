@@ -16,16 +16,32 @@ from twopy.roi import (
     make_roi_set,
     save_roi_set,
 )
+from twopy.synchronization import (
+    AlignedPhotodiodeEvent,
+    PhotodiodeAlignment,
+    PhotodiodeEvent,
+    PhotodiodeEventSet,
+    detect_photodiode_events,
+    detect_recording_photodiode_events,
+    pair_photodiode_events_to_imaging_frames,
+)
 
 __all__ = [
     "__version__",
+    "AlignedPhotodiodeEvent",
     "convert_recording_to_twopy",
+    "detect_photodiode_events",
+    "detect_recording_photodiode_events",
     "extract_roi_traces",
     "find_recordings",
     "load_converted_recording",
     "load_roi_set",
     "load_source_conversion_inputs",
     "make_roi_set",
+    "pair_photodiode_events_to_imaging_frames",
+    "PhotodiodeAlignment",
+    "PhotodiodeEvent",
+    "PhotodiodeEventSet",
     "RoiSet",
     "RoiTraces",
     "save_roi_set",
