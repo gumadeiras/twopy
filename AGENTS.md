@@ -8,6 +8,10 @@ twopy is a two-photon imaging analysis tool.
 - Use Occam's razor: add complexity only when a real observed need requires it.
 - Keep data flow explicit. Avoid hidden global state, surprising side effects, and clever indirection.
 - Favor small functions with clear names over broad abstractions.
+- Do not extract helpers just to avoid repeating one or two obvious lines.
+  Simple local code is better than docstring-heavy indirection.
+- A simplification must reduce cognitive load at the call site and the helper
+  definition together. If it only moves simple code elsewhere, leave it inline.
 - When tradeoffs exist, choose the path that a scientist can inspect and trust.
 - When splitting one module into related helper files, create a package
   directory instead of sibling files with the same basename.
