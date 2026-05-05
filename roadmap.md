@@ -25,6 +25,8 @@ decided.
 - MATLAB file inspection and loading layer for older MAT files and HDF5-backed
   MAT files.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.
+- TIFF metadata extraction for Python access plus optional CSV output with
+  selected TIFF tags and ScanImage recording fields.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
 - Real database query matched the example recording in both `experimentLog.db`

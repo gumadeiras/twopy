@@ -88,6 +88,25 @@ Observed TIFF metadata in the example session:
 
 - one raw movie with one TIFF series
 - shape `(8334, 127, 256)`
+- page count `8334`
+- first-page shape `(127, 256)`
+- pixel dtype `uint16`
+- TIFF tags include `ImageWidth`, `ImageLength`, `BitsPerSample`,
+  `SamplesPerPixel`, `XResolution`, `YResolution`, `ResolutionUnit`, and
+  `ImageDescription`
+- `ImageDescription` contains ScanImage `state.*` fields, including
+  `configName`, `software.version`, `acq.linesPerFrame`, `acq.pixelsPerLine`,
+  `acq.numberOfFrames`, `acq.numberOfChannelsSave`, `acq.frameRate`,
+  `acq.zoomFactor`, `acq.pixelTime`, `acq.msPerLine`, `acq.zStepSize`,
+  `acq.scanAngleMultiplierFast`, `acq.scanAngleMultiplierSlow`,
+  `acq.scanRotation`, `acq.scanShiftFast`, `acq.scanShiftSlow`, `acq.xstep`,
+  `acq.ystep`, and motor absolute positions
+- `XResolution` and `YResolution` appear to be display DPI metadata, not
+  physical microscope pixel size
+
+The recording inspector exposes TIFF tags and parsed ScanImage fields in Python
+through `TiffSummary`, and can write a selected TIFF metadata CSV for quick
+audits.
 
 ## Converted Data
 
