@@ -1,0 +1,34 @@
+# Git hooks for the twopy verification gate.
+#
+# Install once with:
+#
+#   micromamba run -n twopy pre-commit install
+#
+# Each hook calls the twopy micromamba environment so commits use the same
+# Python, ruff, mypy, and test setup documented for the project.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: micromamba run -n twopy python -m ruff check .
+        language: system
+        pass_filenames: false
+
+      - id: ruff-format-check
+        name: ruff format check
+        entry: micromamba run -n twopy python -m ruff format --check .
+        language: system
+        pass_filenames: false
+
+      - id: mypy
+        name: mypy
+        entry: micromamba run -n twopy python -m mypy
+        language: system
+        pass_filenames: false
+
+      - id: unittest
+        name: unittest
+        entry: micromamba run -n twopy python -m unittest discover -s tests
+        language: system
+        pass_filenames: false
