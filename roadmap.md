@@ -73,8 +73,19 @@ decided.
 
 ## Next
 
+- Load converted `recording_data.h5` and `aligned_movie.h5` back into typed
+  Python objects for analysis.
+- Define GUI-independent ROI storage schema for masks, shapes, labels, and
+  saved ROI sets.
+- Extract fluorescence traces from converted movies using saved ROI masks while
+  streaming movie chunks.
+- Decode photodiode events from `highResPd.mat`-derived converted data.
+- Align stimulus events to imaging frames using photodiode timing and
+  `imagingResPd`.
+- Produce trial windows in imaging-frame coordinates for response analysis.
 - Load a recording in napari.
 - Interactively draw or select ROIs in the movie.
+- Save napari-drawn ROIs through the core ROI module.
 - Inspect ROI responses.
 - Divide responses by trials.
 - Divide responses by other metadata associated with the recording.
