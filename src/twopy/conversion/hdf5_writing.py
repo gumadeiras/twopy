@@ -19,8 +19,8 @@ from twopy.conversion.types import (
     AlignedMovieSource,
     PhotodiodeSignals,
     SourceConversionInputs,
+    StimulusData,
     StimulusParameters,
-    StimulusTimeline,
 )
 
 __all__ = [
@@ -92,7 +92,7 @@ def write_recording_data_file(
         _write_attrs(run_group, inputs.run.fields)
         _write_stimulus_group(
             h5_file,
-            inputs.stimulus_timeline,
+            inputs.stimulus_data,
             inputs.stimulus_parameters,
         )
         _write_photodiode_group(h5_file, inputs.photodiode)
@@ -155,14 +155,14 @@ def _write_movie_reference_group(
 
 def _write_stimulus_group(
     h5_file: h5py.File,
-    timeline: StimulusTimeline,
+    stimulus_data: StimulusData,
     parameters: StimulusParameters,
 ) -> None:
-    """Write converted stimulus timeline and epoch parameters.
+    """Write converted stimulus data and epoch parameters.
 
     Args:
         h5_file: Open ``recording_data.h5`` file.
-        timeline: Stimulus timeline loaded from ``stimdata.mat``.
+        stimulus_data: Stimulus data loaded from ``stimdata.mat``.
         parameters: Stimulus epoch parameters loaded from ``stimParams.mat``.
 
     Returns:
@@ -172,12 +172,12 @@ def _write_stimulus_group(
     stimulus_group.attrs["clock_source"] = SYNCHRONIZATION_MODEL["stimulus_clock"]
     stimulus_group.create_dataset(
         "data",
-        data=timeline.data,
+        data=stimulus_data.data,
         compression="gzip",
     )
     stimulus_group.create_dataset(
         "data_column_names",
-        data=np.asarray(timeline.column_names, dtype=h5py.string_dtype("utf-8")),
+        data=np.asarray(stimulus_data.column_names, dtype=h5py.string_dtype("utf-8")),
     )
     stimulus_group.create_dataset(
         "parameters_json",

@@ -36,7 +36,7 @@ decided.
 - MATLAB SciPy loading code simplified so inspect and load paths share one
   visible-variable reader.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus
-  parameters, stimulus timeline, photodiode signals, mean image, and a separate
+  parameters, stimulus data, photodiode signals, mean image, and a separate
   aligned movie file.
 - Conversion uses configured `analysis_output` by default unless a caller passes
   an explicit output directory.
@@ -77,7 +77,7 @@ decided.
   TIFF shape `(8334, 127, 256)`.
 - Real example recording converted successfully to `twopy/recording_data.h5`
   and `twopy/aligned_movie.h5`; aligned movie shape `(4168, 256, 127)`, mean
-  image shape `(256, 127)`, stimulus timeline shape `(18021, 35)`.
+  image shape `(256, 127)`, stimulus data shape `(18021, 35)`.
 - Real example converted recording loaded successfully with current schema; ROI
   trace smoke test produced shape `(5, 1)`, photodiode detection found 101
   high-resolution and 101 imaging-resolution events, and event pairing produced

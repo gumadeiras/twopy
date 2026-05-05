@@ -143,14 +143,14 @@ class RunMetadata:
 
 
 @dataclass(frozen=True)
-class StimulusTimeline:
-    """Per-stimulus-frame timeline from ``stimdata.mat``.
+class StimulusData:
+    """Per-stimulus-frame data from ``stimdata.mat``.
 
     Inputs: MATLAB ``stimData`` table.
     Outputs: the full numeric table, column labels, and common columns as
     direct arrays.
 
-    The stimulus timeline comes from the stimulus presentation computer. Its
+    The stimulus data comes from the stimulus presentation computer. Its
     clock is independent from the imaging computer clock, so response analysis
     must use photodiode synchronization before assigning imaging frames to
     stimulus trials.
@@ -225,7 +225,7 @@ class SourceConversionInputs:
     acquisition: AcquisitionMetadata
     run: RunMetadata
     stimulus_parameters: StimulusParameters
-    stimulus_timeline: StimulusTimeline
+    stimulus_data: StimulusData
     photodiode: PhotodiodeSignals
     frame_counts: FrameCountAudit
 

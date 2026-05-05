@@ -23,8 +23,8 @@ from twopy.conversion.types import (
     PhotodiodeSignals,
     RunMetadata,
     SourceConversionInputs,
+    StimulusData,
     StimulusParameters,
-    StimulusTimeline,
 )
 from twopy.session import discover_session_files
 
@@ -91,7 +91,7 @@ def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
         stimulus_parameters=_load_stimulus_parameters(
             files.stimulus_data_dir / "stimParams.mat",
         ),
-        stimulus_timeline=_load_stimulus_timeline(
+        stimulus_data=_load_stimulus_data(
             files.stimulus_data_dir / "stimdata.mat",
         ),
         photodiode=photodiode,
@@ -193,14 +193,14 @@ def _load_stimulus_parameters(path: Path) -> StimulusParameters:
     )
 
 
-def _load_stimulus_timeline(path: Path) -> StimulusTimeline:
-    """Load the numeric stimulus timeline table.
+def _load_stimulus_data(path: Path) -> StimulusData:
+    """Load the numeric stimulus data table.
 
     Args:
         path: ``stimdata.mat`` path.
 
     Returns:
-        Stimulus timeline with direct views/copies for common columns.
+        Stimulus data with direct views/copies for common columns.
 
     Raises:
         ValueError: If the table does not include time, frame, and epoch columns.
@@ -210,10 +210,10 @@ def _load_stimulus_timeline(path: Path) -> StimulusTimeline:
         msg = f"stimData must be a 2D table with at least 3 columns: {path}"
         raise ValueError(msg)
 
-    return StimulusTimeline(
+    return StimulusData(
         path=path,
         data=data,
-        column_names=_load_stimulus_timeline_column_names(
+        column_names=_load_stimulus_data_column_names(
             path.parent / "textStimData.csv",
             column_count=data.shape[1],
         ),
@@ -223,7 +223,7 @@ def _load_stimulus_timeline(path: Path) -> StimulusTimeline:
     )
 
 
-def _load_stimulus_timeline_column_names(
+def _load_stimulus_data_column_names(
     csv_path: Path,
     *,
     column_count: int,

@@ -17,7 +17,7 @@ prior MATLAB analysis.
 - Use `alignedMovie.mat` as the primary movie source for ROI drawing and trace
   extraction.
 - Use `stimulusData/stimParams.mat` and `stimulusData/stimdata.mat` as the
-  primary stimulus metadata/timeline sources.
+  primary stimulus metadata/data sources.
 - Use `imagingResPd.mat` for frame-resolution stimulus alignment and
   `highResPd.mat` when higher timing precision is needed.
 - Treat imaging frames and stimulus frames as independent clocks until the
@@ -44,7 +44,7 @@ Response analysis must use the photodiode to align the two clocks. Do not assign
 imaging frames to stimulus trials by assuming nominal frame rates are enough.
 The correct workflow is:
 
-1. Load the converted stimulus timeline and photodiode signals.
+1. Load the converted stimulus data and photodiode signals.
 2. Decode photodiode events from the high-resolution signal when precise timing
    is needed.
 3. Map decoded stimulus events onto imaging frames.
@@ -279,7 +279,7 @@ Use this as a human-readable stimulus parameter source. Prefer
 
 ### `stimulusData/textStimData.csv`
 
-CSV stimulus timeline.
+CSV stimulus data.
 
 Observed example contents:
 
@@ -302,7 +302,7 @@ more convenient than MATLAB loading.
 
 ### `stimulusData/stimdata.mat`
 
-MATLAB stimulus timeline.
+MATLAB stimulus data.
 
 Observed example contents:
 
@@ -317,7 +317,7 @@ Observed example contents:
 - Column 34: flash value from `textStimData.csv`.
 - Column 35: unlabeled trailing numeric column observed in `stimData`.
 
-Use this as the primary structured stimulus timeline. twopy also stores
+Use this as the primary structured stimulus data. twopy also stores
 expanded data column labels in `stimulus/data_column_names`. The first
 three labels are specific. Later labels preserve the stimulus-system groups
 without pretending we know every protocol-specific value yet.
@@ -421,7 +421,7 @@ The converted `recording_data.h5` file contains:
 - `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case
   twopy field names such as `rig_name`, `run_number`, `fly_id`, and
   `rig_temperature`.
-- `stimulus/data`: numeric stimulus timeline.
+- `stimulus/data`: numeric stimulus data.
 - `stimulus/data_column_names`: one label per data column.
 - `stimulus/parameters_json`: stimulus epoch parameters.
 - `photodiode`: synchronization metadata explaining the two-computer timing

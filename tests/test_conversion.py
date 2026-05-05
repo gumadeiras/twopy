@@ -61,11 +61,11 @@ class ConversionTest(unittest.TestCase):
                 "Gray Interleave",
             )
             np.testing.assert_array_equal(
-                loaded.stimulus_timeline.epoch_numbers,
+                loaded.stimulus_data.epoch_numbers,
                 np.array([1, 2, 2]),
             )
             self.assertEqual(
-                loaded.stimulus_timeline.column_names,
+                loaded.stimulus_data.column_names,
                 (
                     "time_seconds",
                     "stimulus_frame_number",

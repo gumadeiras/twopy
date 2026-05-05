@@ -132,7 +132,7 @@ small direct-access datasets such as the mean image stay uncompressed.
 
 The conversion writes the aligned movie to a separate `aligned_movie.h5` file
 because it usually dominates file size. It writes acquisition metadata, run
-metadata from `stimulusData/runDetails.mat`, stimulus parameters, stimulus
-timeline plus column labels, photodiode signals, synchronization metadata, and a
+metadata from `stimulusData/runDetails.mat`, stimulus parameters, stimulus data
+plus column labels, photodiode signals, synchronization metadata, and a
 mean image to `recording_data.h5`. The mean image defaults to the full movie and
 can be computed over a requested frame range.

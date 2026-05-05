@@ -125,8 +125,8 @@ class RecordingData:
     acquisition_metadata: dict[str, object]
     run_metadata: dict[str, object]
     synchronization_metadata: dict[str, str]
-    stimulus_timeline: npt.NDArray[np.float64]
-    stimulus_timeline_column_names: tuple[str, ...]
+    stimulus_data: npt.NDArray[np.float64]
+    stimulus_data_column_names: tuple[str, ...]
     stimulus_parameters: tuple[dict[str, object], ...]
     imaging_res_pd: npt.NDArray[np.float64]
     high_res_pd: npt.NDArray[np.float64]
@@ -186,11 +186,11 @@ def load_converted_recording(
             acquisition_metadata=_read_attrs(h5_file["metadata"]),
             run_metadata=_read_attrs(h5_file["run"]),
             synchronization_metadata=_read_str_attrs(h5_file["photodiode"]),
-            stimulus_timeline=cast(
+            stimulus_data=cast(
                 npt.NDArray[np.float64],
                 h5_file["stimulus/data"][()],
             ),
-            stimulus_timeline_column_names=_read_string_dataset(
+            stimulus_data_column_names=_read_string_dataset(
                 h5_file,
                 "stimulus/data_column_names",
             ),
@@ -279,14 +279,11 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
             f"got {recording.imaging_res_pd.shape} for {frame_count} frames"
         )
         raise ValueError(msg)
-    if (
-        len(recording.stimulus_timeline_column_names)
-        != recording.stimulus_timeline.shape[1]
-    ):
+    if len(recording.stimulus_data_column_names) != recording.stimulus_data.shape[1]:
         msg = (
-            "stimulus data column names must match timeline width; "
-            f"got {len(recording.stimulus_timeline_column_names)} names for "
-            f"{recording.stimulus_timeline.shape[1]} columns"
+            "stimulus data column names must match data width; "
+            f"got {len(recording.stimulus_data_column_names)} names for "
+            f"{recording.stimulus_data.shape[1]} columns"
         )
         raise ValueError(msg)
 

@@ -37,7 +37,7 @@ class ConvertedRecordingTest(unittest.TestCase):
             self.assertEqual(recording.run_metadata["rig_name"], "OdorRig")
             self.assertEqual(recording.stimulus_parameters[1]["epochName"], "LR20")
             self.assertEqual(
-                recording.stimulus_timeline_column_names,
+                recording.stimulus_data_column_names,
                 ("time_seconds", "stimulus_frame_number", "epoch_number"),
             )
             self.assertEqual(recording.frame_counts.acquisition_minus_movie, -1)

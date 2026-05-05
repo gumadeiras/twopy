@@ -17,8 +17,8 @@ from twopy.conversion.types import (
     PhotodiodeSignals,
     RunMetadata,
     SourceConversionInputs,
+    StimulusData,
     StimulusParameters,
-    StimulusTimeline,
 )
 
 __all__ = [
@@ -30,7 +30,7 @@ __all__ = [
     "RunMetadata",
     "SourceConversionInputs",
     "StimulusParameters",
-    "StimulusTimeline",
+    "StimulusData",
     "convert_recording_to_twopy",
     "load_source_conversion_inputs",
 ]
