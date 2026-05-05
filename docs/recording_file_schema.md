@@ -435,6 +435,9 @@ Raw-data fallback/audit:
   the recording folder.
 - `analysis_output: /some/output/root` mirrors the recording directory structure
   relative to `data_path` under that output root.
+- `convert_recording_to_twopy(recording)` uses this configured output routing by
+  default. Passing `output_dir` to that function is an explicit one-call
+  override.
 
 Example:
 
@@ -444,3 +447,16 @@ analysis_output: /Volumes/magic/clarklab/twopy_outputs
 recording: /Volumes/magic/clarklab/2p_microscope_data/fly/stim/2023/10_17/10_02_49
 output: /Volumes/magic/clarklab/twopy_outputs/fly/stim/2023/10_17/10_02_49
 ```
+
+## Frame Count Audit
+
+Conversion writes a `frame_counts` group into `recording_data.h5`.
+
+Observed real recordings usually have:
+
+- `aligned_movie_frames == imaging_res_pd_samples`
+- `acq.numberOfFrames == aligned_movie_frames - 1`
+
+twopy allows the exact match or this one-frame ScanImage acquisition metadata
+offset, and stores the counts and deltas so response-analysis code can audit the
+frame contract before assigning trials.

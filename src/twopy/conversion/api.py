@@ -9,6 +9,7 @@ Analysis code should operate on the converted HDF5 files.
 
 from pathlib import Path
 
+from twopy.config import DEFAULT_CONFIG_PATH, load_config, resolve_analysis_output_dir
 from twopy.conversion.frame_ranges import normalize_frame_range
 from twopy.conversion.hdf5_writing import (
     CONVERTED_ALIGNED_MOVIE_FILENAME,
@@ -24,18 +25,21 @@ __all__ = ["convert_recording_to_twopy"]
 
 def convert_recording_to_twopy(
     session_dir: Path,
-    output_dir: Path,
+    output_dir: Path | None = None,
     *,
     mean_start_frame: int | None = None,
     mean_stop_frame: int | None = None,
+    config_path: Path = DEFAULT_CONFIG_PATH,
 ) -> ConvertedRecording:
     """Convert one recording folder into twopy HDF5 files.
 
     Args:
         session_dir: Source recording folder.
-        output_dir: Directory that will receive converted twopy HDF5 files.
+        output_dir: Optional directory that receives converted twopy HDF5 files.
+            When omitted, twopy uses ``analysis_output`` from config.
         mean_start_frame: Optional first frame for the mean image.
         mean_stop_frame: Optional exclusive stop frame for the mean image.
+        config_path: YAML config file used when ``output_dir`` is omitted.
 
     Returns:
         Summary of the converted HDF5 files.
@@ -55,7 +59,11 @@ def convert_recording_to_twopy(
         stop_frame=stop_frame,
     )
 
-    destination_dir = output_dir.expanduser()
+    destination_dir = _resolve_conversion_output_dir(
+        session_dir=inputs.session_files.session_dir,
+        output_dir=output_dir,
+        config_path=config_path,
+    )
     destination_dir.mkdir(parents=True, exist_ok=True)
     recording_data_path = destination_dir / CONVERTED_RECORDING_FILENAME
     movie_path = destination_dir / CONVERTED_ALIGNED_MOVIE_FILENAME
@@ -77,3 +85,29 @@ def convert_recording_to_twopy(
         mean_image_start_frame=start_frame,
         mean_image_stop_frame=stop_frame,
     )
+
+
+def _resolve_conversion_output_dir(
+    *,
+    session_dir: Path,
+    output_dir: Path | None,
+    config_path: Path,
+) -> Path:
+    """Choose where conversion output should be written.
+
+    Args:
+        session_dir: Source recording folder.
+        output_dir: Caller-provided output directory, if any.
+        config_path: Config file used when ``output_dir`` is omitted.
+
+    Returns:
+        Expanded output directory path.
+
+    Passing ``output_dir`` is an explicit override. Otherwise conversion follows
+    the same ``analysis_output`` routing that the rest of twopy uses.
+    """
+    if output_dir is not None:
+        return output_dir.expanduser()
+
+    config = load_config(config_path)
+    return resolve_analysis_output_dir(config, session_dir)

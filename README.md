@@ -53,9 +53,8 @@ from pathlib import Path
 from twopy import convert_recording_to_twopy
 
 recording = Path("/path/to/recording")
-output_dir = recording / "twopy"
 
-converted = convert_recording_to_twopy(recording, output_dir)
+converted = convert_recording_to_twopy(recording)
 print(converted.path)
 print(converted.movie_path)
 ```
@@ -63,7 +62,9 @@ print(converted.movie_path)
 Conversion writes `recording_data.h5` for metadata, stimulus tables,
 photodiode signals, and the mean image. The large aligned movie is written
 separately to `aligned_movie.h5`. By default the mean image uses the full movie;
-pass `mean_start_frame` and `mean_stop_frame` to use a frame range.
+pass `mean_start_frame` and `mean_stop_frame` to use a frame range. By default,
+conversion writes to the location configured by `analysis_output`; pass
+`output_dir` only when you want to override that for a specific call.
 
 `config.yml` also controls analysis output routing. `analysis_output: source`
 writes into `recording/twopy`; a path mirrors the recording directory structure

@@ -94,6 +94,7 @@ def write_recording_data_file(
             inputs.stimulus_parameters,
         )
         _write_photodiode_group(h5_file, inputs.photodiode)
+        _write_frame_count_audit_group(h5_file, inputs)
 
 
 def write_aligned_movie_file(
@@ -208,6 +209,33 @@ def _write_photodiode_group(
         compression="gzip",
     )
     high_res_pd.attrs["sample_domain"] = HIGH_RES_PD_SAMPLE_DOMAIN
+
+
+def _write_frame_count_audit_group(
+    h5_file: h5py.File,
+    inputs: SourceConversionInputs,
+) -> None:
+    """Write source frame-count checks into the converted recording file.
+
+    Args:
+        h5_file: Open ``recording_data.h5`` file.
+        inputs: Loaded source conversion inputs with frame-count audit values.
+
+    Returns:
+        None. The function writes the ``frame_counts`` group.
+
+    These values keep the observed ScanImage one-frame metadata offset visible
+    before response-analysis code starts assigning frames to trials.
+    """
+    frame_counts = h5_file.create_group("frame_counts")
+    audit = inputs.frame_counts
+    frame_counts.attrs["aligned_movie_frames"] = audit.aligned_movie_frames
+    frame_counts.attrs["imaging_res_pd_samples"] = audit.imaging_res_pd_samples
+    frame_counts.attrs["acquisition_number_of_frames"] = (
+        audit.acquisition_number_of_frames
+    )
+    frame_counts.attrs["imaging_res_pd_minus_movie"] = audit.imaging_res_pd_minus_movie
+    frame_counts.attrs["acquisition_minus_movie"] = audit.acquisition_minus_movie
 
 
 def _write_synchronization_metadata(group: h5py.Group) -> None:

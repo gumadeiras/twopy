@@ -170,6 +170,28 @@ class PhotodiodeSignals:
 
 
 @dataclass(frozen=True)
+class FrameCountAudit:
+    """Frame-count relationship checked during source conversion.
+
+    Inputs: aligned movie frames, imaging-resolution photodiode samples, and
+    ScanImage acquisition frame metadata.
+    Outputs: explicit counts and deltas for converted HDF5 audit metadata.
+
+    The aligned movie and imaging-resolution photodiode should describe the
+    same imaging frames. In sampled real recordings, ScanImage
+    ``acq.numberOfFrames`` is often one less than the aligned movie frame count,
+    so twopy records that offset instead of silently treating the fields as
+    interchangeable.
+    """
+
+    aligned_movie_frames: int
+    imaging_res_pd_samples: int
+    acquisition_number_of_frames: int
+    imaging_res_pd_minus_movie: int
+    acquisition_minus_movie: int
+
+
+@dataclass(frozen=True)
 class SourceConversionInputs:
     """All source inputs needed to create a twopy converted recording.
 
@@ -186,6 +208,7 @@ class SourceConversionInputs:
     stimulus_parameters: StimulusParameters
     stimulus_timeline: StimulusTimeline
     photodiode: PhotodiodeSignals
+    frame_counts: FrameCountAudit
 
 
 @dataclass(frozen=True)

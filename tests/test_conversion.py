@@ -49,6 +49,11 @@ class ConversionTest(unittest.TestCase):
             )
             self.assertEqual(loaded.acquisition.fields["acq.frameRate"], 10.0)
             self.assertEqual(loaded.acquisition.fields["acq.zoomFactor"], 2.0)
+            self.assertEqual(loaded.frame_counts.aligned_movie_frames, 3)
+            self.assertEqual(loaded.frame_counts.imaging_res_pd_samples, 3)
+            self.assertEqual(loaded.frame_counts.acquisition_number_of_frames, 3)
+            self.assertEqual(loaded.frame_counts.imaging_res_pd_minus_movie, 0)
+            self.assertEqual(loaded.frame_counts.acquisition_minus_movie, 0)
             self.assertEqual(
                 loaded.stimulus_parameters.epochs[0]["epochName"],
                 "Gray Interleave",
@@ -132,6 +137,26 @@ class ConversionTest(unittest.TestCase):
                     h5_file["photodiode/high_res_pd"].attrs["sample_domain"],
                     "high-rate photodiode signal for precise event detection",
                 )
+                self.assertEqual(
+                    h5_file["frame_counts"].attrs["aligned_movie_frames"],
+                    3,
+                )
+                self.assertEqual(
+                    h5_file["frame_counts"].attrs["imaging_res_pd_samples"],
+                    3,
+                )
+                self.assertEqual(
+                    h5_file["frame_counts"].attrs["acquisition_number_of_frames"],
+                    3,
+                )
+                self.assertEqual(
+                    h5_file["frame_counts"].attrs["imaging_res_pd_minus_movie"],
+                    0,
+                )
+                self.assertEqual(
+                    h5_file["frame_counts"].attrs["acquisition_minus_movie"],
+                    0,
+                )
                 parameters = json.loads(h5_file["stimulus/parameters_json"][()])
                 self.assertEqual(parameters[1]["epochName"], "LR20")
                 self.assertNotIn("aligned", h5_file["movie"])
@@ -170,11 +195,100 @@ class ConversionTest(unittest.TestCase):
                 self.assertEqual(h5_file["movie/mean_image"].attrs["start_frame"], 1)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["stop_frame"], 3)
 
-    def _write_session(self, session_dir: Path) -> None:
+    def test_conversion_uses_configured_analysis_output_by_default(self) -> None:
+        """Confirm conversion defaults to ``analysis_output`` from config.
+
+        Inputs: a temporary config using mirrored output routing and no explicit
+        conversion output directory.
+        Outputs: converted files under the configured mirrored output root.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            session_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            output_root = root / "analysis"
+            config_path = root / "config.yml"
+            self._write_session(session_dir)
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root}\n"
+                "database_access: copy\n"
+                f"analysis_output: {output_root}\n",
+                encoding="utf-8",
+            )
+
+            converted = convert_recording_to_twopy(
+                session_dir,
+                config_path=config_path,
+            )
+
+            expected_dir = output_root / "fly" / "stim" / "2023" / "10_17"
+            self.assertEqual(converted.path, expected_dir / "recording_data.h5")
+            self.assertEqual(converted.movie_path, expected_dir / "aligned_movie.h5")
+            self.assertTrue(converted.path.is_file())
+            self.assertTrue(converted.movie_path.is_file())
+
+    def test_allows_observed_one_frame_acquisition_metadata_offset(self) -> None:
+        """Confirm sampled ScanImage frame-count offset is audited, not hidden.
+
+        Inputs: a temporary recording where ``acq.numberOfFrames`` is one less
+        than the aligned movie and imaging-resolution photodiode.
+        Outputs: loaded audit values that preserve the one-frame offset.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_session(session_dir, acquisition_frame_count=2)
+
+            loaded = load_source_conversion_inputs(session_dir)
+
+            self.assertEqual(loaded.frame_counts.aligned_movie_frames, 3)
+            self.assertEqual(loaded.frame_counts.imaging_res_pd_samples, 3)
+            self.assertEqual(loaded.frame_counts.acquisition_number_of_frames, 2)
+            self.assertEqual(loaded.frame_counts.acquisition_minus_movie, -1)
+
+    def test_rejects_imaging_photodiode_frame_count_mismatch(self) -> None:
+        """Confirm frame-resolution photodiode must match movie frames.
+
+        Inputs: a temporary recording where ``imagingResPd`` has too few samples.
+        Outputs: a clear failure before conversion writes twopy files.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_session(
+                session_dir,
+                imaging_res_pd=np.array([0.0, 1.0]),
+            )
+
+            with self.assertRaisesRegex(ValueError, "imagingResPd"):
+                load_source_conversion_inputs(session_dir)
+
+    def test_rejects_unexpected_acquisition_frame_count_offset(self) -> None:
+        """Confirm acquisition frame metadata cannot drift by more than one.
+
+        Inputs: a temporary recording where acquisition metadata is two frames
+        short of the aligned movie.
+        Outputs: a clear failure before conversion writes twopy files.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_session(session_dir, acquisition_frame_count=1)
+
+            with self.assertRaisesRegex(ValueError, "acq.numberOfFrames"):
+                load_source_conversion_inputs(session_dir)
+
+    def _write_session(
+        self,
+        session_dir: Path,
+        *,
+        acquisition_frame_count: int = 3,
+        imaging_res_pd: np.ndarray | None = None,
+    ) -> None:
         """Create a minimal valid source recording fixture.
 
         Args:
             session_dir: Temporary folder that receives fixture files.
+            acquisition_frame_count: ``acq.numberOfFrames`` metadata value.
+            imaging_res_pd: Optional imaging-resolution photodiode vector.
 
         Returns:
             None. The function writes all required source files to disk.
@@ -199,7 +313,7 @@ class ConversionTest(unittest.TestCase):
                     "acq": {
                         "linesPerFrame": 2,
                         "pixelsPerLine": 2,
-                        "numberOfFrames": 3,
+                        "numberOfFrames": acquisition_frame_count,
                         "numberOfChannelsSave": 2,
                         "frameRate": 10.0,
                         "zoomFactor": 2.0,
@@ -245,7 +359,13 @@ class ConversionTest(unittest.TestCase):
         )
         scipy.io.savemat(
             session_dir / "imagingResPd.mat",
-            {"imagingResPd": np.array([0.0, 1.0, 0.0])},
+            {
+                "imagingResPd": (
+                    np.array([0.0, 1.0, 0.0])
+                    if imaging_res_pd is None
+                    else imaging_res_pd
+                ),
+            },
         )
         scipy.io.savemat(
             session_dir / "highResPd.mat",

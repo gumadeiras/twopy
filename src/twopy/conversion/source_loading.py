@@ -19,6 +19,7 @@ from twopy.conversion.matlab_values import (
 from twopy.conversion.types import (
     AcquisitionMetadata,
     AlignedMovieSource,
+    FrameCountAudit,
     PhotodiodeSignals,
     SourceConversionInputs,
     StimulusParameters,
@@ -60,23 +61,32 @@ def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
     Raises:
         FileNotFoundError: If the session or required files are missing.
         KeyError: If an expected MATLAB variable or HDF5 dataset is absent.
-        ValueError: If a loaded table has an unexpected shape.
+        ValueError: If loaded tables or frame counts have unexpected shapes.
     """
     files = discover_session_files(session_dir)
+    aligned_movie = _load_aligned_movie_source(files.aligned_movie_mat)
+    acquisition = _load_acquisition_metadata(files.image_description_mat)
+    photodiode = _load_photodiode_signals(
+        imaging_res_path=files.imaging_res_pd_mat,
+        high_res_path=files.high_res_pd_mat,
+    )
+    frame_counts = _audit_frame_counts(
+        aligned_movie=aligned_movie,
+        acquisition=acquisition,
+        photodiode=photodiode,
+    )
     return SourceConversionInputs(
         session_files=files,
-        aligned_movie=_load_aligned_movie_source(files.aligned_movie_mat),
-        acquisition=_load_acquisition_metadata(files.image_description_mat),
+        aligned_movie=aligned_movie,
+        acquisition=acquisition,
         stimulus_parameters=_load_stimulus_parameters(
             files.stimulus_data_dir / "stimParams.mat",
         ),
         stimulus_timeline=_load_stimulus_timeline(
             files.stimulus_data_dir / "stimdata.mat",
         ),
-        photodiode=_load_photodiode_signals(
-            imaging_res_path=files.imaging_res_pd_mat,
-            high_res_path=files.high_res_pd_mat,
-        ),
+        photodiode=photodiode,
+        frame_counts=frame_counts,
     )
 
 
@@ -204,3 +214,79 @@ def _load_photodiode_signals(
             dtype=np.float64,
         ),
     )
+
+
+def _audit_frame_counts(
+    *,
+    aligned_movie: AlignedMovieSource,
+    acquisition: AcquisitionMetadata,
+    photodiode: PhotodiodeSignals,
+) -> FrameCountAudit:
+    """Check frame-count relationships that response analysis will rely on.
+
+    Args:
+        aligned_movie: Aligned movie source metadata.
+        acquisition: ScanImage acquisition metadata from ``imageDescription.mat``.
+        photodiode: Loaded photodiode arrays.
+
+    Returns:
+        Frame-count audit values for validation and HDF5 metadata.
+
+    Raises:
+        ValueError: If the imaging-resolution photodiode does not match the
+            aligned movie frame count, or if acquisition metadata differs by
+            more than the observed one-frame ScanImage offset.
+
+    Random sampling of real recordings showed ``imagingResPd`` and
+    ``alignedMovie`` agree exactly, while ``acq.numberOfFrames`` is commonly one
+    less than the aligned movie. That offset is documented, not hidden.
+    """
+    movie_frames = aligned_movie.shape[0]
+    imaging_res_pd_samples = int(photodiode.imaging_res_pd.size)
+    acquisition_frames = _required_int_field(acquisition, "acq.numberOfFrames")
+
+    imaging_delta = imaging_res_pd_samples - movie_frames
+    if imaging_delta != 0:
+        msg = (
+            "imagingResPd sample count must match aligned movie frames: "
+            f"imaging_res_pd={imaging_res_pd_samples}, movie={movie_frames}"
+        )
+        raise ValueError(msg)
+
+    acquisition_delta = acquisition_frames - movie_frames
+    if acquisition_delta not in {-1, 0}:
+        msg = (
+            "Unexpected ScanImage acquisition frame count offset: "
+            f"acq.numberOfFrames={acquisition_frames}, movie={movie_frames}"
+        )
+        raise ValueError(msg)
+
+    return FrameCountAudit(
+        aligned_movie_frames=movie_frames,
+        imaging_res_pd_samples=imaging_res_pd_samples,
+        acquisition_number_of_frames=acquisition_frames,
+        imaging_res_pd_minus_movie=imaging_delta,
+        acquisition_minus_movie=acquisition_delta,
+    )
+
+
+def _required_int_field(acquisition: AcquisitionMetadata, key: str) -> int:
+    """Read one required integer acquisition metadata field.
+
+    Args:
+        acquisition: Loaded acquisition metadata.
+        key: Field name to read.
+
+    Returns:
+        Field value as an integer.
+
+    Raises:
+        ValueError: If the field cannot be interpreted as an integer.
+    """
+    value = acquisition.fields[key]
+    if isinstance(value, str | bytes | int | float | np.generic):
+        return int(value)
+
+    value_type = type(value).__name__
+    msg = f"Acquisition field {key!r} must be integer-like, got {value_type}"
+    raise ValueError(msg)

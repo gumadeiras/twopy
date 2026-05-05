@@ -38,10 +38,14 @@ decided.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus
   parameters, stimulus timeline, photodiode signals, mean image, and a separate
   aligned movie file.
+- Conversion uses configured `analysis_output` by default unless a caller passes
+  an explicit output directory.
 - Conversion code split into focused modules for public workflow, source
   loading, HDF5 writing, MATLAB value conversion, frame ranges, and typed data
   objects.
 - Acquisition metadata fields named in one explicit constant for easier audit.
+- Converted HDF5 files include a `frame_counts` audit group for aligned movie,
+  imaging-resolution photodiode, and acquisition metadata frame counts.
 - Converted HDF5 synchronization metadata documenting that imaging and stimulus
   clocks are aligned through photodiode events.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.
