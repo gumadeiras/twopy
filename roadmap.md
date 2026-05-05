@@ -8,7 +8,8 @@ decided.
 
 - Private GitHub repository and local project skeleton.
 - Python 3.13 micromamba environment named `twopy`.
-- Package metadata with napari as the GUI extra.
+- Package metadata with one required install path for core, GUI, linting, and
+  typing tools.
 - Strict ruff and mypy configuration.
 - Repository rules in `AGENTS.md`.
 - Session path discovery for required microscope output files.

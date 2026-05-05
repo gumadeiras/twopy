@@ -6,7 +6,6 @@ Two-photon imaging analysis tool with a napari interface.
 
 ```sh
 micromamba env create -f environment.yml
-micromamba run -n twopy python -m pip install -e ".[dev,gui]"
 cp config.example.yml config.yml
 ```
 

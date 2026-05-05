@@ -67,7 +67,7 @@ twopy is a two-photon imaging analysis tool.
 - Keep the environment reproducible.
 - When adding, removing, or changing dependencies, update `environment.yml` or a requirements file in the same change.
 - Prefer `environment.yml` for the micromamba development environment.
-- Keep GUI dependencies in a separate package extra when possible so core data code stays usable without launching a GUI.
+- Keep one install path. Do not split dependencies into dev or GUI extras.
 
 ## Configuration
 
