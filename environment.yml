@@ -1,0 +1,11 @@
+# Defines the local development environment for twopy.
+# Inputs: conda-forge package metadata.
+# Outputs: a micromamba environment named "twopy" with Python 3.13 and pip.
+name: twopy
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - pip
+  - pip:
+      - -e .[dev,gui]

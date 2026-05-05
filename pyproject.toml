@@ -5,14 +5,71 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "twopy"
 version = "0.1.0"
-description = "Python project workspace."
+description = "Two-photon imaging analysis tool with a napari interface."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13,<3.14"
 license = { text = "MIT" }
 authors = [
   { name = "Gustavo Madeira Santana", email = "fromweb1@gumadeiras.com" },
 ]
-dependencies = []
+dependencies = [
+  "h5py>=3.16,<4",
+  "pyyaml>=6.0.3,<7",
+  "scipy>=1.17,<2",
+  "tifffile>=2026.3,<2027",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.20",
+  "ruff>=0.15",
+]
+gui = [
+  "napari[all]>=0.7,<0.8",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+  "ANN",
+  "B",
+  "D",
+  "E",
+  "F",
+  "I",
+  "SIM",
+  "UP",
+  "W",
+]
+ignore = [
+  "D203",
+  "D213",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+files = ["src", "tests"]
+mypy_path = "src"
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = [
+  "h5py",
+  "napari",
+  "yaml",
+  "scipy",
+  "scipy.io",
+  "tifffile",
+]
+ignore_missing_imports = true
