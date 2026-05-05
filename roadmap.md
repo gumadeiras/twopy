@@ -21,6 +21,7 @@ decided.
   stimulus, sensor, cell type, hemisphere, and person.
 - DB query access modes: direct mounted DB query or local cached DB copies with
   metadata and SHA-256 change checks.
+- Configured database access mode with `copy` as the default.
 - MATLAB file inspection and loading layer for older MAT files and HDF5-backed
   MAT files.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.

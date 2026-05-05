@@ -27,7 +27,7 @@ def find_recordings(
     cell_type: str | None = None,
     hemisphere: str | None = None,
     person: str | None = None,
-    database_access: DatabaseAccess = "direct",
+    database_access: DatabaseAccess | None = None,
     database_cache_dir: Path | None = None,
     limit: int = 100,
     config_path: Path = DEFAULT_CONFIG_PATH,
@@ -44,8 +44,8 @@ def find_recordings(
         cell_type: Optional cell-type substring from fly ``cellType``.
         hemisphere: Optional exact fly-eye value, such as ``left`` or ``right``.
         person: Optional experimenter substring from fly ``surgeon``.
-        database_access: ``direct`` queries mounted DB files directly. ``copy``
-            copies DB files locally before querying.
+        database_access: Optional override for configured DB access. ``direct``
+            queries mounted DB files directly. ``copy`` copies DB files locally.
         database_cache_dir: Optional cache directory for local DB copies.
         limit: Maximum number of recordings to return.
         config_path: YAML config file containing ``database_path``.
@@ -71,7 +71,7 @@ def find_recordings(
         cell_type=cell_type,
         hemisphere=hemisphere,
         person=person,
-        database_access=database_access,
+        database_access=database_access or config.database_access,
         cache_dir=database_cache_dir,
         limit=limit,
     )

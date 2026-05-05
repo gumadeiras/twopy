@@ -1,7 +1,7 @@
 """Load twopy configuration from a small YAML file.
 
-Inputs: a YAML config file with lab data root paths.
-Outputs: a typed ``TwopyConfig`` object with normalized ``Path`` values.
+Inputs: a YAML config file with lab paths and database access mode.
+Outputs: a typed ``TwopyConfig`` object with normalized values.
 
 The config layer keeps machine-specific paths out of analysis code and makes the
 GUI easy to point at the right database and recording roots.
@@ -13,6 +13,8 @@ from typing import cast
 
 import yaml
 
+from twopy.database.types import DatabaseAccess
+
 __all__ = ["DEFAULT_CONFIG_PATH", "TwopyConfig", "load_config"]
 
 DEFAULT_CONFIG_PATH = Path("config.yml")
@@ -22,8 +24,8 @@ DEFAULT_CONFIG_PATH = Path("config.yml")
 class TwopyConfig:
     """Machine-local paths used by twopy.
 
-    Inputs: database and recording data root paths from ``config.yml``.
-    Outputs: immutable paths that GUI and analysis code can pass around safely.
+    Inputs: database path, data path, and DB access mode from ``config.yml``.
+    Outputs: immutable config values that GUI and analysis code can pass around.
 
     The paths are not required to exist during parsing so tests and machines
     without mounted lab drives can still load and inspect configuration.
@@ -31,6 +33,7 @@ class TwopyConfig:
 
     database_path: Path
     data_path: Path
+    database_access: DatabaseAccess
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
@@ -41,7 +44,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
             working directory.
 
     Returns:
-        A typed configuration object with ``database_path`` and ``data_path``.
+        A typed configuration object with paths and database access mode.
 
     Raises:
         FileNotFoundError: If the config file is absent.
@@ -66,6 +69,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
     return TwopyConfig(
         database_path=_required_path(raw_config, "database_path", config_path),
         data_path=_required_path(raw_config, "data_path", config_path),
+        database_access=_database_access(raw_config, config_path),
     )
 
 
@@ -91,3 +95,29 @@ def _required_path(config: dict[object, object], key: str, config_path: Path) ->
         raise ValueError(msg)
 
     return Path(value).expanduser()
+
+
+def _database_access(
+    config: dict[object, object],
+    config_path: Path,
+) -> DatabaseAccess:
+    """Read the optional database access mode from parsed YAML.
+
+    Args:
+        config: Parsed YAML mapping.
+        config_path: Source config file path, used for clear errors.
+
+    Returns:
+        ``copy`` or ``direct``. Missing values default to ``copy``.
+
+    The default favors local DB copies because mounted lab volumes can be slow
+    and we already verify whether a copy is stale before copying again.
+    """
+    value = config.get("database_access", "copy")
+    if value in {"copy", "direct"}:
+        return cast(DatabaseAccess, value)
+
+    msg = (
+        f"twopy config key 'database_access' must be 'copy' or 'direct': {config_path}"
+    )
+    raise ValueError(msg)

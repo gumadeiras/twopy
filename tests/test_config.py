@@ -24,7 +24,8 @@ class LoadConfigTest(unittest.TestCase):
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
-                "data_path: /Volumes/magic/clarklab/2p_microscope_data\n",
+                "data_path: /Volumes/magic/clarklab/2p_microscope_data\n"
+                "database_access: copy\n",
                 encoding="utf-8",
             )
 
@@ -37,6 +38,43 @@ class LoadConfigTest(unittest.TestCase):
                 config.data_path,
                 Path("/Volumes/magic/clarklab/2p_microscope_data"),
             )
+            self.assertEqual(config.database_access, "copy")
+
+    def test_database_access_defaults_to_copy(self) -> None:
+        """Confirm older config files still get safe local-copy DB access.
+
+        Inputs: a temporary YAML file without ``database_access``.
+        Outputs: an assertion that the loaded mode is ``copy``.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.yml"
+            config_path.write_text(
+                "database_path: /Volumes/magic/clarklab/_Database\n"
+                "data_path: /Volumes/magic/clarklab/2p_microscope_data\n",
+                encoding="utf-8",
+            )
+
+            config = load_config(config_path)
+
+            self.assertEqual(config.database_access, "copy")
+
+    def test_invalid_database_access_raises_clear_error(self) -> None:
+        """Confirm unsupported DB access modes fail during config loading.
+
+        Inputs: a temporary YAML file with an invalid ``database_access``.
+        Outputs: an assertion that the error names the invalid key.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.yml"
+            config_path.write_text(
+                "database_path: /Volumes/magic/clarklab/_Database\n"
+                "data_path: /Volumes/magic/clarklab/2p_microscope_data\n"
+                "database_access: network\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "database_access"):
+                load_config(config_path)
 
     def test_missing_required_path_raises_clear_error(self) -> None:
         """Confirm incomplete config files fail before analysis code runs.

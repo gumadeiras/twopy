@@ -30,7 +30,9 @@ class PublicApiTest(unittest.TestCase):
             self._write_database(database_dir / "experimentLog.db")
             config_path = root / "config.yml"
             config_path.write_text(
-                f"database_path: {database_dir}\ndata_path: {data_dir}\n",
+                f"database_path: {database_dir}\n"
+                f"data_path: {data_dir}\n"
+                "database_access: copy\n",
                 encoding="utf-8",
             )
 
@@ -44,13 +46,13 @@ class PublicApiTest(unittest.TestCase):
                 cell_type="ALPN",
                 hemisphere="left",
                 person="Gustavo",
-                database_access="copy",
                 database_cache_dir=root / "db_cache",
                 config_path=config_path,
             )
 
             self.assertEqual(len(recordings), 1)
             self.assertEqual(recordings[0].stimulus_presentation_id, 20005)
+            self.assertTrue((root / "db_cache" / "experimentLog.db").is_file())
 
     def _write_database(self, path: Path) -> None:
         """Create the smallest SQLite DB needed by the public API test.

@@ -33,6 +33,8 @@ recordings = find_recordings(
     cell_type="ALPN",
     hemisphere="right",
     person="Gustavo",
-    database_access="copy",
 )
 ```
+
+`config.yml` controls whether DB queries use mounted files directly or cached
+local copies. The default is `database_access: copy`.
