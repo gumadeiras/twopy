@@ -1,7 +1,0 @@
-# twopy local configuration.
-# Inputs: paths to lab data locations on this machine.
-# Outputs: root paths used by GUI and analysis code to find recordings and database files.
-database_path: /Volumes/magic/clarklab/_Database
-data_path: /Volumes/magic/clarklab/2p_microscope_data
-database_access: copy
-analysis_output: source

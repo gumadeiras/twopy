@@ -1,0 +1,33 @@
+# Copy this file to config.yml before running twopy:
+#
+#   cp config.example.yml config.yml
+#
+# Then edit config.yml so the paths match your machine.
+# config.yml is private to your computer and must not be committed.
+
+# Folder that contains the lab database files.
+# twopy uses this to find and filter experiments.
+# Example files inside this folder may include experimentLog.db and
+# experimentInitLog.db.
+database_path: /Volumes/magic/clarklab/_Database
+
+# Folder that contains the two-photon microscope recording folders.
+# twopy uses this to connect database entries to recordings on disk.
+data_path: /Volumes/magic/clarklab/2p_microscope_data
+
+# How twopy should read the database.
+# Use "copy" for normal work. Database searches over the network can be slow,
+# but copying the database file is usually fast. twopy makes a local copy before
+# reading, then only copies again when the database file changed.
+# Use "direct" only when you intentionally want to read the shared database
+# files directly.
+database_access: copy
+
+# Where twopy should write converted data and analysis outputs.
+# Use "source" to write into a twopy folder inside each recording folder.
+# Example: /path/to/recording/twopy
+#
+# Or set this to a folder path. twopy will recreate the matching recording
+# folders under that folder.
+# Example: /Volumes/magic/clarklab/twopy_outputs
+analysis_output: source
