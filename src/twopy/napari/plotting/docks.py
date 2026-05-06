@@ -72,6 +72,7 @@ from twopy.napari.roi import (
     roi_label_image_from_layer_for_recording,
     save_napari_label_rois,
 )
+from twopy.napari.text import counted_noun
 
 __all__ = [
     "add_twopy_response_options_widget",
@@ -464,7 +465,8 @@ class _ResponsePlotWidget(QWidget):
         self._refresh_update_path_labels()
         output_folder = format_output_folder(run.output_path, self._recording)
         self._update_status_label.setText(
-            f"Saved {len(roi_set.labels)} ROI(s) to {output_folder}"
+            f"Saved {counted_noun(len(roi_set.labels), 'ROI', 'ROIs')} "
+            f"to {output_folder}"
         )
 
     def set_response_plot_data(

@@ -81,6 +81,7 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_layer,
 )
 from twopy.napari.state import write_last_recording_folder
+from twopy.napari.text import counted_noun
 from twopy.napari.viewer import interior_random_frame_indices
 from twopy.spatial import SpatialCrop
 
@@ -305,6 +306,17 @@ class _FakePlotReceiver:
 class NapariAdapterTest(unittest.TestCase):
     """Tests napari loading and label saving without starting a GUI."""
 
+    def test_counted_noun_formats_status_text(self) -> None:
+        """Confirm napari status text uses normal singular and plural words.
+
+        Inputs: singular and plural counts.
+        Outputs: phrases with full singular or plural nouns.
+        """
+        self.assertEqual(counted_noun(1, "file"), "1 file")
+        self.assertEqual(counted_noun(2, "file"), "2 files")
+        self.assertEqual(counted_noun(1, "ROI", "ROIs"), "1 ROI")
+        self.assertEqual(counted_noun(2, "ROI", "ROIs"), "2 ROIs")
+
     def setUp(self) -> None:
         """Route napari UI state to a temporary file during tests.
 
@@ -488,7 +500,7 @@ class NapariAdapterTest(unittest.TestCase):
             save_widget = cast(Any, opened.save_rois_widget)
             result = save_widget(roi_save_file=roi_save_file)
 
-            self.assertIn("Saved 2 ROI", str(result))
+            self.assertIn("Saved 2 ROIs", str(result))
             loaded = load_roi_set(roi_save_file)
             self.assertEqual(loaded.labels, ("roi_0001", "roi_0002"))
 
@@ -672,7 +684,7 @@ class NapariAdapterTest(unittest.TestCase):
             )
             self.assertIn("Analysis output: ./twopy/analysis_outputs.h5", labels_text)
             self.assertIn("ROI output: ./twopy/rois.h5", labels_text)
-            self.assertIn("Saved 1 ROI(s) to ./twopy", labels_text)
+            self.assertIn("Saved 1 ROI to ./twopy", labels_text)
 
     def test_response_display_paths_use_recording_identity(self) -> None:
         """Confirm response widgets show compact recording and output paths.

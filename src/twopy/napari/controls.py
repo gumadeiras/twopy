@@ -48,6 +48,7 @@ from twopy.napari.state import (
     recording_folder_for_state,
     write_last_recording_folder,
 )
+from twopy.napari.text import counted_noun
 
 __all__ = ["NapariControlDocks", "add_twopy_magicgui_controls"]
 
@@ -454,7 +455,10 @@ def _make_twopy_save_rois_widget(state: NapariControlState) -> object:
             cast(_RoiSavePathReceiver, state.response_plot_widget).set_roi_save_file(
                 resolved_output_path
             )
-        return f"Saved {len(roi_set.labels)} ROI(s) to {resolved_output_path}"
+        return (
+            f"Saved {counted_noun(len(roi_set.labels), 'ROI', 'ROIs')} "
+            f"to {resolved_output_path}"
+        )
 
     save_rois.roi_save_file.mode = "w"
     save_rois.roi_save_file.label = "ROI save file"

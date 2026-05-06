@@ -24,6 +24,7 @@ from twopy.napari.plotting.export import (
     export_recording_view,
     export_roi_view,
 )
+from twopy.napari.text import counted_noun
 
 __all__ = ["ResponseExportState", "create_response_export_tab"]
 
@@ -205,4 +206,4 @@ def _export_status(
     if len(result) == 0:
         return "No files exported."
     folder = format_output_folder(result[0].parent, recording)
-    return f"Saved {len(result)} file(s) to {folder}"
+    return f"Saved {counted_noun(len(result), 'file')} to {folder}"
