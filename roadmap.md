@@ -134,8 +134,10 @@ decided.
 - Napari has an initial response plotting dock with tabs for epoch response
   plots and plot options; it can reload persisted analysis outputs or update
   plots from the current Labels ROIs through the core analysis workflow. Plots
-  now share one y-axis and preserve two seconds of prestimulus baseline by
-  default when those frames are available.
+  now use saved per-trial response time vectors, match ROI trace colors to the
+  Labels layer, share axes, preserve two seconds before stimulus onset, extend
+  two seconds after stimulus offset when gray interleave frames exist, hide gray
+  epochs by default, and expose ROI/epoch visibility plus manual axis controls.
 - Launch script for opening napari from a converted output directory, a source
   recording directory with `twopy/recording_data.h5`, or an explicit
   `recording_data.h5` path.

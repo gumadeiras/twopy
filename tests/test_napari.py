@@ -29,7 +29,12 @@ from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
-from twopy.napari.plotting import response_plot_data_from_grouped
+from twopy.napari.plot_data import response_plot_data_from_grouped
+from twopy.napari.plot_widgets import (
+    global_time_bounds,
+    global_value_bounds,
+    roi_colors_from_layer,
+)
 from twopy.napari.state import write_last_recording_folder
 
 
@@ -158,6 +163,23 @@ class _FakeViewer:
         layer = _FakeLayer(name=name, data=data)
         self.labels.append(layer)
         return layer
+
+
+class _FakeColorLayer:
+    """Small Labels-layer stand-in with deterministic colors."""
+
+    def get_color(self, label: int) -> tuple[float, float, float, float]:
+        """Return one RGBA color for a positive label.
+
+        Args:
+            label: Labels-layer integer value.
+
+        Returns:
+            RGBA tuple in napari's usual float range.
+        """
+        if label == 1:
+            return (1.0, 0.0, 0.0, 1.0)
+        return (0.0, 0.0, 1.0, 1.0)
 
 
 class NapariAdapterTest(unittest.TestCase):
@@ -561,6 +583,57 @@ class NapariAdapterTest(unittest.TestCase):
             plot_data.epochs[0].mean_values,
             np.array([[0.0, 1.0, 2.0, 3.0]]),
         )
+
+    def test_response_plot_bounds_use_selected_epochs_and_rois(self) -> None:
+        """Confirm plot bounds follow selected ROI and epoch visibility.
+
+        Inputs: two epoch plots and two ROIs with different ranges.
+        Outputs: bounds for only the selected epoch and ROI.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((4, 2), dtype=np.float64),
+            baseline=np.ones((4, 2), dtype=np.float64),
+            values=np.array(
+                [[0.0, 10.0], [1.0, 11.0], [2.0, 20.0], [3.0, 21.0]],
+                dtype=np.float64,
+            ),
+            labels=("roi_1", "roi_2"),
+            start_frame=0,
+            stop_frame=4,
+            tau=0.0,
+            amplitudes=np.ones(2, dtype=np.float64),
+            interleave_frame_numbers=np.array([0.0]),
+            interleave_fluorescence=np.ones((1, 2), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "gray"), 1, "Gray"),
+                EpochFrameWindow(FrameWindow(1, 2, 4, "odor"), 2, "Odor"),
+            ),
+            data_rate_hz=1.0,
+        )
+        plot_data = response_plot_data_from_grouped(grouped)
+
+        self.assertEqual(global_time_bounds(plot_data, ((2, "Odor"),)), (0.0, 1.0))
+        self.assertEqual(
+            global_value_bounds(plot_data, (0,), ((2, "Odor"),)),
+            (1.6, 3.6),
+        )
+
+    def test_response_plot_colors_can_match_labels_layer(self) -> None:
+        """Confirm plot colors can come from the napari Labels layer.
+
+        Inputs: fake Labels layer with deterministic per-label RGBA values.
+        Outputs: Qt colors matching those values.
+        """
+        colors = roi_colors_from_layer(_FakeColorLayer(), 2)
+
+        self.assertEqual(colors[0].red(), 255)
+        self.assertEqual(colors[0].blue(), 0)
+        self.assertEqual(colors[1].red(), 0)
+        self.assertEqual(colors[1].blue(), 255)
 
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
         """Confirm no-path app launch can start empty instead of failing.

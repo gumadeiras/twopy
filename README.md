@@ -161,7 +161,10 @@ choose a different preview range. The dock panel saves ROIs to `rois.h5` beside
 the current recording by default. The response dock can reload existing
 `analysis_outputs.h5` or update plots from the current Labels layer. Response
 plots share one y-axis across epochs and show two seconds before stimulus onset
-by default, when those frames are available in the grouped responses.
+and two seconds after stimulus offset by default, when gray interleave frames
+are available in the grouped responses. Each saved response trial includes its
+own `time_seconds` vector, so plots use direct response time values rather than
+inferring time from array indices.
 
 ```python
 from pathlib import Path

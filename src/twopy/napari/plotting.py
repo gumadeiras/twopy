@@ -9,13 +9,9 @@ responses from the current Labels layer, this module converts labels to a
 ``RoiSet`` and calls the normal analysis workflow.
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import numpy.typing as npt
-from qtpy.QtCore import QPointF, QRectF
-from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
 from qtpy.QtWidgets import (
     QCheckBox,
     QLabel,
@@ -26,57 +22,34 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from twopy.analysis.dff import RoiDeltaFOverF
-from twopy.analysis.persistence import load_analysis_outputs
-from twopy.analysis.responses import (
-    GroupedRoiResponses,
-    RoiResponseTrial,
-    group_delta_f_over_f_by_epoch,
-)
-from twopy.analysis.workflow import (
-    DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
-    analyze_recording_responses,
-)
+from twopy.analysis.responses import is_gray_epoch_name
+from twopy.analysis.workflow import analyze_recording_responses
 from twopy.converted import RecordingData
+from twopy.napari.plot_data import (
+    ResponsePlotData,
+    default_analysis_output_path,
+    load_response_plot_data,
+    response_plot_data_from_grouped,
+)
+from twopy.napari.plot_widgets import (
+    EpochPlotWidget,
+    axis_options_widget,
+    clear_layout,
+    epoch_key_label,
+    global_time_bounds,
+    global_value_bounds,
+    ordered_bounds,
+    roi_colors_from_layer,
+    visibility_options_widget,
+)
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import roi_label_image_from_layer
 from twopy.roi import make_roi_set_from_label_image
 
 __all__ = [
-    "EpochResponsePlotData",
-    "ResponsePlotData",
     "add_twopy_response_plot_widget",
     "refresh_response_plot_widget",
-    "response_plot_data_from_grouped",
 ]
-
-
-@dataclass(frozen=True)
-class EpochResponsePlotData:
-    """Mean and SEM traces for one stimulus epoch type.
-
-    Inputs: grouped response trials for one epoch.
-    Outputs: one mean and SEM trace per ROI on a shared time axis.
-    """
-
-    epoch_name: str
-    epoch_number: int
-    roi_labels: tuple[str, ...]
-    time_seconds: npt.NDArray[np.float64]
-    mean_values: npt.NDArray[np.float64]
-    sem_values: npt.NDArray[np.float64]
-
-
-@dataclass(frozen=True)
-class ResponsePlotData:
-    """Plot-ready ROI responses grouped by stimulus epoch.
-
-    Inputs: grouped response analysis output.
-    Outputs: epoch plot data plus the source analysis path.
-    """
-
-    source_path: Path | None
-    epochs: tuple[EpochResponsePlotData, ...]
 
 
 def add_twopy_response_plot_widget(
@@ -162,126 +135,6 @@ def refresh_response_plot_widget(
     widget.load_recording(recording)
 
 
-def response_plot_data_from_grouped(
-    grouped: GroupedRoiResponses,
-    *,
-    source_path: Path | None = None,
-) -> ResponsePlotData:
-    """Summarize grouped responses into mean and SEM traces for plotting.
-
-    Args:
-        grouped: Grouped response object from analysis.
-        source_path: Optional analysis output path used for display.
-
-    Returns:
-        Plot-ready data with one item per stimulus epoch type.
-    """
-    epoch_keys: list[tuple[int, str]] = []
-    trials_by_epoch: dict[tuple[int, str], list[RoiResponseTrial]] = {}
-    for trial in grouped.trials:
-        key = (trial.epoch_number, trial.epoch_name)
-        if key not in trials_by_epoch:
-            epoch_keys.append(key)
-            trials_by_epoch[key] = []
-        trials_by_epoch[key].append(trial)
-
-    epochs = tuple(
-        _epoch_plot_data(
-            epoch_number=epoch_number,
-            epoch_name=epoch_name,
-            trials=tuple(trials_by_epoch[(epoch_number, epoch_name)]),
-            roi_labels=grouped.roi_labels,
-            data_rate_hz=grouped.data_rate_hz,
-        )
-        for epoch_number, epoch_name in epoch_keys
-    )
-    return ResponsePlotData(source_path=source_path, epochs=epochs)
-
-
-def _epoch_plot_data(
-    *,
-    epoch_number: int,
-    epoch_name: str,
-    trials: tuple[RoiResponseTrial, ...],
-    roi_labels: tuple[str, ...],
-    data_rate_hz: float,
-) -> EpochResponsePlotData:
-    """Build plot data for one epoch type.
-
-    Args:
-        epoch_number: Stimulus epoch number.
-        epoch_name: Stimulus epoch name.
-        trials: Trial responses for this epoch type.
-        roi_labels: ROI labels in column order.
-        data_rate_hz: Imaging frame rate in hertz.
-
-    Returns:
-        Mean and SEM traces with shape ``(rois, frames)``.
-    """
-    time_seconds = _shared_time_axis(trials, data_rate_hz)
-    first_time = float(time_seconds[0])
-    max_frames = len(time_seconds)
-    trial_count = len(trials)
-    roi_count = len(roi_labels)
-    values = np.full((trial_count, max_frames, roi_count), np.nan, dtype=np.float64)
-    for trial_index, trial in enumerate(trials):
-        offsets = np.rint((trial.time_seconds - first_time) * data_rate_hz).astype(
-            np.int64,
-            copy=False,
-        )
-        values[trial_index, offsets, :] = trial.values
-
-    mean_values = np.nanmean(values, axis=0).T
-    valid_counts = np.sum(~np.isnan(values), axis=0).T
-    sem_values = np.zeros((roi_count, max_frames), dtype=np.float64)
-    variable_mask = valid_counts > 1
-    if np.any(variable_mask):
-        std_values = np.nanstd(values, axis=0, ddof=1).T
-        sem_values[variable_mask] = std_values[variable_mask] / np.sqrt(
-            valid_counts[variable_mask]
-        )
-    return EpochResponsePlotData(
-        epoch_name=epoch_name,
-        epoch_number=epoch_number,
-        roi_labels=roi_labels,
-        time_seconds=time_seconds,
-        mean_values=mean_values,
-        sem_values=sem_values,
-    )
-
-
-def _shared_time_axis(
-    trials: tuple[RoiResponseTrial, ...],
-    data_rate_hz: float,
-) -> npt.NDArray[np.float64]:
-    """Return one relative time axis that covers all trials in an epoch.
-
-    Args:
-        trials: Trial responses for one epoch type.
-        data_rate_hz: Imaging frame rate in hertz.
-
-    Returns:
-        Relative time in seconds, usually starting at ``-2`` when grouped
-        responses include two prestimulus seconds.
-    """
-    first_time = min(float(trial.time_seconds[0]) for trial in trials)
-    last_time = max(float(trial.time_seconds[-1]) for trial in trials)
-    frame_count = int(round((last_time - first_time) * data_rate_hz)) + 1
-    return first_time + (np.arange(frame_count, dtype=np.float64) / data_rate_hz)
-
-
-def _default_analysis_output_path(recording: RecordingData) -> Path:
-    """Return the default analysis output path for one recording.
-
-    Args:
-        recording: Loaded converted recording.
-
-    Returns:
-        Path to ``analysis_outputs.h5`` beside ``recording_data.h5``.
-    """
-    return recording.path.expanduser().parent / "analysis_outputs.h5"
-
-
 def _ensure_qapplication() -> None:
     """Create a Qt application when tests instantiate widgets without napari.
 
@@ -297,63 +150,6 @@ def _ensure_qapplication() -> None:
         QApplication([])
 
 
-def _load_plot_data(path: Path) -> ResponsePlotData | str:
-    """Load response plot data from an analysis output file.
-
-    Args:
-        path: Candidate ``analysis_outputs.h5`` path.
-
-    Returns:
-        Plot data, or a status message for the user.
-    """
-    if not path.is_file():
-        return f"No analysis output found: {path}"
-    outputs = load_analysis_outputs(path)
-    if outputs.dff is not None and len(outputs.epoch_windows) > 0:
-        data_rate_hz = _analysis_output_data_rate_hz(
-            grouped=outputs.grouped_responses,
-            dff=outputs.dff,
-        )
-        if data_rate_hz is not None:
-            grouped = group_delta_f_over_f_by_epoch(
-                outputs.dff,
-                outputs.epoch_windows,
-                data_rate_hz=data_rate_hz,
-                pre_window_seconds=DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
-            )
-            return response_plot_data_from_grouped(grouped, source_path=outputs.path)
-    if outputs.grouped_responses is None:
-        return f"No grouped responses in: {path}"
-    return response_plot_data_from_grouped(
-        outputs.grouped_responses,
-        source_path=outputs.path,
-    )
-
-
-def _analysis_output_data_rate_hz(
-    *,
-    grouped: GroupedRoiResponses | None,
-    dff: RoiDeltaFOverF,
-) -> float | None:
-    """Return the saved response frame rate when available.
-
-    Args:
-        grouped: Optional grouped responses loaded from analysis outputs.
-        dff: dF/F result with audit metadata.
-
-    Returns:
-        Data rate in hertz, or ``None`` when unavailable.
-    """
-    if grouped is not None:
-        return grouped.data_rate_hz
-    value = dff.metadata.get("data_rate_hz")
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    return None
-
-
 class _ResponsePlotTabs(QTabWidget):
     """Qt tabs for response plots and plot options."""
 
@@ -365,6 +161,12 @@ class _ResponsePlotTabs(QTabWidget):
         self._analysis_path: Path | None = None
         self._plot_data: ResponsePlotData | None = None
         self._show_sem = True
+        self._roi_visibility: dict[str, bool] = {}
+        self._epoch_visibility: dict[tuple[int, str], bool] = {}
+        self._manual_x_min: float | None = None
+        self._manual_x_max: float | None = None
+        self._manual_y_min: float | None = None
+        self._manual_y_max: float | None = None
         self._status_label = QLabel("No recording loaded.")
         self._plot_layout = QVBoxLayout()
         self._plot_layout.addWidget(self._status_label)
@@ -376,6 +178,7 @@ class _ResponsePlotTabs(QTabWidget):
 
         options = QWidget()
         options_layout = QVBoxLayout()
+        self._options_layout = options_layout
         self._show_sem_checkbox = QCheckBox("Show SEM")
         self._show_sem_checkbox.setChecked(True)
         self._show_sem_checkbox.stateChanged.connect(self._set_show_sem)
@@ -385,10 +188,14 @@ class _ResponsePlotTabs(QTabWidget):
         update_from_rois_button.clicked.connect(self.update_from_current_rois)
         self._analysis_path_label = QLabel("Analysis file: default")
         self._analysis_path_label.setWordWrap(True)
+        self._dynamic_options = QWidget()
+        self._dynamic_options_layout = QVBoxLayout()
+        self._dynamic_options.setLayout(self._dynamic_options_layout)
         options_layout.addWidget(self._show_sem_checkbox)
         options_layout.addWidget(refresh_button)
         options_layout.addWidget(update_from_rois_button)
         options_layout.addWidget(self._analysis_path_label)
+        options_layout.addWidget(self._dynamic_options)
         options_layout.addStretch(1)
         options.setLayout(options_layout)
 
@@ -405,6 +212,7 @@ class _ResponsePlotTabs(QTabWidget):
             None.
         """
         self._roi_labels_layer = roi_labels_layer
+        self._render_plots()
 
     def clear_recording(self) -> None:
         """Reset the widget to the empty-launch state.
@@ -418,7 +226,9 @@ class _ResponsePlotTabs(QTabWidget):
         self._recording = None
         self._analysis_path = None
         self._plot_data = None
+        self._reset_plot_state()
         self._analysis_path_label.setText("Analysis file: default")
+        clear_layout(self._dynamic_options_layout)
         self._set_status("No recording loaded.")
 
     def load_recording(self, recording: RecordingData) -> None:
@@ -431,7 +241,7 @@ class _ResponsePlotTabs(QTabWidget):
             None.
         """
         self._recording = recording
-        self._analysis_path = _default_analysis_output_path(recording)
+        self._analysis_path = default_analysis_output_path(recording)
         self._analysis_path_label.setText(f"Analysis file: {self._analysis_path}")
         self.reload()
 
@@ -471,10 +281,15 @@ class _ResponsePlotTabs(QTabWidget):
             self._set_status(str(error))
             return
 
-        self._plot_data = response_plot_data_from_grouped(
-            run.grouped_responses,
-            source_path=run.output_path,
-        )
+        plot_data = load_response_plot_data(run.output_path)
+        if isinstance(plot_data, str):
+            self._plot_data = response_plot_data_from_grouped(
+                run.grouped_responses,
+                source_path=run.output_path,
+            )
+        else:
+            self._plot_data = plot_data
+        self._sync_plot_state(reset_axes=True)
         self._render_plots()
 
     def reload(self) -> None:
@@ -482,12 +297,15 @@ class _ResponsePlotTabs(QTabWidget):
         if self._analysis_path is None:
             self._set_status("No recording loaded.")
             return
-        result = _load_plot_data(self._analysis_path)
+        result = load_response_plot_data(self._analysis_path)
         if isinstance(result, str):
             self._plot_data = None
+            self._reset_plot_state()
+            clear_layout(self._dynamic_options_layout)
             self._set_status(result)
             return
         self._plot_data = result
+        self._sync_plot_state(reset_axes=True)
         self._render_plots()
 
     def _set_show_sem(self, state: int) -> None:
@@ -503,6 +321,194 @@ class _ResponsePlotTabs(QTabWidget):
         self._show_sem = self._show_sem_checkbox.isChecked()
         self._render_plots()
 
+    def _sync_plot_state(self, *, reset_axes: bool) -> None:
+        """Synchronize option state with currently loaded plot data.
+
+        Args:
+            reset_axes: Whether axis spin boxes should return to data-derived
+                defaults.
+
+        Returns:
+            None.
+        """
+        if self._plot_data is None:
+            self._reset_plot_state()
+            return
+
+        roi_labels = self._plot_data.epochs[0].roi_labels
+        self._roi_visibility = {
+            roi_label: self._roi_visibility.get(roi_label, True)
+            for roi_label in roi_labels
+        }
+        self._epoch_visibility = {
+            (epoch.epoch_number, epoch.epoch_name): self._epoch_visibility.get(
+                (epoch.epoch_number, epoch.epoch_name),
+                not is_gray_epoch_name(epoch.epoch_name),
+            )
+            for epoch in self._plot_data.epochs
+        }
+        if reset_axes:
+            self._manual_x_min = None
+            self._manual_x_max = None
+            self._manual_y_min = None
+            self._manual_y_max = None
+        self._render_options()
+
+    def _reset_plot_state(self) -> None:
+        """Clear plot-specific option state.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+        """
+        self._roi_visibility = {}
+        self._epoch_visibility = {}
+        self._manual_x_min = None
+        self._manual_x_max = None
+        self._manual_y_min = None
+        self._manual_y_max = None
+
+    def _render_options(self) -> None:
+        """Render axis, ROI, and epoch visibility controls."""
+        clear_layout(self._dynamic_options_layout)
+        if self._plot_data is None or len(self._plot_data.epochs) == 0:
+            return
+
+        auto_x_min, auto_x_max = global_time_bounds(self._plot_data)
+        auto_y_min, auto_y_max = global_value_bounds(
+            self._plot_data,
+            self._visible_roi_indices(),
+            self._visible_epoch_keys(),
+        )
+        axis_widget = axis_options_widget(
+            x_min=self._manual_x_min if self._manual_x_min is not None else auto_x_min,
+            x_max=self._manual_x_max if self._manual_x_max is not None else auto_x_max,
+            y_min=self._manual_y_min if self._manual_y_min is not None else auto_y_min,
+            y_max=self._manual_y_max if self._manual_y_max is not None else auto_y_max,
+            on_change=self._set_manual_axis_bounds,
+        )
+        self._dynamic_options_layout.addWidget(axis_widget)
+        self._dynamic_options_layout.addWidget(
+            visibility_options_widget(
+                title="ROIs",
+                labels=self._roi_labels(),
+                visibility=self._roi_visibility,
+                on_change=self._set_roi_visibility,
+            ),
+        )
+        self._dynamic_options_layout.addWidget(
+            visibility_options_widget(
+                title="Epochs",
+                labels=tuple(
+                    epoch_key_label(epoch.epoch_number, epoch.epoch_name)
+                    for epoch in self._plot_data.epochs
+                ),
+                visibility={
+                    epoch_key_label(epoch_number, epoch_name): visible
+                    for (
+                        epoch_number,
+                        epoch_name,
+                    ), visible in self._epoch_visibility.items()
+                },
+                on_change=self._set_epoch_visibility_by_label,
+            ),
+        )
+
+    def _set_manual_axis_bounds(
+        self,
+        *,
+        x_min: float,
+        x_max: float,
+        y_min: float,
+        y_max: float,
+    ) -> None:
+        """Store user-selected plot bounds.
+
+        Args:
+            x_min: Minimum x-axis value in seconds.
+            x_max: Maximum x-axis value in seconds.
+            y_min: Minimum dF/F value.
+            y_max: Maximum dF/F value.
+
+        Returns:
+            None.
+        """
+        self._manual_x_min = x_min
+        self._manual_x_max = x_max
+        self._manual_y_min = y_min
+        self._manual_y_max = y_max
+        self._render_plots()
+
+    def _set_roi_visibility(self, label: str, visible: bool) -> None:
+        """Update one ROI visibility flag.
+
+        Args:
+            label: ROI label.
+            visible: Whether the ROI should be plotted.
+
+        Returns:
+            None.
+        """
+        self._roi_visibility[label] = visible
+        self._render_plots()
+
+    def _set_epoch_visibility_by_label(self, label: str, visible: bool) -> None:
+        """Update one epoch visibility flag from an options label.
+
+        Args:
+            label: Display label for the epoch checkbox.
+            visible: Whether the epoch should be plotted.
+
+        Returns:
+            None.
+        """
+        for key in self._epoch_visibility:
+            if epoch_key_label(key[0], key[1]) == label:
+                self._epoch_visibility[key] = visible
+                break
+        self._render_plots()
+
+    def _visible_roi_indices(self) -> tuple[int, ...]:
+        """Return zero-based ROI indices currently visible in plots.
+
+        Args:
+            None.
+
+        Returns:
+            Tuple of ROI indices.
+        """
+        return tuple(
+            index
+            for index, roi_label in enumerate(self._roi_labels())
+            if self._roi_visibility.get(roi_label, True)
+        )
+
+    def _visible_epoch_keys(self) -> tuple[tuple[int, str], ...]:
+        """Return epoch keys currently visible in plots.
+
+        Args:
+            None.
+
+        Returns:
+            Tuple of ``(epoch_number, epoch_name)`` keys.
+        """
+        return tuple(key for key, visible in self._epoch_visibility.items() if visible)
+
+    def _roi_labels(self) -> tuple[str, ...]:
+        """Return ROI labels from the current plot data.
+
+        Args:
+            None.
+
+        Returns:
+            ROI labels, or an empty tuple before data is loaded.
+        """
+        if self._plot_data is None or len(self._plot_data.epochs) == 0:
+            return ()
+        return self._plot_data.epochs[0].roi_labels
+
     def _set_status(self, text: str) -> None:
         """Replace plots with one status message.
 
@@ -512,7 +518,7 @@ class _ResponsePlotTabs(QTabWidget):
         Returns:
             None.
         """
-        _clear_layout(self._plot_layout)
+        clear_layout(self._plot_layout)
         self._status_label = QLabel(text)
         self._status_label.setWordWrap(True)
         self._plot_layout.addWidget(self._status_label)
@@ -520,318 +526,46 @@ class _ResponsePlotTabs(QTabWidget):
 
     def _render_plots(self) -> None:
         """Render one plot widget per epoch type."""
-        _clear_layout(self._plot_layout)
+        clear_layout(self._plot_layout)
         if self._plot_data is None or len(self._plot_data.epochs) == 0:
             self._set_status("No responses available.")
             return
-        value_min, value_max = _global_value_bounds(self._plot_data)
+        roi_indices = self._visible_roi_indices()
+        epoch_keys = self._visible_epoch_keys()
+        if len(roi_indices) == 0 or len(epoch_keys) == 0:
+            self._set_status("No responses selected.")
+            return
+        auto_x_min, auto_x_max = global_time_bounds(self._plot_data, epoch_keys)
+        auto_y_min, auto_y_max = global_value_bounds(
+            self._plot_data,
+            roi_indices,
+            epoch_keys,
+        )
+        time_min = self._manual_x_min if self._manual_x_min is not None else auto_x_min
+        time_max = self._manual_x_max if self._manual_x_max is not None else auto_x_max
+        value_min = self._manual_y_min if self._manual_y_min is not None else auto_y_min
+        value_max = self._manual_y_max if self._manual_y_max is not None else auto_y_max
+        time_min, time_max = ordered_bounds(time_min, time_max)
+        value_min, value_max = ordered_bounds(value_min, value_max)
+        colors = roi_colors_from_layer(self._roi_labels_layer, len(self._roi_labels()))
         for epoch in self._plot_data.epochs:
+            if not self._epoch_visibility.get(
+                (epoch.epoch_number, epoch.epoch_name),
+                True,
+            ):
+                continue
             title = f"Epoch {epoch.epoch_number}: {epoch.epoch_name}"
             self._plot_layout.addWidget(QLabel(title))
             self._plot_layout.addWidget(
-                _EpochPlotWidget(
+                EpochPlotWidget(
                     epoch,
                     show_sem=self._show_sem,
+                    roi_indices=roi_indices,
+                    roi_colors=colors,
+                    time_min=time_min,
+                    time_max=time_max,
                     value_min=value_min,
                     value_max=value_max,
                 ),
             )
         self._plot_layout.addStretch(1)
-
-
-class _EpochPlotWidget(QWidget):
-    """Small custom Qt plot for one stimulus epoch type."""
-
-    def __init__(
-        self,
-        data: EpochResponsePlotData,
-        *,
-        show_sem: bool,
-        value_min: float,
-        value_max: float,
-    ) -> None:
-        """Create a plot widget.
-
-        Args:
-            data: Plot data for one epoch.
-            show_sem: Whether SEM bands should be drawn.
-            value_min: Shared y-axis minimum.
-            value_max: Shared y-axis maximum.
-        """
-        super().__init__()
-        self._data = data
-        self._show_sem = show_sem
-        self._value_min = value_min
-        self._value_max = value_max
-        self.setMinimumHeight(220)
-
-    def paintEvent(self, a0: QPaintEvent | None) -> None:
-        """Draw response traces.
-
-        Args:
-            a0: Qt paint event.
-
-        Returns:
-            None.
-        """
-        del a0
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        plot_rect = QRectF(self.rect().adjusted(42, 12, -12, -32))
-        painter.fillRect(self.rect(), QColor("#20252d"))
-        painter.setPen(QPen(QColor("#8c96a3"), 1))
-        painter.drawRect(plot_rect)
-        colors = _roi_colors(len(self._data.roi_labels))
-        for roi_index, color in enumerate(colors):
-            if self._show_sem:
-                _draw_sem_band(
-                    painter=painter,
-                    rect=plot_rect,
-                    time_values=self._data.time_seconds,
-                    mean_values=self._data.mean_values[roi_index],
-                    sem_values=self._data.sem_values[roi_index],
-                    value_min=self._value_min,
-                    value_max=self._value_max,
-                    color=color,
-                )
-            _draw_trace(
-                painter=painter,
-                rect=plot_rect,
-                time_values=self._data.time_seconds,
-                values=self._data.mean_values[roi_index],
-                value_min=self._value_min,
-                value_max=self._value_max,
-                color=color,
-            )
-        painter.setPen(QPen(QColor("#cfd6df"), 1))
-        painter.drawText(10, 20, f"{self._value_max:.1f}")
-        painter.drawText(QPointF(10.0, plot_rect.bottom()), f"{self._value_min:.1f}")
-        painter.drawText(
-            QPointF(plot_rect.left(), float(self.rect().bottom() - 8)),
-            f"{self._data.time_seconds[0]:.1f} s",
-        )
-        painter.drawText(
-            QPointF(
-                plot_rect.right() - 45.0,
-                float(self.rect().bottom() - 8),
-            ),
-            f"{self._data.time_seconds[-1]:.1f} s",
-        )
-        painter.end()
-
-
-def _clear_layout(layout: QVBoxLayout) -> None:
-    """Remove all widgets from a Qt layout.
-
-    Args:
-        layout: Layout to clear.
-
-    Returns:
-        None.
-    """
-    while layout.count():
-        item = layout.takeAt(0)
-        if item is None:
-            continue
-        widget = item.widget()
-        if widget is not None:
-            widget.deleteLater()
-
-
-def _global_value_bounds(data: ResponsePlotData) -> tuple[float, float]:
-    """Return shared y-axis bounds across all epoch plots.
-
-    Args:
-        data: Full response plot data.
-
-    Returns:
-        ``(min, max)`` bounds expanded by 20 percent and rounded to one decimal.
-    """
-    lower = np.concatenate(
-        tuple(epoch.mean_values - epoch.sem_values for epoch in data.epochs),
-        axis=None,
-    )
-    upper = np.concatenate(
-        tuple(epoch.mean_values + epoch.sem_values for epoch in data.epochs),
-        axis=None,
-    )
-    value_min = float(np.nanmin(lower))
-    value_max = float(np.nanmax(upper))
-    if value_min == value_max:
-        return value_min - 1.0, value_max + 1.0
-    lower_bound = value_min * 1.2 if value_min < 0 else value_min * 0.8
-    upper_bound = value_max * 1.2 if value_max > 0 else value_max * 0.8
-    rounded_min = round(lower_bound, 1)
-    rounded_max = round(upper_bound, 1)
-    if rounded_min >= rounded_max:
-        return rounded_min - 0.1, rounded_max + 0.1
-    return rounded_min, rounded_max
-
-
-def _roi_colors(count: int) -> tuple[QColor, ...]:
-    """Return visually distinct ROI colors.
-
-    Args:
-        count: Number of ROI traces.
-
-    Returns:
-        Tuple of Qt colors.
-    """
-    base = (
-        QColor("#4cc9f0"),
-        QColor("#f72585"),
-        QColor("#f8961e"),
-        QColor("#90be6d"),
-        QColor("#b5179e"),
-        QColor("#43aa8b"),
-    )
-    return tuple(base[index % len(base)] for index in range(count))
-
-
-def _draw_trace(
-    *,
-    painter: QPainter,
-    rect: QRectF,
-    time_values: npt.NDArray[np.float64],
-    values: npt.NDArray[np.float64],
-    value_min: float,
-    value_max: float,
-    color: QColor,
-) -> None:
-    """Draw one ROI mean trace.
-
-    Args:
-        painter: Active Qt painter.
-        rect: Plot rectangle.
-        time_values: X-axis values in seconds.
-        values: Mean response values.
-        value_min: Y-axis minimum.
-        value_max: Y-axis maximum.
-        color: Trace color.
-
-    Returns:
-        None.
-    """
-    path = _trace_path(rect, time_values, values, value_min, value_max)
-    painter.setPen(QPen(color, 2))
-    painter.drawPath(path)
-
-
-def _draw_sem_band(
-    *,
-    painter: QPainter,
-    rect: QRectF,
-    time_values: npt.NDArray[np.float64],
-    mean_values: npt.NDArray[np.float64],
-    sem_values: npt.NDArray[np.float64],
-    value_min: float,
-    value_max: float,
-    color: QColor,
-) -> None:
-    """Draw one ROI SEM band.
-
-    Args:
-        painter: Active Qt painter.
-        rect: Plot rectangle.
-        time_values: X-axis values in seconds.
-        mean_values: Mean response values.
-        sem_values: SEM values.
-        value_min: Y-axis minimum.
-        value_max: Y-axis maximum.
-        color: Band color.
-
-    Returns:
-        None.
-    """
-    upper = mean_values + sem_values
-    lower = mean_values - sem_values
-    path = _trace_path(rect, time_values, upper, value_min, value_max)
-    for index in range(len(time_values) - 1, -1, -1):
-        point = _plot_point(
-            rect,
-            time_values[index],
-            lower[index],
-            time_values[0],
-            time_values[-1],
-            value_min,
-            value_max,
-        )
-        path.lineTo(point)
-    band_color = QColor(color)
-    band_color.setAlpha(55)
-    painter.fillPath(path, band_color)
-
-
-def _trace_path(
-    rect: QRectF,
-    time_values: npt.NDArray[np.float64],
-    values: npt.NDArray[np.float64],
-    value_min: float,
-    value_max: float,
-) -> QPainterPath:
-    """Build a Qt path for one trace.
-
-    Args:
-        rect: Plot rectangle.
-        time_values: X-axis values in seconds.
-        values: Y-axis values.
-        value_min: Y-axis minimum.
-        value_max: Y-axis maximum.
-
-    Returns:
-        Painter path for valid values.
-    """
-    path = QPainterPath()
-    first = True
-    time_min = float(time_values[0])
-    time_max = float(time_values[-1])
-    for time_value, value in zip(time_values, values, strict=True):
-        if np.isnan(value):
-            first = True
-            continue
-        point = _plot_point(
-            rect,
-            time_value,
-            value,
-            time_min,
-            time_max,
-            value_min,
-            value_max,
-        )
-        if first:
-            path.moveTo(point)
-            first = False
-        else:
-            path.lineTo(point)
-    return path
-
-
-def _plot_point(
-    rect: QRectF,
-    time_value: float,
-    value: float,
-    time_min: float,
-    time_max: float,
-    value_min: float,
-    value_max: float,
-) -> QPointF:
-    """Map data coordinates into plot coordinates.
-
-    Args:
-        rect: Plot rectangle.
-        time_value: X value in seconds.
-        value: Y value.
-        time_min: Minimum time value.
-        time_max: Maximum time value.
-        value_min: Minimum y value.
-        value_max: Maximum y value.
-
-    Returns:
-        Qt point in widget coordinates.
-    """
-    time_span = time_max - time_min
-    x_fraction = 0.0 if time_span == 0 else (time_value - time_min) / time_span
-    y_fraction = (value - value_min) / (value_max - value_min)
-    x = rect.left() + x_fraction * rect.width()
-    y = rect.bottom() - y_fraction * rect.height()
-    return QPointF(x, y)
