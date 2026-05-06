@@ -677,8 +677,8 @@ class NapariAdapterTest(unittest.TestCase):
 
         Inputs: converted recording whose source path follows the lab date
         layout.
-        Outputs: parsed root, genotype, recording time, and twopy-relative
-        output paths.
+        Outputs: parsed root, genotype, stimulus, recording time, and
+        twopy-relative output paths.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -695,6 +695,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertEqual(summary.root, root / "data")
             self.assertEqual(summary.genotype, "gh146")
+            self.assertEqual(summary.stimulus, "combo_stim")
             self.assertEqual(summary.recording, "2025-12-21 17:42:22")
             self.assertEqual(
                 format_twopy_h5_output(recording.path.parent / "rois.h5"),

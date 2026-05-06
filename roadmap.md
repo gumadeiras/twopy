@@ -264,9 +264,9 @@ decided.
   analysis" reads existing analysis output from disk, and "Save analysis +
   ROIs" writes the current ROI file plus analysis HDF5, trial-level response
   CSV, and epoch-grouped response CSV.
-- Napari response options now show recording identity as root, genotype, and
-  recording time instead of full raw paths. Analysis, ROI, and export statuses
-  show compact `./twopy/...` output folders.
+- Napari response options now show recording identity as root, genotype,
+  stimulus, and recording time instead of full raw paths. Analysis, ROI, and
+  export statuses show compact `./twopy/...` output folders.
 - Napari ROI and epoch visibility controls use displayed row indices, so
   duplicate display names or duplicate epoch metadata cannot toggle, cache, or
   restore the wrong plotted item.

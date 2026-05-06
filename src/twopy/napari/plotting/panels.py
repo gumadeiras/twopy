@@ -62,8 +62,8 @@ def response_update_tab(
         recompute_preview_button: Button that computes responses from current
             Labels ROIs.
         save_analysis_button: Button that saves ROIs and persisted analysis.
-        recording_summary_label: Label showing root, genotype, and recording
-            time for the selected recording.
+        recording_summary_label: Label showing root, genotype, stimulus, and
+            recording time for the selected recording.
         analysis_output_label: Label showing the analysis output path.
         roi_output_label: Label showing the ROI output path.
         status_label: Label showing the latest save or reload status.

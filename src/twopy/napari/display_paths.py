@@ -32,25 +32,28 @@ class RecordingDisplaySummary:
     """Short recording identity shown in the response Update tab.
 
     Inputs: one converted recording path.
-    Outputs: root data path, genotype folder, and formatted recording time.
+    Outputs: root data path, genotype folder, stimulus folder, and recording
+    time.
     """
 
     root: Path
     genotype: str
+    stimulus: str
     recording: str
 
-    def lines(self) -> tuple[str, str, str]:
+    def lines(self) -> tuple[str, str, str, str]:
         """Return display lines for a compact Qt label.
 
         Args:
             None.
 
         Returns:
-            Three user-facing lines.
+            Four user-facing lines.
         """
         return (
             f"Root: {self.root}",
             f"Genotype: {self.genotype}",
+            f"Stimulus: {self.stimulus}",
             f"Recording: {self.recording}",
         )
 
@@ -76,13 +79,15 @@ def recording_display_summary(recording: RecordingData) -> RecordingDisplaySumma
         data_root = load_config(DEFAULT_CONFIG_PATH).data_path.expanduser()
         relative = recording_dir.relative_to(data_root)
     except (FileNotFoundError, ValueError):
-        data_root, genotype = _fallback_root_and_genotype(recording_dir, date_index)
+        data_root, genotype, stimulus = _fallback_path_parts(recording_dir, date_index)
     else:
         genotype = relative.parts[0] if len(relative.parts) > 0 else "unknown"
+        stimulus = relative.parts[1] if len(relative.parts) > 1 else "unknown"
 
     return RecordingDisplaySummary(
         root=data_root,
         genotype=genotype,
+        stimulus=stimulus,
         recording=recording_label,
     )
 
@@ -166,42 +171,27 @@ def _recording_label(recording_dir: Path, date_index: int | None) -> str:
     return f"{year}-{month_day} {time}"
 
 
-def _fallback_root_and_genotype(
+def _fallback_path_parts(
     recording_dir: Path,
     date_index: int | None,
-) -> tuple[Path, str]:
-    """Infer root and genotype when config is unavailable.
+) -> tuple[Path, str, str]:
+    """Infer root, genotype, and stimulus when config is unavailable.
 
     Args:
         recording_dir: Source recording folder.
         date_index: Index of the year segment, if found.
 
     Returns:
-        ``(root, genotype)`` best effort.
+        ``(root, genotype, stimulus)`` best effort.
 
-    If there is a stimulus folder between genotype and date, it usually has
-    explicit stimulus naming. Otherwise the folder directly before the date is
-    treated as the genotype folder.
+    Stable lab recording paths end as
+    ``<genotype>/<stimulus>/<YYYY>/<MM_DD>/<HH_MM_SS>``. The fallback keeps that
+    contract explicit instead of guessing from folder names.
     """
-    if date_index is None or date_index == 0:
-        return recording_dir.parent, recording_dir.name
+    if date_index is None or date_index < 2:
+        return recording_dir.parent, recording_dir.name, "unknown"
 
     parts = recording_dir.parts
-    genotype_index = date_index - 1
-    if date_index >= 2 and _looks_like_stimulus_folder(parts[date_index - 1]):
-        genotype_index = date_index - 2
-
-    return Path(*parts[:genotype_index]), parts[genotype_index]
-
-
-def _looks_like_stimulus_folder(folder_name: str) -> bool:
-    """Return whether a path segment looks like an explicit stimulus folder.
-
-    Args:
-        folder_name: Candidate folder name.
-
-    Returns:
-        ``True`` when the folder name is likely not genotype.
-    """
-    lowered = folder_name.lower()
-    return "=" in folder_name or "stim" in lowered
+    genotype_index = date_index - 2
+    stimulus_index = date_index - 1
+    return Path(*parts[:genotype_index]), parts[genotype_index], parts[stimulus_index]
