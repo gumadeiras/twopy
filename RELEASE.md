@@ -13,12 +13,24 @@ token secret is required.
 ## Release Flow
 
 1. Update `project.version` in `pyproject.toml`.
-2. Run `micromamba run -n twopy pre-commit run --all-files`.
-3. Commit the version change.
-4. Create a GitHub release whose tag is the same version, with or without a
+2. Update `CHANGELOG.md`.
+3. Run `micromamba run -n twopy pre-commit run --all-files`.
+4. Commit the version and changelog changes.
+5. Create a GitHub release whose tag is the same version, with or without a
    leading `v`.
-5. Publish the release.
-6. Approve the `pypi` deployment.
+6. Publish the release.
+7. Approve the `pypi` deployment.
+
+## Changelog Rules
+
+- Every release must update `CHANGELOG.md` before the release tag is created.
+- Use user-facing language whenever possible. Describe what changed for people
+  using twopy, not repository maintenance.
+- Use these sections when they apply: `Features`, `Fixes`, and `Changes`.
+- Omit empty sections.
+- Do not include release chores such as README screenshots, release guide moves,
+  publishing mechanics, or package-upload status unless the change affects how
+  users install or use twopy.
 
 The release workflow checks that the tag matches `pyproject.toml`, builds the
 wheel and source distribution, checks package metadata, and publishes to PyPI
