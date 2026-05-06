@@ -77,7 +77,10 @@ def compute_roi_delta_f_over_f(
         fit_mode: Exponential fit bounds. ``"robust"`` keeps the shared tau
             bounded but leaves log-amplitude unbounded and ignores nonpositive
             fit samples. ``"source_bounds"`` uses bounded log-amplitude from the
-            original analysis source for audit comparisons.
+            original analysis source for audit comparisons. ``"robust"`` is the
+            default because the source log-amplitude upper bound depends on the
+            first baseline sample; if that sample is small, nonpositive, or
+            noisy, the bound can become invalid or overly restrictive.
 
     Returns:
         ``RoiDeltaFOverF`` with dF/F values shaped ``(frames, rois)``.
@@ -370,8 +373,12 @@ def _fit_shared_tau_robust(
         Shared exponential ``tau``.
 
     This is the default fit path because background correction can create
-    nonpositive values. It preserves the source tau bounds but avoids failing
-    the whole trace because one interleave average is nonpositive.
+    nonpositive values and the first interleave sample can be noisy. The source
+    log-amplitude upper bound is ``10 * log(first baseline)``; that becomes
+    invalid when the first baseline is not greater than one and can be overly
+    restrictive when the first baseline is an outlier. This path keeps the
+    decay-rate bound while fitting amplitude scale from all usable positive
+    samples.
     """
     finite_positive = np.isfinite(mean_fluorescence) & (mean_fluorescence > 0)
     if not np.any(finite_positive):
@@ -419,9 +426,11 @@ def _fit_shared_tau_with_source_bounds(
         ValueError: If any fit sample is nonfinite or the first sample cannot
             define a positive log-amplitude bound.
 
-    This mode exists for audit comparisons. It intentionally does not filter
-    nonpositive samples because doing so would change the source-bounds
-    contract.
+    This mode exists for audit comparisons. Its log-amplitude bound is
+    ``[0, 10 * log(first baseline)]``. That contract makes the first baseline
+    sample unusually important, so this mode intentionally fails on nonfinite,
+    nonpositive, or too-small first samples instead of silently switching to the
+    robust behavior.
     """
     if np.any(~np.isfinite(mean_fluorescence)):
         msg = "source_bounds dF/F fit requires finite interleave fluorescence"

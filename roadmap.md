@@ -157,6 +157,11 @@ decided.
 - Background correction must be explicit and auditable. Store raw traces,
   background estimates, corrected traces, and method metadata rather than only
   the final corrected values.
+- dF/F defaults to the robust exponential fit mode. It keeps the shared tau
+  bound but does not use the source log-amplitude upper bound because that
+  bound depends on the first baseline sample and can become invalid or overly
+  restrictive when that sample is small, nonpositive, or noisy. Use
+  `source_bounds` only for audit comparisons.
 - Code style: simple, typed, documented, and tested.
 - `savedAnalysis/`: optional; only present after prior MATLAB analysis.
 - Roadmap maintenance: update with completed progress and explicit decisions;
