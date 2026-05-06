@@ -8,11 +8,9 @@ responses, or export figures.
 """
 
 from qtpy.QtWidgets import (
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -21,7 +19,6 @@ from twopy.napari.plotting.widgets import EpochPlotWidget
 
 __all__ = [
     "epoch_plot_panel",
-    "plot_size_widget",
     "response_update_tab",
     "scrolling_tab",
 ]
@@ -83,26 +80,6 @@ def response_update_tab(
     layout.addStretch(1)
     tab.setLayout(layout)
     return tab
-
-
-def plot_size_widget(spin_box: QSpinBox) -> QWidget:
-    """Create the compact plot-size control row.
-
-    Args:
-        spin_box: Numeric plot-size input.
-
-    Returns:
-        Qt widget containing the label and spin box.
-    """
-    widget = QWidget()
-    layout = QHBoxLayout()
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(8)
-    layout.addWidget(QLabel("Plot size"))
-    layout.addStretch(1)
-    layout.addWidget(spin_box)
-    widget.setLayout(layout)
-    return widget
 
 
 def scrolling_tab(layout: QVBoxLayout) -> QScrollArea:

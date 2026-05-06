@@ -16,17 +16,19 @@ from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
-    QGridLayout,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 __all__ = [
-    "axis_options_widget",
+    "plot_display_options_group",
     "visibility_options_widget",
 ]
 
@@ -37,17 +39,19 @@ type VisibilityKey = int | str
 type VisibilityState = Mapping[int, bool] | Mapping[str, bool]
 
 
-def axis_options_widget(
+def plot_display_options_group(
     *,
+    plot_size_spin: QSpinBox,
     x_min: float,
     x_max: float,
     y_min: float,
     y_max: float,
     on_change: object,
-) -> QWidget:
-    """Create manual axis-bound controls.
+) -> QGroupBox:
+    """Create the plot option group using the same form layout as other groups.
 
     Args:
+        plot_size_spin: Numeric plot-size input.
         x_min: Initial x-axis minimum.
         x_max: Initial x-axis maximum.
         y_min: Initial y-axis minimum.
@@ -55,29 +59,20 @@ def axis_options_widget(
         on_change: Callback receiving named axis bounds.
 
     Returns:
-        Qt widget containing four numeric inputs.
+        Qt group box with plot display controls.
     """
     callback = cast(CallableAxisBounds, on_change)
-    widget = QWidget()
-    layout = QGridLayout()
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setHorizontalSpacing(8)
-    layout.setVerticalSpacing(3)
-    layout.addWidget(QLabel("Axis limits"), 0, 0, 1, 2)
+    group = QGroupBox("Plot")
+    layout = QFormLayout()
     x_min_spin = _axis_spin_box(x_min)
     x_max_spin = _axis_spin_box(x_max)
     y_min_spin = _axis_spin_box(y_min)
     y_max_spin = _axis_spin_box(y_max)
-    layout.addWidget(QLabel("x min"), 1, 0)
-    layout.addWidget(x_min_spin, 1, 1)
-    layout.addWidget(QLabel("x max"), 2, 0)
-    layout.addWidget(x_max_spin, 2, 1)
-    layout.addWidget(QLabel("y min"), 3, 0)
-    layout.addWidget(y_min_spin, 3, 1)
-    layout.addWidget(QLabel("y max"), 4, 0)
-    layout.addWidget(y_max_spin, 4, 1)
-    layout.setColumnStretch(0, 1)
-    layout.setColumnStretch(1, 2)
+    layout.addRow("Size", plot_size_spin)
+    layout.addRow("x min", x_min_spin)
+    layout.addRow("x max", x_max_spin)
+    layout.addRow("y min", y_min_spin)
+    layout.addRow("y max", y_max_spin)
 
     def update_bounds() -> None:
         """Pass current spin-box values back to the response widget."""
@@ -92,8 +87,8 @@ def axis_options_widget(
     x_max_spin.valueChanged.connect(update_bounds)
     y_min_spin.valueChanged.connect(update_bounds)
     y_max_spin.valueChanged.connect(update_bounds)
-    widget.setLayout(layout)
-    return widget
+    group.setLayout(layout)
+    return group
 
 
 def visibility_options_widget(

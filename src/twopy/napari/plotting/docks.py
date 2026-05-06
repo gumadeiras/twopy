@@ -17,7 +17,6 @@ from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -52,12 +51,11 @@ from twopy.napari.plotting.label_visibility import (
     roi_label_values_from_labels,
 )
 from twopy.napari.plotting.options import (
-    axis_options_widget,
+    plot_display_options_group,
     visibility_options_widget,
 )
 from twopy.napari.plotting.panels import (
     epoch_plot_panel,
-    plot_size_widget,
     response_update_tab,
     scrolling_tab,
 )
@@ -227,30 +225,6 @@ def _ensure_qapplication() -> None:
         _QT_APPLICATION = QApplication([])
 
 
-def _plot_display_options_group(
-    *,
-    plot_size_control: QWidget,
-    axis_control: QWidget,
-) -> QGroupBox:
-    """Create the outlined Plot option group.
-
-    Args:
-        plot_size_control: Widget containing the plot-size input.
-        axis_control: Widget containing dynamic axis-limit controls.
-
-    Returns:
-        Qt group box with plot display controls.
-    """
-    group = QGroupBox("Plot")
-    layout = QVBoxLayout()
-    layout.setContentsMargins(8, 6, 8, 8)
-    layout.setSpacing(6)
-    layout.addWidget(plot_size_control)
-    layout.addWidget(axis_control)
-    group.setLayout(layout)
-    return group
-
-
 class _ResponsePlotWidget(QWidget):
     """Qt widget for response plots plus a separately docked options panel."""
 
@@ -320,26 +294,21 @@ class _ResponsePlotWidget(QWidget):
         self._update_status_label = QLabel("")
         self._update_status_label.setWordWrap(True)
         self._plot_options_layout = QVBoxLayout()
-        self._plot_axis_layout = QVBoxLayout()
-        plot_axis_widget = QWidget()
-        plot_axis_widget.setLayout(self._plot_axis_layout)
-        self._plot_size_spin = QSpinBox()
-        self._plot_size_spin.setRange(240, 900)
-        self._plot_size_spin.setSingleStep(20)
-        self._plot_size_spin.setSuffix(" px")
-        self._plot_size_spin.setValue(self._plot_size)
-        self._plot_size_spin.valueChanged.connect(self._set_plot_size)
+        self._plot_display_options_layout = QVBoxLayout()
+        plot_display_options_widget = QWidget()
+        plot_display_options_widget.setLayout(self._plot_display_options_layout)
+        self._add_plot_display_options_group(
+            x_min=0.0,
+            x_max=1.0,
+            y_min=-1.0,
+            y_max=1.0,
+        )
         self._processing_options_widget = ResponseProcessingOptionsWidget(
             self._response_processing_options,
             on_change=self._set_response_processing_options,
         )
         self._plot_options_layout.addWidget(self._show_sem_checkbox)
-        self._plot_options_layout.addWidget(
-            _plot_display_options_group(
-                plot_size_control=plot_size_widget(self._plot_size_spin),
-                axis_control=plot_axis_widget,
-            )
-        )
+        self._plot_options_layout.addWidget(plot_display_options_widget)
         self._plot_options_layout.addWidget(self._processing_options_widget)
         self._plot_options_layout.addStretch(1)
         self._roi_options_layout = QVBoxLayout()
@@ -709,14 +678,12 @@ class _ResponsePlotWidget(QWidget):
             self._visible_roi_indices(),
             self._visible_epoch_indices(),
         )
-        axis_widget = axis_options_widget(
+        self._add_plot_display_options_group(
             x_min=self._manual_x_min if self._manual_x_min is not None else auto_x_min,
             x_max=self._manual_x_max if self._manual_x_max is not None else auto_x_max,
             y_min=self._manual_y_min if self._manual_y_min is not None else auto_y_min,
             y_max=self._manual_y_max if self._manual_y_max is not None else auto_y_max,
-            on_change=self._set_manual_axis_bounds,
         )
-        self._plot_axis_layout.addWidget(axis_widget)
         self._roi_options_layout.addWidget(
             visibility_options_widget(
                 title="ROIs",
@@ -744,9 +711,35 @@ class _ResponsePlotWidget(QWidget):
         )
         self._epoch_options_layout.addStretch(1)
 
+    def _add_plot_display_options_group(
+        self,
+        *,
+        x_min: float,
+        x_max: float,
+        y_min: float,
+        y_max: float,
+    ) -> None:
+        """Add the Plot group with the same form layout as processing groups."""
+        plot_size_spin = QSpinBox()
+        plot_size_spin.setRange(240, 900)
+        plot_size_spin.setSingleStep(20)
+        plot_size_spin.setSuffix(" px")
+        plot_size_spin.setValue(self._plot_size)
+        plot_size_spin.valueChanged.connect(self._set_plot_size)
+        self._plot_display_options_layout.addWidget(
+            plot_display_options_group(
+                plot_size_spin=plot_size_spin,
+                x_min=x_min,
+                x_max=x_max,
+                y_min=y_min,
+                y_max=y_max,
+                on_change=self._set_manual_axis_bounds,
+            ),
+        )
+
     def _clear_dynamic_option_tabs(self) -> None:
         """Clear dynamic option widgets from plot, ROI, and epoch tabs."""
-        clear_layout(self._plot_axis_layout)
+        clear_layout(self._plot_display_options_layout)
         clear_layout(self._roi_options_layout)
         clear_layout(self._epoch_options_layout)
 
