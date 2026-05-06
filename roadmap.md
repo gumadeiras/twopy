@@ -281,20 +281,24 @@ decided.
   restore the wrong plotted item.
 - Tests for config loading, MATLAB inspection/loading, recording inspection,
   database filtering/copy-cache behavior, conversion, converted-recording
-  loading, ROI storage/extraction, photodiode synchronization, response windows,
-  valid sessions, optional `savedAnalysis/`, missing files, and ambiguous raw
-  TIFF movies.
+  loading, ROI storage/extraction, photodiode synchronization and
+  classification, response windows, persistence, workflow orchestration,
+  response post-processing, napari loading/plotting/live ROI updates, real-data
+  fixtures, stimulus metadata helpers, valid sessions, optional
+  `savedAnalysis/`, missing files, and ambiguous raw TIFF movies.
 
 ## Next
 
 - Add protocol-specific photodiode classifiers for recordings with extra
   within-epoch alignment flashes.
-- Group response outputs directly from classified stimulus windows.
-- Load persisted analysis outputs in napari.
-- Query the database from napari, choose a recording, load converted twopy
-  data, draw or edit Labels ROIs, run analysis, and inspect responses.
-- Divide responses by trials.
-- Divide responses by other metadata associated with the recording.
+- Make the default response workflow consume classified stimulus windows when
+  the boundary-flash classifier applies, while keeping interpolation available
+  for protocols whose photodiode and stimulus-row counts do not match.
+- Add napari database search and recording selection using the typed database
+  helpers, then hand selected recordings to the existing convert/load, Labels
+  ROI, analysis, persistence, and response-inspection workflow.
+- Group or facet responses by recording and stimulus metadata beyond the
+  current epoch, trial, and ROI groupings.
 
 ## Decisions
 
@@ -303,8 +307,10 @@ decided.
   `twopy.napari` helpers that a future plugin can wrap with menus/widgets.
 - Napari control panels start with magicgui; move to custom widgets or plugin
   packaging only when the workflow needs it.
-- Long-term napari workflow: database query, recording selection, converted
-  data load, Labels ROI editing, analysis, and response inspection.
+- Current napari workflow: source or converted path selection, optional
+  conversion, converted data load, Labels ROI editing, live response preview,
+  persisted analysis reload, export, and response inspection. Remaining napari
+  workflow work is database-backed recording search and selection.
 - Primary ROI interaction in napari uses Labels layers because they directly
   represent the pixel masks used by analysis.
 - Python: 3.13.
