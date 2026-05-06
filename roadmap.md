@@ -239,6 +239,11 @@ decided.
   path copies ROI labels from the active cropped viewer layer, streams movie
   frames through the normal analysis helper, and discards stale worker results
   after newer ROI edits.
+- Napari display defaults now favor inspection: mean image contrast starts 10%
+  above the data minimum, movie preview contrast stops at 75% of the data range
+  with additive blending, ROI Labels use additive blending with brush size 6,
+  and live response updates are triggered by committed paint/data edits rather
+  than display-refresh events during mouse movement.
 - Tests for config loading, MATLAB inspection/loading, recording inspection,
   database filtering/copy-cache behavior, conversion, converted-recording
   loading, ROI storage/extraction, photodiode synchronization, response windows,

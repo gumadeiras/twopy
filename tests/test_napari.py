@@ -259,7 +259,7 @@ class _FakeLabelEvents:
         """Create data-change emitters."""
         self.data = _FakeEmitter()
         self.labels_update = _FakeEmitter()
-        self.set_data = _FakeEmitter()
+        self.paint = _FakeEmitter()
 
 
 class _FakePlotReceiver:
@@ -339,6 +339,8 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.labels), 1)
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
+            self.assertEqual(viewer.labels[0].options["brush_size"], 6)
+            self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
             self.assertEqual(len(viewer.window.dock_widgets), 5)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
@@ -402,8 +404,14 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(opened.recording.movie.shape, (3, 2, 2))
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(viewer.images[0].name, "mean image")
+            self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
             self.assertEqual(np.asarray(viewer.images[0].data).shape, (2, 2))
             self.assertEqual(viewer.images[1].name, "aligned movie")
+            self.assertEqual(viewer.images[1].options["blending"], "additive")
+            self.assertEqual(
+                viewer.images[1].options["contrast_limits"],
+                (0.0, 5.25),
+            )
             self.assertEqual(np.asarray(viewer.images[1].data).shape, (2, 2, 2))
             self.assertEqual(len(viewer.labels), 1)
             np.testing.assert_array_equal(
@@ -589,10 +597,10 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse((root / "response_summary.csv").exists())
             self.assertIsNotNone(response_widget._plot_data)
 
-    def test_live_response_controller_updates_after_label_event(self) -> None:
-        """Confirm Labels edits trigger a response plot refresh.
+    def test_live_response_controller_updates_after_paint_event(self) -> None:
+        """Confirm committed Labels painting triggers a response plot refresh.
 
-        Inputs: selected recording, fake Labels event emitters, and patched
+        Inputs: selected recording, fake Labels paint emitter, and patched
         response calculation.
         Outputs: the plot receiver gets new plot data after an event.
         """
@@ -619,10 +627,45 @@ class NapariAdapterTest(unittest.TestCase):
                 "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
                 return_value=_tiny_response_plot_data(),
             ):
-                events.data.emit()
+                events.paint.emit()
 
             self.assertIsNotNone(receiver.plot_data)
             self.assertIsNone(receiver.status)
+
+    def test_live_response_controller_ignores_labels_update_event(self) -> None:
+        """Confirm display refresh events do not recompute responses.
+
+        Inputs: selected recording and fake Labels events.
+        Outputs: ``labels_update`` emits no plot data because napari can emit it
+        during mouse movement without a committed ROI edit.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            events = _FakeLabelEvents()
+            layer = _FakeLayer(
+                name="rois",
+                data=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                options={},
+                events=events,
+            )
+            receiver = _FakePlotReceiver()
+            controller = LiveResponseController(
+                receiver,
+                debounce_ms=0,
+                run_async=False,
+            )
+            controller.set_context(recording, layer)
+
+            with patch(
+                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+                return_value=_tiny_response_plot_data(),
+            ) as compute:
+                events.labels_update.emit()
+
+            compute.assert_not_called()
+            self.assertIsNone(receiver.plot_data)
 
     def test_recording_folder_selection_loads_recording_layers(self) -> None:
         """Confirm selecting a recording folder populates an empty viewer.

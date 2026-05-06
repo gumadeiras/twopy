@@ -294,7 +294,7 @@ class LiveResponseController:
         events = getattr(layer, "events", None)
         if events is None:
             return
-        for event_name in ("data", "labels_update", "set_data"):
+        for event_name in ("paint", "data"):
             emitter = getattr(events, event_name, None)
             if emitter is None:
                 continue

@@ -11,6 +11,9 @@ read source MATLAB/TIFF files, or perform analysis.
 from pathlib import Path
 from typing import cast
 
+import numpy as np
+import numpy.typing as npt
+
 from twopy.converted import load_converted_recording
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.display import (
@@ -79,10 +82,16 @@ def open_recording_in_napari(
     resolved_viewer = create_viewer() if viewer is None else viewer
     display_crop = recording.alignment_valid_crop
     layer_metadata = display_metadata_for_spatial_crop(display_crop)
+    mean_image = display_crop.crop_image(recording.mean_image)
     mean_layer = resolved_viewer.add_image(
-        display_image_from_movie_image(display_crop.crop_image(recording.mean_image)),
+        display_image_from_movie_image(mean_image),
         name=mean_image_layer_name,
         colormap="gray",
+        contrast_limits=contrast_limits_from_data_range(
+            mean_image,
+            minimum_fraction=0.10,
+            maximum_fraction=1.0,
+        ),
         metadata=layer_metadata,
     )
 
@@ -102,6 +111,12 @@ def open_recording_in_napari(
             display_image_from_movie_image(movie),
             name=movie_layer_name,
             colormap="gray",
+            blending="additive",
+            contrast_limits=contrast_limits_from_data_range(
+                movie,
+                minimum_fraction=0.0,
+                maximum_fraction=0.75,
+            ),
             metadata=layer_metadata,
         )
 
@@ -116,6 +131,7 @@ def open_recording_in_napari(
             name=roi_layer_name,
             opacity=0.5,
             blending="additive",
+            brush_size=6,
             metadata=layer_metadata,
         )
     controls_widget = None
@@ -196,3 +212,40 @@ def create_viewer() -> NapariViewer:
     import napari
 
     return cast(NapariViewer, napari.Viewer())
+
+
+def contrast_limits_from_data_range(
+    data: npt.ArrayLike,
+    *,
+    minimum_fraction: float,
+    maximum_fraction: float,
+) -> tuple[float, float]:
+    """Return contrast limits at fractions of one data range.
+
+    Args:
+        data: Image or movie values shown in napari.
+        minimum_fraction: Fraction between the finite data minimum and maximum
+            used for the lower contrast limit.
+        maximum_fraction: Fraction between the finite data minimum and maximum
+            used for the upper contrast limit.
+
+    Returns:
+        ``(minimum, maximum)`` contrast limits.
+
+    This keeps the viewer display easier to inspect without changing the
+    underlying converted data. Fractions are range positions, not percentiles,
+    so the result is deterministic and cheap for already-loaded preview arrays.
+    """
+    values = np.asarray(data, dtype=np.float64)
+    finite_values = values[np.isfinite(values)]
+    if finite_values.size == 0:
+        return (0.0, 1.0)
+    minimum = float(np.min(finite_values))
+    maximum = float(np.max(finite_values))
+    if maximum <= minimum:
+        return (minimum, maximum)
+    value_range = maximum - minimum
+    return (
+        minimum + value_range * minimum_fraction,
+        minimum + value_range * maximum_fraction,
+    )
