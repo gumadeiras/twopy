@@ -45,6 +45,10 @@ twopy is a two-photon imaging analysis tool.
 - Continue building napari support in this repo for now, but structure it so a
   future napari plugin can wrap it. Put reusable GUI workflow code in typed
   `twopy.napari` helpers; a future plugin should be menus/widgets only.
+- Design the napari workflow around the planned loop: query the lab database,
+  choose a recording, load converted twopy data, draw or edit Labels ROIs, run
+  analysis, and inspect responses. Keep each step as a small helper so widgets
+  stay thin.
 - Use magicgui for small napari control panels until a custom QWidget or plugin
   is justified by real workflow complexity.
 - Do not hide analysis decisions inside napari callbacks. Put scientific logic in typed, tested modules.

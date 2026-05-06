@@ -24,7 +24,7 @@ from twopy import (
     save_napari_label_rois,
     save_roi_set,
 )
-from twopy.napari import _resolve_launch_recording_path
+from twopy.napari.launcher import resolve_launch_recording_path
 
 
 class _ControlWidget(Protocol):
@@ -341,7 +341,7 @@ class NapariAdapterTest(unittest.TestCase):
             try:
                 chdir(temp_dir)
 
-                resolved = _resolve_launch_recording_path(None)
+                resolved = resolve_launch_recording_path(None)
             finally:
                 chdir(original_cwd)
 
@@ -361,7 +361,7 @@ class NapariAdapterTest(unittest.TestCase):
             try:
                 chdir(root)
 
-                resolved = _resolve_launch_recording_path(None)
+                resolved = resolve_launch_recording_path(None)
             finally:
                 chdir(original_cwd)
 
@@ -384,7 +384,7 @@ class NapariAdapterTest(unittest.TestCase):
             try:
                 chdir(root)
 
-                resolved = _resolve_launch_recording_path(None)
+                resolved = resolve_launch_recording_path(None)
             finally:
                 chdir(original_cwd)
 

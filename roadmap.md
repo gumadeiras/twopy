@@ -196,6 +196,8 @@ decided.
 - Interactively draw or select ROIs in the movie.
 - Inspect ROI responses.
 - Load persisted analysis outputs in napari.
+- Query the database from napari, choose a recording, load converted twopy
+  data, draw or edit Labels ROIs, run analysis, and inspect responses.
 - Divide responses by trials.
 - Divide responses by other metadata associated with the recording.
 
@@ -206,6 +208,8 @@ decided.
   `twopy.napari` helpers that a future plugin can wrap with menus/widgets.
 - Napari control panels start with magicgui; move to custom widgets or plugin
   packaging only when the workflow needs it.
+- Long-term napari workflow: database query, recording selection, converted
+  data load, Labels ROI editing, analysis, and response inspection.
 - Primary ROI interaction in napari uses Labels layers because they directly
   represent the pixel masks used by analysis.
 - Python: 3.13.
