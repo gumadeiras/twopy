@@ -6,6 +6,7 @@ Outputs: layer data sent to napari-shaped methods and saved ROI HDF5 files.
 
 import tempfile
 import unittest
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from os import chdir, environ
@@ -1779,6 +1780,40 @@ class NapariAdapterTest(unittest.TestCase):
         np.testing.assert_allclose(
             epoch.sem_values,
             np.array([[2.0, 2.0], [3.0, 3.0]]),
+        )
+
+    def test_response_plot_data_avoids_sem_warning_for_single_trial(self) -> None:
+        """Confirm one-trial epochs do not emit NumPy SEM warnings.
+
+        Inputs: one trial for one epoch and one ROI.
+        Outputs: plot-ready data has zero SEM and no runtime warning.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((2, 1), dtype=np.float64),
+            baseline=np.ones((2, 1), dtype=np.float64),
+            values=np.array([[1.0], [3.0]], dtype=np.float64),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=2,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            interleave_frame_numbers=np.array([0.0]),
+            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 2, "Odor"),),
+            data_rate_hz=2.0,
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            plot_data = response_plot_data_from_grouped(grouped)
+
+        np.testing.assert_allclose(
+            plot_data.epochs[0].sem_values,
+            np.zeros((1, 2), dtype=np.float64),
         )
 
     def test_response_plot_data_uses_prestimulus_time_axis(self) -> None:

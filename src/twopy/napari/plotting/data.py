@@ -208,15 +208,17 @@ def _epoch_plot_data(
         )
         values[trial_index, offsets, :] = trial.values
 
-    mean_values = np.nanmean(values, axis=0).T
     valid_counts = np.sum(~np.isnan(values), axis=0).T
+    value_sums = np.nansum(values, axis=0).T
+    mean_values = np.full((roi_count, max_frames), np.nan, dtype=np.float64)
+    valid_mask = valid_counts > 0
+    mean_values[valid_mask] = value_sums[valid_mask] / valid_counts[valid_mask]
     sem_values = np.zeros((roi_count, max_frames), dtype=np.float64)
     variable_mask = valid_counts > 1
     if np.any(variable_mask):
-        std_values = np.nanstd(values, axis=0, ddof=1).T
-        sem_values[variable_mask] = std_values[variable_mask] / np.sqrt(
-            valid_counts[variable_mask]
-        )
+        values_by_roi_frame = np.moveaxis(values, 0, -1).transpose(1, 0, 2)
+        std_values = np.nanstd(values_by_roi_frame[variable_mask], axis=1, ddof=1)
+        sem_values[variable_mask] = std_values / np.sqrt(valid_counts[variable_mask])
     return EpochResponsePlotData(
         epoch_name=epoch_name,
         epoch_number=epoch_number,
