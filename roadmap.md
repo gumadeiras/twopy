@@ -123,6 +123,9 @@ decided.
   through the core ROI module.
 - Initial magicgui dock panel for napari with a Save ROIs control that writes
   the current Labels layer to twopy ROI HDF5.
+- Magicgui dock panel can start from an empty napari window, load a converted
+  recording with a Load Recording button, and then save ROIs beside that
+  recording by default.
 - Launch script for opening napari from a converted output directory, a source
   recording directory with `twopy/recording_data.h5`, or an explicit
   `recording_data.h5` path.

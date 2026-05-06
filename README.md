@@ -144,6 +144,9 @@ source recording directory that contains `twopy/recording_data.h5`:
 twopy
 ```
 
+If no recording is found, `twopy` still opens napari. Use the `Load Recording`
+button in the `twopy` dock panel to choose a converted `recording_data.h5`.
+
 Or pass the converted recording explicitly:
 
 ```sh
@@ -153,7 +156,9 @@ twopy /path/to/recording_data.h5
 By default the launcher opens the mean image, the first 200 movie frames, an
 editable `rois` Labels layer, and the `twopy` dock panel. Use `--no-movie` to
 skip the movie preview, or `--movie-start` and `--movie-stop` to choose a
-different preview range.
+different preview range. The dock panel has `Load Recording` and `Save ROIs`
+buttons. When a recording is loaded from the dock, `Save ROIs` writes
+`rois.h5` beside that recording by default.
 
 ```python
 from pathlib import Path
@@ -180,7 +185,7 @@ roi_set = save_napari_label_rois(label_image, Path("/path/to/rois.h5"))
 Napari code is a thin adapter. It loads converted twopy files, displays the
 mean image, optionally displays a bounded movie preview, creates an editable
 ROI Labels layer, and adds a small magicgui `twopy` dock panel with a
-`Save ROIs` button. The button saves the current Labels layer through the core
-ROI HDF5 helpers. Pass `roi_set=Path("/path/to/rois.h5")` when reopening
-existing ROIs. It does not read source MATLAB/TIFF files or own analysis
-decisions.
+`Load Recording` button and a `Save ROIs` button. The save button writes the
+current Labels layer through the core ROI HDF5 helpers. Pass
+`roi_set=Path("/path/to/rois.h5")` when reopening existing ROIs. It does not
+read source MATLAB/TIFF files or own analysis decisions.

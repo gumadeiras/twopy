@@ -10,12 +10,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import chdir
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import h5py
 import numpy as np
 
 from twopy import (
+    add_twopy_magicgui_controls,
     load_roi_set,
     make_roi_set,
     open_recording_in_napari,
@@ -24,6 +25,25 @@ from twopy import (
     save_roi_set,
 )
 from twopy.napari import _resolve_launch_recording_path
+
+
+class _ControlWidget(Protocol):
+    """Small protocol for the magicgui control container in tests.
+
+    Inputs: integer widget index.
+    Outputs: callable magicgui function widget.
+    """
+
+    def __getitem__(self, index: int) -> Callable[..., object]:
+        """Return one child widget by index.
+
+        Args:
+            index: Child widget index.
+
+        Returns:
+            Callable widget.
+        """
+        ...
 
 
 @dataclass
@@ -242,12 +262,90 @@ class NapariAdapterTest(unittest.TestCase):
             )
 
             viewer.labels[0].data = np.array([[0, 1], [2, 2]])
-            save_widget = cast(Callable[..., object], opened.controls_widget)
+            controls = cast(_ControlWidget, opened.controls_widget)
+            save_widget = controls[1]
             result = save_widget(output_path=roi_output_path)
 
             self.assertIn("Saved 2 ROI", str(result))
             loaded = load_roi_set(roi_output_path)
             self.assertEqual(loaded.labels, ("roi_0001", "roi_0002"))
+
+    def test_magicgui_load_button_adds_recording_layers(self) -> None:
+        """Confirm the Load Recording button can populate an empty viewer.
+
+        Inputs: fake viewer, control dock, and tiny converted recording path.
+        Outputs: mean image, movie preview, and ROI Labels layer.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            roi_output_path = root / "drawn_rois.h5"
+            viewer = _FakeViewer()
+
+            controls_widget, _dock = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_output_path=roi_output_path,
+            )
+            controls = cast(_ControlWidget, controls_widget)
+            load_widget = controls[0]
+
+            result = load_widget(
+                recording_data_path=recording_path,
+                roi_output_path=roi_output_path,
+                load_movie_preview=True,
+            )
+
+            self.assertIn("Loaded", str(result))
+            self.assertEqual(len(viewer.images), 2)
+            self.assertEqual(len(viewer.labels), 1)
+            np.testing.assert_array_equal(
+                roi_label_image_from_layer(viewer.labels[0]),
+                np.zeros((2, 2), dtype=np.int64),
+            )
+
+    def test_load_button_updates_default_roi_save_path(self) -> None:
+        """Confirm loading a recording makes Save ROIs write beside it.
+
+        Inputs: empty viewer, loaded recording, and edited labels.
+        Outputs: ``rois.h5`` beside the loaded ``recording_data.h5``.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            controls_widget, _dock = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_output_path=Path("unused.h5"),
+            )
+            controls = cast(_ControlWidget, controls_widget)
+            load_widget = controls[0]
+            save_widget = controls[1]
+
+            load_widget(recording_data_path=recording_path)
+            viewer.labels[0].data = np.array([[1, 0], [0, 0]])
+            result = save_widget()
+
+            self.assertIn("Saved 1 ROI", str(result))
+            self.assertTrue((root / "rois.h5").exists())
+
+    def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
+        """Confirm no-path app launch can start empty instead of failing.
+
+        Inputs: temporary directory without converted recording files.
+        Outputs: ``None`` so the launcher can open an empty viewer.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_cwd = Path.cwd()
+            try:
+                chdir(temp_dir)
+
+                resolved = _resolve_launch_recording_path(None)
+            finally:
+                chdir(original_cwd)
+
+            self.assertIsNone(resolved)
 
     def test_launch_recording_path_resolves_from_current_directory(self) -> None:
         """Confirm launcher can run with no path from a converted folder.
