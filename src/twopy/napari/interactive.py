@@ -168,6 +168,8 @@ class LiveResponseController:
         """
         if self._is_shutdown:
             return
+        if options == self._response_processing_options:
+            return
         self._response_processing_options = options
         self._version += 1
 

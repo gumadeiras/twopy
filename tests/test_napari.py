@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import chdir, environ
 from pathlib import Path
+from time import monotonic, sleep
 from types import SimpleNamespace
 from typing import Any, Protocol, cast
 from unittest.mock import patch
@@ -307,6 +308,57 @@ class _FakePlotReceiver:
     def show_response_status(self, text: str) -> None:
         """Store status text received from the controller."""
         self.status = text
+
+
+class _ProcessingEchoPlotReceiver(_FakePlotReceiver):
+    """Receiver that mimics plot widgets loading result processing options."""
+
+    def __init__(self) -> None:
+        """Create a receiver whose controller is attached by each test."""
+        super().__init__()
+        self.controller: LiveResponseController | None = None
+
+    def set_response_plot_data(
+        self,
+        plot_data: ResponsePlotData,
+        *,
+        reset_axes: bool,
+    ) -> None:
+        """Store plot data and echo its processing options into the controller."""
+        super().set_response_plot_data(plot_data, reset_axes=reset_axes)
+        if (
+            self.controller is not None
+            and plot_data.response_processing_options is not None
+        ):
+            self.controller.set_response_processing_options(
+                plot_data.response_processing_options,
+            )
+
+
+def _wait_for_live_response_job(
+    controller: LiveResponseController,
+    *,
+    timeout_seconds: float = 2.0,
+) -> None:
+    """Wait until one async live-response job is ready to collect.
+
+    Args:
+        controller: Live response controller with a submitted worker job.
+        timeout_seconds: Maximum wait before failing the test.
+
+    Returns:
+        None.
+
+    Raises:
+        AssertionError: If no worker job finishes within the timeout.
+    """
+    deadline = monotonic() + timeout_seconds
+    while monotonic() < deadline:
+        future = controller._future
+        if future is not None and future.done():
+            return
+        sleep(0.01)
+    raise AssertionError("live response worker did not finish")
 
 
 class NapariAdapterTest(unittest.TestCase):
@@ -902,6 +954,47 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertIsNotNone(receiver.plot_data)
             self.assertIsNone(receiver.status)
+
+    def test_live_response_controller_does_not_loop_on_echoed_options(self) -> None:
+        """Confirm result option hydration does not schedule another recompute.
+
+        Inputs: async live controller whose receiver echoes result processing
+        options, matching the real response plot widget.
+        Outputs: applying the finished result does not mark the job stale and
+        start another background computation.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            layer = _FakeLayer(
+                name="rois",
+                data=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                options={},
+                events=_FakeLabelEvents(),
+            )
+            receiver = _ProcessingEchoPlotReceiver()
+            controller = LiveResponseController(receiver, debounce_ms=0)
+            receiver.controller = controller
+            controller.set_context(recording, layer)
+            plot_data = ResponsePlotData(
+                source_path=None,
+                epochs=_tiny_response_plot_data().epochs,
+                response_processing_options=ResponseProcessingOptions(),
+            )
+
+            with patch(
+                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+                return_value=plot_data,
+            ) as compute:
+                controller.request_update()
+                _wait_for_live_response_job(controller)
+                controller._collect_finished_job()
+
+            self.assertIs(receiver.plot_data, plot_data)
+            self.assertIsNone(controller._future)
+            compute.assert_called_once()
+            controller.shutdown()
 
     def test_live_response_controller_shutdown_disconnects_events(self) -> None:
         """Confirm shutdown breaks event callbacks and ignores later updates.
