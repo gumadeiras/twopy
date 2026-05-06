@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import h5py
 import numpy as np
+from napari.layers import Labels
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QApplication, QWidget
 
@@ -35,6 +36,7 @@ from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 from twopy.napari.plotting.data import response_plot_data_from_grouped
+from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.options import visibility_options_widget
 from twopy.napari.plotting.widgets import (
     global_time_bounds,
@@ -634,6 +636,26 @@ class NapariAdapterTest(unittest.TestCase):
         styles = "\n".join(child.styleSheet() for child in widget.findChildren(QWidget))
         self.assertIn("#ff0000", styles)
         self.assertIn("#0000ff", styles)
+
+    def test_roi_visibility_can_hide_labels_layer_rois(self) -> None:
+        """Confirm plot ROI visibility can hide ROI labels in napari.
+
+        Inputs: one Labels layer with two ROI labels and one hidden ROI.
+        Outputs: hidden ROI color becomes transparent while label pixels remain.
+        """
+        label_image = np.array([[0, 1], [2, 0]], dtype=np.int64)
+        layer = Labels(label_image)
+
+        apply_roi_visibility_to_labels_layer(
+            layer,
+            roi_labels=("roi_1", "roi_2"),
+            visibility={"roi_1": False, "roi_2": True},
+            colors=(QColor("#ff0000"), QColor("#0000ff")),
+        )
+
+        np.testing.assert_array_equal(layer.data, label_image)
+        self.assertEqual(layer.get_color(1)[3], 0.0)
+        self.assertEqual(layer.get_color(2)[3], 1.0)
 
     def test_movie_frame_range_accepts_last_default(self) -> None:
         """Confirm empty-launch widget defaults request the full movie.

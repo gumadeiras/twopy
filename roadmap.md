@@ -140,7 +140,9 @@ decided.
   frames exist, hide gray epochs by default, sort epochs by epoch number, draw
   thicker dashed zero-reference lines, and expose
   ROI/epoch visibility plus manual axis controls in scrollable option panels;
-  the ROI selection list shows each ROI's plot color beside its name.
+  the ROI selection list shows each ROI's plot color beside its name, and
+  deselecting an ROI also hides that ROI in the napari Labels overlay without
+  editing label pixels.
 - Napari recording controls show the loaded path tail instead of `default`
   after a selection, and the Save ROIs control lives in a left-side dock instead
   of duplicating ROI save fields in the recording-load panel.

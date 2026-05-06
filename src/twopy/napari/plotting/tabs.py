@@ -12,6 +12,7 @@ responses from the current Labels layer, this module converts labels to a
 from pathlib import Path
 
 import numpy as np
+from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -31,6 +32,9 @@ from twopy.napari.plotting.data import (
     default_analysis_output_path,
     load_response_plot_data,
     response_plot_data_from_grouped,
+)
+from twopy.napari.plotting.label_visibility import (
+    apply_roi_visibility_to_labels_layer,
 )
 from twopy.napari.plotting.options import (
     axis_options_widget,
@@ -165,6 +169,7 @@ class _ResponsePlotTabs(QTabWidget):
         self._plot_data: ResponsePlotData | None = None
         self._show_sem = True
         self._roi_visibility: dict[str, bool] = {}
+        self._roi_colors: tuple[QColor, ...] = ()
         self._epoch_visibility: dict[tuple[int, str], bool] = {}
         self._manual_x_min: float | None = None
         self._manual_x_max: float | None = None
@@ -347,6 +352,9 @@ class _ResponsePlotTabs(QTabWidget):
             roi_label: self._roi_visibility.get(roi_label, True)
             for roi_label in roi_labels
         }
+        self._roi_colors = _opaque_colors(
+            roi_colors_from_layer(self._roi_labels_layer, len(roi_labels))
+        )
         self._epoch_visibility = {
             (epoch.epoch_number, epoch.epoch_name): self._epoch_visibility.get(
                 (epoch.epoch_number, epoch.epoch_name),
@@ -371,6 +379,7 @@ class _ResponsePlotTabs(QTabWidget):
             None.
         """
         self._roi_visibility = {}
+        self._roi_colors = ()
         self._epoch_visibility = {}
         self._manual_x_min = None
         self._manual_x_max = None
@@ -397,17 +406,13 @@ class _ResponsePlotTabs(QTabWidget):
             on_change=self._set_manual_axis_bounds,
         )
         self._dynamic_options_layout.addWidget(axis_widget)
-        roi_colors = roi_colors_from_layer(
-            self._roi_labels_layer,
-            len(self._roi_labels()),
-        )
         self._dynamic_options_layout.addWidget(
             visibility_options_widget(
                 title="ROIs",
                 labels=self._roi_labels(),
                 visibility=self._roi_visibility,
                 on_change=self._set_roi_visibility,
-                colors=roi_colors,
+                colors=self._roi_colors,
             ),
         )
         self._dynamic_options_layout.addWidget(
@@ -542,6 +547,7 @@ class _ResponsePlotTabs(QTabWidget):
         if self._plot_data is None or len(self._plot_data.epochs) == 0:
             self._set_status("No responses available.")
             return
+        self._apply_roi_layer_visibility()
         roi_indices = self._visible_roi_indices()
         epoch_keys = self._visible_epoch_keys()
         if len(roi_indices) == 0 or len(epoch_keys) == 0:
@@ -559,7 +565,7 @@ class _ResponsePlotTabs(QTabWidget):
         value_max = self._manual_y_max if self._manual_y_max is not None else auto_y_max
         time_min, time_max = ordered_bounds(time_min, time_max)
         value_min, value_max = ordered_bounds(value_min, value_max)
-        colors = roi_colors_from_layer(self._roi_labels_layer, len(self._roi_labels()))
+        colors = self._roi_colors
         for epoch in self._plot_data.epochs:
             if not self._epoch_visibility.get(
                 (epoch.epoch_number, epoch.epoch_name),
@@ -584,6 +590,15 @@ class _ResponsePlotTabs(QTabWidget):
             )
         self._plot_layout.addStretch(1)
 
+    def _apply_roi_layer_visibility(self) -> None:
+        """Mirror plot ROI visibility onto the napari Labels overlay."""
+        apply_roi_visibility_to_labels_layer(
+            self._roi_labels_layer,
+            roi_labels=self._roi_labels(),
+            visibility=self._roi_visibility,
+            colors=self._roi_colors,
+        )
+
 
 def _epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
     """Create one titled plot panel for the horizontal response strip.
@@ -601,3 +616,20 @@ def _epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
     layout.addWidget(plot)
     panel.setLayout(layout)
     return panel
+
+
+def _opaque_colors(colors: tuple[QColor, ...]) -> tuple[QColor, ...]:
+    """Return ROI colors with full alpha for plotting and visibility restore.
+
+    Args:
+        colors: Colors read from the Labels layer.
+
+    Returns:
+        Same RGB colors with alpha set to fully opaque.
+    """
+    opaque: list[QColor] = []
+    for color in colors:
+        updated = QColor(color)
+        updated.setAlpha(255)
+        opaque.append(updated)
+    return tuple(opaque)
