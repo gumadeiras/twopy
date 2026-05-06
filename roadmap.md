@@ -193,6 +193,12 @@ decided.
 - Napari movie-frame range changes reuse the resolved recording path even when
   the visible path field is shortened, and response options are split into
   Update, Plot, ROIs, and Epochs tabs.
+- Response post-processing settings are wired through the core workflow,
+  analysis persistence, and napari Plot tab: smoothing and low-pass filtering
+  run on continuous dF/F before grouping, while correlation QC scores grouped
+  responses and saves the selected settings plus ROI inclusion scores.
+  Smoothing supports moving-average and Savitzky-Golay methods, with
+  Savitzky-Golay defaulting to a seven-frame second-order local fit.
 - Launch script for opening napari from a converted output directory, a source
   recording directory, or an explicit `recording_data.h5` path. When a source
   recording has no converted twopy files yet, napari runs conversion first and

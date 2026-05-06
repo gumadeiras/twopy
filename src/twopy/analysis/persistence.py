@@ -23,6 +23,14 @@ from twopy.analysis.background_subtraction import (
     BackgroundCorrectionMethod,
 )
 from twopy.analysis.dff import RoiDeltaFOverF
+from twopy.analysis.response_processing import (
+    ResponseProcessingOptions,
+    RoiCorrelationScores,
+)
+from twopy.analysis.response_processing.persistence import (
+    read_response_processing_group,
+    write_response_processing_group,
+)
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseTrial,
@@ -87,6 +95,8 @@ class LoadedAnalysisOutputs:
     dff: RoiDeltaFOverF | None
     epoch_windows: tuple[EpochFrameWindow, ...]
     grouped_responses: GroupedRoiResponses | None
+    response_processing_options: ResponseProcessingOptions | None
+    correlation_scores: RoiCorrelationScores | None
 
 
 def save_analysis_outputs(
@@ -97,6 +107,8 @@ def save_analysis_outputs(
     dff: RoiDeltaFOverF | None = None,
     epoch_windows: Sequence[EpochFrameWindow] = (),
     grouped_responses: GroupedRoiResponses | None = None,
+    response_processing_options: ResponseProcessingOptions | None = None,
+    correlation_scores: RoiCorrelationScores | None = None,
     response_summary_trials_csv: Path | None = None,
     response_summary_grouped_csv: Path | None = None,
 ) -> None:
@@ -109,6 +121,9 @@ def save_analysis_outputs(
         dff: Optional ROI dF/F result.
         epoch_windows: Optional stimulus windows used for response grouping.
         grouped_responses: Optional grouped trial responses.
+        response_processing_options: Optional smoothing, low-pass, and
+            correlation-QC settings used for these outputs.
+        correlation_scores: Optional ROI-level correlation QC scores.
         response_summary_trials_csv: Optional CSV path for one row per trial
             and ROI, with one column per relative response timepoint.
         response_summary_grouped_csv: Optional CSV path for one row per epoch,
@@ -129,6 +144,9 @@ def save_analysis_outputs(
     if any(path is not None for path in summary_outputs) and grouped_responses is None:
         msg = "response summary CSV outputs require grouped_responses"
         raise ValueError(msg)
+    if correlation_scores is not None and response_processing_options is None:
+        msg = "correlation_scores require response_processing_options"
+        raise ValueError(msg)
 
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +164,12 @@ def save_analysis_outputs(
             _write_grouped_responses(
                 h5_file.create_group("responses"),
                 grouped_responses,
+            )
+        if response_processing_options is not None:
+            write_response_processing_group(
+                h5_file.create_group("response_processing"),
+                options=response_processing_options,
+                correlation_scores=correlation_scores,
             )
 
     if grouped_responses is not None:
@@ -177,6 +201,11 @@ def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
     input_path = path.expanduser()
     with h5py.File(input_path, "r") as h5_file:
         _require_analysis_format(h5_file, input_path)
+        response_processing = (
+            read_response_processing_group(h5_file["response_processing"])
+            if "response_processing" in h5_file
+            else None
+        )
         return LoadedAnalysisOutputs(
             path=input_path,
             roi_set=(
@@ -196,6 +225,14 @@ def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
             grouped_responses=(
                 _read_grouped_responses(h5_file["responses"])
                 if "responses" in h5_file
+                else None
+            ),
+            response_processing_options=(
+                response_processing.options if response_processing is not None else None
+            ),
+            correlation_scores=(
+                response_processing.correlation_scores
+                if response_processing is not None
                 else None
             ),
         )

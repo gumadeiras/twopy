@@ -25,7 +25,7 @@ __all__ = [
     "validate_response_processing_options",
 ]
 
-SmoothingMethod = Literal["none", "moving_average"]
+SmoothingMethod = Literal["none", "moving_average", "savgol"]
 LowPassFilterMethod = Literal["none", "butterworth"]
 CorrelationFilterReference = Literal["none", "epoch_mean", "epoch_peak"]
 CorrelationWindowSeconds = tuple[float | None, float | None]
@@ -33,17 +33,21 @@ CorrelationWindowSeconds = tuple[float | None, float | None]
 
 @dataclass(frozen=True)
 class SmoothingOptions:
-    """Moving-average smoothing settings.
+    """Response-trace smoothing settings.
 
     Inputs: a smoothing method and window length in imaging frames.
     Outputs: a typed contract consumed by signal-processing kernels.
 
-    ``method="none"`` leaves values unchanged. ``window_frames`` is still kept
-    explicit so saved options can report exactly what the user selected.
+    ``method="none"`` leaves values unchanged. ``window_frames`` and
+    ``polynomial_order`` are still kept explicit so saved options can report
+    exactly what the user selected. ``method="savgol"`` defaults to a
+    seven-frame, second-order Savitzky-Golay smoother because that preserves
+    local peak shape better than a moving average.
     """
 
     method: SmoothingMethod = "none"
-    window_frames: int = 1
+    window_frames: int = 7
+    polynomial_order: int = 2
 
 
 @dataclass(frozen=True)
@@ -124,12 +128,32 @@ def validate_response_processing_options(
 
 def _validate_smoothing_options(options: SmoothingOptions) -> None:
     """Validate smoothing options."""
-    if options.method not in {"none", "moving_average"}:
+    if options.method not in {"none", "moving_average", "savgol"}:
         msg = f"Unknown smoothing method {options.method!r}"
         raise ValueError(msg)
     if options.window_frames < 1:
         msg = f"smoothing window_frames must be at least 1; got {options.window_frames}"
         raise ValueError(msg)
+    if options.polynomial_order < 0:
+        msg = (
+            "smoothing polynomial_order must be non-negative; "
+            f"got {options.polynomial_order}"
+        )
+        raise ValueError(msg)
+    if options.method == "savgol":
+        if options.window_frames % 2 == 0:
+            msg = (
+                "Savitzky-Golay smoothing window_frames must be odd; "
+                f"got {options.window_frames}"
+            )
+            raise ValueError(msg)
+        if options.polynomial_order >= options.window_frames:
+            msg = (
+                "Savitzky-Golay polynomial_order must be below window_frames; "
+                f"got order {options.polynomial_order} and window "
+                f"{options.window_frames}"
+            )
+            raise ValueError(msg)
 
 
 def _validate_low_pass_options(

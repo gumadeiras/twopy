@@ -20,6 +20,13 @@ from twopy.analysis.persistence import (
     save_analysis_outputs,
     write_response_summary_grouped_csv,
 )
+from twopy.analysis.response_processing import (
+    CorrelationFilterOptions,
+    LowPassFilterOptions,
+    ResponseProcessingOptions,
+    RoiCorrelationScores,
+    SmoothingOptions,
+)
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.roi import make_roi_set
@@ -56,6 +63,30 @@ class PersistenceTest(unittest.TestCase):
                 windows,
                 data_rate_hz=2.0,
             )
+            processing_options = ResponseProcessingOptions(
+                smoothing=SmoothingOptions(
+                    method="moving_average",
+                    window_frames=3,
+                ),
+                low_pass=LowPassFilterOptions(
+                    method="butterworth",
+                    cutoff_hz=0.5,
+                    order=2,
+                ),
+                correlation_filter=CorrelationFilterOptions(
+                    reference="epoch_mean",
+                    minimum_correlation=0.4,
+                    window_seconds=(0.0, 2.0),
+                ),
+            )
+            correlation_scores = RoiCorrelationScores(
+                roi_labels=("roi_1", "roi_2"),
+                scores=np.array([0.9, 0.1], dtype=np.float64),
+                included_mask=np.array([True, False]),
+                minimum_correlation=0.4,
+                reference="epoch_mean",
+                window_seconds=(0.0, 2.0),
+            )
 
             save_analysis_outputs(
                 h5_path,
@@ -64,6 +95,8 @@ class PersistenceTest(unittest.TestCase):
                 dff=dff,
                 epoch_windows=windows,
                 grouped_responses=grouped,
+                response_processing_options=processing_options,
+                correlation_scores=correlation_scores,
                 response_summary_trials_csv=trials_csv_path,
                 response_summary_grouped_csv=grouped_csv_path,
             )
@@ -77,6 +110,22 @@ class PersistenceTest(unittest.TestCase):
                 self.assertEqual(h5_file["traces/raw_values"].shape, (3, 2))
                 self.assertEqual(h5_file["dff/values"].shape, (3, 2))
                 self.assertEqual(h5_file["epoch_windows/start_frame"][0], 0)
+                self.assertEqual(
+                    h5_file["response_processing/smoothing"].attrs["method"],
+                    "moving_average",
+                )
+                self.assertEqual(
+                    h5_file["response_processing/smoothing"].attrs["polynomial_order"],
+                    2,
+                )
+                self.assertEqual(
+                    h5_file["response_processing/low_pass"].attrs["cutoff_hz"],
+                    0.5,
+                )
+                np.testing.assert_array_equal(
+                    h5_file["response_processing/correlation_scores/included_mask"][()],
+                    np.array([True, False]),
+                )
                 trial_group = h5_file["responses/trials/trial_0001"]
                 self.assertEqual(trial_group.attrs["epoch_name"], "Gray")
                 np.testing.assert_array_equal(
@@ -119,6 +168,8 @@ class PersistenceTest(unittest.TestCase):
             self.assertIsNotNone(loaded.traces)
             self.assertIsNotNone(loaded.dff)
             self.assertIsNotNone(loaded.grouped_responses)
+            self.assertIsNotNone(loaded.response_processing_options)
+            self.assertIsNotNone(loaded.correlation_scores)
             self.assertEqual(len(loaded.epoch_windows), 1)
             if loaded.roi_set is not None:
                 self.assertEqual(loaded.roi_set.labels, ("roi_1", "roi_2"))
@@ -131,6 +182,24 @@ class PersistenceTest(unittest.TestCase):
                 np.testing.assert_array_equal(loaded.dff.values, dff.values)
             if loaded.grouped_responses is not None:
                 self.assertEqual(len(loaded.grouped_responses.trials), 1)
+            if loaded.response_processing_options is not None:
+                self.assertEqual(
+                    loaded.response_processing_options.smoothing.method,
+                    "moving_average",
+                )
+                self.assertEqual(
+                    loaded.response_processing_options.low_pass.cutoff_hz,
+                    0.5,
+                )
+                self.assertEqual(
+                    loaded.response_processing_options.correlation_filter.window_seconds,
+                    (0.0, 2.0),
+                )
+            if loaded.correlation_scores is not None:
+                np.testing.assert_array_equal(
+                    loaded.correlation_scores.included_mask,
+                    np.array([True, False]),
+                )
 
     def test_csv_requires_grouped_responses(self) -> None:
         """Confirm response CSV is not written without response groups.

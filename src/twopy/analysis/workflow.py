@@ -29,6 +29,13 @@ from twopy.analysis.epoch_mapping import (
 )
 from twopy.analysis.motion import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.persistence import save_analysis_outputs
+from twopy.analysis.response_processing import (
+    ResponseProcessingOptions,
+    RoiCorrelationScores,
+    apply_correlation_filter_to_grouped_roi_responses,
+    process_roi_delta_f_over_f,
+    validate_response_processing_options,
+)
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     group_delta_f_over_f_by_epoch,
@@ -74,6 +81,8 @@ class AnalysisResponseComputation:
     epoch_windows: tuple[EpochFrameWindow, ...]
     interleave_windows: tuple[FrameWindow, ...]
     grouped_responses: GroupedRoiResponses
+    response_processing_options: ResponseProcessingOptions
+    correlation_scores: RoiCorrelationScores | None
 
 
 @dataclass(frozen=True)
@@ -112,6 +121,7 @@ def analyze_recording_responses(
     spatial_domain: SpatialDomain = "alignment_valid_crop",
     response_pre_window_seconds: float = DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
     response_post_window_seconds: float = 0.0,
+    response_processing_options: ResponseProcessingOptions | None = None,
 ) -> AnalysisResponseRun:
     """Run the standard ROI response analysis workflow.
 
@@ -147,6 +157,10 @@ def analyze_recording_responses(
             include in grouped responses. The default is zero so persisted
             summaries keep their epoch-window meaning; plotting code can add
             visual context separately from saved dF/F and epoch windows.
+        response_processing_options: Optional smoothing, low-pass, and
+            correlation-QC settings to apply after dF/F. Signal filters are
+            applied to continuous dF/F before grouping; correlation QC is
+            applied to grouped responses.
 
     Returns:
         ``AnalysisResponseRun`` with computed objects and output paths.
@@ -174,6 +188,7 @@ def analyze_recording_responses(
         spatial_domain=spatial_domain,
         response_pre_window_seconds=response_pre_window_seconds,
         response_post_window_seconds=response_post_window_seconds,
+        response_processing_options=response_processing_options,
     )
     resolved_output_path = _resolve_output_path(recording.path, output_path)
     resolved_trials_summary_path = _resolve_summary_csv_path(
@@ -195,6 +210,8 @@ def analyze_recording_responses(
         dff=computation.dff,
         epoch_windows=computation.epoch_windows,
         grouped_responses=computation.grouped_responses,
+        response_processing_options=computation.response_processing_options,
+        correlation_scores=computation.correlation_scores,
         response_summary_trials_csv=resolved_trials_summary_path,
         response_summary_grouped_csv=resolved_grouped_summary_path,
     )
@@ -208,6 +225,8 @@ def analyze_recording_responses(
         epoch_windows=computation.epoch_windows,
         interleave_windows=computation.interleave_windows,
         grouped_responses=computation.grouped_responses,
+        response_processing_options=computation.response_processing_options,
+        correlation_scores=computation.correlation_scores,
         output_path=resolved_output_path,
         response_summary_trials_csv_path=resolved_trials_summary_path,
         response_summary_grouped_csv_path=resolved_grouped_summary_path,
@@ -230,6 +249,7 @@ def compute_recording_responses(
     spatial_domain: SpatialDomain = "alignment_valid_crop",
     response_pre_window_seconds: float = DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
     response_post_window_seconds: float = 0.0,
+    response_processing_options: ResponseProcessingOptions | None = None,
 ) -> AnalysisResponseComputation:
     """Compute ROI responses from converted data without writing files.
 
@@ -253,6 +273,8 @@ def compute_recording_responses(
             include in grouped responses.
         response_post_window_seconds: Seconds after each stimulus window to
             include in grouped responses.
+        response_processing_options: Optional smoothing, low-pass, and
+            correlation-QC settings to apply after dF/F.
 
     Returns:
         In-memory response-analysis objects.
@@ -268,6 +290,10 @@ def compute_recording_responses(
         _recording_frame_rate_hz(recording)
         if data_rate_hz is None
         else float(data_rate_hz)
+    )
+    processing_options = _resolve_response_processing_options(
+        response_processing_options,
+        data_rate_hz=frame_rate_hz,
     )
     mapping, resolved_epoch_windows = _resolve_epoch_windows(recording, epoch_windows)
     trace_start, trace_stop = _frame_range_for_epoch_windows(
@@ -304,6 +330,12 @@ def compute_recording_responses(
     )
     if apply_motion_mask:
         dff = apply_motion_artifact_mask_to_delta_f_over_f(dff, recording)
+    if _has_continuous_response_processing(processing_options):
+        dff = process_roi_delta_f_over_f(
+            dff,
+            options=processing_options,
+            data_rate_hz=frame_rate_hz,
+        )
 
     grouped_responses = group_delta_f_over_f_by_epoch(
         dff,
@@ -311,6 +343,12 @@ def compute_recording_responses(
         data_rate_hz=frame_rate_hz,
         pre_window_seconds=response_pre_window_seconds,
         post_window_seconds=response_post_window_seconds,
+    )
+    grouped_responses, correlation_scores = (
+        apply_correlation_filter_to_grouped_roi_responses(
+            grouped_responses,
+            options=processing_options,
+        )
     )
 
     return AnalysisResponseComputation(
@@ -322,7 +360,33 @@ def compute_recording_responses(
         epoch_windows=resolved_epoch_windows,
         interleave_windows=interleave_windows,
         grouped_responses=grouped_responses,
+        response_processing_options=processing_options,
+        correlation_scores=correlation_scores,
     )
+
+
+def _resolve_response_processing_options(
+    options: ResponseProcessingOptions | None,
+    *,
+    data_rate_hz: float,
+) -> ResponseProcessingOptions:
+    """Return validated response-processing options for one run.
+
+    Args:
+        options: Caller-provided options, or ``None`` for defaults.
+        data_rate_hz: Imaging frame rate used for low-pass validation.
+
+    Returns:
+        Validated ``ResponseProcessingOptions``.
+    """
+    resolved = ResponseProcessingOptions() if options is None else options
+    validate_response_processing_options(resolved, data_rate_hz=data_rate_hz)
+    return resolved
+
+
+def _has_continuous_response_processing(options: ResponseProcessingOptions) -> bool:
+    """Return whether dF/F values need continuous signal processing."""
+    return options.smoothing.method != "none" or options.low_pass.method != "none"
 
 
 def _resolve_roi_set(roi_set: RoiSet | Path) -> RoiSet:

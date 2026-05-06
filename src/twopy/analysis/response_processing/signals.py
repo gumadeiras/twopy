@@ -13,11 +13,12 @@ from collections.abc import Iterator
 
 import numpy as np
 import numpy.typing as npt
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, savgol_filter, sosfiltfilt
 
 __all__ = [
     "butterworth_low_pass",
     "nan_aware_moving_average",
+    "nan_aware_savgol_filter",
 ]
 
 
@@ -100,6 +101,51 @@ def butterworth_low_pass(
     return _restore_shape(filtered, was_1d=was_1d)
 
 
+def nan_aware_savgol_filter(
+    values: npt.NDArray[np.float64],
+    *,
+    window_frames: int = 7,
+    polynomial_order: int = 2,
+) -> npt.NDArray[np.float64]:
+    """Smooth values with a NaN-aware Savitzky-Golay filter.
+
+    Args:
+        values: One-dimensional or ``(frames, channels)`` response values.
+        window_frames: Odd number of frames in the local regression window.
+        polynomial_order: Polynomial order fit inside each local window.
+
+    Returns:
+        Smoothed values with the same shape as ``values``.
+
+    Raises:
+        ValueError: If parameters or input rank are invalid.
+
+    Each finite contiguous run is smoothed independently so masked samples stay
+    NaN. Runs shorter than the requested window are copied unchanged because a
+    smaller implicit window would silently change the selected smoothing scale.
+    """
+    _validate_savgol_parameters(
+        window_frames=window_frames,
+        polynomial_order=polynomial_order,
+    )
+    matrix, was_1d = _as_frame_channel_matrix(values)
+    smoothed = np.full(matrix.shape, np.nan, dtype=np.float64)
+    for column_index in range(matrix.shape[1]):
+        column = matrix[:, column_index]
+        for start, stop in _finite_runs(np.isfinite(column)):
+            segment = column[start:stop]
+            if segment.size < window_frames:
+                smoothed[start:stop, column_index] = segment
+                continue
+            smoothed[start:stop, column_index] = savgol_filter(
+                segment,
+                window_length=window_frames,
+                polyorder=polynomial_order,
+                mode="interp",
+            )
+    return _restore_shape(smoothed, was_1d=was_1d)
+
+
 def _as_frame_channel_matrix(
     values: npt.NDArray[np.float64],
 ) -> tuple[npt.NDArray[np.float64], bool]:
@@ -173,6 +219,29 @@ def _validate_low_pass_parameters(
         raise ValueError(msg)
     if order < 1:
         msg = f"order must be at least 1; got {order}"
+        raise ValueError(msg)
+
+
+def _validate_savgol_parameters(
+    *,
+    window_frames: int,
+    polynomial_order: int,
+) -> None:
+    """Validate Savitzky-Golay smoothing parameters."""
+    if window_frames < 1:
+        msg = f"window_frames must be at least 1; got {window_frames}"
+        raise ValueError(msg)
+    if window_frames % 2 == 0:
+        msg = f"window_frames must be odd for Savitzky-Golay; got {window_frames}"
+        raise ValueError(msg)
+    if polynomial_order < 0:
+        msg = f"polynomial_order must be non-negative; got {polynomial_order}"
+        raise ValueError(msg)
+    if polynomial_order >= window_frames:
+        msg = (
+            "polynomial_order must be below window_frames; "
+            f"got {polynomial_order} and {window_frames}"
+        )
         raise ValueError(msg)
 
 

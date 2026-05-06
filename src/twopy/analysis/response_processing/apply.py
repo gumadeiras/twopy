@@ -25,10 +25,13 @@ from twopy.analysis.response_processing.qc import (
 from twopy.analysis.response_processing.signals import (
     butterworth_low_pass,
     nan_aware_moving_average,
+    nan_aware_savgol_filter,
 )
 from twopy.analysis.responses import GroupedRoiResponses, RoiResponseTrial
 
 __all__ = [
+    "apply_correlation_filter_to_grouped_roi_responses",
+    "mask_grouped_roi_responses_by_included_rois",
     "ResponseProcessingResult",
     "process_grouped_roi_responses",
     "process_roi_delta_f_over_f",
@@ -122,23 +125,74 @@ def process_grouped_roi_responses(
     validate_response_processing_options(options, data_rate_hz=grouped.data_rate_hz)
     _validate_grouped_for_processing(grouped)
     processed = _copy_grouped_with_processed_values(grouped, options=options)
-    correlation_scores = None
-    if options.correlation_filter.reference in {"epoch_mean", "epoch_peak"}:
-        correlation_scores = score_roi_correlations(
-            processed,
-            minimum_correlation=options.correlation_filter.minimum_correlation,
-            reference=options.correlation_filter.reference,
-            window_seconds=options.correlation_filter.window_seconds,
-        )
-        processed = _mask_excluded_rois(
-            processed,
-            included_mask=correlation_scores.included_mask,
-        )
+    processed, correlation_scores = apply_correlation_filter_to_grouped_roi_responses(
+        processed,
+        options=options,
+    )
     return ResponseProcessingResult(
         grouped_responses=processed,
         options=options,
         correlation_scores=correlation_scores,
     )
+
+
+def apply_correlation_filter_to_grouped_roi_responses(
+    grouped: GroupedRoiResponses,
+    *,
+    options: ResponseProcessingOptions,
+) -> tuple[GroupedRoiResponses, RoiCorrelationScores | None]:
+    """Apply only the correlation filter from a processing option object.
+
+    Args:
+        grouped: Grouped ROI responses to score and optionally mask.
+        options: Complete processing options. Smoothing and low-pass settings
+            are validated but not re-applied here.
+
+    Returns:
+        ``(grouped_responses, scores)``. ``scores`` is ``None`` when the
+        correlation filter is disabled.
+
+    This helper lets the standard workflow process continuous dF/F first, then
+    perform trial-level quality control after grouping without accidentally
+    smoothing or filtering the same traces a second time.
+    """
+    validate_response_processing_options(options, data_rate_hz=grouped.data_rate_hz)
+    _validate_grouped_for_processing(grouped)
+    if options.correlation_filter.reference not in {"epoch_mean", "epoch_peak"}:
+        return grouped, None
+    correlation_scores = score_roi_correlations(
+        grouped,
+        minimum_correlation=options.correlation_filter.minimum_correlation,
+        reference=options.correlation_filter.reference,
+        window_seconds=options.correlation_filter.window_seconds,
+    )
+    return (
+        mask_grouped_roi_responses_by_included_rois(
+            grouped,
+            included_mask=correlation_scores.included_mask,
+        ),
+        correlation_scores,
+    )
+
+
+def mask_grouped_roi_responses_by_included_rois(
+    grouped: GroupedRoiResponses,
+    *,
+    included_mask: npt.NDArray[np.bool_],
+) -> GroupedRoiResponses:
+    """Return grouped responses with excluded ROI columns set to NaN.
+
+    Args:
+        grouped: Grouped ROI responses to mask.
+        included_mask: Boolean vector matching ``grouped.roi_labels``.
+
+    Returns:
+        New grouped responses with the same shape and labels.
+
+    The mask is public because persisted QC scores should be able to hide ROIs
+    during plot reloads without recomputing the scientific QC decision.
+    """
+    return _mask_excluded_rois(grouped, included_mask=included_mask)
 
 
 def _process_values(
@@ -153,6 +207,12 @@ def _process_values(
         processed = nan_aware_moving_average(
             processed,
             window_frames=options.smoothing.window_frames,
+        )
+    if options.smoothing.method == "savgol":
+        processed = nan_aware_savgol_filter(
+            processed,
+            window_frames=options.smoothing.window_frames,
+            polynomial_order=options.smoothing.polynomial_order,
         )
     if options.low_pass.method == "butterworth":
         if options.low_pass.cutoff_hz is None:
@@ -272,6 +332,9 @@ def _processing_metadata(
     return {
         "response_processing_smoothing_method": options.smoothing.method,
         "response_processing_smoothing_window_frames": options.smoothing.window_frames,
+        "response_processing_smoothing_polynomial_order": (
+            options.smoothing.polynomial_order
+        ),
         "response_processing_low_pass_method": options.low_pass.method,
         "response_processing_low_pass_cutoff_hz": (
             "none"

@@ -15,6 +15,7 @@ from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     SmoothingOptions,
     nan_aware_moving_average,
+    nan_aware_savgol_filter,
     process_grouped_roi_responses,
     process_roi_delta_f_over_f,
 )
@@ -84,6 +85,41 @@ class ResponseProcessingTest(unittest.TestCase):
         self.assertEqual(
             processed.metadata["response_processing_smoothing_method"],
             "moving_average",
+        )
+
+    def test_savgol_smoothing_preserves_quadratic_shape(self) -> None:
+        """Confirm Savitzky-Golay smoothing uses window and polynomial order.
+
+        Inputs: one quadratic trace and default Savitzky-Golay options.
+        Outputs: unchanged values and persisted smoothing metadata.
+        """
+        values = np.arange(7, dtype=np.float64) ** 2
+
+        smoothed = nan_aware_savgol_filter(values)
+
+        np.testing.assert_allclose(smoothed, values, atol=1e-12)
+
+        dff = _dff(np.column_stack((values, values + 1.0)))
+        processed = process_roi_delta_f_over_f(
+            dff,
+            options=ResponseProcessingOptions(
+                smoothing=SmoothingOptions(method="savgol"),
+            ),
+            data_rate_hz=2.0,
+        )
+
+        np.testing.assert_allclose(processed.values[:, 0], values, atol=1e-12)
+        self.assertEqual(
+            processed.metadata["response_processing_smoothing_method"],
+            "savgol",
+        )
+        self.assertEqual(
+            processed.metadata["response_processing_smoothing_window_frames"],
+            7,
+        )
+        self.assertEqual(
+            processed.metadata["response_processing_smoothing_polynomial_order"],
+            2,
         )
 
     def test_low_pass_options_validate_cutoff_against_nyquist(self) -> None:

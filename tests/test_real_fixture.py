@@ -14,6 +14,11 @@ from pathlib import Path
 import numpy as np
 
 from twopy import analyze_recording_responses, load_converted_recording, load_roi_set
+from twopy.analysis.persistence import load_analysis_outputs
+from twopy.analysis.response_processing import (
+    ResponseProcessingOptions,
+    SmoothingOptions,
+)
 from twopy.analysis.responses import summarize_grouped_responses
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 
@@ -86,6 +91,32 @@ class RealDataFixtureTest(unittest.TestCase):
             self.assertTrue(run.output_path.exists())
             self.assertTrue((root / "response_summary_trials.csv").exists())
             self.assertTrue((root / "response_summary_grouped.csv").exists())
+
+            processed_run = analyze_recording_responses(
+                FIXTURE_ROOT / "recording_data.h5",
+                load_roi_set(FIXTURE_ROOT / "rois.h5"),
+                output_path=root / "processed_analysis_outputs.h5",
+                epoch_windows=windows,
+                background_method="none",
+                seconds_interleave_use=None,
+                apply_motion_mask=True,
+                fit_mode="robust",
+                chunk_frames=11,
+                response_processing_options=ResponseProcessingOptions(
+                    smoothing=SmoothingOptions(
+                        method="moving_average",
+                        window_frames=3,
+                    ),
+                ),
+            )
+            self.assertFalse(np.allclose(processed_run.dff.values, run.dff.values))
+            loaded = load_analysis_outputs(processed_run.output_path)
+            self.assertIsNotNone(loaded.response_processing_options)
+            if loaded.response_processing_options is not None:
+                self.assertEqual(
+                    loaded.response_processing_options.smoothing.method,
+                    "moving_average",
+                )
 
 
 if __name__ == "__main__":

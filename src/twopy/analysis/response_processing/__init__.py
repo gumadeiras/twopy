@@ -12,6 +12,8 @@ how to save the resulting audit trail.
 
 from twopy.analysis.response_processing.apply import (
     ResponseProcessingResult,
+    apply_correlation_filter_to_grouped_roi_responses,
+    mask_grouped_roi_responses_by_included_rois,
     process_grouped_roi_responses,
     process_roi_delta_f_over_f,
 )
@@ -33,6 +35,7 @@ from twopy.analysis.response_processing.qc import (
 from twopy.analysis.response_processing.signals import (
     butterworth_low_pass,
     nan_aware_moving_average,
+    nan_aware_savgol_filter,
 )
 
 __all__ = [
@@ -42,7 +45,10 @@ __all__ = [
     "CorrelationWindowSeconds",
     "LowPassFilterMethod",
     "LowPassFilterOptions",
+    "apply_correlation_filter_to_grouped_roi_responses",
+    "mask_grouped_roi_responses_by_included_rois",
     "nan_aware_moving_average",
+    "nan_aware_savgol_filter",
     "process_grouped_roi_responses",
     "process_roi_delta_f_over_f",
     "ResponseProcessingOptions",

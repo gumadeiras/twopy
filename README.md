@@ -229,6 +229,14 @@ shared exponential tau and one amplitude per ROI. The default dF/F fit mode is
 `robust`; pass `fit_mode="source_bounds"` when you need original source-bound
 behavior for audit comparisons.
 
+The script and napari workflows also accept `ResponseProcessingOptions` for
+post-dF/F response processing. Smoothing and low-pass filters are applied to
+continuous dF/F before trial grouping, while correlation filtering scores
+grouped trial responses and stores the selected settings plus QC scores in the
+analysis HDF5 output. Smoothing supports moving-average and Savitzky-Golay
+methods; Savitzky-Golay defaults to a seven-frame window with polynomial order
+two.
+
 ## Open In Napari
 
 From a converted output directory that contains `recording_data.h5`, or from a
