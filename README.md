@@ -78,27 +78,39 @@ from pathlib import Path
 import numpy as np
 
 from twopy import (
+    compute_roi_delta_f_over_f,
     detect_recording_photodiode_events,
-    extract_roi_traces,
-    frame_windows_from_photodiode_alignment,
+    extract_background_corrected_roi_traces,
     load_converted_recording,
     make_roi_set,
-    split_traces_by_frame_windows,
+    map_stimulus_epochs_to_frame_windows,
+    select_epoch_frame_windows,
 )
 
 recording = load_converted_recording(Path("/path/to/recording_data.h5"))
 mask_array = np.zeros((1, *recording.movie.shape[1:]), dtype=bool)
 mask_array[0, :10, :10] = True
 roi_set = make_roi_set(mask_array)
-traces = extract_roi_traces(recording, roi_set)
-alignment = detect_recording_photodiode_events(recording)
-windows = frame_windows_from_photodiode_alignment(
-    alignment,
-    frame_count=recording.movie.shape[0],
+traces = extract_background_corrected_roi_traces(
+    recording,
+    roi_set,
+    method="movie_global_percentile",
 )
-responses = split_traces_by_frame_windows(traces, windows)
+alignment = detect_recording_photodiode_events(recording)
+epoch_windows = map_stimulus_epochs_to_frame_windows(recording, alignment)
+interleave_windows = select_epoch_frame_windows(
+    epoch_windows,
+    epoch_name="Gray Interleave",
+)
+dff = compute_roi_delta_f_over_f(
+    traces,
+    interleave_windows,
+    data_rate_hz=float(recording.acquisition_metadata["acq.frameRate"]),
+)
 ```
 
 Analysis starts from converted HDF5 files. ROI masks are GUI-independent, trace
-extraction streams movie chunks, and response windows come from photodiode
-events instead of nominal frame-rate assumptions.
+extraction streams movie chunks, background correction stays explicit, and
+stimulus epoch windows come from photodiode events instead of nominal
+frame-rate assumptions. ROI dF/F uses corrected ROI fluorescence plus gray
+interleave windows to fit one shared exponential tau and one amplitude per ROI.

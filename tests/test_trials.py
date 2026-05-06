@@ -6,15 +6,20 @@ Outputs: frame windows and sliced ROI response arrays.
 """
 
 import unittest
+from pathlib import Path
 
 import numpy as np
 
 from twopy import (
     frame_windows_from_photodiode_alignment,
     make_frame_windows,
+    map_stimulus_epochs_to_frame_windows,
+    select_epoch_frame_windows,
     split_traces_by_frame_windows,
 )
 from twopy.analysis.trials import FrameWindow
+from twopy.conversion.types import FrameCountAudit
+from twopy.converted import ConvertedMovie, RecordingData
 from twopy.roi import RoiTraces
 from twopy.synchronization import (
     AlignedPhotodiodeEvent,
@@ -124,6 +129,52 @@ class ResponsesTest(unittest.TestCase):
                 (FrameWindow(0, 4, 6, "early"),),
             )
 
+    def test_maps_stimulus_epoch_runs_to_frame_windows(self) -> None:
+        """Confirm stimulus epoch runs pair with photodiode windows by order.
+
+        Inputs: three stimulus epoch runs and four paired photodiode events.
+        Outputs: three frame windows labeled with epoch numbers and names.
+        """
+        recording = self._recording_with_stimulus_epochs(
+            np.array([1, 1, 2, 2, 1, 1, 0], dtype=np.float64),
+        )
+        alignment = self._alignment((0, 5, 10, 15))
+
+        epoch_windows = map_stimulus_epochs_to_frame_windows(recording, alignment)
+
+        self.assertEqual(
+            [(item.epoch_number, item.epoch_name) for item in epoch_windows],
+            [(1, "Gray Interleave"), (2, "LR20"), (1, "Gray Interleave")],
+        )
+        self.assertEqual(
+            [
+                (item.window.start_frame, item.window.stop_frame)
+                for item in epoch_windows
+            ],
+            [(0, 5), (5, 10), (10, 15)],
+        )
+        selected = select_epoch_frame_windows(
+            epoch_windows,
+            epoch_name="Gray Interleave",
+        )
+        self.assertEqual(
+            [(window.start_frame, window.stop_frame) for window in selected],
+            [(0, 5), (10, 15)],
+        )
+
+    def test_rejects_epoch_window_count_mismatch(self) -> None:
+        """Confirm epoch-to-frame mapping fails when counts disagree.
+
+        Inputs: two stimulus epoch runs and one photodiode frame window.
+        Outputs: a clear count-mismatch error.
+        """
+        recording = self._recording_with_stimulus_epochs(
+            np.array([1, 1, 2, 2], dtype=np.float64),
+        )
+
+        with self.assertRaisesRegex(ValueError, "counts differ"):
+            map_stimulus_epochs_to_frame_windows(recording, self._alignment((0, 5)))
+
     def _alignment(self, frames: tuple[int, ...]) -> PhotodiodeAlignment:
         """Create photodiode alignment with paired events at selected frames.
 
@@ -164,6 +215,51 @@ class ResponsesTest(unittest.TestCase):
                     imaging_events,
                     strict=True,
                 )
+            ),
+        )
+
+    def _recording_with_stimulus_epochs(
+        self,
+        epoch_numbers: np.ndarray,
+    ) -> RecordingData:
+        """Create a minimal recording with stimulus epoch metadata.
+
+        Args:
+            epoch_numbers: Stimulus epoch numbers written as ``stimulus/data``.
+
+        Returns:
+            ``RecordingData`` with enough fields for epoch-window mapping.
+        """
+        frame_count = 20
+        return RecordingData(
+            path=Path("/tmp/recording_data.h5"),
+            movie=ConvertedMovie(
+                path=Path("/tmp/aligned_movie.h5"),
+                dataset_name="movie/aligned",
+                shape=(frame_count, 2, 2),
+                dtype="float64",
+            ),
+            source_session_dir=Path("/tmp/source"),
+            acquisition_metadata={},
+            run_metadata={},
+            synchronization_metadata={},
+            stimulus_data=epoch_numbers[:, None],
+            stimulus_data_column_names=("epoch_number",),
+            stimulus_parameters=(
+                {"epochName": "Gray Interleave"},
+                {"epochName": "LR20"},
+            ),
+            stimulus_function_lookup={},
+            stimulus_specific_columns={},
+            imaging_res_pd=np.zeros(frame_count, dtype=np.float64),
+            high_res_pd=np.zeros(frame_count, dtype=np.float64),
+            mean_image=np.zeros((2, 2), dtype=np.float64),
+            frame_counts=FrameCountAudit(
+                aligned_movie_frames=frame_count,
+                imaging_res_pd_samples=frame_count,
+                acquisition_number_of_frames=frame_count,
+                imaging_res_pd_minus_movie=0,
+                acquisition_minus_movie=0,
             ),
         )
 

@@ -68,6 +68,12 @@ decided.
   global movie percentile subtraction, and local y-neighborhood percentile
   subtraction.
 - Trial/frame-window response helpers live in `twopy.analysis.trials`.
+- Stimulus epoch runs from `stimulus/data` can be mapped onto photodiode-aligned
+  imaging-frame windows when their counts agree.
+- ROI-level dF/F computation matches the audited MATLAB
+  `calcDFOverFByRoi = 1` path: use corrected ROI fluorescence, gray interleave
+  windows, last-second baseline samples, one shared exponential tau, and one
+  amplitude per ROI.
 - Photodiode event segmentation for converted `high_res_pd` and
   `imaging_res_pd` signals.
 - Order-based pairing of high-resolution photodiode events to imaging-frame
@@ -117,6 +123,8 @@ decided.
   `imagingResPd`.
 - Connect stimulus metadata to frame windows so responses can be grouped by
   epoch, trial, and other recording metadata.
+- Compare twopy ROI-level dF/F against MATLAB `savedAnalysis/` on a recording
+  that already has matching saved ROI masks.
 - Load a recording in napari.
 - Interactively draw or select ROIs in the movie.
 - Save napari-drawn ROIs through the core ROI module.
