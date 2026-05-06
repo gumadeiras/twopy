@@ -2,7 +2,7 @@
 
 Inputs: ROI sets, extracted traces, dF/F results, epoch windows, and grouped
 responses.
-Outputs: one HDF5 analysis file plus optional CSV response summaries.
+Outputs: one HDF5 analysis file plus optional CSV response time series.
 
 This module only saves twopy-owned Python objects. It does not read source
 MATLAB/TIFF files or decide analysis parameters.
@@ -16,6 +16,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import numpy.typing as npt
 
 from twopy.analysis.background_subtraction import (
     BackgroundCorrectedRoiTraces,
@@ -24,11 +25,7 @@ from twopy.analysis.background_subtraction import (
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.responses import (
     GroupedRoiResponses,
-    GroupedRoiResponseSummary,
-    RoiResponseSummary,
     RoiResponseTrial,
-    summarize_epoch_roi_responses,
-    summarize_grouped_responses,
 )
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.roi import RoiSet, TraceStatistic, make_roi_set
@@ -49,7 +46,7 @@ __all__ = [
 ]
 
 ANALYSIS_OUTPUT_FILE_FORMAT = "twopy-analysis-outputs"
-_SUMMARY_CSV_COLUMNS = (
+_TRIAL_RESPONSE_CSV_BASE_COLUMNS = (
     "epoch_number",
     "epoch_name",
     "trial_index",
@@ -58,17 +55,12 @@ _SUMMARY_CSV_COLUMNS = (
     "start_frame",
     "stop_frame",
     "frame_count",
-    "mean_response",
-    "peak_response",
-    "min_response",
 )
-_GROUPED_SUMMARY_CSV_COLUMNS = (
+_GROUPED_RESPONSE_CSV_BASE_COLUMNS = (
     "epoch_number",
     "epoch_name",
     "roi_label",
-    "mean_response",
-    "sem_response",
-    "n_trials",
+    "statistic",
 )
 _TRACE_STATISTICS: tuple[TraceStatistic, ...] = ("mean",)
 _BACKGROUND_CORRECTION_METHODS: tuple[BackgroundCorrectionMethod, ...] = (
@@ -108,7 +100,7 @@ def save_analysis_outputs(
     response_summary_trials_csv: Path | None = None,
     response_summary_grouped_csv: Path | None = None,
 ) -> None:
-    """Save analysis outputs to one HDF5 file and optional CSV summaries.
+    """Save analysis outputs to one HDF5 file and optional CSV time series.
 
     Args:
         path: Destination HDF5 path.
@@ -118,16 +110,17 @@ def save_analysis_outputs(
         epoch_windows: Optional stimulus windows used for response grouping.
         grouped_responses: Optional grouped trial responses.
         response_summary_trials_csv: Optional CSV path for one row per trial
-            and ROI.
-        response_summary_grouped_csv: Optional CSV path for one row per epoch
-            and ROI, collapsed across trials.
+            and ROI, with one column per relative response timepoint.
+        response_summary_grouped_csv: Optional CSV path for one row per epoch,
+            ROI, and statistic, with one column per relative response
+            timepoint.
 
     Returns:
         None.
 
     The HDF5 file stores arrays with gzip compression where arrays can be large.
-    CSV files are intentionally small summaries; frame-by-frame values stay in
-    HDF5.
+    The HDF5 file is the complete audit trail. CSV files duplicate response
+    time series in a spreadsheet-friendly layout for quick plotting and checks.
     """
     summary_outputs = (
         response_summary_trials_csv,
@@ -212,10 +205,10 @@ def write_response_summary_trials_csv(
     grouped_responses: GroupedRoiResponses,
     path: Path,
 ) -> None:
-    """Write trial-level response summaries to CSV.
+    """Write trial-level response time series to CSV.
 
     Args:
-        grouped_responses: Grouped response object to summarize.
+        grouped_responses: Grouped response object to write.
         path: Destination CSV path.
 
     Returns:
@@ -223,22 +216,32 @@ def write_response_summary_trials_csv(
     """
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    summaries = summarize_grouped_responses(grouped_responses)
+    time_columns = _time_columns(grouped_responses.trials)
+    fieldnames = (*_TRIAL_RESPONSE_CSV_BASE_COLUMNS, *time_columns)
     with output_path.open("w", encoding="utf-8", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=_SUMMARY_CSV_COLUMNS)
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
-        for summary in summaries:
-            writer.writerow(_summary_row(summary))
+        for trial in grouped_responses.trials:
+            _validate_response_trial(trial, grouped_responses.roi_labels)
+            for roi_index, roi_label in enumerate(grouped_responses.roi_labels):
+                writer.writerow(
+                    _trial_response_row(
+                        trial,
+                        roi_index=roi_index,
+                        roi_label=roi_label,
+                        time_columns=time_columns,
+                    ),
+                )
 
 
 def write_response_summary_grouped_csv(
     grouped_responses: GroupedRoiResponses,
     path: Path,
 ) -> None:
-    """Write epoch-level response summaries to CSV.
+    """Write epoch-level response time series to CSV.
 
     Args:
-        grouped_responses: Grouped response object to summarize.
+        grouped_responses: Grouped response object to write.
         path: Destination CSV path.
 
     Returns:
@@ -246,12 +249,15 @@ def write_response_summary_grouped_csv(
     """
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    summaries = summarize_epoch_roi_responses(grouped_responses)
+    for trial in grouped_responses.trials:
+        _validate_response_trial(trial, grouped_responses.roi_labels)
+    time_columns = _time_columns(grouped_responses.trials)
+    fieldnames = (*_GROUPED_RESPONSE_CSV_BASE_COLUMNS, *time_columns)
     with output_path.open("w", encoding="utf-8", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=_GROUPED_SUMMARY_CSV_COLUMNS)
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
-        for summary in summaries:
-            writer.writerow(_grouped_summary_row(summary))
+        for row in _grouped_response_rows(grouped_responses, time_columns):
+            writer.writerow(row)
 
 
 def _write_roi_set(group: h5py.Group, roi_set: RoiSet) -> None:
@@ -688,49 +694,235 @@ def _read_string_dataset(group: h5py.Group, name: str) -> tuple[str, ...]:
     return tuple(_decode_string(value) for value in group[name][()])
 
 
-def _summary_row(summary: RoiResponseSummary) -> dict[str, str | int | float]:
-    """Convert one summary object to a CSV row.
+def _time_columns(trials: Sequence[RoiResponseTrial]) -> tuple[str, ...]:
+    """Return stable CSV column names for every relative response timepoint.
 
     Args:
-        summary: Response summary object.
+        trials: Response trials whose time axes should become CSV columns.
 
     Returns:
-        Dictionary keyed by CSV column name.
+        Sorted column names, one per unique relative time in seconds.
+
+    Trials can include pre-window or post-window context and different epoch
+    types can have different lengths. A shared union of timepoints lets one CSV
+    hold all rows without padding arrays in memory.
     """
-    return {
-        "epoch_number": summary.epoch_number,
-        "epoch_name": summary.epoch_name,
-        "trial_index": summary.trial_index,
-        "window_index": summary.window_index,
-        "roi_label": summary.roi_label,
-        "start_frame": summary.start_frame,
-        "stop_frame": summary.stop_frame,
-        "frame_count": summary.frame_count,
-        "mean_response": summary.mean_response,
-        "peak_response": summary.peak_response,
-        "min_response": summary.min_response,
-    }
+    time_values = sorted(
+        {float(time) for trial in trials for time in trial.time_seconds},
+    )
+    columns = tuple(_time_column_name(time) for time in time_values)
+    if len(columns) != len(set(columns)):
+        msg = "Response time columns are not unique after formatting"
+        raise ValueError(msg)
+    return columns
 
 
-def _grouped_summary_row(
-    summary: GroupedRoiResponseSummary,
+def _time_column_name(time_seconds: float) -> str:
+    """Format one relative response time as a CSV column name.
+
+    Args:
+        time_seconds: Relative time in seconds.
+
+    Returns:
+        Human-readable CSV column name.
+    """
+    return f"time_s_{time_seconds:.6f}"
+
+
+def _validate_response_trial(
+    trial: RoiResponseTrial,
+    roi_labels: tuple[str, ...],
+) -> None:
+    """Validate one response trial before flattening it into CSV rows.
+
+    Args:
+        trial: Trial response object to validate.
+        roi_labels: ROI labels that should match the response matrix width.
+
+    Returns:
+        None.
+    """
+    if trial.values.shape != (trial.time_seconds.size, len(roi_labels)):
+        msg = (
+            "Trial response values must have shape (timepoints, rois); "
+            f"got {trial.values.shape}, expected "
+            f"({trial.time_seconds.size}, {len(roi_labels)})"
+        )
+        raise ValueError(msg)
+
+
+def _trial_response_row(
+    trial: RoiResponseTrial,
+    *,
+    roi_index: int,
+    roi_label: str,
+    time_columns: tuple[str, ...],
 ) -> dict[str, str | int | float]:
-    """Convert one grouped summary object to a CSV row.
+    """Convert one trial and ROI response trace to a CSV row.
 
     Args:
-        summary: Grouped response summary object.
+        trial: Trial response object.
+        roi_index: Zero-based ROI column index in ``trial.values``.
+        roi_label: Display label for that ROI.
+        time_columns: Complete CSV time-column union.
 
     Returns:
-        Dictionary keyed by grouped CSV column name.
+        Dictionary keyed by trial-response CSV column name.
     """
-    return {
-        "epoch_number": summary.epoch_number,
-        "epoch_name": summary.epoch_name,
-        "roi_label": summary.roi_label,
-        "mean_response": summary.mean_response,
-        "sem_response": summary.sem_response,
-        "n_trials": summary.n_trials,
+    row: dict[str, str | int | float] = {
+        "epoch_number": trial.epoch_number,
+        "epoch_name": trial.epoch_name,
+        "trial_index": trial.trial_index,
+        "window_index": trial.window_index,
+        "roi_label": roi_label,
+        "start_frame": trial.start_frame,
+        "stop_frame": trial.stop_frame,
+        "frame_count": trial.stop_frame - trial.start_frame,
     }
+    row.update({column: "" for column in time_columns})
+    for time_seconds, value in zip(
+        trial.time_seconds,
+        trial.values[:, roi_index],
+        strict=True,
+    ):
+        row[_time_column_name(float(time_seconds))] = float(value)
+    return row
+
+
+def _grouped_response_rows(
+    grouped: GroupedRoiResponses,
+    time_columns: tuple[str, ...],
+) -> tuple[dict[str, str | int | float], ...]:
+    """Convert grouped trial responses to mean, SEM, and count CSV rows.
+
+    Args:
+        grouped: Grouped response object.
+        time_columns: Complete CSV time-column union.
+
+    Returns:
+        Rows keyed by epoch, ROI, statistic, and relative timepoint.
+
+    Counts are per timepoint rather than one scalar because pre/post context or
+    clipped recording edges can make some trials shorter than others.
+    """
+    rows: list[dict[str, str | int | float]] = []
+    for epoch_number, epoch_name, trials in _trials_by_epoch(grouped.trials):
+        for roi_index, roi_label in enumerate(grouped.roi_labels):
+            values_by_time = _values_by_time_column(
+                trials,
+                roi_index=roi_index,
+                time_columns=time_columns,
+            )
+            rows.extend(
+                _epoch_roi_statistic_rows(
+                    epoch_number=epoch_number,
+                    epoch_name=epoch_name,
+                    roi_label=roi_label,
+                    values_by_time=values_by_time,
+                    time_columns=time_columns,
+                ),
+            )
+    return tuple(rows)
+
+
+def _trials_by_epoch(
+    trials: Sequence[RoiResponseTrial],
+) -> tuple[tuple[int, str, tuple[RoiResponseTrial, ...]], ...]:
+    """Group trials by epoch while preserving first-seen epoch order.
+
+    Args:
+        trials: Trial responses to group.
+
+    Returns:
+        Tuple of ``(epoch_number, epoch_name, trials)`` groups.
+    """
+    grouped: dict[tuple[int, str], list[RoiResponseTrial]] = {}
+    for trial in trials:
+        grouped.setdefault((trial.epoch_number, trial.epoch_name), []).append(trial)
+    return tuple(
+        (epoch_number, epoch_name, tuple(epoch_trials))
+        for (epoch_number, epoch_name), epoch_trials in grouped.items()
+    )
+
+
+def _values_by_time_column(
+    trials: Sequence[RoiResponseTrial],
+    *,
+    roi_index: int,
+    time_columns: tuple[str, ...],
+) -> dict[str, list[float]]:
+    """Collect repeated-trial values for one ROI by relative time column.
+
+    Args:
+        trials: Trials from one epoch type.
+        roi_index: Zero-based ROI column index.
+        time_columns: Complete CSV time-column union.
+
+    Returns:
+        Mapping from time column to observed response values.
+    """
+    values_by_time = {column: [] for column in time_columns}
+    for trial in trials:
+        for time_seconds, value in zip(
+            trial.time_seconds,
+            trial.values[:, roi_index],
+            strict=True,
+        ):
+            if not np.isnan(value):
+                values_by_time[_time_column_name(float(time_seconds))].append(
+                    float(value),
+                )
+    return values_by_time
+
+
+def _epoch_roi_statistic_rows(
+    *,
+    epoch_number: int,
+    epoch_name: str,
+    roi_label: str,
+    values_by_time: Mapping[str, Sequence[float]],
+    time_columns: tuple[str, ...],
+) -> tuple[dict[str, str | int | float], ...]:
+    """Build grouped mean, SEM, and count rows for one epoch and ROI.
+
+    Args:
+        epoch_number: Stimulus epoch number.
+        epoch_name: Stimulus epoch name.
+        roi_label: ROI label.
+        values_by_time: Response values keyed by relative time column.
+        time_columns: Complete CSV time-column union.
+
+    Returns:
+        Three CSV rows: ``mean``, ``sem``, and ``n_trials``.
+    """
+    base_row: dict[str, str | int | float] = {
+        "epoch_number": epoch_number,
+        "epoch_name": epoch_name,
+        "roi_label": roi_label,
+    }
+    mean_row = {**base_row, "statistic": "mean"}
+    sem_row = {**base_row, "statistic": "sem"}
+    count_row = {**base_row, "statistic": "n_trials"}
+    for column in time_columns:
+        values = np.asarray(values_by_time[column], dtype=np.float64)
+        mean_row[column] = float(np.nanmean(values)) if values.size > 0 else ""
+        sem_row[column] = _sem(values) if values.size > 0 else ""
+        count_row[column] = int(values.size)
+    return mean_row, sem_row, count_row
+
+
+def _sem(values: npt.NDArray[np.float64]) -> float:
+    """Return the standard error for repeated-trial values.
+
+    Args:
+        values: One-dimensional response values at a single timepoint.
+
+    Returns:
+        SEM value, or ``0`` when only one trial contributes.
+    """
+    if values.size <= 1:
+        return 0.0
+    return float(np.nanstd(values, ddof=1) / np.sqrt(values.size))
 
 
 def _require_analysis_format(h5_file: h5py.File, path: Path) -> None:

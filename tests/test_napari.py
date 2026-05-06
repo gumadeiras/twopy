@@ -636,6 +636,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse((root / "analysis_outputs.h5").exists())
             self.assertFalse((root / "response_summary_trials.csv").exists())
             self.assertFalse((root / "response_summary_grouped.csv").exists())
+            self.assertFalse((root / "exports" / "csvs").exists())
             self.assertIsNotNone(response_widget._plot_data)
 
     def test_save_analysis_button_writes_roi_and_analysis_outputs(self) -> None:

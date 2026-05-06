@@ -93,6 +93,31 @@ micromamba run -n twopy pre-commit run --all-files
 The installed pre-commit hook runs ruff, ty, and the unit tests before each
 commit.
 
+## Release
+
+PyPI publishing uses GitHub Actions Trusted Publishing. No PyPI API token secret
+is required.
+
+One-time setup in PyPI:
+
+1. Add a trusted publisher for the `twopy` project.
+2. Use owner `gumadeiras`, repository `twopy`, workflow
+   `publish-to-pypi.yml`, and environment `pypi`.
+3. In GitHub, create the `pypi` environment and require manual approval.
+
+Release flow:
+
+1. Update `project.version` in `pyproject.toml`.
+2. Run `micromamba run -n twopy pre-commit run --all-files`.
+3. Commit the version change.
+4. Create a GitHub release whose tag is the same version, with or without a
+   leading `v`.
+5. Publish the release.
+
+The release workflow checks that the tag matches `pyproject.toml`, builds the
+wheel and source distribution, checks package metadata, and publishes to PyPI
+after the `pypi` environment approval.
+
 ## Find Recordings
 
 ```python
@@ -225,8 +250,8 @@ and `--movie-end` to choose a different preview range. Save ROIs writes
 `rois.h5` beside the current recording by default. The response dock can reload
 existing `analysis_outputs.h5` or update plots from the current Labels layer.
 Saving analysis writes `rois.h5`, `analysis_outputs.h5`,
-`response_summary_trials.csv`, and `response_summary_grouped.csv` beside the
-converted recording.
+`exports/csvs/response_summary_trials.csv`, and
+`exports/csvs/response_summary_grouped.csv` beside the converted recording.
 Response plots share one y-axis across epochs and show two seconds before
 stimulus onset and two seconds after stimulus offset by default, when gray
 interleave frames are available in the grouped responses. Epoch plots are laid

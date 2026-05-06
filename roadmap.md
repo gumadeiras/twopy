@@ -12,6 +12,8 @@ decided.
   typing tools.
 - Strict ruff and ty configuration.
 - Pre-commit hooks for ruff, ty, and unit tests.
+- GitHub Actions PyPI release workflow using Trusted Publishing, a version-tag
+  check, package build, metadata check, and the protected `pypi` environment.
 - Repository rules in `AGENTS.md`.
 - Session path discovery for required microscope output files.
 - Mini input data spec in `docs/input_data_spec.md`.
@@ -105,10 +107,11 @@ decided.
 - Frame-window response objects for splitting ROI traces by explicit imaging
   frame boundaries.
 - ROI dF/F responses can be grouped by epoch and trial, with one response
-  matrix per trial and compact per-ROI summary rows.
+  matrix per trial and spreadsheet-friendly time-series CSV rows.
 - Analysis outputs can be persisted to one inspectable HDF5 file containing ROI
   masks, fluorescence/background traces, dF/F arrays, epoch windows, and grouped
-  responses, with optional trial-level and epoch-grouped CSV response summaries.
+  responses, with optional trial-level and epoch-grouped CSV response time
+  series under `exports/csvs/`.
 - Script-facing response workflow loads a converted recording and ROI set, runs
   trace extraction, dF/F, response grouping, and persistence in one call.
 - Persisted analysis HDF5 files can be reloaded into typed twopy analysis
@@ -263,7 +266,7 @@ decided.
   "Recompute preview now" refreshes live plots in memory, "Reload saved
   analysis" reads existing analysis output from disk, and "Save analysis +
   ROIs" writes the current ROI file plus analysis HDF5, trial-level response
-  CSV, and epoch-grouped response CSV.
+  CSV, and epoch-grouped response CSV under `exports/csvs/`.
 - Napari response options now show recording identity as root, genotype,
   stimulus, and recording time instead of full raw paths. Analysis, ROI, and
   export statuses show compact `./twopy/...` output folders.

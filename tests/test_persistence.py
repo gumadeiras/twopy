@@ -1,7 +1,7 @@
 """Tests for saving twopy analysis outputs.
 
 Inputs: small ROI, trace, dF/F, window, and grouped-response objects.
-Outputs: inspectable HDF5 files and compact CSV summaries.
+Outputs: inspectable HDF5 files and response time-series CSV files.
 """
 
 import csv
@@ -18,6 +18,7 @@ from twopy.analysis.persistence import (
     ANALYSIS_OUTPUT_FILE_FORMAT,
     load_analysis_outputs,
     save_analysis_outputs,
+    write_response_summary_grouped_csv,
 )
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
@@ -31,7 +32,7 @@ class PersistenceTest(unittest.TestCase):
         """Confirm analysis objects are saved in auditable HDF5 groups.
 
         Inputs: one ROI set, traces, dF/F, epoch window, and grouped response.
-        Outputs: one HDF5 file plus trial-level and grouped CSV summaries.
+        Outputs: one HDF5 file plus trial-level and grouped response CSVs.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -92,7 +93,8 @@ class PersistenceTest(unittest.TestCase):
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["epoch_name"], "Gray")
             self.assertEqual(rows[0]["roi_label"], "roi_1")
-            self.assertEqual(float(rows[0]["mean_response"]), 1.0)
+            self.assertEqual(float(rows[0]["time_s_0.000000"]), 0.0)
+            self.assertEqual(float(rows[0]["time_s_0.500000"]), 2.0)
 
             with grouped_csv_path.open(
                 "r",
@@ -100,12 +102,16 @@ class PersistenceTest(unittest.TestCase):
                 newline="",
             ) as csv_file:
                 grouped_rows = list(csv.DictReader(csv_file))
-            self.assertEqual(len(grouped_rows), 2)
+            self.assertEqual(len(grouped_rows), 6)
             self.assertEqual(grouped_rows[0]["epoch_name"], "Gray")
             self.assertEqual(grouped_rows[0]["roi_label"], "roi_1")
-            self.assertEqual(float(grouped_rows[0]["mean_response"]), 1.0)
-            self.assertEqual(float(grouped_rows[0]["sem_response"]), 0.0)
-            self.assertEqual(int(grouped_rows[0]["n_trials"]), 1)
+            self.assertEqual(grouped_rows[0]["statistic"], "mean")
+            self.assertEqual(float(grouped_rows[0]["time_s_0.000000"]), 0.0)
+            self.assertEqual(float(grouped_rows[0]["time_s_0.500000"]), 2.0)
+            self.assertEqual(grouped_rows[1]["statistic"], "sem")
+            self.assertEqual(float(grouped_rows[1]["time_s_0.500000"]), 0.0)
+            self.assertEqual(grouped_rows[2]["statistic"], "n_trials")
+            self.assertEqual(int(grouped_rows[2]["time_s_0.500000"]), 1)
 
             loaded = load_analysis_outputs(h5_path)
 
@@ -127,7 +133,7 @@ class PersistenceTest(unittest.TestCase):
                 self.assertEqual(len(loaded.grouped_responses.trials), 1)
 
     def test_csv_requires_grouped_responses(self) -> None:
-        """Confirm summary CSV is not written without response groups.
+        """Confirm response CSV is not written without response groups.
 
         Inputs: a requested CSV path and no grouped response object.
         Outputs: a clear validation error.
@@ -140,6 +146,48 @@ class PersistenceTest(unittest.TestCase):
                     response_summary_trials_csv=Path(temp_dir) / "summary.csv",
                 )
             self.assertFalse(h5_path.exists())
+
+    def test_grouped_response_csv_keeps_time_series_statistics(self) -> None:
+        """Confirm grouped CSV rows contain mean, SEM, and count traces.
+
+        Inputs: two one-frame trials from the same epoch and one ROI.
+        Outputs: grouped CSV rows with one relative-time column.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "response_summary_grouped.csv"
+            dff = RoiDeltaFOverF(
+                fluorescence=np.ones((2, 1), dtype=np.float64),
+                baseline=np.ones((2, 1), dtype=np.float64),
+                values=np.array([[0.0], [2.0]], dtype=np.float64),
+                labels=("roi_1",),
+                start_frame=0,
+                stop_frame=2,
+                tau=0.0,
+                amplitudes=np.ones(1, dtype=np.float64),
+                interleave_frame_numbers=np.array([], dtype=np.float64),
+                interleave_fluorescence=np.empty((0, 1), dtype=np.float64),
+                metadata={},
+            )
+            grouped = group_delta_f_over_f_by_epoch(
+                dff,
+                (
+                    EpochFrameWindow(FrameWindow(0, 0, 1, "odor_a"), 2, "Odor"),
+                    EpochFrameWindow(FrameWindow(1, 1, 2, "odor_b"), 2, "Odor"),
+                ),
+                data_rate_hz=2.0,
+            )
+
+            write_response_summary_grouped_csv(grouped, output_path)
+
+            with output_path.open("r", encoding="utf-8", newline="") as csv_file:
+                rows = list(csv.DictReader(csv_file))
+            self.assertEqual(
+                [row["statistic"] for row in rows],
+                ["mean", "sem", "n_trials"],
+            )
+            self.assertEqual(float(rows[0]["time_s_0.000000"]), 1.0)
+            self.assertEqual(float(rows[1]["time_s_0.000000"]), 1.0)
+            self.assertEqual(int(rows[2]["time_s_0.000000"]), 2)
 
     def test_rejects_unknown_persisted_trace_statistic(self) -> None:
         """Confirm trace metadata is validated when loading analysis output.

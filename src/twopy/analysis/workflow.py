@@ -121,12 +121,12 @@ def analyze_recording_responses(
         output_path: Optional destination HDF5 path. When omitted, output is
             written beside ``recording_data.h5`` as ``analysis_outputs.h5``.
         response_summary_trials_csv_path: Optional trial-level CSV path. When
-            omitted and ``write_summary_csv`` is true, output is written beside
-            the HDF5 file as ``response_summary_trials.csv``.
+            omitted and ``write_summary_csv`` is true, output is written under
+            ``exports/csvs/response_summary_trials.csv`` beside the HDF5 file.
         response_summary_grouped_csv_path: Optional grouped CSV path. When
-            omitted and ``write_summary_csv`` is true, output is written beside
-            the HDF5 file as ``response_summary_grouped.csv``.
-        write_summary_csv: Whether to write compact CSV summaries.
+            omitted and ``write_summary_csv`` is true, output is written under
+            ``exports/csvs/response_summary_grouped.csv`` beside the HDF5 file.
+        write_summary_csv: Whether to write response time-series CSV files.
         epoch_windows: Optional explicit epoch windows. When omitted, twopy
             interpolates epochs from converted stimulus data.
         interleave_epoch_number: Optional baseline epoch number selector.
@@ -439,7 +439,7 @@ def _resolve_summary_csv_path(
     write_summary_csv: bool,
     filename: str,
 ) -> Path | None:
-    """Resolve the optional response summary CSV path.
+    """Resolve the optional response time-series CSV path.
 
     Args:
         output_path: Analysis HDF5 output path.
@@ -454,4 +454,4 @@ def _resolve_summary_csv_path(
         return None
     if requested_path is not None:
         return requested_path.expanduser()
-    return output_path.parent / filename
+    return output_path.parent / "exports" / "csvs" / filename
