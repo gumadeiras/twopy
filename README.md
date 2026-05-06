@@ -149,6 +149,8 @@ roi_set = save_napari_label_rois(label_image, Path("/path/to/rois.h5"))
 
 Napari code is a thin adapter. It loads converted twopy files, displays the
 mean image, optionally displays a bounded movie preview, creates an editable
-ROI Labels layer, and saves label-layer edits through the core ROI HDF5
-helpers. Pass `roi_set=Path("/path/to/rois.h5")` when reopening existing ROIs.
-It does not read source MATLAB/TIFF files or own analysis decisions.
+ROI Labels layer, and adds a small magicgui `twopy` dock panel with a
+`Save ROIs` button. The button saves the current Labels layer through the core
+ROI HDF5 helpers. Pass `roi_set=Path("/path/to/rois.h5")` when reopening
+existing ROIs. It does not read source MATLAB/TIFF files or own analysis
+decisions.

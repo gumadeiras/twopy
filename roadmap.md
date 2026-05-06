@@ -121,6 +121,8 @@ decided.
 - Thin napari adapter loads a converted recording mean image, optional bounded
   movie preview, editable ROI Labels layer, and saves edited label images
   through the core ROI module.
+- Initial magicgui dock panel for napari with a Save ROIs control that writes
+  the current Labels layer to twopy ROI HDF5.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
   snake_case twopy field names such as `rig_name`.
 - Conversion stores one code-derived label per stimulus data column using the
@@ -195,6 +197,8 @@ decided.
 - GUI: napari.
 - Napari implementation stays inside this repo for now, structured as reusable
   `twopy.napari` helpers that a future plugin can wrap with menus/widgets.
+- Napari control panels start with magicgui; move to custom widgets or plugin
+  packaging only when the workflow needs it.
 - Primary ROI interaction in napari uses Labels layers because they directly
   represent the pixel masks used by analysis.
 - Python: 3.13.

@@ -6,8 +6,10 @@ Outputs: layer data sent to napari-shaped methods and saved ROI HDF5 files.
 
 import tempfile
 import unittest
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import h5py
 import numpy as np
@@ -22,7 +24,7 @@ from twopy import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass
 class _FakeLayer:
     """Layer object returned by the fake viewer.
 
@@ -34,8 +36,60 @@ class _FakeLayer:
     data: object
 
 
+@dataclass(frozen=True)
+class _FakeDockWidget:
+    """Dock widget object returned by the fake viewer window.
+
+    Inputs: dock name, area, and widget.
+    Outputs: inspectable test object.
+    """
+
+    name: str
+    area: str
+    widget: object
+
+
+class _FakeWindow:
+    """Small napari-shaped window for dock-widget tests."""
+
+    dock_widgets: list[_FakeDockWidget]
+
+    def __init__(self) -> None:
+        """Create an empty fake window.
+
+        Inputs: none.
+        Outputs: window with no dock widgets.
+        """
+        self.dock_widgets: list[_FakeDockWidget] = []
+
+    def add_dock_widget(
+        self,
+        widget: object,
+        *,
+        name: str,
+        area: str,
+    ) -> object:
+        """Record a dock-widget request.
+
+        Args:
+            widget: Widget object added by the adapter.
+            name: Dock name.
+            area: Dock area.
+
+        Returns:
+            Fake dock widget.
+        """
+        dock_widget = _FakeDockWidget(name=name, area=area, widget=widget)
+        self.dock_widgets.append(dock_widget)
+        return dock_widget
+
+
 class _FakeViewer:
     """Small napari-shaped viewer for adapter tests."""
+
+    images: list[_FakeLayer]
+    labels: list[_FakeLayer]
+    window: _FakeWindow
 
     def __init__(self) -> None:
         """Create an empty fake viewer.
@@ -45,6 +99,7 @@ class _FakeViewer:
         """
         self.images: list[_FakeLayer] = []
         self.labels: list[_FakeLayer] = []
+        self.window = _FakeWindow()
 
     def add_image(self, data: object, *, name: str, **kwargs: object) -> object:
         """Record an image layer request.
@@ -94,7 +149,11 @@ class NapariAdapterTest(unittest.TestCase):
             opened = open_recording_in_napari(recording_path, viewer=viewer)
 
             self.assertIsNotNone(opened.roi_labels_layer)
+            self.assertIsNotNone(opened.controls_widget)
+            self.assertIsNotNone(opened.controls_dock_widget)
             self.assertEqual(len(viewer.labels), 1)
+            self.assertEqual(len(viewer.window.dock_widgets), 1)
+            self.assertEqual(viewer.window.dock_widgets[0].name, "twopy")
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
@@ -162,6 +221,31 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(saved.labels, ("drawn_0001", "drawn_0002"))
             self.assertEqual(loaded.labels, saved.labels)
             np.testing.assert_array_equal(loaded.masks, saved.masks)
+
+    def test_magicgui_save_button_writes_current_labels(self) -> None:
+        """Confirm the dock widget saves the editable Labels layer.
+
+        Inputs: tiny converted recording, fake viewer, and edited label data.
+        Outputs: ROI HDF5 file written by the magicgui function.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            roi_output_path = root / "drawn_rois.h5"
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(
+                recording_path,
+                viewer=viewer,
+                roi_output_path=roi_output_path,
+            )
+
+            viewer.labels[0].data = np.array([[0, 1], [2, 2]])
+            save_widget = cast(Callable[..., object], opened.controls_widget)
+            result = save_widget(output_path=roi_output_path)
+
+            self.assertIn("Saved 2 ROI", str(result))
+            loaded = load_roi_set(roi_output_path)
+            self.assertEqual(loaded.labels, ("roi_0001", "roi_0002"))
 
 
 def _write_converted_recording(root: Path) -> Path:

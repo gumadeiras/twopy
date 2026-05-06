@@ -40,6 +40,7 @@ from twopy.conversion import convert_recording_to_twopy, load_source_conversion_
 from twopy.converted import load_converted_recording
 from twopy.napari import (
     NapariRecordingView,
+    add_twopy_magicgui_controls,
     open_recording_in_napari,
     roi_label_image_from_layer,
     save_napari_label_rois,
@@ -82,6 +83,7 @@ __all__ = [
     "AlignedPhotodiodeEvent",
     "AnalysisResponseRun",
     "analyze_recording_responses",
+    "add_twopy_magicgui_controls",
     "apply_motion_artifact_mask_to_delta_f_over_f",
     "BackgroundCorrectedRoiTraces",
     "BackgroundCorrectionMethod",

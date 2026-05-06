@@ -26,10 +26,38 @@ from twopy.roi import (
 
 __all__ = [
     "NapariRecordingView",
+    "add_twopy_magicgui_controls",
     "open_recording_in_napari",
     "roi_label_image_from_layer",
     "save_napari_label_rois",
 ]
+
+
+class _NapariWindow(Protocol):
+    """Small protocol for adding dock widgets to a napari viewer.
+
+    Inputs: widget objects.
+    Outputs: dock widgets owned by napari.
+    """
+
+    def add_dock_widget(
+        self,
+        widget: object,
+        *,
+        name: str,
+        area: str,
+    ) -> object:
+        """Add a dock widget to the viewer window.
+
+        Args:
+            widget: Widget object to dock.
+            name: Dock title shown by napari.
+            area: Napari dock area name.
+
+        Returns:
+            The dock widget created by napari.
+        """
+        ...
 
 
 class _NapariViewer(Protocol):
@@ -38,6 +66,15 @@ class _NapariViewer(Protocol):
     Inputs: image or label layer data.
     Outputs: napari layer objects.
     """
+
+    @property
+    def window(self) -> _NapariWindow:
+        """Return the viewer window used to add dock widgets.
+
+        Inputs: viewer object.
+        Outputs: napari window object.
+        """
+        ...
 
     def add_image(self, data: object, *, name: str, **kwargs: object) -> object:
         """Add an image layer to the viewer.
@@ -94,6 +131,8 @@ class NapariRecordingView:
     mean_image_layer: object
     movie_layer: object | None
     roi_labels_layer: object | None
+    controls_widget: object | None
+    controls_dock_widget: object | None
 
 
 def open_recording_in_napari(
@@ -106,6 +145,8 @@ def open_recording_in_napari(
     movie_layer_name: str = "aligned movie",
     roi_layer_name: str = "rois",
     add_roi_labels_layer: bool = True,
+    add_controls: bool = True,
+    roi_output_path: Path | None = None,
 ) -> NapariRecordingView:
     """Open a converted recording in napari.
 
@@ -123,6 +164,9 @@ def open_recording_in_napari(
         add_roi_labels_layer: Whether to add a napari Labels layer for ROI
             drawing or editing. When ``roi_set`` is omitted, the layer starts as
             an empty integer image with the movie spatial shape.
+        add_controls: Whether to add the small magicgui twopy control panel.
+        roi_output_path: Default ROI HDF5 path used by the Save ROIs button.
+            When omitted, twopy uses ``rois.h5`` beside ``recording_data.h5``.
 
     Returns:
         ``NapariRecordingView`` with the loaded recording and created layers.
@@ -155,6 +199,18 @@ def open_recording_in_napari(
             _roi_label_image_for_display(roi_set, recording),
             name=roi_layer_name,
         )
+    controls_widget = None
+    controls_dock = None
+    if add_controls:
+        controls_widget, controls_dock = add_twopy_magicgui_controls(
+            resolved_viewer,
+            roi_labels_layer=roi_layer,
+            roi_output_path=_resolve_roi_output_path(
+                recording_data_path=recording.path,
+                roi_set=roi_set,
+                explicit_roi_output_path=roi_output_path,
+            ),
+        )
 
     return NapariRecordingView(
         viewer=resolved_viewer,
@@ -162,7 +218,47 @@ def open_recording_in_napari(
         mean_image_layer=mean_layer,
         movie_layer=movie_layer,
         roi_labels_layer=roi_layer,
+        controls_widget=controls_widget,
+        controls_dock_widget=controls_dock,
     )
+
+
+def add_twopy_magicgui_controls(
+    viewer: _NapariViewer,
+    *,
+    roi_labels_layer: object | None,
+    roi_output_path: Path,
+    dock_name: str = "twopy",
+    dock_area: str = "right",
+) -> tuple[object, object]:
+    """Add the first twopy magicgui control panel to a napari viewer.
+
+    Args:
+        viewer: Napari viewer that should receive the dock widget.
+        roi_labels_layer: Editable napari Labels layer that contains ROI
+            integer labels. ``None`` creates a disabled save path with a clear
+            status message.
+        roi_output_path: Default destination for saved ROI HDF5 files.
+        dock_name: Dock widget title.
+        dock_area: Napari dock area.
+
+    Returns:
+        ``(widget, dock_widget)`` created by magicgui and napari.
+
+    The panel is intentionally small. It saves the current Labels layer through
+    the same ROI helpers used by scripts, so a future plugin can wrap this
+    without changing ROI semantics.
+    """
+    widget = _make_roi_save_widget(
+        roi_labels_layer=roi_labels_layer,
+        roi_output_path=roi_output_path,
+    )
+    dock_widget = viewer.window.add_dock_widget(
+        widget,
+        name=dock_name,
+        area=dock_area,
+    )
+    return widget, dock_widget
 
 
 def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
@@ -214,6 +310,44 @@ def save_napari_label_rois(
     return roi_set
 
 
+def _make_roi_save_widget(
+    *,
+    roi_labels_layer: object | None,
+    roi_output_path: Path,
+) -> object:
+    """Create a magicgui widget that saves the current ROI Labels layer.
+
+    Args:
+        roi_labels_layer: Napari Labels layer to save.
+        roi_output_path: Default output path.
+
+    Returns:
+        magicgui function widget.
+    """
+    from magicgui import magicgui
+
+    @magicgui(call_button="Save ROIs")
+    def save_rois(output_path: Path = roi_output_path) -> str:
+        """Save current napari ROI labels to twopy ROI HDF5.
+
+        Args:
+            output_path: Destination ROI HDF5 path.
+
+        Returns:
+            Human-readable status for the dock widget.
+        """
+        if roi_labels_layer is None:
+            return "No ROI Labels layer is available."
+        label_image = roi_label_image_from_layer(roi_labels_layer)
+        if not np.any(label_image > 0):
+            return "No ROI labels to save."
+
+        roi_set = save_napari_label_rois(label_image, Path(output_path))
+        return f"Saved {len(roi_set.labels)} ROI(s) to {Path(output_path)}"
+
+    return save_rois
+
+
 def _roi_label_image_for_display(
     roi_set: RoiSet | Path | None,
     recording: RecordingData,
@@ -232,6 +366,29 @@ def _roi_label_image_for_display(
     loaded_roi_set = _resolve_roi_set(roi_set)
     _validate_roi_shape(loaded_roi_set, recording)
     return roi_set_to_label_image(loaded_roi_set)
+
+
+def _resolve_roi_output_path(
+    *,
+    recording_data_path: Path,
+    roi_set: RoiSet | Path | None,
+    explicit_roi_output_path: Path | None,
+) -> Path:
+    """Resolve the default path used by the magicgui Save ROIs button.
+
+    Args:
+        recording_data_path: Converted recording manifest path.
+        roi_set: Optional ROI object or path opened in napari.
+        explicit_roi_output_path: Optional caller-provided output path.
+
+    Returns:
+        Path for saving ROI HDF5 files.
+    """
+    if explicit_roi_output_path is not None:
+        return explicit_roi_output_path.expanduser()
+    if isinstance(roi_set, Path):
+        return roi_set.expanduser()
+    return recording_data_path.expanduser().parent / "rois.h5"
 
 
 def _create_viewer() -> _NapariViewer:
