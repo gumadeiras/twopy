@@ -192,6 +192,7 @@ def extract_roi_traces(
     The function streams movie chunks from HDF5. Only one chunk and the output
     traces are held in memory.
     """
+    validate_trace_statistic(statistic)
     if roi_set.masks.shape[1:] != recording.movie.shape[1:]:
         _raise_roi_movie_shape_error(roi_set, recording)
 
@@ -216,6 +217,26 @@ def extract_roi_traces(
         stop_frame=frame_stop,
         statistic=statistic,
     )
+
+
+def validate_trace_statistic(statistic: TraceStatistic) -> None:
+    """Validate the requested ROI pixel statistic.
+
+    Args:
+        statistic: Pixel statistic requested by a public trace-extraction API.
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: If ``statistic`` names behavior twopy does not implement.
+
+    Only mean traces are implemented right now. Runtime validation prevents
+    untyped scripts from producing mean traces with misleading metadata.
+    """
+    if statistic != "mean":
+        msg = f"Unknown trace statistic {statistic!r}; supported statistics: mean"
+        raise ValueError(msg)
 
 
 def _roi_pixel_indices(roi_set: RoiSet) -> tuple[npt.NDArray[np.int64], ...]:

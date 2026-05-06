@@ -7,6 +7,7 @@ Outputs: saved ROI files and fluorescence traces with known expected values.
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 import h5py
 import numpy as np
@@ -19,6 +20,7 @@ from twopy import (
 )
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
+from twopy.roi import TraceStatistic
 from twopy.spatial import full_frame_crop
 
 
@@ -103,6 +105,23 @@ class RoiTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "does not match movie"):
                 extract_roi_traces(recording, roi_set)
+
+    def test_rejects_unimplemented_trace_statistic(self) -> None:
+        """Confirm trace metadata cannot claim an unsupported statistic.
+
+        Inputs: an untyped-script-style ``median`` statistic request.
+        Outputs: a clear validation error before trace extraction.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = self._write_recording(Path(temp_dir))
+            roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
+
+            with self.assertRaisesRegex(ValueError, "Unknown trace statistic"):
+                extract_roi_traces(
+                    recording,
+                    roi_set,
+                    statistic=cast(TraceStatistic, "median"),
+                )
 
     def _write_recording(
         self,

@@ -16,7 +16,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.converted import RecordingData
-from twopy.roi import RoiSet, TraceStatistic
+from twopy.roi import RoiSet, TraceStatistic, validate_trace_statistic
 from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
 
 __all__ = [
@@ -111,6 +111,8 @@ def extract_background_corrected_roi_traces(
     into memory. Each method records enough metadata to audit how the background
     values were produced.
     """
+    _validate_background_method(method)
+    validate_trace_statistic(statistic)
     _validate_roi_movie_shape(roi_set, recording)
 
     frame_start, frame_stop = _normalize_trace_frame_range(
@@ -178,6 +180,34 @@ def extract_background_corrected_roi_traces(
         method=method,
         metadata=metadata,
     )
+
+
+def _validate_background_method(method: BackgroundCorrectionMethod) -> None:
+    """Validate the requested background correction method.
+
+    Args:
+        method: Background correction method requested by the caller.
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: If ``method`` names behavior twopy does not implement.
+
+    Runtime validation keeps untyped scripts from falling through the branch
+    table and getting a misleading low-level error.
+    """
+    allowed_methods = {
+        "none",
+        "movie_global_percentile",
+        "roi_local_percentile_y",
+    }
+    if method not in allowed_methods:
+        msg = (
+            f"Unknown background correction method {method!r}; "
+            f"supported methods: {', '.join(sorted(allowed_methods))}"
+        )
+        raise ValueError(msg)
 
 
 def _extract_mean_traces_from_indices(

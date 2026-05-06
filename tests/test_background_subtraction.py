@@ -7,14 +7,17 @@ Outputs: raw, background, and corrected ROI traces with known expected values.
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 import h5py
 import numpy as np
 import numpy.typing as npt
 
 from twopy import extract_background_corrected_roi_traces, make_roi_set
+from twopy.analysis.background_subtraction import BackgroundCorrectionMethod
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
+from twopy.roi import TraceStatistic
 from twopy.spatial import SpatialCrop, full_frame_crop
 
 
@@ -288,6 +291,43 @@ class BackgroundSubtractionTest(unittest.TestCase):
                     recording,
                     roi_set,
                     method="none",
+                )
+
+    def test_rejects_unknown_background_method(self) -> None:
+        """Confirm invalid runtime method strings get public API errors.
+
+        Inputs: an untyped-script-style background correction method.
+        Outputs: a clear validation error before branch-specific work starts.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = self._write_recording(Path(temp_dir))
+            roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Unknown background correction method",
+            ):
+                extract_background_corrected_roi_traces(
+                    recording,
+                    roi_set,
+                    method=cast(BackgroundCorrectionMethod, "median_filter"),
+                )
+
+    def test_rejects_unimplemented_trace_statistic(self) -> None:
+        """Confirm corrected traces cannot claim an unsupported statistic.
+
+        Inputs: an untyped-script-style ``median`` statistic request.
+        Outputs: a clear validation error before trace extraction.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = self._write_recording(Path(temp_dir))
+            roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
+
+            with self.assertRaisesRegex(ValueError, "Unknown trace statistic"):
+                extract_background_corrected_roi_traces(
+                    recording,
+                    roi_set,
+                    statistic=cast(TraceStatistic, "median"),
                 )
 
     def test_extracts_roi_local_y_corrected_traces(self) -> None:
