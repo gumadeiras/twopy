@@ -212,9 +212,8 @@ class DeltaFOverFTest(unittest.TestCase):
             result.interleave_frame_numbers,
             np.array([11.5, 14.5]),
         )
-        expected_frame_numbers = np.arange(11, 15, dtype=np.float64)
         expected_baseline = result.amplitudes[None, :] * np.exp(
-            result.tau * expected_frame_numbers[:, None],
+            result.tau * absolute_frame_numbers[:, None],
         )
         np.testing.assert_allclose(result.baseline, expected_baseline)
 
