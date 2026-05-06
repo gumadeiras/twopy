@@ -121,6 +121,11 @@ decided.
 - Read-only `twopy.parity` loader for selected `savedAnalysis/*.mat`
   `lastRoi` fields needed by parity checks: ROI masks, epoch lists, epoch
   windows, and saved ROI traces.
+- Parity adapter converts saved ROI label images into full-frame twopy
+  `RoiSet` objects for audit comparisons.
+- Parity dF/F comparator runs the normal twopy analysis path over converted
+  data, using saved ROI masks and saved interleave windows, then reports
+  numeric error against saved trace matrices.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
 - Real example recording converted successfully to `twopy/recording_data.h5`
@@ -139,6 +144,10 @@ decided.
   under the current threshold.
 - Real example `savedAnalysis/` loader read saved ROI mask shape `(244, 109)`
   and saved trace shape `(3909, 1221)` from a prior analysis file.
+- Real example dF/F parity comparison against
+  `WatershedRoiExtraction_28_12_10_17_10_23.mat` matched 1,221 saved ROI
+  traces over 3,909 frames with mean absolute error `1.84e-10` and median ROI
+  correlation `1.0`.
 - Real example photodiode classification found 1 stimulus start event, 99 trial
   transition events, 1 stimulus end event, and 100 classified stimulus windows.
 - Real database query matched the example recording in both `experimentLog.db`
