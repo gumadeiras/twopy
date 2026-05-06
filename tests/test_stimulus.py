@@ -86,6 +86,19 @@ class StimulusMetadataTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "stimulus_specific"):
                 map_stimulus_specific_column(recording, "time_seconds")
 
+    def test_rejects_malformed_stimulus_column_metadata(self) -> None:
+        """Confirm stimulus column metadata must be a string-key dictionary.
+
+        Inputs: decoded metadata whose columns list contains a scalar.
+        Outputs: a clear malformed-metadata error.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = self._recording(Path(temp_dir))
+            recording.stimulus_specific_columns["62002"]["columns"] = [1]
+
+            with self.assertRaisesRegex(ValueError, "malformed"):
+                map_stimulus_specific_column(recording, "stimulus_specific_04")
+
     def _recording(self, root: Path) -> RecordingData:
         """Create a minimal loaded recording with stimulus-code metadata.
 

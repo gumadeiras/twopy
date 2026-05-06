@@ -11,9 +11,9 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
-from typing import cast
 
 from twopy.database.types import DatabaseAccess
+from twopy.typing_guards import string_key_mapping_or_none
 
 __all__ = [
     "DEFAULT_DATABASE_CACHE_DIR",
@@ -107,10 +107,7 @@ def _read_copy_manifest(manifest_path: Path) -> dict[str, object] | None:
     except (OSError, json.JSONDecodeError):
         return None
 
-    if not isinstance(loaded, dict):
-        return None
-
-    return cast(dict[str, object], loaded)
+    return string_key_mapping_or_none(loaded)
 
 
 def _manifest_metadata_matches(

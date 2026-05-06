@@ -10,9 +10,9 @@ per-``stimtype`` mapping explicit for scripts and analysis code.
 """
 
 from dataclasses import dataclass
-from typing import cast
 
 from twopy.converted import RecordingData
+from twopy.typing_guards import require_string_key_mapping
 
 __all__ = [
     "StimulusSpecificColumnMapping",
@@ -176,10 +176,14 @@ def _mappings_from_metadata(
 
     mappings: list[StimulusSpecificColumnMapping] = []
     for column in columns:
-        if not isinstance(column, dict):
+        try:
+            column_metadata = require_string_key_mapping(
+                column,
+                name=f"stimulus metadata for stimtype {stimtype!r} column",
+            )
+        except ValueError as error:
             msg = f"stimulus metadata for stimtype {stimtype!r} is malformed"
-            raise ValueError(msg)
-        column_metadata = cast(dict[str, object], column)
+            raise ValueError(msg) from error
         if column_metadata.get("column_name") != stable_column_name:
             continue
 
