@@ -123,6 +123,9 @@ decided.
   through the core ROI module.
 - Initial magicgui dock panel for napari with a Save ROIs control that writes
   the current Labels layer to twopy ROI HDF5.
+- Launch script for opening napari from a converted output directory, a source
+  recording directory with `twopy/recording_data.h5`, or an explicit
+  `recording_data.h5` path.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
   snake_case twopy field names such as `rig_name`.
 - Conversion stores one code-derived label per stimulus data column using the

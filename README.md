@@ -128,14 +128,35 @@ behavior for audit comparisons.
 
 ## Open In Napari
 
+From a converted output directory that contains `recording_data.h5`, or from a
+source recording directory that contains `twopy/recording_data.h5`:
+
+```sh
+/Users/gumadeiras/git/twopy/scripts/launch_napari
+```
+
+Or pass the converted recording explicitly:
+
+```sh
+/Users/gumadeiras/git/twopy/scripts/launch_napari /path/to/recording_data.h5
+```
+
+By default the launcher opens the mean image, the first 200 movie frames, an
+editable `rois` Labels layer, and the `twopy` dock panel. Use `--no-movie` to
+skip the movie preview, or `--movie-start` and `--movie-stop` to choose a
+different preview range.
+
 ```python
 from pathlib import Path
 
 from twopy import (
+    launch_napari,
     open_recording_in_napari,
     roi_label_image_from_layer,
     save_napari_label_rois,
 )
+
+launch_napari(Path("/path/to/recording_data.h5"))
 
 view = open_recording_in_napari(
     Path("/path/to/recording_data.h5"),

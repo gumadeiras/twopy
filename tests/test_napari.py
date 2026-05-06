@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from collections.abc import Callable
 from dataclasses import dataclass
+from os import chdir
 from pathlib import Path
 from typing import cast
 
@@ -22,6 +23,7 @@ from twopy import (
     save_napari_label_rois,
     save_roi_set,
 )
+from twopy.napari import _resolve_launch_recording_path
 
 
 @dataclass
@@ -246,6 +248,49 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Saved 2 ROI", str(result))
             loaded = load_roi_set(roi_output_path)
             self.assertEqual(loaded.labels, ("roi_0001", "roi_0002"))
+
+    def test_launch_recording_path_resolves_from_current_directory(self) -> None:
+        """Confirm launcher can run with no path from a converted folder.
+
+        Inputs: temporary directory containing ``recording_data.h5``.
+        Outputs: resolved path to that file.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = root / "recording_data.h5"
+            recording_path.touch()
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+
+                resolved = _resolve_launch_recording_path(None)
+            finally:
+                chdir(original_cwd)
+
+            self.assertEqual(resolved, recording_path.resolve())
+
+    def test_launch_recording_path_resolves_from_source_recording_directory(
+        self,
+    ) -> None:
+        """Confirm launcher can run from a source recording with twopy output.
+
+        Inputs: temporary directory containing ``twopy/recording_data.h5``.
+        Outputs: resolved path to the converted recording file.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = root / "twopy" / "recording_data.h5"
+            recording_path.parent.mkdir()
+            recording_path.touch()
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+
+                resolved = _resolve_launch_recording_path(None)
+            finally:
+                chdir(original_cwd)
+
+            self.assertEqual(resolved, recording_path.resolve())
 
 
 def _write_converted_recording(root: Path) -> Path:

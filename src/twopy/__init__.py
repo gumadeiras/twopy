@@ -41,6 +41,7 @@ from twopy.converted import load_converted_recording
 from twopy.napari import (
     NapariRecordingView,
     add_twopy_magicgui_controls,
+    launch_napari,
     open_recording_in_napari,
     roi_label_image_from_layer,
     save_napari_label_rois,
@@ -107,6 +108,7 @@ __all__ = [
     "GroupedRoiResponses",
     "InterpolatedEpochMapping",
     "interpolate_stimulus_epochs_to_frame_windows",
+    "launch_napari",
     "load_analysis_outputs",
     "load_converted_recording",
     "load_roi_set",

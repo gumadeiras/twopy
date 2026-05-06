@@ -8,6 +8,7 @@ analysis remain in core modules so scripts and tests can use the same code
 without starting napari.
 """
 
+from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
@@ -27,10 +28,13 @@ from twopy.roi import (
 __all__ = [
     "NapariRecordingView",
     "add_twopy_magicgui_controls",
+    "launch_napari",
     "open_recording_in_napari",
     "roi_label_image_from_layer",
     "save_napari_label_rois",
 ]
+
+DEFAULT_MOVIE_PREVIEW_FRAMES = 200
 
 
 class _NapariWindow(Protocol):
@@ -223,6 +227,51 @@ def open_recording_in_napari(
     )
 
 
+def launch_napari(
+    recording_data_path: Path | None = None,
+    *,
+    roi_set: Path | None = None,
+    roi_output_path: Path | None = None,
+    movie_start_frame: int = 0,
+    movie_stop_frame: int | None = DEFAULT_MOVIE_PREVIEW_FRAMES,
+) -> NapariRecordingView:
+    """Launch napari for one converted recording and start the event loop.
+
+    Args:
+        recording_data_path: Optional path to ``recording_data.h5``. When
+            omitted, twopy looks in the current directory and ``./twopy``.
+        roi_set: Optional saved ROI HDF5 path to reopen.
+        roi_output_path: Optional ROI output path for the Save ROIs button.
+        movie_start_frame: First movie preview frame.
+        movie_stop_frame: Exclusive movie preview stop frame. ``None`` skips
+            the movie preview and shows only the mean image.
+
+    Returns:
+        ``NapariRecordingView`` created before napari starts its event loop.
+
+    This is the script-facing launcher. It keeps command-line convenience
+    separate from the core GUI adapter so a future plugin can still call
+    ``open_recording_in_napari`` directly.
+    """
+    resolved_recording_path = _resolve_launch_recording_path(recording_data_path)
+    movie_range = (
+        None
+        if movie_stop_frame is None
+        else (int(movie_start_frame), int(movie_stop_frame))
+    )
+    view = open_recording_in_napari(
+        resolved_recording_path,
+        roi_set=roi_set,
+        roi_output_path=roi_output_path,
+        movie_frame_range=movie_range,
+    )
+
+    import napari
+
+    napari.run()
+    return view
+
+
 def add_twopy_magicgui_controls(
     viewer: _NapariViewer,
     *,
@@ -405,6 +454,47 @@ def _create_viewer() -> _NapariViewer:
     return cast(_NapariViewer, napari.Viewer())
 
 
+def _resolve_launch_recording_path(recording_data_path: Path | None) -> Path:
+    """Resolve a command-line recording path.
+
+    Args:
+        recording_data_path: Optional caller path.
+
+    Returns:
+        Existing ``recording_data.h5`` path.
+
+    Raises:
+        ValueError: If no recording file can be found.
+
+    Running from a converted output directory or from a source recording
+    directory should be enough for day-to-day use.
+    """
+    candidates: list[Path] = []
+    if recording_data_path is not None:
+        candidates.append(recording_data_path.expanduser())
+    else:
+        cwd = Path.cwd()
+        candidates.extend(
+            (
+                cwd / "recording_data.h5",
+                cwd / "twopy" / "recording_data.h5",
+            ),
+        )
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+
+    candidate_list = "\n".join(f"- {candidate}" for candidate in candidates)
+    msg = (
+        "Could not find recording_data.h5. Pass a path, run from a twopy output "
+        "directory, or run from a recording directory that contains "
+        "twopy/recording_data.h5.\n"
+        f"Checked:\n{candidate_list}"
+    )
+    raise ValueError(msg)
+
+
 def _resolve_roi_set(roi_set: RoiSet | Path) -> RoiSet:
     """Return a ROI set object from either an object or HDF5 path.
 
@@ -435,3 +525,79 @@ def _validate_roi_shape(roi_set: RoiSet, recording: RecordingData) -> None:
             f"shape {recording.movie.shape[1:]}"
         )
         raise ValueError(msg)
+
+
+def _parse_launch_args() -> Namespace:
+    """Parse command-line arguments for ``python -m twopy.napari``.
+
+    Args:
+        None.
+
+    Returns:
+        Parsed argument namespace.
+    """
+    parser = ArgumentParser(
+        description="Launch napari for a twopy-converted recording.",
+    )
+    parser.add_argument(
+        "recording_data_path",
+        nargs="?",
+        type=Path,
+        help=(
+            "Path to recording_data.h5. If omitted, twopy checks the current "
+            "directory and ./twopy/recording_data.h5."
+        ),
+    )
+    parser.add_argument(
+        "--roi-set",
+        type=Path,
+        default=None,
+        help="Optional existing rois.h5 file to load into the Labels layer.",
+    )
+    parser.add_argument(
+        "--roi-output",
+        type=Path,
+        default=None,
+        help="Optional output path for the Save ROIs button.",
+    )
+    parser.add_argument(
+        "--movie-start",
+        type=int,
+        default=0,
+        help="First frame for the movie preview.",
+    )
+    parser.add_argument(
+        "--movie-stop",
+        type=int,
+        default=DEFAULT_MOVIE_PREVIEW_FRAMES,
+        help="Exclusive stop frame for the movie preview.",
+    )
+    parser.add_argument(
+        "--no-movie",
+        action="store_true",
+        help="Skip loading movie preview frames and show only the mean image.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Run the twopy napari launcher from the command line.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    args = _parse_launch_args()
+    launch_napari(
+        args.recording_data_path,
+        roi_set=args.roi_set,
+        roi_output_path=args.roi_output,
+        movie_start_frame=args.movie_start,
+        movie_stop_frame=None if args.no_movie else args.movie_stop,
+    )
+
+
+if __name__ == "__main__":
+    main()
