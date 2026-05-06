@@ -20,6 +20,7 @@ from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import (
+    PathInput,
     is_default_path,
     resolve_recording_paths,
     resolve_widget_output_path,
@@ -156,9 +157,11 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         if state.is_loading:
             return "Recording load already in progress."
         state.is_loading = True
-        paths = resolve_recording_paths(
-            _resolve_recording_folder_value(recording_folder, state),
+        selected_recording_path = _resolve_recording_folder_value(
+            recording_folder,
+            state,
         )
+        paths = resolve_recording_paths(selected_recording_path)
         try:
             roi_path = (
                 paths.roi_file_to_load
@@ -199,7 +202,10 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
             state.roi_save_file = resolved_roi_save_file
             state.recording = view.recording
             write_last_recording_folder(
-                recording_folder_for_state(recording_folder, paths.recording_data_path),
+                recording_folder_for_state(
+                    selected_recording_path,
+                    paths.recording_data_path,
+                ),
             )
             frame_end = _default_movie_end_frame(view.recording)
             load_recording.movie_frame_range.max = frame_end
@@ -361,7 +367,7 @@ def _recording_picker_start_path(state: NapariControlState) -> str | None:
 
 
 def _resolve_recording_folder_value(
-    recording_folder: Path,
+    recording_folder: PathInput,
     state: NapariControlState,
 ) -> Path:
     """Resolve the picker value into the recording path to load.
@@ -375,13 +381,16 @@ def _resolve_recording_folder_value(
         ``default``.
     """
     if not is_default_path(recording_folder):
-        return recording_folder
+        return Path(recording_folder).expanduser()
     if state.recording is not None:
         return state.recording.path
-    return recording_folder
+    return Path(recording_folder)
 
 
-def _has_recording_to_load(recording_folder: Path, state: NapariControlState) -> bool:
+def _has_recording_to_load(
+    recording_folder: PathInput,
+    state: NapariControlState,
+) -> bool:
     """Return whether a load-relevant widget change can load a recording.
 
     Args:
@@ -395,7 +404,7 @@ def _has_recording_to_load(recording_folder: Path, state: NapariControlState) ->
     return not is_default_path(recording_folder) or state.recording is not None
 
 
-def _resolve_optional_roi_path(path: Path) -> Path | None:
+def _resolve_optional_roi_path(path: PathInput) -> Path | None:
     """Resolve an optional ROI file selected by the user.
 
     Args:
@@ -406,7 +415,7 @@ def _resolve_optional_roi_path(path: Path) -> Path | None:
     """
     if is_default_path(path):
         return None
-    resolved = path.expanduser()
+    resolved = Path(path).expanduser()
     if not resolved.is_file():
         msg = f"ROI file does not exist: {resolved}"
         raise ValueError(msg)

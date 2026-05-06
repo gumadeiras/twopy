@@ -9,6 +9,7 @@ output folder, a source recording folder with ``twopy/`` output, or a direct
 """
 
 from dataclasses import dataclass
+from os import PathLike
 from pathlib import Path
 
 from twopy.napari.constants import (
@@ -20,11 +21,14 @@ from twopy.napari.constants import (
 
 __all__ = [
     "NapariRecordingPaths",
+    "PathInput",
     "is_default_path",
     "resolve_launch_recording_path",
     "resolve_recording_paths",
     "resolve_widget_output_path",
 ]
+
+PathInput = str | PathLike[str]
 
 
 @dataclass(frozen=True)
@@ -41,11 +45,12 @@ class NapariRecordingPaths:
     roi_save_file: Path
 
 
-def resolve_recording_paths(path: Path) -> NapariRecordingPaths:
+def resolve_recording_paths(path: PathInput) -> NapariRecordingPaths:
     """Resolve a widget-selected file or folder into twopy recording paths.
 
     Args:
         path: User-selected folder, ``recording_data.h5`` file, or ``default``.
+            Magicgui may provide this as either a ``Path`` or plain string.
 
     Returns:
         Existing recording data path plus optional movie and ROI paths.
@@ -56,7 +61,7 @@ def resolve_recording_paths(path: Path) -> NapariRecordingPaths:
     Folder selection is the intended GUI workflow. Direct file selection still
     works for scripts and audits.
     """
-    selected = Path.cwd() if is_default_path(path) else path.expanduser()
+    selected = Path.cwd() if is_default_path(path) else Path(path).expanduser()
     recording_path = _resolve_recording_data_path(selected)
     recording_dir = recording_path.parent
     movie_path = _optional_file(recording_dir / ALIGNED_MOVIE_FILENAME)
@@ -69,7 +74,9 @@ def resolve_recording_paths(path: Path) -> NapariRecordingPaths:
     )
 
 
-def resolve_launch_recording_path(recording_data_path: Path | None) -> Path | None:
+def resolve_launch_recording_path(
+    recording_data_path: PathInput | None,
+) -> Path | None:
     """Resolve an optional command-line recording path.
 
     Args:
@@ -94,11 +101,12 @@ def resolve_launch_recording_path(recording_data_path: Path | None) -> Path | No
     return None
 
 
-def resolve_widget_output_path(path: Path, *, default: Path) -> Path:
+def resolve_widget_output_path(path: PathInput, *, default: Path) -> Path:
     """Resolve an optional widget output path.
 
     Args:
-        path: Path value from a magicgui widget.
+        path: Path value from a magicgui widget. Magicgui may provide this as
+            either a ``Path`` or plain string.
         default: Default path to use when the widget says ``default``.
 
     Returns:
@@ -106,10 +114,10 @@ def resolve_widget_output_path(path: Path, *, default: Path) -> Path:
     """
     if is_default_path(path):
         return default.expanduser()
-    return path.expanduser()
+    return Path(path).expanduser()
 
 
-def is_default_path(path: Path) -> bool:
+def is_default_path(path: PathInput) -> bool:
     """Return whether a widget path means "use twopy's default".
 
     Args:

@@ -434,6 +434,26 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(paths.roi_file_to_load, roi_path.resolve())
             self.assertEqual(paths.roi_save_file, roi_path.resolve())
 
+    def test_recording_path_resolution_accepts_widget_strings(self) -> None:
+        """Confirm magicgui string paths resolve the same way as ``Path`` values.
+
+        Inputs: converted output folder passed as text, matching magicgui
+            ``FileEdit`` callback values.
+        Outputs: concrete recording, movie, and ROI paths.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            roi_path = root / "rois.h5"
+            roi_path.touch()
+
+            paths = resolve_recording_paths(str(root))
+
+            self.assertEqual(paths.recording_data_path, recording_path.resolve())
+            self.assertEqual(paths.movie_path, (root / "aligned_movie.h5").resolve())
+            self.assertEqual(paths.roi_file_to_load, roi_path.resolve())
+            self.assertEqual(paths.roi_save_file, roi_path.resolve())
+
     def test_movie_frame_range_accepts_last_default(self) -> None:
         """Confirm empty-launch widget defaults request the full movie.
 
