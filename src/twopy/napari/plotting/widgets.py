@@ -101,6 +101,50 @@ class EpochPlotWidget(QWidget):
         """
         return QSize(self._plot_size, self._plot_size)
 
+    def update_display(
+        self,
+        *,
+        show_sem: bool,
+        roi_indices: tuple[int, ...],
+        roi_colors: tuple[QColor, ...],
+        time_min: float,
+        time_max: float,
+        value_min: float,
+        value_max: float,
+        plot_size: int,
+    ) -> None:
+        """Update visible plot options without rebuilding the widget.
+
+        Args:
+            show_sem: Whether SEM bands should be drawn.
+            roi_indices: Zero-based ROI indices to draw.
+            roi_colors: Colors matching the viewer Labels layer by ROI index.
+            time_min: Shared x-axis minimum.
+            time_max: Shared x-axis maximum.
+            value_min: Shared y-axis minimum.
+            value_max: Shared y-axis maximum.
+            plot_size: Square widget size in screen pixels.
+
+        Returns:
+            None.
+
+        Visibility toggles do not change the computed response arrays. Updating
+        the existing widget keeps checkbox interactions responsive because Qt
+        only repaints the cached plot instead of destroying and recreating the
+        full plot strip.
+        """
+        self._show_sem = show_sem
+        self._roi_indices = roi_indices
+        self._roi_colors = roi_colors
+        self._time_min = time_min
+        self._time_max = time_max
+        self._value_min = value_min
+        self._value_max = value_max
+        self._plot_size = int(plot_size)
+        self.setMinimumSize(self._plot_size, self._plot_size)
+        self.updateGeometry()
+        self.update()
+
     def paintEvent(self, a0: QPaintEvent | None) -> None:
         """Draw response traces.
 

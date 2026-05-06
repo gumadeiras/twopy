@@ -239,6 +239,8 @@ class _ResponsePlotWidget(QWidget):
         self._plot_data: ResponsePlotData | None = None
         self._show_sem = True
         self._plot_size = 360
+        self._epoch_plot_widgets: dict[tuple[int, str], EpochPlotWidget] = {}
+        self._epoch_plot_panels: dict[tuple[int, str], QWidget] = {}
         self._roi_visibility: dict[str, bool] = {}
         self._roi_colors: tuple[QColor, ...] = ()
         self._epoch_visibility: dict[tuple[int, str], bool] = {}
@@ -489,6 +491,7 @@ class _ResponsePlotWidget(QWidget):
         Returns:
             None.
         """
+        self._clear_epoch_plot_cache()
         self._plot_data = plot_data
         self._sync_plot_state(reset_axes=reset_axes)
         self._render_plots()
@@ -523,12 +526,12 @@ class _ResponsePlotWidget(QWidget):
         """Update whether SEM bands are drawn."""
         del state
         self._show_sem = self._show_sem_checkbox.isChecked()
-        self._render_plots()
+        self._render_plots(apply_roi_layer_visibility=False)
 
     def _set_plot_size(self, value: int) -> None:
         """Update the square pixel size used for live response plots."""
         self._plot_size = int(value)
-        self._render_plots()
+        self._render_plots(apply_roi_layer_visibility=False)
 
     def _sync_plot_state(self, *, reset_axes: bool) -> None:
         """Synchronize option state with currently loaded plot data.
@@ -606,6 +609,7 @@ class _ResponsePlotWidget(QWidget):
                 labels=self._roi_labels(),
                 visibility=self._roi_visibility,
                 on_change=self._set_roi_visibility,
+                on_change_batch=self._set_roi_visibility_batch,
                 colors=self._roi_colors,
             ),
         )
@@ -625,6 +629,7 @@ class _ResponsePlotWidget(QWidget):
                     ), visible in self._epoch_visibility.items()
                 },
                 on_change=self._set_epoch_visibility_by_label,
+                on_change_batch=self._set_epoch_visibility_batch_by_label,
             ),
         )
         self._epoch_options_layout.addStretch(1)
@@ -658,7 +663,7 @@ class _ResponsePlotWidget(QWidget):
         self._manual_x_max = x_max
         self._manual_y_min = y_min
         self._manual_y_max = y_max
-        self._render_plots()
+        self._render_plots(apply_roi_layer_visibility=False)
 
     def _export_state(self) -> ResponseExportState:
         """Return the current state needed by export buttons."""
@@ -727,13 +732,27 @@ class _ResponsePlotWidget(QWidget):
         self._roi_visibility[label] = visible
         self._render_plots()
 
+    def _set_roi_visibility_batch(self, visibility: dict[str, bool]) -> None:
+        """Update several ROI visibility flags with one plot refresh."""
+        self._roi_visibility.update(visibility)
+        self._render_plots()
+
     def _set_epoch_visibility_by_label(self, label: str, visible: bool) -> None:
         """Update one epoch visibility flag from an options label."""
         for key in self._epoch_visibility:
             if epoch_key_label(key[0], key[1]) == label:
                 self._epoch_visibility[key] = visible
                 break
-        self._render_plots()
+        self._render_plots(apply_roi_layer_visibility=False)
+
+    def _set_epoch_visibility_batch_by_label(self, visibility: dict[str, bool]) -> None:
+        """Update several epoch visibility flags with one plot refresh."""
+        label_visibility = dict(visibility)
+        for key in self._epoch_visibility:
+            label = epoch_key_label(key[0], key[1])
+            if label in label_visibility:
+                self._epoch_visibility[key] = label_visibility[label]
+        self._render_plots(apply_roi_layer_visibility=False)
 
     def _visible_roi_indices(self) -> tuple[int, ...]:
         """Return zero-based ROI indices currently visible in plots.
@@ -783,19 +802,21 @@ class _ResponsePlotWidget(QWidget):
         Returns:
             None.
         """
+        self._clear_epoch_plot_cache()
         clear_layout(self._plot_layout)
         self._status_label = QLabel(text)
         self._status_label.setWordWrap(True)
         self._plot_layout.addWidget(self._status_label)
         self._plot_layout.addStretch(1)
 
-    def _render_plots(self) -> None:
+    def _render_plots(self, *, apply_roi_layer_visibility: bool = True) -> None:
         """Render one plot widget per epoch type."""
-        clear_layout(self._plot_layout)
+        self._clear_plot_layout_preserving_epoch_cache()
         if self._plot_data is None or len(self._plot_data.epochs) == 0:
             self._set_status("No responses available.")
             return
-        self._apply_roi_layer_visibility()
+        if apply_roi_layer_visibility:
+            self._apply_roi_layer_visibility()
         roi_indices = self._visible_roi_indices()
         epoch_keys = self._visible_epoch_keys()
         if len(roi_indices) == 0 or len(epoch_keys) == 0:
@@ -815,30 +836,79 @@ class _ResponsePlotWidget(QWidget):
             manual_max=self._manual_y_max,
         )
         colors = self._roi_colors
+        self._ensure_epoch_plot_cache()
         for epoch in self._plot_data.epochs:
             if not self._epoch_visibility.get(
                 (epoch.epoch_number, epoch.epoch_name),
                 True,
             ):
                 continue
-            title = f"Epoch {epoch.epoch_number}: {epoch.epoch_name}"
-            self._plot_layout.addWidget(
-                epoch_plot_panel(
-                    title=title,
-                    plot=EpochPlotWidget(
-                        epoch,
-                        show_sem=self._show_sem,
-                        roi_indices=roi_indices,
-                        roi_colors=colors,
-                        time_min=time_min,
-                        time_max=time_max,
-                        value_min=value_min,
-                        value_max=value_max,
-                        plot_size=self._plot_size,
-                    ),
-                )
+            key = (epoch.epoch_number, epoch.epoch_name)
+            plot = self._epoch_plot_widgets[key]
+            plot.update_display(
+                show_sem=self._show_sem,
+                roi_indices=roi_indices,
+                roi_colors=colors,
+                time_min=time_min,
+                time_max=time_max,
+                value_min=value_min,
+                value_max=value_max,
+                plot_size=self._plot_size,
             )
+            self._plot_layout.addWidget(self._epoch_plot_panels[key])
         self._plot_layout.addStretch(1)
+
+    def _ensure_epoch_plot_cache(self) -> None:
+        """Create one persistent plot widget per loaded epoch."""
+        if self._plot_data is None:
+            self._clear_epoch_plot_cache()
+            return
+        expected_keys = {
+            (epoch.epoch_number, epoch.epoch_name) for epoch in self._plot_data.epochs
+        }
+        for key in tuple(self._epoch_plot_widgets):
+            if key not in expected_keys:
+                self._epoch_plot_panels[key].deleteLater()
+                del self._epoch_plot_panels[key]
+                del self._epoch_plot_widgets[key]
+        for epoch in self._plot_data.epochs:
+            key = (epoch.epoch_number, epoch.epoch_name)
+            if key in self._epoch_plot_widgets:
+                continue
+            plot = EpochPlotWidget(
+                epoch,
+                show_sem=self._show_sem,
+                roi_indices=self._visible_roi_indices(),
+                roi_colors=self._roi_colors,
+                time_min=0.0,
+                time_max=1.0,
+                value_min=0.0,
+                value_max=1.0,
+                plot_size=self._plot_size,
+            )
+            self._epoch_plot_widgets[key] = plot
+            self._epoch_plot_panels[key] = epoch_plot_panel(
+                title=f"Epoch {epoch.epoch_number}: {epoch.epoch_name}",
+                plot=plot,
+            )
+
+    def _clear_epoch_plot_cache(self) -> None:
+        """Delete cached epoch plot panels and widgets."""
+        for panel in self._epoch_plot_panels.values():
+            panel.deleteLater()
+        self._epoch_plot_widgets.clear()
+        self._epoch_plot_panels.clear()
+
+    def _clear_plot_layout_preserving_epoch_cache(self) -> None:
+        """Clear the plot strip while keeping cached epoch panels alive."""
+        cached_panels = set(self._epoch_plot_panels.values())
+        while self._plot_layout.count():
+            item = self._plot_layout.takeAt(0)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget is not None and widget not in cached_panels:
+                widget.deleteLater()
 
     def _apply_roi_layer_visibility(self) -> None:
         """Mirror plot ROI visibility onto the napari Labels overlay."""

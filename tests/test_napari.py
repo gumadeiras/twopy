@@ -1109,6 +1109,36 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertIn("#ff0000", styles)
         self.assertIn("#0000ff", styles)
 
+    def test_visibility_select_none_uses_one_batch_callback(self) -> None:
+        """Confirm bulk visibility changes avoid one redraw per checkbox.
+
+        Inputs: three ROI labels and a Select-none button click.
+        Outputs: no per-checkbox callback and one batch visibility update.
+        """
+        _ = QApplication.instance() or QApplication([])
+        single_calls: list[tuple[str, bool]] = []
+        batch_calls: list[dict[str, bool]] = []
+        widget = visibility_options_widget(
+            title="ROIs",
+            labels=("roi_1", "roi_2", "roi_3"),
+            visibility={"roi_1": True, "roi_2": True, "roi_3": True},
+            on_change=lambda label, visible: single_calls.append((label, visible)),
+            on_change_batch=lambda visibility: batch_calls.append(visibility),
+        )
+        none_button = next(
+            button
+            for button in widget.findChildren(QPushButton)
+            if button.text() == "None"
+        )
+
+        none_button.click()
+
+        self.assertEqual(single_calls, [])
+        self.assertEqual(
+            batch_calls,
+            [{"roi_1": False, "roi_2": False, "roi_3": False}],
+        )
+
     def test_roi_visibility_can_hide_labels_layer_rois(self) -> None:
         """Confirm plot ROI visibility can hide ROI labels in napari.
 
@@ -1424,6 +1454,19 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(widget.sizeHint().width(), widget.sizeHint().height())
         self.assertEqual(widget.sizeHint().width(), 480)
+
+        widget.update_display(
+            show_sem=False,
+            roi_indices=(0,),
+            roi_colors=(QColor("#ff0000"),),
+            time_min=-1.0,
+            time_max=2.0,
+            value_min=-0.5,
+            value_max=1.5,
+            plot_size=320,
+        )
+
+        self.assertEqual(widget.sizeHint().width(), 320)
 
     def test_response_plot_export_writes_editable_figure_bundle(self) -> None:
         """Confirm response plots export in the expected file formats.

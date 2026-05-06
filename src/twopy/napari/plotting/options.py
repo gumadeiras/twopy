@@ -11,6 +11,7 @@ load analysis files, or compute responses.
 from collections.abc import Callable
 from typing import cast
 
+from qtpy.QtCore import QSignalBlocker
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -31,6 +32,7 @@ __all__ = [
 
 type CallableAxisBounds = Callable[..., None]
 type CallableVisibility = Callable[[str, bool], None]
+type CallableVisibilityBatch = Callable[[dict[str, bool]], None]
 
 
 def axis_options_widget(
@@ -93,6 +95,7 @@ def visibility_options_widget(
     labels: tuple[str, ...],
     visibility: dict[str, bool],
     on_change: object,
+    on_change_batch: object | None = None,
     colors: tuple[QColor, ...] | None = None,
 ) -> QWidget:
     """Create select-all/select-none checkboxes for plot visibility.
@@ -102,12 +105,20 @@ def visibility_options_widget(
         labels: Checkbox labels.
         visibility: Current visibility by label.
         on_change: Callback receiving ``(label, visible)``.
+        on_change_batch: Optional callback receiving all labels changed by
+            Select all or None. This prevents one bulk click from redrawing the
+            plots once per checkbox.
         colors: Optional swatch colors matching ``labels`` by position.
 
     Returns:
         Qt widget containing controls.
     """
     callback = cast(CallableVisibility, on_change)
+    batch_callback = (
+        cast(CallableVisibilityBatch, on_change_batch)
+        if on_change_batch is not None
+        else None
+    )
     widget = QWidget()
     layout = QVBoxLayout()
     layout.addWidget(QLabel(title))
@@ -140,8 +151,15 @@ def visibility_options_widget(
 
     def set_all(checked: bool) -> None:
         """Set all checkboxes and visibility flags together."""
+        blockers = [QSignalBlocker(checkbox) for checkbox in checkboxes]
         for checkbox in checkboxes:
             checkbox.setChecked(checked)
+        del blockers
+        if batch_callback is not None:
+            batch_callback({checkbox.text(): checked for checkbox in checkboxes})
+            return
+        for checkbox in checkboxes:
+            callback(checkbox.text(), checked)
 
     all_button.clicked.connect(lambda: set_all(True))
     none_button.clicked.connect(lambda: set_all(False))
