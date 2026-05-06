@@ -10,13 +10,13 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from twopy._segments import true_segments
 from twopy.conversion.types import (
     AcquisitionMetadata,
     AlignedMovieSource,
     AlignmentCropAudit,
     PhotodiodeSignals,
 )
+from twopy.photodiode import stimulus_frame_bounds_from_photodiode
 from twopy.spatial import SpatialCrop
 
 __all__ = ["load_alignment_valid_crop"]
@@ -25,8 +25,6 @@ ONE_X_PIXELS_PER_MICRON_AT_256_X = 0.4
 DEFAULT_MOTION_THRESHOLD_PERCENT = 150.0
 DEFAULT_PLANE_MOTION_LIMIT_MICRONS = 5.0
 DEFAULT_LINESCAN_MOTION_LIMIT_MICRONS = 15.0
-PROJECTOR_HZ = 60.0
-END_FLASH_PROJECTOR_FRAME_THRESHOLD = 19.0
 
 
 def load_alignment_valid_crop(
@@ -76,6 +74,11 @@ def load_alignment_valid_crop(
         spatial_shape=_movie_spatial_shape(aligned_movie),
         line_scan=line_scan,
     )
+    alignment_shift_pixels = _alignment_shift_pixels(
+        alignment[: aligned_movie.shape[0], :],
+        line_scan=line_scan,
+    )
+    motion_artifact_mask = alignment_shift_pixels > motion_threshold_pixels
     kept_alignment, over_moved_count = _remove_over_moved_alignment_rows(
         alignment_window,
         line_scan=line_scan,
@@ -95,6 +98,8 @@ def load_alignment_valid_crop(
         y_cutoff_pixels=y_cutoff,
         over_moved_frame_count=over_moved_count,
         motion_threshold_pixels=motion_threshold_pixels,
+        alignment_shift_pixels=alignment_shift_pixels,
+        motion_artifact_mask=motion_artifact_mask,
     )
 
 
@@ -117,118 +122,11 @@ def _stimulus_alignment_frame_range(
     if _is_line_scan(acquisition):
         return (0, aligned_movie.shape[0])
 
-    high_res_lines_per_frame = _high_res_lines_per_frame(
-        high_res_sample_count=photodiode.high_res_pd.size,
-        movie_frame_count=aligned_movie.shape[0],
-    )
-    frame_rate = _required_float_field(acquisition, "acq.frameRate")
-    event_starts, event_durations = _detect_high_res_photodiode_events(
+    return stimulus_frame_bounds_from_photodiode(
         photodiode.high_res_pd,
+        movie_frame_count=aligned_movie.shape[0],
+        frame_rate_hz=_required_float_field(acquisition, "acq.frameRate"),
     )
-    if event_starts.size == 0:
-        msg = "Cannot compute alignment-valid crop without photodiode flashes"
-        raise ValueError(msg)
-
-    end_event_index = _end_flash_event_index(
-        event_durations=event_durations,
-        high_res_lines_per_frame=high_res_lines_per_frame,
-        frame_rate=frame_rate,
-    )
-    epoch_begin = event_starts[0] / high_res_lines_per_frame
-    epoch_end = (event_starts[end_event_index] - 1) / high_res_lines_per_frame
-    start = int(np.floor(epoch_begin))
-    stop = int(np.floor(epoch_end)) + 1
-    if start < 0 or stop > aligned_movie.shape[0] or start >= stop:
-        msg = (
-            f"Invalid stimulus-bounded alignment range [{start}, {stop}) for "
-            f"{aligned_movie.shape[0]} frames"
-        )
-        raise ValueError(msg)
-    return start, stop
-
-
-def _end_flash_event_index(
-    *,
-    event_durations: npt.NDArray[np.int64],
-    high_res_lines_per_frame: int,
-    frame_rate: float,
-) -> int:
-    """Identify the final long photodiode event that marks stimulus end.
-
-    Args:
-        event_durations: Photodiode flash widths in high-resolution samples.
-        high_res_lines_per_frame: High-resolution samples per imaging frame.
-        frame_rate: Imaging frame rate in hertz.
-
-    Returns:
-        Index of the flash whose start bounds the stimulus end.
-    """
-    projector_frames = (
-        event_durations.astype(np.float64)
-        / float(high_res_lines_per_frame)
-        / frame_rate
-        * PROJECTOR_HZ
-    )
-    end_candidates = np.flatnonzero(
-        projector_frames > END_FLASH_PROJECTOR_FRAME_THRESHOLD,
-    )
-    if end_candidates.size == 0:
-        msg = "Cannot compute alignment-valid crop because no end flash was detected"
-        raise ValueError(msg)
-    if end_candidates.size == 2 and end_candidates[1] - end_candidates[0] > 3:
-        return int(end_candidates[1])
-    return int(end_candidates[0])
-
-
-def _detect_high_res_photodiode_events(
-    signal: npt.NDArray[np.float64],
-) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
-    """Detect high-resolution photodiode flash starts and durations.
-
-    Args:
-        signal: One-dimensional ``highResPd`` vector.
-
-    Returns:
-        Event start indices and durations in samples.
-
-    Conversion only needs the first stimulus flash and final long end flash for
-    the spatial crop. The threshold is the same midpoint rule used by the public
-    photodiode detector, kept local to avoid importing analysis-facing recording
-    objects into source conversion.
-    """
-    values = np.asarray(signal, dtype=np.float64)
-    if values.ndim != 1:
-        msg = f"highResPd must be one-dimensional; got {values.shape}"
-        raise ValueError(msg)
-    threshold = (float(np.min(values)) + float(np.max(values))) / 2.0
-    active = values > threshold
-    segments = true_segments(active)
-    starts = np.asarray([start for start, _ in segments], dtype=np.int64)
-    durations = np.asarray([stop - start for start, stop in segments], dtype=np.int64)
-    return starts, durations
-
-
-def _high_res_lines_per_frame(
-    *,
-    high_res_sample_count: int,
-    movie_frame_count: int,
-) -> int:
-    """Return high-resolution photodiode samples per movie frame.
-
-    Args:
-        high_res_sample_count: Number of samples in ``highResPd``.
-        movie_frame_count: Number of aligned movie frames.
-
-    Returns:
-        Integer high-resolution samples per imaging frame.
-    """
-    if high_res_sample_count % movie_frame_count != 0:
-        msg = (
-            "highResPd sample count must be an integer multiple of movie frames: "
-            f"{high_res_sample_count} samples for {movie_frame_count} frames"
-        )
-        raise ValueError(msg)
-    return high_res_sample_count // movie_frame_count
 
 
 def _motion_threshold_pixels(
@@ -273,11 +171,7 @@ def _remove_over_moved_alignment_rows(
     Returns:
         Filtered alignment rows and the number of dropped rows.
     """
-    if line_scan:
-        full_shift = np.abs(alignment[:, 0])
-    else:
-        full_shift = np.sqrt(alignment[:, 0] ** 2 + alignment[:, 1] ** 2)
-
+    full_shift = _alignment_shift_pixels(alignment, line_scan=line_scan)
     over_moved = full_shift > motion_threshold_pixels
     over_moved_percent = (
         100.0 * float(np.count_nonzero(over_moved)) / alignment.shape[0]
@@ -292,6 +186,25 @@ def _remove_over_moved_alignment_rows(
         )
         raise ValueError(msg)
     return kept, int(np.count_nonzero(over_moved))
+
+
+def _alignment_shift_pixels(
+    alignment: npt.NDArray[np.float64],
+    *,
+    line_scan: bool,
+) -> npt.NDArray[np.float64]:
+    """Return per-frame alignment shift magnitudes in pixels.
+
+    Args:
+        alignment: Alignment table with x/y offset columns.
+        line_scan: Whether this recording is a line scan.
+
+    Returns:
+        One shift magnitude per alignment row.
+    """
+    if line_scan:
+        return np.abs(alignment[:, 0])
+    return np.sqrt(alignment[:, 0] ** 2 + alignment[:, 1] ** 2)
 
 
 def _alignment_crop_from_offsets(

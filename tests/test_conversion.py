@@ -53,6 +53,10 @@ class ConversionTest(unittest.TestCase):
             self.assertEqual(loaded.alignment_crop.crop.shape, (2, 2))
             self.assertEqual(loaded.alignment_crop.alignment_frame_start, 0)
             self.assertEqual(loaded.alignment_crop.alignment_frame_stop, 2)
+            np.testing.assert_array_equal(
+                loaded.alignment_crop.motion_artifact_mask,
+                np.array([False, False, False]),
+            )
             self.assertEqual(loaded.run.fields["rig_name"], "OdorRig")
             self.assertEqual(loaded.run.fields["run_number"], 1)
             self.assertEqual(loaded.frame_counts.aligned_movie_frames, 3)
@@ -239,6 +243,14 @@ class ConversionTest(unittest.TestCase):
                 self.assertEqual(
                     h5_file["movie/alignment_valid_crop"].attrs["alignment_frame_stop"],
                     2,
+                )
+                np.testing.assert_array_equal(
+                    h5_file["movie/alignment_valid_crop/alignment_shift_pixels"][()],
+                    np.array([0.0, 0.0, 0.0]),
+                )
+                np.testing.assert_array_equal(
+                    h5_file["movie/alignment_valid_crop/motion_artifact_mask"][()],
+                    np.array([False, False, False]),
                 )
                 self.assertEqual(h5_file["metadata"].attrs["acq.frameRate"], 2.0)
                 self.assertEqual(h5_file["run"].attrs["rig_name"], "OdorRig")
@@ -431,6 +443,36 @@ class ConversionTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "acq.numberOfFrames"):
                 load_source_conversion_inputs(session_dir)
 
+    def test_rejects_ambiguous_long_end_flashes(self) -> None:
+        """Confirm conversion does not guess when end flashes are ambiguous.
+
+        Inputs: a temporary recording with three long high-rate photodiode
+        flashes.
+        Outputs: a clear ambiguity error before conversion writes files.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_session(
+                session_dir,
+                movie_values=np.zeros((4, 2, 2), dtype=np.float64),
+                high_res_pd=np.array(
+                    [
+                        1.0,
+                        1.0,
+                        0.0,
+                        1.0,
+                        1.0,
+                        0.0,
+                        1.0,
+                        1.0,
+                    ],
+                    dtype=np.float64,
+                ),
+            )
+
+            with self.assertRaisesRegex(ValueError, "Ambiguous stimulus end"):
+                load_source_conversion_inputs(session_dir)
+
     def _write_session(
         self,
         session_dir: Path,
@@ -440,6 +482,7 @@ class ConversionTest(unittest.TestCase):
         stimulus_data_column_count: int = 3,
         movie_values: np.ndarray | None = None,
         alignment_data: np.ndarray | None = None,
+        high_res_pd: np.ndarray | None = None,
     ) -> None:
         """Create a minimal valid source recording fixture.
 
@@ -450,6 +493,7 @@ class ConversionTest(unittest.TestCase):
             stimulus_data_column_count: Number of ``stimData`` columns to write.
             movie_values: Optional aligned movie values.
             alignment_data: Optional alignment text table.
+            high_res_pd: Optional high-resolution photodiode vector.
 
         Returns:
             None. The function writes all required source files to disk.
@@ -550,7 +594,13 @@ class ConversionTest(unittest.TestCase):
         )
         scipy.io.savemat(
             session_dir / "highResPd.mat",
-            {"highResPd": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 1.0])},
+            {
+                "highResPd": (
+                    np.array([1.0, 0.0, 0.0, 0.0, 1.0, 1.0])
+                    if high_res_pd is None
+                    else high_res_pd
+                ),
+            },
         )
 
         (session_dir / "stimulus_name_changes_001.tif").touch()

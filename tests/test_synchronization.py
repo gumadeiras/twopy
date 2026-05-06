@@ -59,6 +59,22 @@ class SynchronizationTest(unittest.TestCase):
         self.assertEqual(event_set.events[0].start_sample, 1)
         self.assertEqual(event_set.events[0].stop_sample, 4)
 
+    def test_default_threshold_uses_lab_range_fraction(self) -> None:
+        """Confirm omitted thresholds use the 0.3 signal-range rule.
+
+        Inputs: a dim flash above 0.3 range but below midpoint.
+        Outputs: the dim flash is detected and the stored threshold is 0.3.
+        """
+        event_set = detect_photodiode_events(
+            np.array([0.0, 0.4, 0.4, 0.0, 1.0, 1.0, 0.0]),
+        )
+
+        self.assertEqual(event_set.threshold, 0.3)
+        self.assertEqual(
+            [(event.start_sample, event.stop_sample) for event in event_set.events],
+            [(1, 3), (4, 6)],
+        )
+
     def test_pairs_recording_events_to_imaging_frames(self) -> None:
         """Confirm high-resolution events pair with imaging-frame events.
 
@@ -146,6 +162,8 @@ class SynchronizationTest(unittest.TestCase):
             high_res_pd=high_res_pd,
             mean_image=np.zeros((2, 2), dtype=np.float64),
             alignment_valid_crop=full_frame_crop((2, 2)),
+            alignment_shift_pixels=np.zeros(len(imaging_res_pd), dtype=np.float64),
+            motion_artifact_mask=np.zeros(len(imaging_res_pd), dtype=np.bool_),
             frame_counts=FrameCountAudit(
                 aligned_movie_frames=len(imaging_res_pd),
                 imaging_res_pd_samples=len(imaging_res_pd),

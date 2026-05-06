@@ -445,6 +445,8 @@ class BackgroundSubtractionTest(unittest.TestCase):
             high_res_pd=np.zeros(0, dtype=np.float64),
             mean_image=movie_values.mean(axis=0),
             alignment_valid_crop=alignment_crop,
+            alignment_shift_pixels=np.zeros(movie_values.shape[0], dtype=np.float64),
+            motion_artifact_mask=np.zeros(movie_values.shape[0], dtype=np.bool_),
             frame_counts=FrameCountAudit(
                 aligned_movie_frames=movie_values.shape[0],
                 imaging_res_pd_samples=movie_values.shape[0],

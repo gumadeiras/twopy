@@ -14,7 +14,12 @@ from typing import cast
 
 from twopy.converted import RecordingData
 
-__all__ = ["StimulusSpecificColumnMapping", "map_stimulus_specific_column"]
+__all__ = [
+    "StimulusSpecificColumnMapping",
+    "map_stimulus_specific_column",
+    "stimulus_column_index",
+    "stimulus_epoch_names_by_number",
+]
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,48 @@ def map_stimulus_specific_column(
             ),
         )
     return tuple(mappings)
+
+
+def stimulus_column_index(recording: RecordingData, column_name: str) -> int:
+    """Return the index for one converted stimulus data column.
+
+    Args:
+        recording: Loaded converted recording.
+        column_name: Required column name from ``stimulus/data_column_names``.
+
+    Returns:
+        Integer column index.
+
+    Raises:
+        ValueError: If the column is not present.
+
+    Keeping this lookup in one helper avoids slightly different error handling
+    in timing, classification, and script-facing analysis code.
+    """
+    try:
+        return recording.stimulus_data_column_names.index(column_name)
+    except ValueError as error:
+        msg = f"stimulus/data is missing required column {column_name!r}"
+        raise ValueError(msg) from error
+
+
+def stimulus_epoch_names_by_number(recording: RecordingData) -> dict[int, str]:
+    """Map one-based stimulus epoch numbers to readable epoch names.
+
+    Args:
+        recording: Loaded converted recording with stimulus parameter metadata.
+
+    Returns:
+        Dictionary mapping epoch number to name.
+
+    Epoch numbers in ``stimulus/data`` are one-based because they come from the
+    stimulus computer. Missing names fall back to ``epoch_N`` at the call site.
+    """
+    names: dict[int, str] = {}
+    for index, parameters in enumerate(recording.stimulus_parameters, start=1):
+        epoch_name = parameters.get("epochName", f"epoch_{index}")
+        names[index] = str(epoch_name)
+    return names
 
 
 def _selected_stimtypes(

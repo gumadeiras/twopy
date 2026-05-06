@@ -18,6 +18,11 @@ from twopy.analysis.dff import (
     RoiDeltaFOverF,
     compute_roi_delta_f_over_f,
 )
+from twopy.analysis.epoch_mapping import (
+    InterpolatedEpochMapping,
+    interpolate_stimulus_epochs_to_frame_windows,
+)
+from twopy.analysis.motion import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.trials import (
     EpochFrameWindow,
     FrameWindow,
@@ -30,6 +35,7 @@ from twopy.analysis.trials import (
 )
 
 __all__ = [
+    "apply_motion_artifact_mask_to_delta_f_over_f",
     "BackgroundCorrectedRoiTraces",
     "BackgroundCorrectionMethod",
     "compute_roi_delta_f_over_f",
@@ -38,6 +44,8 @@ __all__ = [
     "extract_background_corrected_roi_traces",
     "frame_windows_from_photodiode_alignment",
     "FrameWindow",
+    "InterpolatedEpochMapping",
+    "interpolate_stimulus_epochs_to_frame_windows",
     "make_frame_windows",
     "map_stimulus_epochs_to_frame_windows",
     "RoiDeltaFOverF",

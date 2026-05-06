@@ -12,42 +12,28 @@ nominal frame rates.
 from dataclasses import dataclass
 from typing import Literal
 
-import numpy as np
 import numpy.typing as npt
 
-from twopy._segments import true_segments
 from twopy.converted import RecordingData
+from twopy.photodiode import (
+    DEFAULT_PHOTODIODE_THRESHOLD_FRACTION,
+    PhotodiodeEvent,
+    PhotodiodePolarity,
+    detect_photodiode_event_segments,
+)
 
 __all__ = [
     "AlignedPhotodiodeEvent",
     "PhotodiodeAlignment",
     "PhotodiodeEvent",
     "PhotodiodeEventSet",
+    "PhotodiodePolarity",
     "detect_photodiode_events",
     "detect_recording_photodiode_events",
     "pair_photodiode_events_to_imaging_frames",
 ]
 
-PhotodiodePolarity = Literal["above", "below"]
 PhotodiodeSignalName = Literal["high_res_pd", "imaging_res_pd"]
-
-
-@dataclass(frozen=True)
-class PhotodiodeEvent:
-    """One contiguous photodiode flash segment.
-
-    Inputs: one thresholded photodiode signal.
-    Outputs: start, stop, center, duration, and peak for one detected event.
-
-    ``start_sample`` is inclusive and ``stop_sample`` is exclusive. For
-    ``imaging_res_pd``, sample indices are imaging-frame indices.
-    """
-
-    start_sample: int
-    stop_sample: int
-    center_sample: float
-    duration_samples: int
-    peak_value: float
 
 
 @dataclass(frozen=True)
@@ -105,6 +91,7 @@ def detect_photodiode_events(
     *,
     signal_name: PhotodiodeSignalName = "high_res_pd",
     threshold: float | None = None,
+    threshold_fraction: float = DEFAULT_PHOTODIODE_THRESHOLD_FRACTION,
     polarity: PhotodiodePolarity = "above",
     minimum_width_samples: int = 1,
     merge_gap_samples: int = 0,
@@ -114,8 +101,10 @@ def detect_photodiode_events(
     Args:
         signal: One-dimensional photodiode samples.
         signal_name: Name of the converted photodiode signal being decoded.
-        threshold: Optional threshold. When omitted, the midpoint between the
-            signal minimum and maximum is used.
+        threshold: Optional threshold. When omitted, twopy uses
+            ``min + threshold_fraction * range``.
+        threshold_fraction: Signal-range fraction used when ``threshold`` is
+            omitted. Defaults to the lab analysis convention, 0.3.
         polarity: ``above`` detects samples greater than threshold; ``below``
             detects samples less than threshold.
         minimum_width_samples: Drop events shorter than this width.
@@ -131,9 +120,10 @@ def detect_photodiode_events(
     This function segments flashes. It does not classify stimulus-specific flash
     patterns because that requires stimulus protocol rules.
     """
-    events, resolved_threshold = _detect_events(
+    events, resolved_threshold = detect_photodiode_event_segments(
         signal=signal,
         threshold=threshold,
+        threshold_fraction=threshold_fraction,
         polarity=polarity,
         minimum_width_samples=minimum_width_samples,
         merge_gap_samples=merge_gap_samples,
@@ -151,6 +141,7 @@ def detect_recording_photodiode_events(
     *,
     high_res_threshold: float | None = None,
     imaging_res_threshold: float | None = None,
+    threshold_fraction: float = DEFAULT_PHOTODIODE_THRESHOLD_FRACTION,
     polarity: PhotodiodePolarity = "above",
     minimum_width_samples: int = 1,
     merge_gap_samples: int = 0,
@@ -161,6 +152,8 @@ def detect_recording_photodiode_events(
         recording: Loaded converted recording.
         high_res_threshold: Optional threshold for ``high_res_pd``.
         imaging_res_threshold: Optional threshold for ``imaging_res_pd``.
+        threshold_fraction: Signal-range fraction used for either signal when
+            its explicit threshold is omitted.
         polarity: Which side of threshold marks a photodiode flash.
         minimum_width_samples: Drop events shorter than this width in each
             signal.
@@ -178,6 +171,7 @@ def detect_recording_photodiode_events(
         recording.high_res_pd,
         signal_name="high_res_pd",
         threshold=high_res_threshold,
+        threshold_fraction=threshold_fraction,
         polarity=polarity,
         minimum_width_samples=minimum_width_samples,
         merge_gap_samples=merge_gap_samples,
@@ -186,6 +180,7 @@ def detect_recording_photodiode_events(
         recording.imaging_res_pd,
         signal_name="imaging_res_pd",
         threshold=imaging_res_threshold,
+        threshold_fraction=threshold_fraction,
         polarity=polarity,
         minimum_width_samples=minimum_width_samples,
         merge_gap_samples=merge_gap_samples,
@@ -237,143 +232,4 @@ def pair_photodiode_events_to_imaging_frames(
             imaging_res_events,
             strict=True,
         )
-    )
-
-
-def _detect_events(
-    *,
-    signal: npt.ArrayLike,
-    threshold: float | None,
-    polarity: PhotodiodePolarity,
-    minimum_width_samples: int,
-    merge_gap_samples: int,
-) -> tuple[tuple[PhotodiodeEvent, ...], float]:
-    """Detect event segments and return the threshold used.
-
-    Args:
-        signal: One-dimensional photodiode samples.
-        threshold: Optional threshold.
-        polarity: Which side of threshold marks an event.
-        minimum_width_samples: Drop events shorter than this width.
-        merge_gap_samples: Merge neighboring events separated by this width.
-
-    Returns:
-        ``(events, threshold)``.
-    """
-    values = np.asarray(signal, dtype=np.float64)
-    if values.ndim != 1:
-        msg = f"Photodiode signal must be one-dimensional; got {values.shape}"
-        raise ValueError(msg)
-    if minimum_width_samples < 1:
-        msg = "minimum_width_samples must be at least 1"
-        raise ValueError(msg)
-    if merge_gap_samples < 0:
-        msg = "merge_gap_samples cannot be negative"
-        raise ValueError(msg)
-
-    resolved_threshold = (
-        _default_threshold(values) if threshold is None else float(threshold)
-    )
-    if values.size == 0:
-        return (), resolved_threshold
-
-    active = _threshold_signal(
-        values=values,
-        threshold=resolved_threshold,
-        polarity=polarity,
-    )
-    segments = true_segments(active)
-    merged_segments = _merge_close_segments(segments, merge_gap_samples)
-    events = tuple(
-        _event_from_segment(values, start, stop)
-        for start, stop in merged_segments
-        if stop - start >= minimum_width_samples
-    )
-    return events, resolved_threshold
-
-
-def _default_threshold(values: npt.NDArray[np.float64]) -> float:
-    """Choose a simple midpoint threshold for one signal.
-
-    Args:
-        values: One-dimensional signal values.
-
-    Returns:
-        Midpoint between minimum and maximum, or zero for an empty signal.
-    """
-    if values.size == 0:
-        return 0.0
-    return float((np.nanmin(values) + np.nanmax(values)) / 2.0)
-
-
-def _threshold_signal(
-    *,
-    values: npt.NDArray[np.float64],
-    threshold: float,
-    polarity: PhotodiodePolarity,
-) -> npt.NDArray[np.bool_]:
-    """Convert signal values into an active-event mask.
-
-    Args:
-        values: One-dimensional signal values.
-        threshold: Event threshold.
-        polarity: Which side of threshold is active.
-
-    Returns:
-        Boolean mask with one value per input sample.
-    """
-    if polarity == "above":
-        return values > threshold
-    return values < threshold
-
-
-def _merge_close_segments(
-    segments: tuple[tuple[int, int], ...],
-    merge_gap_samples: int,
-) -> tuple[tuple[int, int], ...]:
-    """Merge event segments separated by short inactive gaps.
-
-    Args:
-        segments: Event start/stop pairs.
-        merge_gap_samples: Maximum inactive gap to merge.
-
-    Returns:
-        Merged start/stop pairs.
-    """
-    if len(segments) <= 1 or merge_gap_samples == 0:
-        return segments
-
-    merged: list[tuple[int, int]] = [segments[0]]
-    for start, stop in segments[1:]:
-        last_start, last_stop = merged[-1]
-        if start - last_stop <= merge_gap_samples:
-            merged[-1] = (last_start, stop)
-        else:
-            merged.append((start, stop))
-
-    return tuple(merged)
-
-
-def _event_from_segment(
-    values: npt.NDArray[np.float64],
-    start: int,
-    stop: int,
-) -> PhotodiodeEvent:
-    """Summarize one active event segment.
-
-    Args:
-        values: Full one-dimensional photodiode signal.
-        start: Inclusive event start sample.
-        stop: Exclusive event stop sample.
-
-    Returns:
-        ``PhotodiodeEvent`` for the segment.
-    """
-    event_values = values[start:stop]
-    return PhotodiodeEvent(
-        start_sample=start,
-        stop_sample=stop,
-        center_sample=float(start + (stop - start - 1) / 2.0),
-        duration_samples=stop - start,
-        peak_value=float(np.nanmax(event_values)),
     )

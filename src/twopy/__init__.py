@@ -11,11 +11,14 @@ from twopy.analysis import (
     DeltaFOverFFitMode,
     EpochFrameWindow,
     FrameWindow,
+    InterpolatedEpochMapping,
     RoiDeltaFOverF,
     WindowedRoiResponse,
+    apply_motion_artifact_mask_to_delta_f_over_f,
     compute_roi_delta_f_over_f,
     extract_background_corrected_roi_traces,
     frame_windows_from_photodiode_alignment,
+    interpolate_stimulus_epochs_to_frame_windows,
     make_frame_windows,
     map_stimulus_epochs_to_frame_windows,
     select_epoch_frame_windows,
@@ -40,6 +43,7 @@ from twopy.roi import (
     make_roi_set,
     save_roi_set,
 )
+from twopy.saved_analysis import SavedAnalysisLastRoi, load_saved_analysis_last_roi
 from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
 from twopy.stimulus import (
     StimulusSpecificColumnMapping,
@@ -58,6 +62,7 @@ from twopy.synchronization import (
 __all__ = [
     "__version__",
     "AlignedPhotodiodeEvent",
+    "apply_motion_artifact_mask_to_delta_f_over_f",
     "BackgroundCorrectedRoiTraces",
     "BackgroundCorrectionMethod",
     "ClassifiedPhotodiodeEvent",
@@ -76,6 +81,8 @@ __all__ = [
     "frame_windows_from_photodiode_alignment",
     "FrameWindow",
     "full_frame_crop",
+    "InterpolatedEpochMapping",
+    "interpolate_stimulus_epochs_to_frame_windows",
     "load_converted_recording",
     "load_roi_set",
     "load_source_conversion_inputs",
@@ -93,12 +100,14 @@ __all__ = [
     "RoiSet",
     "RoiTraces",
     "save_roi_set",
+    "SavedAnalysisLastRoi",
     "select_epoch_frame_windows",
     "split_traces_by_frame_windows",
     "SpatialCrop",
     "SpatialDomain",
     "StimulusSpecificColumnMapping",
     "WindowedRoiResponse",
+    "load_saved_analysis_last_roi",
 ]
 
 __version__ = "0.1.0"

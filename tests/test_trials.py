@@ -258,6 +258,8 @@ class ResponsesTest(unittest.TestCase):
             high_res_pd=np.zeros(frame_count, dtype=np.float64),
             mean_image=np.zeros((2, 2), dtype=np.float64),
             alignment_valid_crop=full_frame_crop((2, 2)),
+            alignment_shift_pixels=np.zeros(frame_count, dtype=np.float64),
+            motion_artifact_mask=np.zeros(frame_count, dtype=np.bool_),
             frame_counts=FrameCountAudit(
                 aligned_movie_frames=frame_count,
                 imaging_res_pd_samples=frame_count,

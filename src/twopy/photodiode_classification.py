@@ -18,6 +18,7 @@ import numpy as np
 
 from twopy._segments import constant_segments, true_segments
 from twopy.converted import RecordingData
+from twopy.stimulus import stimulus_column_index, stimulus_epoch_names_by_number
 from twopy.synchronization import AlignedPhotodiodeEvent, PhotodiodeAlignment
 
 __all__ = [
@@ -183,7 +184,7 @@ def classify_recording_photodiode_events(
     windows = _classified_windows(
         events=classified_events,
         epoch_runs=epoch_runs,
-        epoch_names=_epoch_names_by_number(recording),
+        epoch_names=stimulus_epoch_names_by_number(recording),
     )
 
     return ClassifiedStimulusTiming(
@@ -217,7 +218,7 @@ def _stimulus_flash_segments(
     Returns:
         One segment per contiguous active flash run.
     """
-    flash_column = _stimulus_column_index(recording, "photodiode_flash")
+    flash_column = stimulus_column_index(recording, "photodiode_flash")
     flash_values = recording.stimulus_data[:, flash_column]
     active = np.asarray(flash_values > flash_threshold, dtype=np.bool_)
     segments = true_segments(active)
@@ -239,7 +240,7 @@ def _stimulus_epoch_runs(recording: RecordingData) -> tuple[_StimulusEpochRun, .
     Returns:
         One run per contiguous positive epoch number.
     """
-    epoch_column = _stimulus_column_index(recording, "epoch_number")
+    epoch_column = stimulus_column_index(recording, "epoch_number")
     epoch_numbers = recording.stimulus_data[:, epoch_column].astype(np.int64)
     all_segments = constant_segments(epoch_numbers)
     epoch_runs = tuple(
@@ -255,23 +256,6 @@ def _stimulus_epoch_runs(recording: RecordingData) -> tuple[_StimulusEpochRun, .
         msg = "stimulus/data does not contain any positive epoch runs"
         raise ValueError(msg)
     return epoch_runs
-
-
-def _stimulus_column_index(recording: RecordingData, column_name: str) -> int:
-    """Return the column index for one converted stimulus data column.
-
-    Args:
-        recording: Loaded converted recording.
-        column_name: Required stimulus column name.
-
-    Returns:
-        Integer column index.
-    """
-    try:
-        return recording.stimulus_data_column_names.index(column_name)
-    except ValueError as error:
-        msg = f"stimulus/data is missing required column {column_name!r}"
-        raise ValueError(msg) from error
 
 
 def _validate_event_and_flash_counts(
@@ -498,19 +482,3 @@ def _typical_transition_duration(
         dtype=np.float64,
     )
     return float(np.median(durations))
-
-
-def _epoch_names_by_number(recording: RecordingData) -> dict[int, str]:
-    """Create an epoch-number to epoch-name map.
-
-    Args:
-        recording: Loaded converted recording.
-
-    Returns:
-        Dictionary keyed by stimulus epoch number.
-    """
-    names: dict[int, str] = {}
-    for index, parameters in enumerate(recording.stimulus_parameters, start=1):
-        raw_name = parameters.get("epochName", f"epoch_{index}")
-        names[index] = str(raw_name)
-    return names

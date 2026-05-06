@@ -153,6 +153,8 @@ class RecordingData:
     high_res_pd: npt.NDArray[np.float64]
     mean_image: npt.NDArray[np.float64]
     alignment_valid_crop: SpatialCrop
+    alignment_shift_pixels: npt.NDArray[np.float64]
+    motion_artifact_mask: npt.NDArray[np.bool_]
     frame_counts: FrameCountAudit
 
 
@@ -233,6 +235,14 @@ def load_converted_recording(
                 h5_file["movie/mean_image"][()],
             ),
             alignment_valid_crop=_read_alignment_valid_crop(h5_file),
+            alignment_shift_pixels=cast(
+                npt.NDArray[np.float64],
+                h5_file["movie/alignment_valid_crop/alignment_shift_pixels"][()],
+            ),
+            motion_artifact_mask=cast(
+                npt.NDArray[np.bool_],
+                h5_file["movie/alignment_valid_crop/motion_artifact_mask"][()],
+            ),
             frame_counts=_read_frame_counts(h5_file),
         )
 
@@ -317,6 +327,18 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
             "alignment_valid_crop original shape must match movie spatial shape; "
             f"got {recording.alignment_valid_crop.original_shape} and "
             f"{recording.movie.shape[1:]}"
+        )
+        raise ValueError(msg)
+    if recording.alignment_shift_pixels.shape != (frame_count,):
+        msg = (
+            "alignment_shift_pixels must have one value per movie frame; "
+            f"got {recording.alignment_shift_pixels.shape} for {frame_count} frames"
+        )
+        raise ValueError(msg)
+    if recording.motion_artifact_mask.shape != (frame_count,):
+        msg = (
+            "motion_artifact_mask must have one value per movie frame; "
+            f"got {recording.motion_artifact_mask.shape} for {frame_count} frames"
         )
         raise ValueError(msg)
 
