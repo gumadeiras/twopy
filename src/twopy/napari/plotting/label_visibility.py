@@ -21,7 +21,7 @@ __all__ = [
 
 _LABEL_COLOR_LOOKAHEAD = 4096
 _BASE_LABEL_COLORMAP_METADATA_KEY = "twopy_base_label_colormap"
-_DESELECTED_ROI_ALPHA = 0.1
+_DESELECTED_ROI_ALPHA = 0.2
 type VisibilityKey = int | str
 type VisibilityState = Mapping[int, bool] | Mapping[str, bool]
 

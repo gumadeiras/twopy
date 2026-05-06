@@ -55,7 +55,6 @@ from twopy.napari.plotting.panels import (
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     clear_layout,
-    epoch_key_label,
     global_time_bounds,
     global_value_bounds,
     opaque_colors,
@@ -611,7 +610,7 @@ class _ResponsePlotWidget(QWidget):
             visibility_options_widget(
                 title="Epochs",
                 labels=tuple(
-                    epoch_key_label(epoch.epoch_number, epoch.epoch_name)
+                    f"{epoch.epoch_number}: {epoch.epoch_name}"
                     for epoch in self._plot_data.epochs
                 ),
                 visibility=self._epoch_visibility,
@@ -770,7 +769,9 @@ class _ResponsePlotWidget(QWidget):
             Tuple of displayed epoch row indices.
         """
         return tuple(
-            index for index, visible in self._epoch_visibility.items() if visible
+            index
+            for index in range(self._epoch_count())
+            if self._epoch_visibility.get(index, True)
         )
 
     def _roi_labels(self) -> tuple[str, ...]:
@@ -851,6 +852,7 @@ class _ResponsePlotWidget(QWidget):
                 plot_size=self._plot_size,
             )
             self._plot_layout.addWidget(self._epoch_plot_panels[epoch_index])
+            self._epoch_plot_panels[epoch_index].show()
         self._plot_layout.addStretch(1)
 
     def _ensure_epoch_plot_cache(self) -> None:
@@ -879,10 +881,12 @@ class _ResponsePlotWidget(QWidget):
                 plot_size=self._plot_size,
             )
             self._epoch_plot_widgets[epoch_index] = plot
-            self._epoch_plot_panels[epoch_index] = epoch_plot_panel(
+            panel = epoch_plot_panel(
                 title=f"Epoch {epoch.epoch_number}: {epoch.epoch_name}",
                 plot=plot,
             )
+            panel.hide()
+            self._epoch_plot_panels[epoch_index] = panel
 
     def _clear_epoch_plot_cache(self) -> None:
         """Delete cached epoch plot panels and widgets."""
@@ -899,7 +903,14 @@ class _ResponsePlotWidget(QWidget):
             if item is None:
                 continue
             widget = item.widget()
-            if widget is not None and widget not in cached_panels:
+            if widget is None:
+                continue
+            if widget in cached_panels:
+                # Qt keeps a widget visible after it is removed from a layout.
+                # Hidden epoch plots must be hidden explicitly so stale panels
+                # cannot remain on screen after checkbox changes.
+                widget.hide()
+            else:
                 widget.deleteLater()
 
     def _apply_roi_layer_visibility(self) -> None:

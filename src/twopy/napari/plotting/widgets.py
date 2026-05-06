@@ -21,7 +21,6 @@ from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 __all__ = [
     "EpochPlotWidget",
     "clear_layout",
-    "epoch_key_label",
     "global_time_bounds",
     "global_value_bounds",
     "ordered_bounds",
@@ -350,19 +349,6 @@ def roi_colors_from_label_values(
         QColor("#43aa8b"),
     )
     return tuple(base[index % len(base)] for index in range(fallback_count))
-
-
-def epoch_key_label(epoch_number: int, epoch_name: str) -> str:
-    """Return a stable checkbox label for one epoch type.
-
-    Args:
-        epoch_number: Epoch number.
-        epoch_name: Epoch name.
-
-    Returns:
-        Human-readable label.
-    """
-    return f"{epoch_number}: {epoch_name}"
 
 
 def ordered_bounds(min_value: float, max_value: float) -> tuple[float, float]:

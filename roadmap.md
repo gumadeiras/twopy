@@ -175,13 +175,15 @@ decided.
   require the active Labels layer to match the displayed alignment-valid crop,
   then persist or analyze full-frame ROI masks with zeros outside that crop.
 - Napari ROI and epoch visibility controls operate on already-computed response
-  data. Checkbox changes update cached plot widgets directly, and bulk
-  select-all/select-none actions redraw once instead of once per checkbox.
-- Napari epoch visibility controls use stable epoch keys instead of display
-  text, so selecting and deselecting epochs is idempotent even if labels repeat.
+  data. Checkbox changes update cached plot widgets directly, hidden cached
+  epoch panels are explicitly hidden, and bulk select-all/select-none actions
+  redraw once instead of once per checkbox.
+- Napari epoch visibility controls use displayed row indices instead of display
+  text, so selecting and deselecting epochs is idempotent even if labels repeat
+  or gray interleave epochs start hidden by default.
 - Napari Save Analysis + ROIs persists ROI and analysis files without replacing
   the current in-memory plot preview.
-- ROI visibility controls hide existing label values without making future
+- ROI visibility controls dim existing label values without making future
   newly drawn label numbers transparent or forcing them to share one fallback
   color, so users can keep adding ROIs after filtering plots.
 - Napari movie-frame range changes reuse the resolved recording path even when

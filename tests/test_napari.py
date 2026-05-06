@@ -1207,7 +1207,7 @@ class NapariAdapterTest(unittest.TestCase):
         )
 
         np.testing.assert_array_equal(layer.data, label_image)
-        self.assertAlmostEqual(layer.get_color(1)[3], 0.1)
+        self.assertAlmostEqual(layer.get_color(1)[3], 0.2)
         self.assertEqual(layer.get_color(2)[3], 1.0)
 
     def test_roi_visibility_keeps_new_labels_drawable(self) -> None:
@@ -1226,7 +1226,7 @@ class NapariAdapterTest(unittest.TestCase):
             colors=(QColor("#ff0000"),),
         )
 
-        self.assertAlmostEqual(layer.get_color(10)[3], 0.1)
+        self.assertAlmostEqual(layer.get_color(10)[3], 0.2)
         self.assertEqual(layer.get_color(11)[3], 1.0)
         self.assertEqual(layer.get_color(12)[3], 1.0)
         self.assertFalse(np.array_equal(layer.get_color(11), layer.get_color(12)))
@@ -1248,7 +1248,7 @@ class NapariAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(layer.get_color(1)[3], 1.0)
-        self.assertAlmostEqual(layer.get_color(2)[3], 0.1)
+        self.assertAlmostEqual(layer.get_color(2)[3], 0.2)
 
     def test_display_helpers_transpose_movie_axes_for_napari(self) -> None:
         """Confirm movie axes are transposed only at the napari boundary.
@@ -1585,6 +1585,53 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(response_widget._visible_epoch_indices(), (0,))
         self.assertEqual(tuple(response_widget._epoch_plot_widgets), (0, 1))
+
+    def test_hidden_epoch_plot_panel_is_hidden_after_layout_refresh(self) -> None:
+        """Confirm hidden epoch plots do not remain visible as stale Qt panels.
+
+        Inputs: one gray epoch hidden by default plus two visible epochs.
+        Outputs: hiding the last visible row explicitly hides that cached panel.
+        """
+        _ = QApplication.instance() or QApplication([])
+        time_seconds = np.array([0.0, 1.0], dtype=np.float64)
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Gray Interleave",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor A",
+                    epoch_number=2,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor B",
+                    epoch_number=3,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[4.0, 5.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+
+        response_widget._set_epoch_visibility(2, False)
+
+        self.assertEqual(response_widget._visible_epoch_indices(), (1,))
+        self.assertTrue(response_widget._epoch_plot_panels[0].isHidden())
+        self.assertFalse(response_widget._epoch_plot_panels[1].isHidden())
+        self.assertTrue(response_widget._epoch_plot_panels[2].isHidden())
 
     def test_roi_visibility_toggle_is_idempotent_by_row_index(self) -> None:
         """Confirm ROI visibility does not depend on unique display labels.
