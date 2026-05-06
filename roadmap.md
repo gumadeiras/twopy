@@ -72,6 +72,8 @@ decided.
 - ROI-level dF/F computation uses corrected ROI fluorescence, gray interleave
   windows, last-second baseline samples, one shared exponential tau, and one
   amplitude per ROI.
+- ROI-level dF/F supports a default robust exponential fit mode plus
+  `source_bounds` mode for original source-bound audit comparisons.
 - Photodiode event segmentation for converted `high_res_pd` and
   `imaging_res_pd` signals.
 - Order-based pairing of high-resolution photodiode events to imaging-frame

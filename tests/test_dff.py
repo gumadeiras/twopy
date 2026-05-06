@@ -61,6 +61,7 @@ class DeltaFOverFTest(unittest.TestCase):
             ),
         )
         self.assertEqual(result.metadata["method"], "shared_tau_roi_amplitude")
+        self.assertEqual(result.metadata["fit_mode"], "robust")
 
     def test_uses_last_requested_seconds_of_each_interleave(self) -> None:
         """Confirm interleave baseline uses the end of the gray window.
@@ -81,6 +82,82 @@ class DeltaFOverFTest(unittest.TestCase):
         np.testing.assert_allclose(result.amplitudes, np.array([12.0]))
         np.testing.assert_allclose(result.baseline, np.full((4, 1), 12.0))
         np.testing.assert_allclose(result.interleave_fluorescence, np.array([[12.0]]))
+
+    def test_source_bounds_fit_mode_records_and_runs(self) -> None:
+        """Confirm source-bounds mode is available for audit comparisons.
+
+        Inputs: positive interleave fluorescence where source-style bounds are
+        ordered.
+        Outputs: dF/F result with metadata recording ``source_bounds``.
+        """
+        traces = self._traces(
+            np.array(
+                [
+                    [10.0],
+                    [10.0],
+                    [20.0],
+                    [10.0],
+                    [10.0],
+                ],
+            ),
+        )
+
+        result = compute_roi_delta_f_over_f(
+            traces,
+            (
+                FrameWindow(0, 0, 2, "gray_1"),
+                FrameWindow(1, 3, 5, "gray_2"),
+            ),
+            data_rate_hz=2.0,
+            seconds_interleave_use=None,
+            fit_mode="source_bounds",
+        )
+
+        self.assertEqual(result.metadata["fit_mode"], "source_bounds")
+        self.assertEqual(result.values.shape, (5, 1))
+
+    def test_robust_fit_mode_filters_nonpositive_interleave_sample(self) -> None:
+        """Confirm robust mode tolerates one nonpositive baseline sample.
+
+        Inputs: one nonpositive and two positive gray-window averages.
+        Outputs: finite dF/F values from the remaining positive fit samples.
+        """
+        traces = self._traces(np.array([[10.0], [-1.0], [10.0], [20.0], [10.0]]))
+
+        result = compute_roi_delta_f_over_f(
+            traces,
+            (
+                FrameWindow(0, 0, 1, "gray_1"),
+                FrameWindow(1, 1, 2, "gray_2"),
+                FrameWindow(2, 4, 5, "gray_3"),
+            ),
+            data_rate_hz=1.0,
+            seconds_interleave_use=None,
+            fit_mode="robust",
+        )
+
+        self.assertTrue(np.isfinite(result.values).all())
+
+    def test_source_bounds_fit_mode_rejects_nonpositive_interleave_sample(self) -> None:
+        """Confirm source-bounds mode does not hide nonpositive fit samples.
+
+        Inputs: one nonpositive gray-window average.
+        Outputs: a clear validation error.
+        """
+        traces = self._traces(np.array([[10.0], [-1.0], [10.0]]))
+
+        with self.assertRaisesRegex(ValueError, "positive interleave"):
+            compute_roi_delta_f_over_f(
+                traces,
+                (
+                    FrameWindow(0, 0, 1, "gray_1"),
+                    FrameWindow(1, 1, 2, "gray_2"),
+                    FrameWindow(2, 2, 3, "gray_3"),
+                ),
+                data_rate_hz=1.0,
+                seconds_interleave_use=None,
+                fit_mode="source_bounds",
+            )
 
     def test_rejects_interleave_window_outside_trace_range(self) -> None:
         """Confirm baseline windows must be inside the trace frame range.

@@ -108,6 +108,7 @@ dff = compute_roi_delta_f_over_f(
     traces,
     interleave_windows,
     data_rate_hz=float(recording.acquisition_metadata["acq.frameRate"]),
+    fit_mode="robust",
 )
 ```
 
@@ -117,4 +118,6 @@ stimulus epoch windows come from classified photodiode events instead of
 nominal frame-rate assumptions. `timing.events` keeps the start, transition,
 and end classifications auditable. ROI dF/F uses corrected ROI fluorescence
 plus gray interleave windows to fit one shared exponential tau and one
-amplitude per ROI.
+amplitude per ROI. The default dF/F fit mode is `robust`; pass
+`fit_mode="source_bounds"` when you need original source-bound behavior for
+audit comparisons.

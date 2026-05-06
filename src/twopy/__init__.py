@@ -8,6 +8,7 @@ Outputs: package constants and helper functions imported by users and scripts.
 from twopy.analysis import (
     BackgroundCorrectedRoiTraces,
     BackgroundCorrectionMethod,
+    DeltaFOverFFitMode,
     EpochFrameWindow,
     FrameWindow,
     RoiDeltaFOverF,
@@ -66,6 +67,7 @@ __all__ = [
     "convert_recording_to_twopy",
     "detect_photodiode_events",
     "detect_recording_photodiode_events",
+    "DeltaFOverFFitMode",
     "EpochFrameWindow",
     "extract_background_corrected_roi_traces",
     "extract_roi_traces",

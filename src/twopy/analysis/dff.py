@@ -12,6 +12,7 @@ interleave windows derived from converted data and photodiode alignment.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -21,10 +22,12 @@ from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.trials import FrameWindow
 
 __all__ = [
+    "DeltaFOverFFitMode",
     "RoiDeltaFOverF",
     "compute_roi_delta_f_over_f",
 ]
 
+DeltaFOverFFitMode = Literal["robust", "source_bounds"]
 DffMetadataValue = str | int | float | bool
 
 
@@ -59,6 +62,7 @@ def compute_roi_delta_f_over_f(
     *,
     data_rate_hz: float,
     seconds_interleave_use: float | None = 1.0,
+    fit_mode: DeltaFOverFFitMode = "robust",
 ) -> RoiDeltaFOverF:
     """Compute ROI-level dF/F from corrected fluorescence.
 
@@ -70,6 +74,10 @@ def compute_roi_delta_f_over_f(
         data_rate_hz: Imaging frame rate in frames per second.
         seconds_interleave_use: Number of seconds to keep from the end of each
             interleave window. ``None`` uses the full window.
+        fit_mode: Exponential fit bounds. ``"robust"`` keeps the shared tau
+            bounded but leaves log-amplitude unbounded and ignores nonpositive
+            fit samples. ``"source_bounds"`` uses bounded log-amplitude from the
+            original analysis source for audit comparisons.
 
     Returns:
         ``RoiDeltaFOverF`` with dF/F values shaped ``(frames, rois)``.
@@ -88,6 +96,7 @@ def compute_roi_delta_f_over_f(
         interleave_windows=interleave_windows,
         data_rate_hz=data_rate_hz,
         seconds_interleave_use=seconds_interleave_use,
+        fit_mode=fit_mode,
     )
 
     fluorescence = traces.corrected_values.astype(np.float64, copy=False)
@@ -101,6 +110,7 @@ def compute_roi_delta_f_over_f(
     tau = _fit_shared_tau(
         frame_numbers=interleave_samples.frame_numbers,
         mean_fluorescence=interleave_samples.values.mean(axis=1),
+        fit_mode=fit_mode,
     )
     amplitudes = _compute_roi_amplitudes(
         interleave_values=interleave_samples.values,
@@ -134,6 +144,7 @@ def compute_roi_delta_f_over_f(
                 else float(seconds_interleave_use)
             ),
             "interleave_window_count": len(interleave_windows),
+            "fit_mode": fit_mode,
         },
     )
 
@@ -157,6 +168,7 @@ def _validate_dff_inputs(
     interleave_windows: Sequence[FrameWindow],
     data_rate_hz: float,
     seconds_interleave_use: float | None,
+    fit_mode: DeltaFOverFFitMode,
 ) -> None:
     """Validate the public dF/F inputs.
 
@@ -165,6 +177,7 @@ def _validate_dff_inputs(
         interleave_windows: Candidate baseline windows.
         data_rate_hz: Imaging frame rate.
         seconds_interleave_use: Optional seconds from each interleave end.
+        fit_mode: Requested exponential fit mode.
 
     Returns:
         None.
@@ -190,6 +203,9 @@ def _validate_dff_inputs(
             "seconds_interleave_use must be positive or None; "
             f"got {seconds_interleave_use}"
         )
+        raise ValueError(msg)
+    if fit_mode not in {"robust", "source_bounds"}:
+        msg = f"Unknown dF/F fit_mode {fit_mode!r}"
         raise ValueError(msg)
 
 
@@ -310,8 +326,41 @@ def _fit_shared_tau(
     *,
     frame_numbers: npt.NDArray[np.float64],
     mean_fluorescence: npt.NDArray[np.float64],
+    fit_mode: DeltaFOverFFitMode,
 ) -> float:
     """Fit one exponential decay constant shared across ROIs.
+
+    Args:
+        frame_numbers: One-based frame number for each interleave sample.
+        mean_fluorescence: Mean fluorescence across ROIs for each sample.
+        fit_mode: Fit bounds to use.
+
+    Returns:
+        Shared exponential ``tau``.
+
+    The fit model is ``exp(tau * t + b)`` on the ROI-averaged interleave trace.
+    Only ``tau`` is shared; per-ROI amplitudes are computed in a separate
+    transparent step. ``robust`` mode handles nonpositive outliers defensively;
+    ``source_bounds`` preserves the original bounded log-amplitude fit for
+    audit comparisons.
+    """
+    if fit_mode == "source_bounds":
+        return _fit_shared_tau_with_source_bounds(
+            frame_numbers=frame_numbers,
+            mean_fluorescence=mean_fluorescence,
+        )
+    return _fit_shared_tau_robust(
+        frame_numbers=frame_numbers,
+        mean_fluorescence=mean_fluorescence,
+    )
+
+
+def _fit_shared_tau_robust(
+    *,
+    frame_numbers: npt.NDArray[np.float64],
+    mean_fluorescence: npt.NDArray[np.float64],
+) -> float:
+    """Fit shared tau with defensive handling for nonpositive samples.
 
     Args:
         frame_numbers: One-based frame number for each interleave sample.
@@ -320,9 +369,9 @@ def _fit_shared_tau(
     Returns:
         Shared exponential ``tau``.
 
-    The fit model is ``exp(tau * t + b)`` on the ROI-averaged interleave trace.
-    Only ``tau`` is shared; per-ROI amplitudes are computed in a separate
-    transparent step.
+    This is the default fit path because background correction can create
+    nonpositive values. It preserves the source tau bounds but avoids failing
+    the whole trace because one interleave average is nonpositive.
     """
     finite_positive = np.isfinite(mean_fluorescence) & (mean_fluorescence > 0)
     if not np.any(finite_positive):
@@ -347,6 +396,68 @@ def _fit_shared_tau(
         bounds=(
             np.asarray([-0.01, -np.inf], dtype=np.float64),
             np.asarray([0.01, np.inf], dtype=np.float64),
+        ),
+    )
+    return float(fit.x[0])
+
+
+def _fit_shared_tau_with_source_bounds(
+    *,
+    frame_numbers: npt.NDArray[np.float64],
+    mean_fluorescence: npt.NDArray[np.float64],
+) -> float:
+    """Fit shared tau using the original bounded log-amplitude contract.
+
+    Args:
+        frame_numbers: One-based frame number for each interleave sample.
+        mean_fluorescence: Mean fluorescence across ROIs for each sample.
+
+    Returns:
+        Shared exponential ``tau``.
+
+    Raises:
+        ValueError: If any fit sample is nonfinite or the first sample cannot
+            define a positive log-amplitude bound.
+
+    This mode exists for audit comparisons. It intentionally does not filter
+    nonpositive samples because doing so would change the source-bounds
+    contract.
+    """
+    if np.any(~np.isfinite(mean_fluorescence)):
+        msg = "source_bounds dF/F fit requires finite interleave fluorescence"
+        raise ValueError(msg)
+    if mean_fluorescence.size == 0:
+        msg = "source_bounds dF/F fit requires at least one interleave sample"
+        raise ValueError(msg)
+    first_value = float(mean_fluorescence[0])
+    if first_value <= 1.0:
+        msg = (
+            "source_bounds dF/F fit requires first interleave fluorescence "
+            "greater than 1.0 to define an ordered log-amplitude bound; "
+            f"got {first_value}"
+        )
+        raise ValueError(msg)
+    if np.any(mean_fluorescence <= 0):
+        msg = "source_bounds dF/F fit requires positive interleave fluorescence"
+        raise ValueError(msg)
+    if mean_fluorescence.size == 1:
+        return 0.0
+
+    initial_log_amplitude = float(np.log(first_value))
+    upper_log_amplitude = 10.0 * initial_log_amplitude
+
+    def residual(parameters: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        """Return direct exponential residuals for source-bound least squares."""
+        tau = parameters[0]
+        log_amplitude = parameters[1]
+        return np.exp((tau * frame_numbers) + log_amplitude) - mean_fluorescence
+
+    fit = least_squares(
+        residual,
+        x0=np.asarray([0.0, initial_log_amplitude], dtype=np.float64),
+        bounds=(
+            np.asarray([-0.01, 0.0], dtype=np.float64),
+            np.asarray([0.01, upper_log_amplitude], dtype=np.float64),
         ),
     )
     return float(fit.x[0])

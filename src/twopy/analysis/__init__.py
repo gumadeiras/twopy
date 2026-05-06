@@ -13,7 +13,11 @@ from twopy.analysis.background_subtraction import (
     BackgroundCorrectionMethod,
     extract_background_corrected_roi_traces,
 )
-from twopy.analysis.dff import RoiDeltaFOverF, compute_roi_delta_f_over_f
+from twopy.analysis.dff import (
+    DeltaFOverFFitMode,
+    RoiDeltaFOverF,
+    compute_roi_delta_f_over_f,
+)
 from twopy.analysis.trials import (
     EpochFrameWindow,
     FrameWindow,
@@ -29,6 +33,7 @@ __all__ = [
     "BackgroundCorrectedRoiTraces",
     "BackgroundCorrectionMethod",
     "compute_roi_delta_f_over_f",
+    "DeltaFOverFFitMode",
     "EpochFrameWindow",
     "extract_background_corrected_roi_traces",
     "frame_windows_from_photodiode_alignment",
