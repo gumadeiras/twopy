@@ -155,8 +155,8 @@ decided.
   movie coordinates before saving or analysis. This keeps the viewer orientation
   natural while preserving the analysis spatial contract.
 - ROI visibility controls hide existing label values without making future
-  newly drawn label numbers transparent, so users can keep adding ROIs after
-  filtering plots.
+  newly drawn label numbers transparent or forcing them to share one fallback
+  color, so users can keep adding ROIs after filtering plots.
 - Napari movie-frame range changes reuse the resolved recording path even when
   the visible path field is shortened, and response options are split into
   Update, Plot, ROIs, and Epochs tabs.

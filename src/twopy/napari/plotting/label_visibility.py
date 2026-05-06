@@ -8,18 +8,29 @@ This module only changes how labels are displayed. It never edits the label
 image, so hiding an ROI in the plot options cannot delete ROI data.
 """
 
-from collections import defaultdict
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from qtpy.QtGui import QColor
 
 __all__ = ["apply_roi_visibility_to_labels_layer", "roi_label_value_from_label"]
+
+_LABEL_COLOR_LOOKAHEAD = 4096
+_BASE_LABEL_COLORMAP_METADATA_KEY = "twopy_base_label_colormap"
 
 
 class _LabelsLayerWithColormap(Protocol):
     """Small protocol for napari Labels layers with settable colormaps."""
 
     colormap: object
+    metadata: dict[str, object]
+
+
+class _LabelColormapLike(Protocol):
+    """Small protocol for napari label colormaps used for color sampling."""
+
+    colors: object
+    seed: object
+    background_value: object
 
 
 def apply_roi_visibility_to_labels_layer(
@@ -40,9 +51,10 @@ def apply_roi_visibility_to_labels_layer(
     Returns:
         None.
 
-    The Labels layer stores ROI identity as integer labels: ROI index ``0`` maps
-    to Labels value ``1``. Hidden ROIs keep their label pixels in ``layer.data``;
-    only their display alpha becomes zero.
+    Hidden ROIs keep their label pixels in ``layer.data``; only their display
+    alpha becomes zero. Future labels stay drawable because the direct colormap
+    contains napari-style colors for a broad range of label values instead of a
+    single fallback color.
     """
     if layer is None or not hasattr(layer, "colormap"):
         return
@@ -52,10 +64,10 @@ def apply_roi_visibility_to_labels_layer(
     except ImportError:
         return
 
-    default_color = _qcolor_rgba(QColor("#4cc9f0"), visible=True)
-    color_dict: defaultdict[int | None, object] = defaultdict(
-        lambda: default_color,
-        {0: "transparent", None: default_color},
+    labels_layer = cast(_LabelsLayerWithColormap, layer)
+    color_dict = _visible_label_color_dict(
+        labels_layer,
+        roi_labels=roi_labels,
     )
     for roi_index, roi_label in enumerate(roi_labels):
         label_value = roi_label_value_from_label(
@@ -68,7 +80,6 @@ def apply_roi_visibility_to_labels_layer(
             visible=visibility.get(roi_label, True),
         )
 
-    labels_layer = cast(_LabelsLayerWithColormap, layer)
     labels_layer.colormap = direct_colormap(color_dict)
 
 
@@ -110,3 +121,113 @@ def _qcolor_rgba(color: QColor, *, visible: bool) -> tuple[float, float, float, 
         color.blueF(),
         1.0 if visible else 0.0,
     )
+
+
+def _visible_label_color_dict(
+    layer: _LabelsLayerWithColormap,
+    *,
+    roi_labels: tuple[str, ...],
+) -> dict[int | None, object]:
+    """Return visible colors for known and future Labels values.
+
+    Args:
+        layer: napari Labels layer.
+        roi_labels: ROI names in analysis/plot order.
+
+    Returns:
+        Mapping from label values to RGBA colors for napari's direct colormap.
+    """
+    color_count = max(
+        _LABEL_COLOR_LOOKAHEAD,
+        _max_roi_label_value(roi_labels) + 512,
+    )
+    color_dict: dict[int | None, object] = {0: "transparent"}
+    for label_value in range(1, color_count + 1):
+        color_dict[label_value] = _base_label_rgba(layer, label_value)
+    color_dict[None] = color_dict[color_count]
+    return color_dict
+
+
+def _max_roi_label_value(roi_labels: tuple[str, ...]) -> int:
+    """Return the largest integer label represented by ROI labels.
+
+    Args:
+        roi_labels: ROI names in analysis/plot order.
+
+    Returns:
+        Maximum positive Labels value, or ``0`` when there are no ROIs.
+    """
+    if len(roi_labels) == 0:
+        return 0
+    return max(
+        roi_label_value_from_label(roi_label, fallback=index + 1)
+        for index, roi_label in enumerate(roi_labels)
+    )
+
+
+def _base_label_rgba(
+    layer: _LabelsLayerWithColormap,
+    label_value: int,
+) -> tuple[float, float, float, float]:
+    """Return napari's cyclic label color for one label value.
+
+    Args:
+        layer: napari Labels layer.
+        label_value: Positive integer label value.
+
+    Returns:
+        RGBA tuple in ``0`` to ``1`` float range.
+    """
+    try:
+        from napari.utils.colormaps import label_colormap
+    except ImportError:
+        return _qcolor_rgba(QColor("#4cc9f0"), visible=True)
+
+    params = _base_label_colormap_params(layer)
+    colormap = label_colormap(
+        num_colors=params["num_colors"],
+        seed=params["seed"],
+        background_value=params["background_value"],
+    )
+    rgba = colormap.map(label_value)
+    return (
+        float(rgba[0]),
+        float(rgba[1]),
+        float(rgba[2]),
+        float(rgba[3]),
+    )
+
+
+def _base_label_colormap_params(
+    layer: _LabelsLayerWithColormap,
+) -> dict[str, int | float]:
+    """Return stable cyclic-colormap parameters for one Labels layer.
+
+    Args:
+        layer: napari Labels layer.
+
+    Returns:
+        Plain parameters for reconstructing napari's cyclic label colormap.
+
+    The first call records the original cyclic colormap. Later calls may see a
+    direct visibility colormap, so reading from metadata preserves the original
+    color cycle while users toggle ROI visibility.
+    """
+    stored = layer.metadata.get(_BASE_LABEL_COLORMAP_METADATA_KEY)
+    if isinstance(stored, dict):
+        stored_params = cast(dict[str, object], stored)
+        return {
+            "num_colors": int(cast(Any, stored_params["num_colors"])),
+            "seed": float(cast(Any, stored_params["seed"])),
+            "background_value": int(cast(Any, stored_params["background_value"])),
+        }
+
+    colormap = cast(_LabelColormapLike, layer.colormap)
+    colors = getattr(colormap, "colors", ())
+    params = {
+        "num_colors": max(len(colors) - 1, 1),
+        "seed": float(getattr(colormap, "seed", 0.5)),
+        "background_value": int(getattr(colormap, "background_value", 0)),
+    }
+    layer.metadata[_BASE_LABEL_COLORMAP_METADATA_KEY] = params
+    return params

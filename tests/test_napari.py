@@ -724,6 +724,8 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(layer.get_color(10)[3], 0.0)
         self.assertEqual(layer.get_color(11)[3], 1.0)
+        self.assertEqual(layer.get_color(12)[3], 1.0)
+        self.assertFalse(np.array_equal(layer.get_color(11), layer.get_color(12)))
 
     def test_display_helpers_transpose_movie_axes_for_napari(self) -> None:
         """Confirm movie axes are transposed only at the napari boundary.
