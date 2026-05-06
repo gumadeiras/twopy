@@ -64,14 +64,12 @@ decided.
 - GUI-independent `twopy.analysis` package for analysis-time modules.
 - ROI background-corrected trace extraction with raw, background, and corrected
   arrays kept side by side for audit.
-- Implemented three ROI background modes: no correction, MATLAB-compatible
-  global movie percentile subtraction, and local y-neighborhood percentile
-  subtraction.
+- Implemented three ROI background modes: no correction, global movie
+  percentile subtraction, and local y-neighborhood percentile subtraction.
 - Trial/frame-window response helpers live in `twopy.analysis.trials`.
 - Stimulus epoch runs from `stimulus/data` can be mapped onto photodiode-aligned
   imaging-frame windows when their counts agree.
-- ROI-level dF/F computation matches the audited MATLAB
-  `calcDFOverFByRoi = 1` path: use corrected ROI fluorescence, gray interleave
+- ROI-level dF/F computation uses corrected ROI fluorescence, gray interleave
   windows, last-second baseline samples, one shared exponential tau, and one
   amplitude per ROI.
 - Photodiode event segmentation for converted `high_res_pd` and

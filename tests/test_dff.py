@@ -14,7 +14,7 @@ from twopy.analysis.trials import FrameWindow
 
 
 class DeltaFOverFTest(unittest.TestCase):
-    """Tests MATLAB-style ROI-level dF/F helpers."""
+    """Tests ROI-level dF/F helpers."""
 
     def test_computes_roi_level_dff_from_gray_interleaves(self) -> None:
         """Confirm baseline is fit from interleaves and applied per ROI.

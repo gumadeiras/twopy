@@ -49,7 +49,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
             np.testing.assert_array_equal(traces.corrected_values, traces.raw_values)
 
     def test_extracts_movie_global_percentile_corrected_traces(self) -> None:
-        """Confirm MATLAB-style movie background subtraction is pixel-level.
+        """Confirm global movie background subtraction is pixel-level.
 
         Inputs: one ROI, one dim background pixel, and framewise background
         values.

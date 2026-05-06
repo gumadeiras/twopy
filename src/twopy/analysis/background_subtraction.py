@@ -76,8 +76,8 @@ def extract_background_corrected_roi_traces(
         recording: Loaded converted recording with lazy aligned movie access.
         roi_set: ROI masks in aligned movie spatial coordinates.
         method: Background correction method. ``"none"`` keeps raw traces,
-            ``"movie_global_percentile"`` matches the audited MATLAB
-            ``backgroundSubtractMovie = 1`` path, and
+            ``"movie_global_percentile"`` subtracts a framewise background
+            estimated from dim global pixels in the mean image, and
             ``"roi_local_percentile_y"`` subtracts a local y-neighborhood
             background trace from each ROI.
         start_frame: Optional first frame to extract.
@@ -218,7 +218,7 @@ def _extract_movie_global_percentile_corrected_traces(
     npt.NDArray[np.float64],
     dict[str, BackgroundMetadataValue],
 ]:
-    """Extract MATLAB-compatible global movie-background-corrected traces.
+    """Extract global movie-background-corrected traces.
 
     Args:
         recording: Converted recording with mean image and aligned movie.
@@ -232,9 +232,8 @@ def _extract_movie_global_percentile_corrected_traces(
         Raw ROI traces, repeated background traces, corrected ROI traces, and
         audit metadata.
 
-    The corrected trace matches the audited MATLAB movie-level correction:
-    subtract one framewise background value from each pixel, clamp negatives to
-    zero, and then average corrected pixels inside each ROI.
+    This subtracts one framewise background value from each ROI pixel, clamps
+    negatives to zero, and then averages corrected pixels inside each ROI.
     """
     _validate_percentile(percentile)
     background_indices, threshold = _global_background_pixel_indices(
@@ -260,8 +259,8 @@ def _extract_movie_global_percentile_corrected_traces(
             roi_pixels = chunk_flat[:, pixel_indices]
             raw_values[chunk_slice, roi_index] = roi_pixels.mean(axis=1)
             background_values[chunk_slice, roi_index] = background_trace
-            # MATLAB clamps the movie after subtraction. Corrected ROI traces
-            # therefore need pixel-level subtraction before averaging.
+            # Clamp pixels before averaging so dim pixels cannot pull the
+            # corrected ROI trace below zero.
             corrected_pixels = np.maximum(roi_pixels - background_trace[:, None], 0.0)
             corrected_values[chunk_slice, roi_index] = corrected_pixels.mean(axis=1)
 

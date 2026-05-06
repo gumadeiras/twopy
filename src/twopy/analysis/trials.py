@@ -5,9 +5,9 @@ alignment.
 Outputs: frame windows, stimulus-epoch labels, and windowed ROI response
 arrays.
 
-This module keeps trial slicing independent from the GUI and from source
-MATLAB/TIFF files. Stimulus-specific labels can be added when the stimulus
-metadata has been decoded.
+This module keeps trial slicing independent from the GUI and from source files.
+Stimulus-specific labels can be added when the stimulus metadata has been
+decoded.
 """
 
 from collections.abc import Sequence
@@ -327,7 +327,7 @@ def _epoch_window_label(epoch_number: int, epoch_name: str) -> str:
 
     Args:
         epoch_number: One-indexed stimulus epoch number.
-        epoch_name: Human-readable epoch name from ``stimParams.mat``.
+        epoch_name: Human-readable epoch name from converted stimulus metadata.
 
     Returns:
         Label suitable for plots and logs.

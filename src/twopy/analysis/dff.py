@@ -5,10 +5,9 @@ windows.
 Outputs: ROI dF/F traces, fitted baselines, shared exponential tau, and
 per-ROI amplitudes.
 
-This module owns the MATLAB-compatible ROI-level dF/F calculation. It does not
-read source MATLAB files and does not decide which stimulus events are
-interleaves; callers pass explicit interleave windows derived from converted
-data and photodiode alignment.
+This module owns ROI-level dF/F calculation from twopy Python objects. It does
+not decide which stimulus events are interleaves; callers pass explicit
+interleave windows derived from converted data and photodiode alignment.
 """
 
 from collections.abc import Sequence
@@ -61,7 +60,7 @@ def compute_roi_delta_f_over_f(
     data_rate_hz: float,
     seconds_interleave_use: float | None = 1.0,
 ) -> RoiDeltaFOverF:
-    """Compute MATLAB-style ROI-level dF/F from corrected fluorescence.
+    """Compute ROI-level dF/F from corrected fluorescence.
 
     Args:
         traces: Background-corrected ROI traces. ``corrected_values`` is treated
@@ -79,10 +78,10 @@ def compute_roi_delta_f_over_f(
         ValueError: If no interleave windows are supplied, windows fall outside
             the traces, or the fit has no positive finite baseline samples.
 
-    The calculation mirrors the audited MATLAB path when
-    ``calcDFOverFByRoi = 1``: first average background-subtracted pixels inside
-    each ROI, then fit one exponential decay constant shared by all ROIs from
-    gray interleaves, then estimate one amplitude per ROI.
+    The calculation uses the current twopy analysis contract: first use the
+    background-corrected mean fluorescence inside each ROI, then fit one
+    exponential decay constant shared by all ROIs from gray interleaves, then
+    estimate one amplitude per ROI.
     """
     _validate_dff_inputs(
         traces=traces,
@@ -212,12 +211,11 @@ def _interleave_samples(
         seconds_interleave_use: Optional seconds from each interleave end.
 
     Returns:
-        Mean interleave fluorescence and MATLAB-style one-based frame numbers.
+        Mean interleave fluorescence and one-based fit frame numbers.
 
-    MATLAB first shrinks each interleave to the last requested second, then
-    averages the selected frames into one point per interleave. We keep that
-    structure because the exponential fit should not overweight longer
-    interleaves.
+    Each interleave is first narrowed to the last requested second, then the
+    selected frames are averaged into one point per interleave. That keeps
+    longer interleaves from dominating the exponential fit.
     """
     frame_numbers: list[float] = []
     values: list[npt.NDArray[np.float64]] = []
@@ -238,8 +236,8 @@ def _interleave_samples(
         )
 
         duration = sample_stop - sample_start
-        # MATLAB uses one-based frame numbers and epochLoc = start + duration/2.
-        # The equivalent for a Python half-open range is sample_start + 1 + N/2.
+        # The fit uses one-based frame numbers centered on the averaged
+        # half-open sample range: sample_start + 1 + N / 2.
         frame_numbers.append(float(sample_start + 1) + (duration / 2.0))
         values.append(fluorescence[sample_start:sample_stop, :].mean(axis=0))
 
@@ -322,9 +320,9 @@ def _fit_shared_tau(
     Returns:
         Shared exponential ``tau``.
 
-    This mirrors the non-legacy MATLAB path: fit ``exp(tau * t + b)`` to the
-    spatially averaged interleave trace, then keep only ``tau``. Per-ROI
-    amplitudes are computed in a separate transparent step.
+    The fit model is ``exp(tau * t + b)`` on the ROI-averaged interleave trace.
+    Only ``tau`` is shared; per-ROI amplitudes are computed in a separate
+    transparent step.
     """
     finite_positive = np.isfinite(mean_fluorescence) & (mean_fluorescence > 0)
     if not np.any(finite_positive):
