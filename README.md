@@ -2,7 +2,7 @@
 
 Two-photon imaging analysis tool for the Clark Lab output format.
 
-![twopy napari interface](docs/assets/twopy-napari.png)
+![twopy napari interface](https://raw.githubusercontent.com/gumadeiras/twopy/main/docs/assets/twopy-napari.png)
 
 ## Getting Started
 
