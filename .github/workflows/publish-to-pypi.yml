@@ -6,6 +6,9 @@ on:
 
 permissions: {}
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: publish-pypi-${{ github.event.release.tag_name }}
   cancel-in-progress: false
