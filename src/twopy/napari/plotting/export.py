@@ -134,6 +134,7 @@ def export_roi_view(
         roi_labels_layer=roi_labels_layer,
         recording=recording,
     )
+    labels = labels_for_recording_image(labels, recording=recording)
     fig, ax = image_figure(labels.shape)
     draw_roi_contours(
         ax,
@@ -176,6 +177,7 @@ def export_recording_roi_overlay(
         roi_labels_layer=roi_labels_layer,
         recording=recording,
     )
+    labels = labels_for_recording_image(labels, recording=recording)
     fig, ax = image_figure(image.shape)
     draw_recording_image(ax, image)
     draw_roi_contours(
@@ -284,6 +286,7 @@ def export_epoch_roi_overlay_plots(
         roi_labels_layer=roi_labels_layer,
         recording=recording,
     )
+    labels = labels_for_recording_image(labels, recording=recording)
     written: list[Path] = []
     for epoch in _visible_epochs(plot_data, epoch_keys):
         for roi_index in roi_indices:
@@ -362,6 +365,46 @@ def current_roi_labels(
         crop = recording.alignment_valid_crop
         return np.zeros((crop.shape[1], crop.shape[0]), dtype=np.int64)
     return np.asarray(cast(_LayerWithData, roi_labels_layer).data, dtype=np.int64)
+
+
+def labels_for_recording_image(
+    labels: npt.NDArray[np.int64],
+    *,
+    recording: RecordingData,
+) -> npt.NDArray[np.int64]:
+    """Return display-coordinate labels matching the cropped recording image.
+
+    Args:
+        labels: Current Labels-layer data in display coordinates.
+        recording: Loaded converted recording that defines the displayed crop.
+
+    Returns:
+        Label image with the same shape as the exported recording image.
+
+    The viewer shows the alignment-valid crop. Older sessions or manually
+    created layers may still contain a full-frame display label image; in that
+    case export crops it before drawing so ROIs outside the valid display area
+    cannot expand the figure beyond the recording image.
+    """
+    crop = recording.alignment_valid_crop
+    expected_shape = (crop.shape[1], crop.shape[0])
+    if labels.shape == expected_shape:
+        return labels
+
+    full_frame_display_shape = (
+        recording.movie.shape[2],
+        recording.movie.shape[1],
+    )
+    if labels.shape == full_frame_display_shape:
+        movie_labels = display_image_from_movie_image(labels)
+        cropped = crop.crop_image(movie_labels)
+        return cast(npt.NDArray[np.int64], display_image_from_movie_image(cropped))
+
+    msg = (
+        f"ROI label image shape {labels.shape} does not match displayed recording "
+        f"crop {expected_shape} or full-frame display shape {full_frame_display_shape}"
+    )
+    raise ValueError(msg)
 
 
 def image_figure(shape: tuple[int, int]) -> tuple[Figure, Axes]:

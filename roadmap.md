@@ -149,14 +149,18 @@ decided.
 - Napari sessions can keep multiple recordings loaded at once. A Loaded
   Recordings panel lists loaded paths, switches Save ROIs and response options
   to the selected recording, and unloads the selected recording with its
-  associated image/movie/ROI layers.
+  associated image/movie/ROI layers. Selecting a loaded recording also makes
+  that recording's layers visible and hides layers from the other loaded
+  recordings.
 - Napari response plotting code is scoped under `twopy.napari.plotting` with
   separate modules for plot data, option controls, drawing widgets, and docks.
 - Napari response options now include a Plot-size control and an Export tab
   that saves recording views, ROI views, recording/ROI overlays, per-epoch
   response plots, and two-column ROI-overlay/response figures as PDF and PNG
   with Illustrator-editable PDF text and vector ROI/trace paths where possible.
-  Each export action writes into its own subfolder under `exports/`.
+  Each export action writes into its own subfolder under `exports/`. ROI image
+  exports use the same cropped display area as the recording view, including
+  when an older full-frame Labels layer is still present in napari.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
 - Napari displays the alignment-valid crop with explicit movie-axis to

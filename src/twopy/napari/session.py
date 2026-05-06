@@ -12,7 +12,7 @@ recording so the controls can switch context cleanly.
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from qtpy.QtWidgets import (
     QLabel,
@@ -34,6 +34,7 @@ __all__ = [
     "remove_loaded_recording_layers",
     "render_loaded_recordings_panel",
     "select_loaded_recording",
+    "set_loaded_recording_visibility",
     "unload_loaded_recording",
     "update_selected_roi_save_file",
 ]
@@ -50,6 +51,12 @@ class NapariSessionState(Protocol):
     loaded_recordings: list["LoadedNapariRecording"]
     selected_recording_index: int | None
     loaded_recordings_panel: "LoadedRecordingsPanel | None"
+
+
+class _LayerWithVisibility(Protocol):
+    """Small protocol for napari layers whose visibility can be toggled."""
+
+    visible: bool
 
 
 @dataclass(frozen=True)
@@ -242,6 +249,7 @@ def select_loaded_recording(
         state.selected_recording_index = None
         state.recording = None
         state.roi_labels_layer = None
+        set_loaded_recording_visibility(state.loaded_recordings, selected_index=None)
         refresh_response_plot_widget(
             state.response_plot_widget,
             recording=None,
@@ -255,6 +263,7 @@ def select_loaded_recording(
     state.recording = selected.recording
     state.roi_labels_layer = selected.roi_labels_layer
     state.roi_save_file = selected.roi_save_file
+    set_loaded_recording_visibility(state.loaded_recordings, selected_index=index)
     refresh_response_plot_widget(
         state.response_plot_widget,
         recording=selected.recording,
@@ -321,6 +330,28 @@ def update_selected_roi_save_file(
         state.loaded_recordings[index],
         roi_save_file=roi_save_file,
     )
+
+
+def set_loaded_recording_visibility(
+    loaded_recordings: list[LoadedNapariRecording],
+    *,
+    selected_index: int | None,
+) -> None:
+    """Show selected recording layers and hide layers from other recordings.
+
+    Args:
+        loaded_recordings: Recordings currently loaded in the viewer.
+        selected_index: Recording index that should be visible, or ``None`` to
+            hide all loaded recording layers.
+
+    Returns:
+        None.
+    """
+    for index, loaded_recording in enumerate(loaded_recordings):
+        visible = selected_index is not None and index == selected_index
+        for layer in loaded_recording.layers():
+            if hasattr(layer, "visible"):
+                cast(_LayerWithVisibility, layer).visible = visible
 
 
 def _remove_layer(viewer: object, layer: object) -> None:

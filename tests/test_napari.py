@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import h5py
 import numpy as np
+import numpy.typing as npt
 from matplotlib.figure import Figure
 from napari.layers import Labels
 from qtpy.QtGui import QColor
@@ -43,7 +44,11 @@ from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 from twopy.napari.plotting.data import ResponsePlotData, response_plot_data_from_grouped
-from twopy.napari.plotting.export import draw_roi_contours, export_epoch_plots
+from twopy.napari.plotting.export import (
+    draw_roi_contours,
+    export_epoch_plots,
+    labels_for_recording_image,
+)
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.options import visibility_options_widget
 from twopy.napari.plotting.widgets import (
@@ -86,6 +91,7 @@ class _FakeLayer:
     name: str
     data: object
     options: dict[str, object]
+    visible: bool = True
 
 
 @dataclass(frozen=True)
@@ -467,8 +473,20 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(loaded_list.currentRow(), 1)
             self.assertEqual(len(viewer.images), 4)
             self.assertEqual(len(viewer.labels), 2)
+            self.assertFalse(viewer.images[0].visible)
+            self.assertFalse(viewer.images[1].visible)
+            self.assertFalse(viewer.labels[0].visible)
+            self.assertTrue(viewer.images[2].visible)
+            self.assertTrue(viewer.images[3].visible)
+            self.assertTrue(viewer.labels[1].visible)
 
             loaded_list.setCurrentRow(0)
+            self.assertTrue(viewer.images[0].visible)
+            self.assertTrue(viewer.images[1].visible)
+            self.assertTrue(viewer.labels[0].visible)
+            self.assertFalse(viewer.images[2].visible)
+            self.assertFalse(viewer.images[3].visible)
+            self.assertFalse(viewer.labels[1].visible)
             viewer.labels[0].data = np.array([[1, 0], [0, 0]])
             result = save_widget()
             self.assertIn("Saved 1 ROI", str(result))
@@ -479,6 +497,9 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(loaded_list.count(), 1)
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(len(viewer.labels), 1)
+            self.assertTrue(viewer.images[0].visible)
+            self.assertTrue(viewer.images[1].visible)
+            self.assertTrue(viewer.labels[0].visible)
             remaining_item = loaded_list.item(0)
             assert remaining_item is not None
             self.assertIn(str(second), remaining_item.text())
@@ -1114,6 +1135,45 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertLess(float(np.max(vertices[:, 1])), 2.0)
 
+    def test_export_crops_full_frame_display_labels_to_recording_view(self) -> None:
+        """Confirm stale full-frame Labels data exports only the displayed crop.
+
+        Inputs: converted recording with an alignment-valid crop and one
+        full-frame display label image.
+        Outputs: labels cropped to the same display shape as the recording
+        image, excluding ROI pixels outside the valid crop.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                movie_values=np.arange(27, dtype=np.float64).reshape(3, 3, 3),
+                alignment_valid_crop=SpatialCrop(
+                    axis0_start=1,
+                    axis0_stop=3,
+                    axis1_start=0,
+                    axis1_stop=2,
+                    original_shape=(3, 3),
+                    source="alignment_valid_crop",
+                ),
+            )
+            opened = open_recording_in_napari(
+                recording_path,
+                viewer=_FakeViewer(),
+                add_controls=False,
+            )
+            full_frame_display_labels = np.zeros((3, 3), dtype=np.int64)
+            full_frame_display_labels[0, 0] = 1
+            full_frame_display_labels[1, 2] = 2
+
+            labels = labels_for_recording_image(
+                full_frame_display_labels,
+                recording=opened.recording,
+            )
+
+            self.assertEqual(labels.shape, (2, 2))
+            np.testing.assert_array_equal(np.unique(labels), np.array([0, 2]))
+
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
         """Confirm no-path app launch can start empty instead of failing.
 
@@ -1175,20 +1235,39 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(resolved, recording_path.resolve())
 
 
-def _write_converted_recording(root: Path) -> Path:
+def _write_converted_recording(
+    root: Path,
+    *,
+    movie_values: npt.NDArray[np.float64] | None = None,
+    alignment_valid_crop: SpatialCrop | None = None,
+) -> Path:
     """Write a tiny converted recording for adapter tests.
 
     Args:
         root: Temporary directory receiving HDF5 files.
+        movie_values: Optional movie array shaped ``(frames, axis0, axis1)``.
+        alignment_valid_crop: Optional spatial crop metadata.
 
     Returns:
         Path to ``recording_data.h5``.
     """
-    movie_values = np.arange(12, dtype=np.float64).reshape(3, 2, 2)
+    resolved_movie_values = movie_values
+    if resolved_movie_values is None:
+        resolved_movie_values = np.arange(12, dtype=np.float64).reshape(3, 2, 2)
+    resolved_crop = alignment_valid_crop
+    if resolved_crop is None:
+        resolved_crop = SpatialCrop(
+            axis0_start=0,
+            axis0_stop=resolved_movie_values.shape[1],
+            axis1_start=0,
+            axis1_stop=resolved_movie_values.shape[2],
+            original_shape=resolved_movie_values.shape[1:],
+            source="full_frame",
+        )
     movie_path = root / "aligned_movie.h5"
     with h5py.File(movie_path, "w") as h5_file:
         h5_file.attrs["twopy_format"] = "aligned-movie"
-        h5_file.create_dataset("movie/aligned", data=movie_values)
+        h5_file.create_dataset("movie/aligned", data=resolved_movie_values)
 
     recording_path = root / "recording_data.h5"
     with h5py.File(recording_path, "w") as h5_file:
@@ -1197,23 +1276,26 @@ def _write_converted_recording(root: Path) -> Path:
         movie_group = h5_file.create_group("movie")
         movie_group.attrs["aligned_movie_file"] = "aligned_movie.h5"
         movie_group.attrs["aligned_movie_dataset"] = "movie/aligned"
-        movie_group.attrs["aligned_movie_shape"] = movie_values.shape
+        movie_group.attrs["aligned_movie_shape"] = resolved_movie_values.shape
         movie_group.attrs["aligned_movie_dtype"] = "float64"
-        movie_group.create_dataset("mean_image", data=movie_values.mean(axis=0))
+        movie_group.create_dataset(
+            "mean_image",
+            data=resolved_movie_values.mean(axis=0),
+        )
         crop_group = movie_group.create_group("alignment_valid_crop")
-        crop_group.attrs["source"] = "full_frame"
-        crop_group.attrs["axis0_start"] = 0
-        crop_group.attrs["axis0_stop"] = 2
-        crop_group.attrs["axis1_start"] = 0
-        crop_group.attrs["axis1_stop"] = 2
-        crop_group.attrs["original_shape"] = (2, 2)
+        crop_group.attrs["source"] = resolved_crop.source
+        crop_group.attrs["axis0_start"] = resolved_crop.axis0_start
+        crop_group.attrs["axis0_stop"] = resolved_crop.axis0_stop
+        crop_group.attrs["axis1_start"] = resolved_crop.axis1_start
+        crop_group.attrs["axis1_stop"] = resolved_crop.axis1_stop
+        crop_group.attrs["original_shape"] = resolved_crop.original_shape
         crop_group.create_dataset(
             "alignment_shift_pixels",
-            data=np.zeros(3, dtype=np.float64),
+            data=np.zeros(resolved_movie_values.shape[0], dtype=np.float64),
         )
         crop_group.create_dataset(
             "motion_artifact_mask",
-            data=np.zeros(3, dtype=np.bool_),
+            data=np.zeros(resolved_movie_values.shape[0], dtype=np.bool_),
         )
         metadata_group = h5_file.create_group("metadata")
         metadata_group.attrs["acq.frameRate"] = 10.0
@@ -1235,16 +1317,18 @@ def _write_converted_recording(root: Path) -> Path:
         photodiode_group = h5_file.create_group("photodiode")
         photodiode_group.create_dataset(
             "imaging_res_pd",
-            data=np.zeros(3, dtype=np.float64),
+            data=np.zeros(resolved_movie_values.shape[0], dtype=np.float64),
         )
         photodiode_group.create_dataset(
             "high_res_pd",
-            data=np.zeros(3, dtype=np.float64),
+            data=np.zeros(resolved_movie_values.shape[0], dtype=np.float64),
         )
         frame_counts = h5_file.create_group("frame_counts")
-        frame_counts.attrs["aligned_movie_frames"] = 3
-        frame_counts.attrs["imaging_res_pd_samples"] = 3
-        frame_counts.attrs["acquisition_number_of_frames"] = 3
+        frame_counts.attrs["aligned_movie_frames"] = resolved_movie_values.shape[0]
+        frame_counts.attrs["imaging_res_pd_samples"] = resolved_movie_values.shape[0]
+        frame_counts.attrs["acquisition_number_of_frames"] = (
+            resolved_movie_values.shape[0]
+        )
         frame_counts.attrs["imaging_res_pd_minus_movie"] = 0
         frame_counts.attrs["acquisition_minus_movie"] = 0
     return recording_path
