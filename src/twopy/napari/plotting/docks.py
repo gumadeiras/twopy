@@ -10,6 +10,7 @@ responses from the current Labels layer, this module converts labels to a
 """
 
 from pathlib import Path
+from typing import TypeGuard
 
 import numpy as np
 from qtpy.QtGui import QColor
@@ -33,7 +34,6 @@ from twopy.napari.plotting.data import (
     ResponsePlotData,
     default_analysis_output_path,
     load_response_plot_data,
-    response_plot_data_from_grouped,
 )
 from twopy.napari.plotting.export_controls import (
     ResponseExportState,
@@ -467,13 +467,6 @@ class _ResponsePlotWidget(QWidget):
         self._update_status_label.setText(
             f"Saved {len(roi_set.labels)} ROI(s), {run.output_path}{summary}"
         )
-        self.set_response_plot_data(
-            response_plot_data_from_grouped(
-                run.grouped_responses,
-                source_path=run.output_path,
-            ),
-            reset_axes=True,
-        )
 
     def set_response_plot_data(
         self,
@@ -628,8 +621,12 @@ class _ResponsePlotWidget(QWidget):
                         epoch_name,
                     ), visible in self._epoch_visibility.items()
                 },
-                on_change=self._set_epoch_visibility_by_label,
-                on_change_batch=self._set_epoch_visibility_batch_by_label,
+                on_change=self._set_epoch_visibility,
+                on_change_batch=self._set_epoch_visibility_batch,
+                keys=tuple(
+                    (epoch.epoch_number, epoch.epoch_name)
+                    for epoch in self._plot_data.epochs
+                ),
             ),
         )
         self._epoch_options_layout.addStretch(1)
@@ -737,22 +734,27 @@ class _ResponsePlotWidget(QWidget):
         self._roi_visibility.update(visibility)
         self._render_plots()
 
-    def _set_epoch_visibility_by_label(self, label: str, visible: bool) -> None:
-        """Update one epoch visibility flag from an options label."""
-        for key in self._epoch_visibility:
-            if epoch_key_label(key[0], key[1]) == label:
-                self._epoch_visibility[key] = visible
-                break
+    def _set_epoch_visibility(self, key: object, visible: bool) -> None:
+        """Update one epoch visibility flag from its stable epoch key."""
+        if self._is_epoch_key(key):
+            self._epoch_visibility[key] = visible
         self._render_plots(apply_roi_layer_visibility=False)
 
-    def _set_epoch_visibility_batch_by_label(self, visibility: dict[str, bool]) -> None:
+    def _set_epoch_visibility_batch(self, visibility: dict[object, bool]) -> None:
         """Update several epoch visibility flags with one plot refresh."""
-        label_visibility = dict(visibility)
-        for key in self._epoch_visibility:
-            label = epoch_key_label(key[0], key[1])
-            if label in label_visibility:
-                self._epoch_visibility[key] = label_visibility[label]
+        for key, visible in visibility.items():
+            if self._is_epoch_key(key):
+                self._epoch_visibility[key] = visible
         self._render_plots(apply_roi_layer_visibility=False)
+
+    def _is_epoch_key(self, value: object) -> TypeGuard[tuple[int, str]]:
+        """Return whether a callback value is an epoch visibility key."""
+        return (
+            isinstance(value, tuple)
+            and len(value) == 2
+            and isinstance(value[0], int)
+            and isinstance(value[1], str)
+        )
 
     def _visible_roi_indices(self) -> tuple[int, ...]:
         """Return zero-based ROI indices currently visible in plots.

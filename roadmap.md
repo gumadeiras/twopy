@@ -159,8 +159,9 @@ decided.
   response plots, and two-column ROI-overlay/response figures as PDF and PNG
   with Illustrator-editable PDF text and vector ROI/trace paths where possible.
   Each export action writes into its own subfolder under `exports/`. ROI image
-  exports use the same cropped display area as the recording view, including
-  when an older full-frame Labels layer is still present in napari.
+  exports use pixel-edge ROI outlines and the same cropped display area as the
+  recording view, including when an older full-frame Labels layer is still
+  present in napari.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
 - Napari image layers set initial display contrast without narrowing the full
@@ -176,6 +177,10 @@ decided.
 - Napari ROI and epoch visibility controls operate on already-computed response
   data. Checkbox changes update cached plot widgets directly, and bulk
   select-all/select-none actions redraw once instead of once per checkbox.
+- Napari epoch visibility controls use stable epoch keys instead of display
+  text, so selecting and deselecting epochs is idempotent even if labels repeat.
+- Napari Save Analysis + ROIs persists ROI and analysis files without replacing
+  the current in-memory plot preview.
 - ROI visibility controls hide existing label values without making future
   newly drawn label numbers transparent or forcing them to share one fallback
   color, so users can keep adding ROIs after filtering plots.

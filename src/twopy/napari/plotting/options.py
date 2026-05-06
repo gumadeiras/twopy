@@ -8,7 +8,7 @@ This module owns option-panel widgets only. It does not draw response traces,
 load analysis files, or compute responses.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from typing import cast
 
 from qtpy.QtCore import QSignalBlocker
@@ -31,8 +31,8 @@ __all__ = [
 ]
 
 type CallableAxisBounds = Callable[..., None]
-type CallableVisibility = Callable[[str, bool], None]
-type CallableVisibilityBatch = Callable[[dict[str, bool]], None]
+type CallableVisibility = Callable[[Hashable, bool], None]
+type CallableVisibilityBatch = Callable[[dict[Hashable, bool]], None]
 
 
 def axis_options_widget(
@@ -96,6 +96,7 @@ def visibility_options_widget(
     visibility: dict[str, bool],
     on_change: object,
     on_change_batch: object | None = None,
+    keys: tuple[Hashable, ...] | None = None,
     colors: tuple[QColor, ...] | None = None,
 ) -> QWidget:
     """Create select-all/select-none checkboxes for plot visibility.
@@ -108,6 +109,9 @@ def visibility_options_widget(
         on_change_batch: Optional callback receiving all labels changed by
             Select all or None. This prevents one bulk click from redrawing the
             plots once per checkbox.
+        keys: Optional stable callback keys matching ``labels``. Labels stay
+            human-readable; keys prevent duplicate display names from toggling
+            the wrong underlying item.
         colors: Optional swatch colors matching ``labels`` by position.
 
     Returns:
@@ -133,13 +137,16 @@ def visibility_options_widget(
     list_layout = QVBoxLayout()
     list_layout.setContentsMargins(0, 0, 0, 0)
     checkboxes: list[QCheckBox] = []
+    checkbox_keys: list[Hashable] = []
     for index, label in enumerate(labels):
+        key = keys[index] if keys is not None and index < len(keys) else label
         checkbox = QCheckBox(label)
         checkbox.setChecked(visibility.get(label, True))
         checkbox.stateChanged.connect(
-            lambda _state, item=label, box=checkbox: callback(item, box.isChecked())
+            lambda _state, item=key, box=checkbox: callback(item, box.isChecked())
         )
         checkboxes.append(checkbox)
+        checkbox_keys.append(key)
         list_layout.addWidget(_visibility_row(checkbox, _color_at(colors, index)))
     list_widget.setLayout(list_layout)
 
@@ -156,10 +163,10 @@ def visibility_options_widget(
             checkbox.setChecked(checked)
         del blockers
         if batch_callback is not None:
-            batch_callback({checkbox.text(): checked for checkbox in checkboxes})
+            batch_callback({key: checked for key in checkbox_keys})
             return
-        for checkbox in checkboxes:
-            callback(checkbox.text(), checked)
+        for key in checkbox_keys:
+            callback(key, checked)
 
     all_button.clicked.connect(lambda: set_all(True))
     none_button.clicked.connect(lambda: set_all(False))

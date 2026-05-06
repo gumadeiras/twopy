@@ -18,6 +18,7 @@ import matplotlib as mpl
 import numpy as np
 import numpy.typing as npt
 from matplotlib.axes import Axes
+from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 
 from twopy.converted import RecordingData
@@ -30,10 +31,12 @@ __all__ = [
     "export_recording_roi_overlay",
     "export_recording_view",
     "export_roi_view",
+    "roi_boundary_segments",
 ]
 
 MM_TO_INCH = 1.0 / 25.4
 DEFAULT_FORMATS = ("pdf", "png")
+type BoundarySegment = tuple[tuple[float, float], tuple[float, float]]
 
 
 class _LayerWithData(Protocol):
@@ -527,14 +530,49 @@ def draw_roi_contours(
         mask = labels == roi_label_values[roi_index]
         if not np.any(mask):
             continue
-        ax.contour(
-            mask.astype(np.float64),
-            levels=(0.5,),
-            colors=(roi_colors[roi_index],),
-            linewidths=0.75,
+        ax.add_collection(
+            LineCollection(
+                roi_boundary_segments(mask),
+                colors=(roi_colors[roi_index],),
+                linewidths=0.75,
+            )
         )
     ax.set_xlim(-0.5, labels.shape[1] - 0.5)
     ax.set_ylim(labels.shape[0] - 0.5, -0.5)
+
+
+def roi_boundary_segments(mask: npt.NDArray[np.bool_]) -> list[BoundarySegment]:
+    """Return pixel-edge line segments around one ROI mask.
+
+    Args:
+        mask: Two-dimensional boolean ROI mask in display coordinates.
+
+    Returns:
+        Line segments in Matplotlib data coordinates.
+
+    Matplotlib contours trace between pixel centers, which misses visible
+    boundaries when an ROI touches the image edge. These segments follow the
+    outside edge of ROI pixels exactly, including pixels on the first or last
+    row/column.
+    """
+    rows, columns = mask.shape
+    segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    for row, column in np.argwhere(mask):
+        row_index = int(row)
+        column_index = int(column)
+        left = float(column_index) - 0.5
+        right = float(column_index) + 0.5
+        top = float(row_index) - 0.5
+        bottom = float(row_index) + 0.5
+        if row_index == 0 or not mask[row_index - 1, column_index]:
+            segments.append(((left, top), (right, top)))
+        if row_index == rows - 1 or not mask[row_index + 1, column_index]:
+            segments.append(((left, bottom), (right, bottom)))
+        if column_index == 0 or not mask[row_index, column_index - 1]:
+            segments.append(((left, top), (left, bottom)))
+        if column_index == columns - 1 or not mask[row_index, column_index + 1]:
+            segments.append(((right, top), (right, bottom)))
+    return segments
 
 
 def draw_epoch_response_plot(

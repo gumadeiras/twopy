@@ -17,11 +17,13 @@ from unittest.mock import patch
 import h5py
 import numpy as np
 import numpy.typing as npt
+from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 from napari.layers import Labels
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QApplication,
+    QCheckBox,
     QLabel,
     QListWidget,
     QPushButton,
@@ -54,10 +56,12 @@ from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 from twopy.napari.plotting.data import ResponsePlotData, response_plot_data_from_grouped
+from twopy.napari.plotting.docks import create_response_plot_widget
 from twopy.napari.plotting.export import (
     draw_roi_contours,
     export_epoch_plots,
     labels_for_recording_image,
+    roi_boundary_segments,
 )
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.options import visibility_options_widget
@@ -616,8 +620,8 @@ class NapariAdapterTest(unittest.TestCase):
         """Confirm the Update tab can persist current ROI analysis.
 
         Inputs: edited Labels layer and a patched analysis workflow.
-        Outputs: ROI HDF5 file written beside the recording and plot data
-        updated from the saved analysis run.
+        Outputs: ROI HDF5 file written beside the recording without replacing
+        the current in-memory plot preview.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -628,6 +632,8 @@ class NapariAdapterTest(unittest.TestCase):
             opened = open_recording_in_napari(recording_path, viewer=viewer)
             viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
             response_widget = cast(Any, opened.response_plot_widget)
+            preview_plot_data = _tiny_response_plot_data()
+            response_widget._plot_data = preview_plot_data
 
             with patch(
                 "twopy.napari.plotting.docks.analyze_recording_responses",
@@ -645,7 +651,7 @@ class NapariAdapterTest(unittest.TestCase):
             _, roi_set = analyze.call_args.args
             self.assertEqual(roi_set.labels, ("roi_0001",))
             self.assertEqual(analyze.call_args.kwargs["output_path"], analysis_path)
-            self.assertIsNotNone(response_widget._plot_data)
+            self.assertIs(response_widget._plot_data, preview_plot_data)
 
     def test_live_response_controller_updates_after_paint_event(self) -> None:
         """Confirm committed Labels painting triggers a response plot refresh.
@@ -1140,6 +1146,27 @@ class NapariAdapterTest(unittest.TestCase):
             [{"roi_1": False, "roi_2": False, "roi_3": False}],
         )
 
+    def test_visibility_options_use_stable_keys_for_duplicate_labels(self) -> None:
+        """Confirm duplicate display labels can still toggle distinct items.
+
+        Inputs: two checkboxes with the same visible label but separate keys.
+        Outputs: toggling the second checkbox reports the second key.
+        """
+        _ = QApplication.instance() or QApplication([])
+        calls: list[tuple[object, bool]] = []
+        widget = visibility_options_widget(
+            title="Epochs",
+            labels=("same epoch", "same epoch"),
+            keys=((1, "same epoch"), (2, "same epoch")),
+            visibility={"same epoch": True},
+            on_change=lambda key, visible: calls.append((key, visible)),
+        )
+        checkboxes = widget.findChildren(QCheckBox)
+
+        checkboxes[1].setChecked(False)
+
+        self.assertEqual(calls, [((2, "same epoch"), False)])
+
     def test_roi_visibility_can_hide_labels_layer_rois(self) -> None:
         """Confirm plot ROI visibility can hide ROI labels in napari.
 
@@ -1399,6 +1426,47 @@ class NapariAdapterTest(unittest.TestCase):
             (1, 3),
         )
 
+    def test_epoch_visibility_toggle_is_idempotent_by_key(self) -> None:
+        """Confirm hiding and showing an epoch restores the same epoch.
+
+        Inputs: two epoch plots and direct stable epoch-key toggles.
+        Outputs: the selected epoch set returns to the original keys.
+        """
+        _ = QApplication.instance() or QApplication([])
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((4, 1), dtype=np.float64),
+            baseline=np.ones((4, 1), dtype=np.float64),
+            values=np.arange(4, dtype=np.float64).reshape(4, 1),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=4,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            interleave_frame_numbers=np.array([0.0]),
+            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        plot_data = response_plot_data_from_grouped(
+            group_delta_f_over_f_by_epoch(
+                dff,
+                (
+                    EpochFrameWindow(FrameWindow(0, 0, 2, "first"), 1, "First"),
+                    EpochFrameWindow(FrameWindow(1, 2, 4, "second"), 2, "Second"),
+                ),
+                data_rate_hz=1.0,
+            ),
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+
+        response_widget._set_epoch_visibility((1, "First"), False)
+        response_widget._set_epoch_visibility((1, "First"), True)
+
+        self.assertEqual(
+            response_widget._visible_epoch_keys(),
+            ((1, "First"), (2, "Second")),
+        )
+
     def test_response_plot_bounds_use_selected_epochs_and_rois(self) -> None:
         """Confirm plot bounds follow selected ROI and epoch visibility.
 
@@ -1528,12 +1596,27 @@ class NapariAdapterTest(unittest.TestCase):
             roi_indices=(0,),
             roi_colors=("#ff0000",),
         )
+        contour_lines = cast(LineCollection, ax.collections[0])
         vertices = np.asarray(
-            ax.collections[0].get_paths()[0].vertices,
+            contour_lines.get_segments()[0],
             dtype=np.float64,
         )
 
         self.assertLess(float(np.max(vertices[:, 1])), 2.0)
+
+    def test_export_roi_contours_follow_pixel_edges_at_image_boundary(self) -> None:
+        """Confirm edge-touching ROIs export outlines on the image boundary.
+
+        Inputs: one ROI pixel at the top-left image corner.
+        Outputs: boundary segments include the top and left external pixel
+        edges instead of shifting inward.
+        """
+        segments = roi_boundary_segments(
+            np.array([[True, False], [False, False]], dtype=np.bool_),
+        )
+
+        self.assertIn(((-0.5, -0.5), (0.5, -0.5)), segments)
+        self.assertIn(((-0.5, -0.5), (-0.5, 0.5)), segments)
 
     def test_export_crops_full_frame_display_labels_to_recording_view(self) -> None:
         """Confirm stale full-frame Labels data exports only the displayed crop.
