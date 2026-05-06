@@ -661,6 +661,8 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(analyze.call_args.kwargs["output_path"], analysis_path)
             self.assertIs(response_widget._plot_data, preview_plot_data)
 
+            recording_summary_text = response_widget._recording_summary_label.text()
+            self.assertEqual(len(recording_summary_text.split("\n\n")), 4)
             labels_text = "\n".join(
                 (
                     response_widget._analysis_path_label.text(),

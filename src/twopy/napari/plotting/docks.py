@@ -723,7 +723,7 @@ class _ResponsePlotWidget(QWidget):
             return
 
         summary = recording_display_summary(self._recording)
-        self._recording_summary_label.setText("\n".join(summary.lines()))
+        self._recording_summary_label.setText("\n\n".join(summary.lines()))
         self._analysis_path_label.setText(
             f"Analysis output: {format_twopy_h5_output(self._resolved_analysis_path())}"
         )
