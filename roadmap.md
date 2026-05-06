@@ -193,6 +193,8 @@ decided.
 ## Decisions
 
 - GUI: napari.
+- Napari implementation stays inside this repo for now, structured as reusable
+  `twopy.napari` helpers that a future plugin can wrap with menus/widgets.
 - Python: 3.13.
 - Environment: micromamba env named `twopy`.
 - Core modules stay GUI-independent; napari code calls core modules.

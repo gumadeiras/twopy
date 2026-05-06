@@ -42,6 +42,9 @@ twopy is a two-photon imaging analysis tool.
 - Use napari for the user interface.
 - Keep core modules GUI-independent. Session discovery, MATLAB loading, data conversion, and analysis code must not import napari.
 - Keep napari code thin: load recordings, display movies, collect or select ROIs, call documented analysis functions, and display responses.
+- Continue building napari support in this repo for now, but structure it so a
+  future napari plugin can wrap it. Put reusable GUI workflow code in typed
+  `twopy.napari` helpers; a future plugin should be menus/widgets only.
 - Do not hide analysis decisions inside napari callbacks. Put scientific logic in typed, tested modules.
 - Use napari image/shape/label layers for movie and ROI interaction where possible.
 
