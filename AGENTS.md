@@ -112,6 +112,8 @@ twopy is a two-photon imaging analysis tool.
   raw TIFF files, stimulus backups, and text metadata.
 - `twopy.analysis` owns scientific calculations over converted twopy objects
   and HDF5 files. Analysis code must not read source MAT/TIFF files directly.
+- GUI selects analysis parameters; workflow owns execution; processing modules
+  own math; persistence owns the audit trail.
 - `twopy.parity` owns read-only comparison helpers for prior `savedAnalysis/`
   outputs. Normal conversion, analysis, and napari code should not import
   parity helpers.
