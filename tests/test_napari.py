@@ -55,7 +55,11 @@ from twopy.napari.interactive import LiveResponseController
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
-from twopy.napari.plotting.data import ResponsePlotData, response_plot_data_from_grouped
+from twopy.napari.plotting.data import (
+    EpochResponsePlotData,
+    ResponsePlotData,
+    response_plot_data_from_grouped,
+)
 from twopy.napari.plotting.docks import create_response_plot_widget
 from twopy.napari.plotting.export import (
     draw_roi_contours,
@@ -1157,15 +1161,15 @@ class NapariAdapterTest(unittest.TestCase):
         widget = visibility_options_widget(
             title="Epochs",
             labels=("same epoch", "same epoch"),
-            keys=((1, "same epoch"), (2, "same epoch")),
-            visibility={"same epoch": True},
+            keys=(0, 1),
+            visibility={0: True, 1: True},
             on_change=lambda key, visible: calls.append((key, visible)),
         )
         checkboxes = widget.findChildren(QCheckBox)
 
         checkboxes[1].setChecked(False)
 
-        self.assertEqual(calls, [((2, "same epoch"), False)])
+        self.assertEqual(calls, [(1, False)])
 
     def test_visibility_options_read_initial_state_from_keys(self) -> None:
         """Confirm keyed rows do not read visibility from duplicate labels.
@@ -1177,8 +1181,8 @@ class NapariAdapterTest(unittest.TestCase):
         widget = visibility_options_widget(
             title="ROIs",
             labels=("same roi", "same roi"),
-            keys=((0, "same roi"), (1, "same roi")),
-            visibility={(0, "same roi"): True, (1, "same roi"): False},
+            keys=(0, 1),
+            visibility={0: True, 1: False},
             on_change=lambda _key, _visible: None,
         )
         checkboxes = widget.findChildren(QCheckBox)
@@ -1190,7 +1194,7 @@ class NapariAdapterTest(unittest.TestCase):
         """Confirm plot ROI visibility can hide ROI labels in napari.
 
         Inputs: one Labels layer with two ROI labels and one hidden ROI.
-        Outputs: hidden ROI color becomes transparent while label pixels remain.
+        Outputs: hidden ROI color is dimmed while label pixels remain.
         """
         label_image = np.array([[0, 1], [2, 0]], dtype=np.int64)
         layer = Labels(label_image)
@@ -1203,7 +1207,7 @@ class NapariAdapterTest(unittest.TestCase):
         )
 
         np.testing.assert_array_equal(layer.data, label_image)
-        self.assertEqual(layer.get_color(1)[3], 0.0)
+        self.assertAlmostEqual(layer.get_color(1)[3], 0.1)
         self.assertEqual(layer.get_color(2)[3], 1.0)
 
     def test_roi_visibility_keeps_new_labels_drawable(self) -> None:
@@ -1222,7 +1226,7 @@ class NapariAdapterTest(unittest.TestCase):
             colors=(QColor("#ff0000"),),
         )
 
-        self.assertEqual(layer.get_color(10)[3], 0.0)
+        self.assertAlmostEqual(layer.get_color(10)[3], 0.1)
         self.assertEqual(layer.get_color(11)[3], 1.0)
         self.assertEqual(layer.get_color(12)[3], 1.0)
         self.assertFalse(np.array_equal(layer.get_color(11), layer.get_color(12)))
@@ -1231,20 +1235,20 @@ class NapariAdapterTest(unittest.TestCase):
         """Confirm duplicate ROI names can hide distinct label values.
 
         Inputs: two label values with the same displayed ROI name.
-        Outputs: hiding the second key makes only the second label transparent.
+        Outputs: hiding the second key dims only the second label.
         """
         layer = Labels(np.array([[1, 2]], dtype=np.int64))
 
         apply_roi_visibility_to_labels_layer(
             layer,
             roi_labels=("cell", "cell"),
-            visibility={(0, "cell"): True, (1, "cell"): False},
-            keys=((0, "cell"), (1, "cell")),
+            visibility={0: True, 1: False},
+            keys=(0, 1),
             colors=(QColor("#ff0000"), QColor("#0000ff")),
         )
 
         self.assertEqual(layer.get_color(1)[3], 1.0)
-        self.assertEqual(layer.get_color(2)[3], 0.0)
+        self.assertAlmostEqual(layer.get_color(2)[3], 0.1)
 
     def test_display_helpers_transpose_movie_axes_for_napari(self) -> None:
         """Confirm movie axes are transposed only at the napari boundary.
@@ -1507,11 +1511,11 @@ class NapariAdapterTest(unittest.TestCase):
             (1, 3),
         )
 
-    def test_epoch_visibility_toggle_is_idempotent_by_key(self) -> None:
-        """Confirm hiding and showing an epoch restores the same epoch.
+    def test_epoch_visibility_toggle_is_idempotent_by_row_index(self) -> None:
+        """Confirm hiding and showing an epoch restores the same row.
 
-        Inputs: two epoch plots and direct stable epoch-key toggles.
-        Outputs: the selected epoch set returns to the original keys.
+        Inputs: two epoch plots and direct row-index toggles.
+        Outputs: the selected epoch set returns to the original row indices.
         """
         _ = QApplication.instance() or QApplication([])
         dff = RoiDeltaFOverF(
@@ -1540,15 +1544,49 @@ class NapariAdapterTest(unittest.TestCase):
         response_widget = cast(Any, create_response_plot_widget(None))
         response_widget.set_response_plot_data(plot_data, reset_axes=True)
 
-        response_widget._set_epoch_visibility((1, "First"), False)
-        response_widget._set_epoch_visibility((1, "First"), True)
+        response_widget._set_epoch_visibility(0, False)
+        response_widget._set_epoch_visibility(0, True)
 
-        self.assertEqual(
-            response_widget._visible_epoch_keys(),
-            ((1, "First"), (2, "Second")),
+        self.assertEqual(response_widget._visible_epoch_indices(), (0, 1))
+
+    def test_duplicate_epoch_metadata_does_not_collide_in_visibility(self) -> None:
+        """Confirm epoch rows do not share GUI state when metadata matches.
+
+        Inputs: two plot rows with the same epoch number and name.
+        Outputs: hiding the second row leaves only the first row visible.
+        """
+        _ = QApplication.instance() or QApplication([])
+        time_seconds = np.array([0.0, 1.0], dtype=np.float64)
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Same",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Same",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
         )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
 
-    def test_roi_visibility_toggle_is_idempotent_by_key(self) -> None:
+        response_widget._set_epoch_visibility(1, False)
+
+        self.assertEqual(response_widget._visible_epoch_indices(), (0,))
+        self.assertEqual(tuple(response_widget._epoch_plot_widgets), (0, 1))
+
+    def test_roi_visibility_toggle_is_idempotent_by_row_index(self) -> None:
         """Confirm ROI visibility does not depend on unique display labels.
 
         Inputs: one plot data object with duplicate ROI names.
@@ -1578,10 +1616,10 @@ class NapariAdapterTest(unittest.TestCase):
         response_widget = cast(Any, create_response_plot_widget(None))
         response_widget.set_response_plot_data(plot_data, reset_axes=True)
 
-        response_widget._set_roi_visibility((1, "same"), False)
+        response_widget._set_roi_visibility(1, False)
         self.assertEqual(response_widget._visible_roi_indices(), (0,))
 
-        response_widget._set_roi_visibility((1, "same"), True)
+        response_widget._set_roi_visibility(1, True)
         self.assertEqual(response_widget._visible_roi_indices(), (0, 1))
 
     def test_response_plot_bounds_use_selected_epochs_and_rois(self) -> None:
@@ -1616,9 +1654,9 @@ class NapariAdapterTest(unittest.TestCase):
         )
         plot_data = response_plot_data_from_grouped(grouped)
 
-        self.assertEqual(global_time_bounds(plot_data, ((2, "Odor"),)), (0.0, 1.0))
+        self.assertEqual(global_time_bounds(plot_data, (1,)), (0.0, 1.0))
         self.assertEqual(
-            global_value_bounds(plot_data, (0,), ((2, "Odor"),)),
+            global_value_bounds(plot_data, (0,), (1,)),
             (1.6, 3.6),
         )
 
@@ -1683,7 +1721,7 @@ class NapariAdapterTest(unittest.TestCase):
             written = export_epoch_plots(
                 plot_data=plot_data,
                 output_dir=Path(temp_dir),
-                epoch_keys=((1, "Odor"),),
+                epoch_indices=(0,),
                 roi_indices=(0,),
                 roi_colors=("#ff0000",),
                 show_sem=True,

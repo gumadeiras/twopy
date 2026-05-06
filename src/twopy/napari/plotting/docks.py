@@ -9,9 +9,7 @@ responses from the current Labels layer, this module converts labels to a
 ``RoiSet`` and calls the normal analysis workflow.
 """
 
-from collections.abc import Hashable
 from pathlib import Path
-from typing import TypeGuard
 
 import numpy as np
 from qtpy.QtGui import QColor
@@ -78,7 +76,6 @@ __all__ = [
 ]
 
 _QT_APPLICATION: object | None = None
-type RoiVisibilityKey = tuple[int, str]
 
 
 def add_twopy_response_plot_widget(
@@ -241,11 +238,11 @@ class _ResponsePlotWidget(QWidget):
         self._plot_data: ResponsePlotData | None = None
         self._show_sem = True
         self._plot_size = 360
-        self._epoch_plot_widgets: dict[tuple[int, str], EpochPlotWidget] = {}
-        self._epoch_plot_panels: dict[tuple[int, str], QWidget] = {}
-        self._roi_visibility: dict[RoiVisibilityKey, bool] = {}
+        self._epoch_plot_widgets: dict[int, EpochPlotWidget] = {}
+        self._epoch_plot_panels: dict[int, QWidget] = {}
+        self._roi_visibility: dict[int, bool] = {}
         self._roi_colors: tuple[QColor, ...] = ()
-        self._epoch_visibility: dict[tuple[int, str], bool] = {}
+        self._epoch_visibility: dict[int, bool] = {}
         self._manual_x_min: float | None = None
         self._manual_x_max: float | None = None
         self._manual_y_min: float | None = None
@@ -544,8 +541,8 @@ class _ResponsePlotWidget(QWidget):
 
         roi_labels = self._plot_data.epochs[0].roi_labels
         self._roi_visibility = {
-            key: self._roi_visibility.get(key, True)
-            for key in roi_visibility_keys(roi_labels)
+            index: self._roi_visibility.get(index, True)
+            for index in range(len(roi_labels))
         }
         self._roi_colors = opaque_colors(
             roi_colors_from_label_values(
@@ -555,11 +552,11 @@ class _ResponsePlotWidget(QWidget):
             )
         )
         self._epoch_visibility = {
-            (epoch.epoch_number, epoch.epoch_name): self._epoch_visibility.get(
-                (epoch.epoch_number, epoch.epoch_name),
+            index: self._epoch_visibility.get(
+                index,
                 not is_gray_epoch_name(epoch.epoch_name),
             )
-            for epoch in self._plot_data.epochs
+            for index, epoch in enumerate(self._plot_data.epochs)
         }
         if reset_axes:
             self._manual_x_min = None
@@ -588,7 +585,7 @@ class _ResponsePlotWidget(QWidget):
         auto_y_min, auto_y_max = global_value_bounds(
             self._plot_data,
             self._visible_roi_indices(),
-            self._visible_epoch_keys(),
+            self._visible_epoch_indices(),
         )
         axis_widget = axis_options_widget(
             x_min=self._manual_x_min if self._manual_x_min is not None else auto_x_min,
@@ -605,7 +602,7 @@ class _ResponsePlotWidget(QWidget):
                 visibility=self._roi_visibility,
                 on_change=self._set_roi_visibility,
                 on_change_batch=self._set_roi_visibility_batch,
-                keys=self._roi_keys(),
+                keys=tuple(range(len(self._roi_labels()))),
                 colors=self._roi_colors,
             ),
         )
@@ -620,10 +617,7 @@ class _ResponsePlotWidget(QWidget):
                 visibility=self._epoch_visibility,
                 on_change=self._set_epoch_visibility,
                 on_change_batch=self._set_epoch_visibility_batch,
-                keys=tuple(
-                    (epoch.epoch_number, epoch.epoch_name)
-                    for epoch in self._plot_data.epochs
-                ),
+                keys=tuple(range(len(self._plot_data.epochs))),
             ),
         )
         self._epoch_options_layout.addStretch(1)
@@ -669,12 +663,12 @@ class _ResponsePlotWidget(QWidget):
             output_dir=self._export_output_dir(),
             roi_label_values=self._roi_label_values(),
             roi_colors=self._roi_color_hex(),
-            epoch_keys=self._visible_epoch_keys(),
+            epoch_indices=self._visible_epoch_indices(),
             roi_indices=self._visible_roi_indices(),
             show_sem=self._show_sem,
             time_bounds=resolved_time_bounds(
                 self._plot_data,
-                self._visible_epoch_keys(),
+                self._visible_epoch_indices(),
                 manual_min=self._manual_x_min,
                 manual_max=self._manual_x_max,
             )
@@ -683,7 +677,7 @@ class _ResponsePlotWidget(QWidget):
             value_bounds=resolved_value_bounds(
                 self._plot_data,
                 self._visible_roi_indices(),
-                self._visible_epoch_keys(),
+                self._visible_epoch_indices(),
                 manual_min=self._manual_y_min,
                 manual_max=self._manual_y_max,
             )
@@ -721,49 +715,35 @@ class _ResponsePlotWidget(QWidget):
         """Return integer Labels values in plot ROI order."""
         return roi_label_values_from_labels(self._roi_labels())
 
-    def _set_roi_visibility(self, key: Hashable, visible: bool) -> None:
-        """Update one ROI visibility flag from its stable ROI key."""
-        if self._is_roi_key(key):
-            self._roi_visibility[key] = visible
+    def _set_roi_visibility(self, index: object, visible: bool) -> None:
+        """Update one ROI visibility flag from its displayed row index."""
+        row_index = _row_index_or_none(index, len(self._roi_labels()))
+        if row_index is not None:
+            self._roi_visibility[row_index] = visible
         self._render_plots()
 
-    def _set_roi_visibility_batch(self, visibility: dict[Hashable, bool]) -> None:
+    def _set_roi_visibility_batch(self, visibility: dict[object, bool]) -> None:
         """Update several ROI visibility flags with one plot refresh."""
-        for key, visible in visibility.items():
-            if self._is_roi_key(key):
-                self._roi_visibility[key] = visible
+        for index, visible in visibility.items():
+            row_index = _row_index_or_none(index, len(self._roi_labels()))
+            if row_index is not None:
+                self._roi_visibility[row_index] = visible
         self._render_plots()
 
-    def _set_epoch_visibility(self, key: object, visible: bool) -> None:
-        """Update one epoch visibility flag from its stable epoch key."""
-        if self._is_epoch_key(key):
-            self._epoch_visibility[key] = visible
+    def _set_epoch_visibility(self, index: object, visible: bool) -> None:
+        """Update one epoch visibility flag from its displayed row index."""
+        row_index = _row_index_or_none(index, self._epoch_count())
+        if row_index is not None:
+            self._epoch_visibility[row_index] = visible
         self._render_plots(apply_roi_layer_visibility=False)
 
     def _set_epoch_visibility_batch(self, visibility: dict[object, bool]) -> None:
         """Update several epoch visibility flags with one plot refresh."""
-        for key, visible in visibility.items():
-            if self._is_epoch_key(key):
-                self._epoch_visibility[key] = visible
+        for index, visible in visibility.items():
+            row_index = _row_index_or_none(index, self._epoch_count())
+            if row_index is not None:
+                self._epoch_visibility[row_index] = visible
         self._render_plots(apply_roi_layer_visibility=False)
-
-    def _is_epoch_key(self, value: object) -> TypeGuard[tuple[int, str]]:
-        """Return whether a callback value is an epoch visibility key."""
-        return (
-            isinstance(value, tuple)
-            and len(value) == 2
-            and isinstance(value[0], int)
-            and isinstance(value[1], str)
-        )
-
-    def _is_roi_key(self, value: object) -> TypeGuard[RoiVisibilityKey]:
-        """Return whether a callback value is a ROI visibility key."""
-        return (
-            isinstance(value, tuple)
-            and len(value) == 2
-            and isinstance(value[0], int)
-            and isinstance(value[1], str)
-        )
 
     def _visible_roi_indices(self) -> tuple[int, ...]:
         """Return zero-based ROI indices currently visible in plots.
@@ -776,20 +756,22 @@ class _ResponsePlotWidget(QWidget):
         """
         return tuple(
             index
-            for index, key in enumerate(self._roi_keys())
-            if self._roi_visibility.get(key, True)
+            for index in range(len(self._roi_labels()))
+            if self._roi_visibility.get(index, True)
         )
 
-    def _visible_epoch_keys(self) -> tuple[tuple[int, str], ...]:
-        """Return epoch keys currently visible in plots.
+    def _visible_epoch_indices(self) -> tuple[int, ...]:
+        """Return epoch row indices currently visible in plots.
 
         Args:
             None.
 
         Returns:
-            Tuple of ``(epoch_number, epoch_name)`` keys.
+            Tuple of displayed epoch row indices.
         """
-        return tuple(key for key, visible in self._epoch_visibility.items() if visible)
+        return tuple(
+            index for index, visible in self._epoch_visibility.items() if visible
+        )
 
     def _roi_labels(self) -> tuple[str, ...]:
         """Return ROI labels from the current plot data.
@@ -804,9 +786,11 @@ class _ResponsePlotWidget(QWidget):
             return ()
         return self._plot_data.epochs[0].roi_labels
 
-    def _roi_keys(self) -> tuple[RoiVisibilityKey, ...]:
-        """Return stable ROI visibility keys for the current plot labels."""
-        return roi_visibility_keys(self._roi_labels())
+    def _epoch_count(self) -> int:
+        """Return the number of epoch rows in the current plot data."""
+        if self._plot_data is None:
+            return 0
+        return len(self._plot_data.epochs)
 
     def _set_status(self, text: str) -> None:
         """Replace plots with one status message.
@@ -833,33 +817,29 @@ class _ResponsePlotWidget(QWidget):
         if apply_roi_layer_visibility:
             self._apply_roi_layer_visibility()
         roi_indices = self._visible_roi_indices()
-        epoch_keys = self._visible_epoch_keys()
-        if len(roi_indices) == 0 or len(epoch_keys) == 0:
+        epoch_indices = self._visible_epoch_indices()
+        if len(roi_indices) == 0 or len(epoch_indices) == 0:
             self._set_status("No responses selected.")
             return
         time_min, time_max = resolved_time_bounds(
             self._plot_data,
-            epoch_keys,
+            epoch_indices,
             manual_min=self._manual_x_min,
             manual_max=self._manual_x_max,
         )
         value_min, value_max = resolved_value_bounds(
             self._plot_data,
             roi_indices,
-            epoch_keys,
+            epoch_indices,
             manual_min=self._manual_y_min,
             manual_max=self._manual_y_max,
         )
         colors = self._roi_colors
         self._ensure_epoch_plot_cache()
-        for epoch in self._plot_data.epochs:
-            if not self._epoch_visibility.get(
-                (epoch.epoch_number, epoch.epoch_name),
-                True,
-            ):
+        for epoch_index, _epoch in enumerate(self._plot_data.epochs):
+            if not self._epoch_visibility.get(epoch_index, True):
                 continue
-            key = (epoch.epoch_number, epoch.epoch_name)
-            plot = self._epoch_plot_widgets[key]
+            plot = self._epoch_plot_widgets[epoch_index]
             plot.update_display(
                 show_sem=self._show_sem,
                 roi_indices=roi_indices,
@@ -870,7 +850,7 @@ class _ResponsePlotWidget(QWidget):
                 value_max=value_max,
                 plot_size=self._plot_size,
             )
-            self._plot_layout.addWidget(self._epoch_plot_panels[key])
+            self._plot_layout.addWidget(self._epoch_plot_panels[epoch_index])
         self._plot_layout.addStretch(1)
 
     def _ensure_epoch_plot_cache(self) -> None:
@@ -878,17 +858,14 @@ class _ResponsePlotWidget(QWidget):
         if self._plot_data is None:
             self._clear_epoch_plot_cache()
             return
-        expected_keys = {
-            (epoch.epoch_number, epoch.epoch_name) for epoch in self._plot_data.epochs
-        }
-        for key in tuple(self._epoch_plot_widgets):
-            if key not in expected_keys:
-                self._epoch_plot_panels[key].deleteLater()
-                del self._epoch_plot_panels[key]
-                del self._epoch_plot_widgets[key]
-        for epoch in self._plot_data.epochs:
-            key = (epoch.epoch_number, epoch.epoch_name)
-            if key in self._epoch_plot_widgets:
+        expected_indices = set(range(len(self._plot_data.epochs)))
+        for epoch_index in tuple(self._epoch_plot_widgets):
+            if epoch_index not in expected_indices:
+                self._epoch_plot_panels[epoch_index].deleteLater()
+                del self._epoch_plot_panels[epoch_index]
+                del self._epoch_plot_widgets[epoch_index]
+        for epoch_index, epoch in enumerate(self._plot_data.epochs):
+            if epoch_index in self._epoch_plot_widgets:
                 continue
             plot = EpochPlotWidget(
                 epoch,
@@ -901,8 +878,8 @@ class _ResponsePlotWidget(QWidget):
                 value_max=1.0,
                 plot_size=self._plot_size,
             )
-            self._epoch_plot_widgets[key] = plot
-            self._epoch_plot_panels[key] = epoch_plot_panel(
+            self._epoch_plot_widgets[epoch_index] = plot
+            self._epoch_plot_panels[epoch_index] = epoch_plot_panel(
                 title=f"Epoch {epoch.epoch_number}: {epoch.epoch_name}",
                 plot=plot,
             )
@@ -932,17 +909,20 @@ class _ResponsePlotWidget(QWidget):
             roi_labels=self._roi_labels(),
             visibility=self._roi_visibility,
             colors=self._roi_colors,
-            keys=self._roi_keys(),
+            keys=tuple(range(len(self._roi_labels()))),
         )
 
 
-def roi_visibility_keys(roi_labels: tuple[str, ...]) -> tuple[RoiVisibilityKey, ...]:
-    """Return stable ROI keys that do not depend on unique display names.
+def _row_index_or_none(value: object, row_count: int) -> int | None:
+    """Return a valid widget row index from an external callback value.
 
     Args:
-        roi_labels: ROI labels in plot order.
+        value: Callback key from a visibility checkbox.
+        row_count: Number of rows currently displayed by that widget.
 
     Returns:
-        One ``(roi_index, roi_label)`` key per ROI.
+        Zero-based row index, or ``None`` when ``value`` is invalid.
     """
-    return tuple(enumerate(roi_labels))
+    if type(value) is not int or value < 0 or value >= row_count:
+        return None
+    return value

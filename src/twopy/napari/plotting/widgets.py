@@ -239,18 +239,18 @@ def clear_layout(layout: QLayout) -> None:
 
 def global_time_bounds(
     data: ResponsePlotData,
-    epoch_keys: tuple[tuple[int, str], ...] | None = None,
+    epoch_indices: tuple[int, ...] | None = None,
 ) -> tuple[float, float]:
     """Return shared x-axis bounds across selected epoch plots.
 
     Args:
         data: Full response plot data.
-        epoch_keys: Optional selected epoch keys.
+        epoch_indices: Optional selected epoch row indices.
 
     Returns:
         ``(min, max)`` response time in seconds.
     """
-    epochs = _selected_epochs(data, epoch_keys)
+    epochs = _selected_epochs(data, epoch_indices)
     time_min = min(float(epoch.time_seconds[0]) for epoch in epochs)
     time_max = max(float(epoch.time_seconds[-1]) for epoch in epochs)
     if time_min == time_max:
@@ -261,19 +261,19 @@ def global_time_bounds(
 def global_value_bounds(
     data: ResponsePlotData,
     roi_indices: tuple[int, ...] | None = None,
-    epoch_keys: tuple[tuple[int, str], ...] | None = None,
+    epoch_indices: tuple[int, ...] | None = None,
 ) -> tuple[float, float]:
     """Return shared y-axis bounds across all epoch plots.
 
     Args:
         data: Full response plot data.
         roi_indices: Optional selected ROI indices.
-        epoch_keys: Optional selected epoch keys.
+        epoch_indices: Optional selected epoch row indices.
 
     Returns:
         ``(min, max)`` bounds expanded by 20 percent and rounded to one decimal.
     """
-    epochs = _selected_epochs(data, epoch_keys)
+    epochs = _selected_epochs(data, epoch_indices)
     selected_roi_indices = roi_indices or tuple(range(len(epochs[0].roi_labels)))
     lower = np.concatenate(
         tuple(
@@ -384,7 +384,7 @@ def ordered_bounds(min_value: float, max_value: float) -> tuple[float, float]:
 
 def resolved_time_bounds(
     data: ResponsePlotData,
-    epoch_keys: tuple[tuple[int, str], ...],
+    epoch_indices: tuple[int, ...],
     *,
     manual_min: float | None,
     manual_max: float | None,
@@ -393,14 +393,14 @@ def resolved_time_bounds(
 
     Args:
         data: Full response plot data.
-        epoch_keys: Visible epoch keys.
+        epoch_indices: Visible epoch row indices.
         manual_min: Optional user-entered minimum.
         manual_max: Optional user-entered maximum.
 
     Returns:
         Ordered nonzero x-axis bounds.
     """
-    auto_min, auto_max = global_time_bounds(data, epoch_keys)
+    auto_min, auto_max = global_time_bounds(data, epoch_indices)
     time_min = manual_min if manual_min is not None else auto_min
     time_max = manual_max if manual_max is not None else auto_max
     return ordered_bounds(time_min, time_max)
@@ -409,7 +409,7 @@ def resolved_time_bounds(
 def resolved_value_bounds(
     data: ResponsePlotData,
     roi_indices: tuple[int, ...],
-    epoch_keys: tuple[tuple[int, str], ...],
+    epoch_indices: tuple[int, ...],
     *,
     manual_min: float | None,
     manual_max: float | None,
@@ -419,14 +419,14 @@ def resolved_value_bounds(
     Args:
         data: Full response plot data.
         roi_indices: Visible ROI indices.
-        epoch_keys: Visible epoch keys.
+        epoch_indices: Visible epoch row indices.
         manual_min: Optional user-entered minimum.
         manual_max: Optional user-entered maximum.
 
     Returns:
         Ordered nonzero y-axis bounds.
     """
-    auto_min, auto_max = global_value_bounds(data, roi_indices, epoch_keys)
+    auto_min, auto_max = global_value_bounds(data, roi_indices, epoch_indices)
     value_min = manual_min if manual_min is not None else auto_min
     value_max = manual_max if manual_max is not None else auto_max
     return ordered_bounds(value_min, value_max)
@@ -451,25 +451,22 @@ def opaque_colors(colors: tuple[QColor, ...]) -> tuple[QColor, ...]:
 
 def _selected_epochs(
     data: ResponsePlotData,
-    epoch_keys: tuple[tuple[int, str], ...] | None,
+    epoch_indices: tuple[int, ...] | None,
 ) -> tuple[EpochResponsePlotData, ...]:
     """Return epochs selected for plotting.
 
     Args:
         data: Full response plot data.
-        epoch_keys: Optional selected epoch keys.
+        epoch_indices: Optional selected epoch row indices.
 
     Returns:
         Tuple of selected epochs.
     """
-    if epoch_keys is None:
+    if epoch_indices is None:
         return data.epochs
-    selected = tuple(
-        epoch
-        for epoch in data.epochs
-        if (epoch.epoch_number, epoch.epoch_name) in epoch_keys
+    return tuple(
+        data.epochs[index] for index in epoch_indices if 0 <= index < len(data.epochs)
     )
-    return selected or data.epochs
 
 
 def _qcolor_from_rgba(value: object) -> QColor:

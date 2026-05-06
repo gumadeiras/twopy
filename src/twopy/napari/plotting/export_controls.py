@@ -43,7 +43,7 @@ class ResponseExportState:
     output_dir: Path
     roi_label_values: tuple[int, ...]
     roi_colors: tuple[str, ...]
-    epoch_keys: tuple[tuple[int, str], ...]
+    epoch_indices: tuple[int, ...]
     roi_indices: tuple[int, ...]
     show_sem: bool
     time_bounds: tuple[float, float]
@@ -126,7 +126,7 @@ def _save_plots(state: ResponseExportState) -> tuple[Path, ...] | str:
     return export_epoch_plots(
         plot_data=state.plot_data,
         output_dir=state.output_dir,
-        epoch_keys=state.epoch_keys,
+        epoch_indices=state.epoch_indices,
         roi_indices=state.roi_indices,
         roi_colors=state.roi_colors,
         show_sem=state.show_sem,
@@ -147,7 +147,7 @@ def _save_plots_with_rois(state: ResponseExportState) -> tuple[Path, ...] | str:
         roi_labels_layer=state.roi_labels_layer,
         plot_data=state.plot_data,
         output_dir=state.output_dir,
-        epoch_keys=state.epoch_keys,
+        epoch_indices=state.epoch_indices,
         roi_indices=state.roi_indices,
         roi_label_values=state.roi_label_values,
         roi_colors=state.roi_colors,

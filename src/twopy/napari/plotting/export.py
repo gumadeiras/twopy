@@ -201,7 +201,7 @@ def export_epoch_plots(
     *,
     plot_data: ResponsePlotData,
     output_dir: Path,
-    epoch_keys: tuple[tuple[int, str], ...],
+    epoch_indices: tuple[int, ...],
     roi_indices: tuple[int, ...],
     roi_colors: tuple[str, ...],
     show_sem: bool,
@@ -214,7 +214,7 @@ def export_epoch_plots(
     Args:
         plot_data: Plot-ready response data.
         output_dir: Directory where exported files should be written.
-        epoch_keys: Visible ``(epoch_number, epoch_name)`` pairs.
+        epoch_indices: Visible epoch row indices.
         roi_indices: Zero-based ROI indices to draw.
         roi_colors: Hex colors in plot ROI order.
         show_sem: Whether to draw SEM bands.
@@ -226,7 +226,7 @@ def export_epoch_plots(
         Paths written to disk.
     """
     written: list[Path] = []
-    for epoch in _visible_epochs(plot_data, epoch_keys):
+    for epoch in _visible_epochs(plot_data, epoch_indices):
         fig, ax = plot_figure()
         draw_epoch_response_plot(
             ax,
@@ -255,7 +255,7 @@ def export_epoch_roi_overlay_plots(
     roi_labels_layer: object | None,
     plot_data: ResponsePlotData,
     output_dir: Path,
-    epoch_keys: tuple[tuple[int, str], ...],
+    epoch_indices: tuple[int, ...],
     roi_indices: tuple[int, ...],
     roi_label_values: tuple[int, ...],
     roi_colors: tuple[str, ...],
@@ -272,7 +272,7 @@ def export_epoch_roi_overlay_plots(
         roi_labels_layer: Current napari Labels layer.
         plot_data: Plot-ready response data.
         output_dir: Directory where exported files should be written.
-        epoch_keys: Visible ``(epoch_number, epoch_name)`` pairs.
+        epoch_indices: Visible epoch row indices.
         roi_indices: Zero-based ROI indices to draw.
         roi_label_values: Integer Labels values in plot ROI order.
         roi_colors: Hex colors in plot ROI order.
@@ -291,7 +291,7 @@ def export_epoch_roi_overlay_plots(
     )
     labels = labels_for_recording_image(labels, recording=recording)
     written: list[Path] = []
-    for epoch in _visible_epochs(plot_data, epoch_keys):
+    for epoch in _visible_epochs(plot_data, epoch_indices):
         for roi_index in roi_indices:
             fig, image_ax, plot_ax = overlay_plot_figure(image.shape)
             draw_recording_image(image_ax, image)
@@ -697,14 +697,13 @@ def safe_stem(text: str) -> str:
 
 def _visible_epochs(
     plot_data: ResponsePlotData,
-    epoch_keys: tuple[tuple[int, str], ...],
+    epoch_indices: tuple[int, ...],
 ) -> tuple[EpochResponsePlotData, ...]:
     """Return plot data for selected epochs in saved plot order."""
-    selected = set(epoch_keys)
     return tuple(
-        epoch
-        for epoch in plot_data.epochs
-        if (epoch.epoch_number, epoch.epoch_name) in selected
+        plot_data.epochs[index]
+        for index in epoch_indices
+        if 0 <= index < len(plot_data.epochs)
     )
 
 

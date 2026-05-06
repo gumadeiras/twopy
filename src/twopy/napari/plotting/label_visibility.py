@@ -2,13 +2,13 @@
 
 Inputs: the current napari Labels layer, ROI labels, ROI visibility state, and
 ROI colors.
-Outputs: a Labels-layer colormap where hidden ROIs are transparent.
+Outputs: a Labels-layer colormap where deselected ROIs are dimmed.
 
 This module only changes how labels are displayed. It never edits the label
 image, so hiding an ROI in the plot options cannot delete ROI data.
 """
 
-from collections.abc import Hashable, Mapping
+from collections.abc import Mapping
 from typing import Any, Protocol, cast
 
 from qtpy.QtGui import QColor
@@ -21,7 +21,9 @@ __all__ = [
 
 _LABEL_COLOR_LOOKAHEAD = 4096
 _BASE_LABEL_COLORMAP_METADATA_KEY = "twopy_base_label_colormap"
-type VisibilityState = Mapping[str, bool] | Mapping[tuple[int, str], bool]
+_DESELECTED_ROI_ALPHA = 0.1
+type VisibilityKey = int | str
+type VisibilityState = Mapping[int, bool] | Mapping[str, bool]
 
 
 class _LabelsLayerWithColormap(Protocol):
@@ -45,7 +47,7 @@ def apply_roi_visibility_to_labels_layer(
     roi_labels: tuple[str, ...],
     visibility: VisibilityState,
     colors: tuple[QColor, ...],
-    keys: tuple[Hashable, ...] | None = None,
+    keys: tuple[VisibilityKey, ...] | None = None,
 ) -> None:
     """Apply ROI visibility state to the napari Labels layer display.
 
@@ -60,10 +62,10 @@ def apply_roi_visibility_to_labels_layer(
     Returns:
         None.
 
-    Hidden ROIs keep their label pixels in ``layer.data``; only their display
-    alpha becomes zero. Future labels stay drawable because the direct colormap
-    contains napari-style colors for a broad range of label values instead of a
-    single fallback color.
+    Deselected ROIs keep their label pixels in ``layer.data``; only their
+    display alpha is reduced. Future labels stay drawable because the direct
+    colormap contains napari-style colors for a broad range of label values
+    instead of a single fallback color.
     """
     if layer is None or not hasattr(layer, "colormap"):
         return
@@ -74,7 +76,7 @@ def apply_roi_visibility_to_labels_layer(
         return
 
     labels_layer = cast(_LabelsLayerWithColormap, layer)
-    visibility_lookup: dict[Hashable, bool] = dict(visibility.items())
+    visibility_lookup = dict(visibility.items())
     color_dict = _visible_label_color_dict(
         labels_layer,
         roi_labels=roi_labels,
@@ -88,10 +90,7 @@ def apply_roi_visibility_to_labels_layer(
             keys[roi_index] if keys is not None and roi_index < len(keys) else roi_label
         )
         color = colors[roi_index] if roi_index < len(colors) else QColor("#4cc9f0")
-        color_dict[label_value] = _qcolor_rgba(
-            color,
-            visible=visibility_lookup.get(key, True),
-        )
+        color_dict[label_value] = _qcolor_rgba(color, visibility_lookup.get(key, True))
 
     labels_layer.colormap = direct_colormap(color_dict)
 
@@ -133,12 +132,12 @@ def roi_label_values_from_labels(roi_labels: tuple[str, ...]) -> tuple[int, ...]
     )
 
 
-def _qcolor_rgba(color: QColor, *, visible: bool) -> tuple[float, float, float, float]:
+def _qcolor_rgba(color: QColor, visible: bool) -> tuple[float, float, float, float]:
     """Return a normalized RGBA tuple for one ROI label.
 
     Args:
         color: ROI color.
-        visible: Whether the ROI should be visible in the Labels overlay.
+        visible: Whether the ROI should be fully visible in the Labels overlay.
 
     Returns:
         RGBA tuple in napari's expected ``0`` to ``1`` float range.
@@ -147,7 +146,7 @@ def _qcolor_rgba(color: QColor, *, visible: bool) -> tuple[float, float, float, 
         color.redF(),
         color.greenF(),
         color.blueF(),
-        1.0 if visible else 0.0,
+        1.0 if visible else _DESELECTED_ROI_ALPHA,
     )
 
 
@@ -209,7 +208,7 @@ def _base_label_rgba(
     try:
         from napari.utils.colormaps import label_colormap
     except ImportError:
-        return _qcolor_rgba(QColor("#4cc9f0"), visible=True)
+        return _qcolor_rgba(QColor("#4cc9f0"), True)
 
     params = _base_label_colormap_params(layer)
     colormap = label_colormap(

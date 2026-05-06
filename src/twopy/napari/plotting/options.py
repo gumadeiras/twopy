@@ -33,7 +33,8 @@ __all__ = [
 type CallableAxisBounds = Callable[..., None]
 type CallableVisibility = Callable[[Hashable, bool], None]
 type CallableVisibilityBatch = Callable[[dict[Hashable, bool]], None]
-type VisibilityState = Mapping[str, bool] | Mapping[tuple[int, str], bool]
+type VisibilityKey = int | str
+type VisibilityState = Mapping[int, bool] | Mapping[str, bool]
 
 
 def axis_options_widget(
@@ -97,7 +98,7 @@ def visibility_options_widget(
     visibility: VisibilityState,
     on_change: object,
     on_change_batch: object | None = None,
-    keys: tuple[Hashable, ...] | None = None,
+    keys: tuple[VisibilityKey, ...] | None = None,
     colors: tuple[QColor, ...] | None = None,
 ) -> QWidget:
     """Create select-all/select-none checkboxes for plot visibility.
@@ -126,7 +127,7 @@ def visibility_options_widget(
         else None
     )
     widget = QWidget()
-    visibility_lookup: dict[Hashable, bool] = dict(visibility.items())
+    visibility_lookup = dict(visibility.items())
     layout = QVBoxLayout()
     layout.addWidget(QLabel(title))
     button_row = QHBoxLayout()
@@ -140,7 +141,7 @@ def visibility_options_widget(
     list_layout = QVBoxLayout()
     list_layout.setContentsMargins(0, 0, 0, 0)
     checkboxes: list[QCheckBox] = []
-    checkbox_keys: list[Hashable] = []
+    checkbox_keys: list[VisibilityKey] = []
     for index, label in enumerate(labels):
         key = keys[index] if keys is not None and index < len(keys) else label
         checkbox = QCheckBox(label)

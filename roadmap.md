@@ -260,8 +260,9 @@ decided.
   "Recompute preview now" refreshes live plots in memory, "Reload saved
   analysis" reads existing analysis output from disk, and "Save analysis +
   ROIs" writes the current ROI file plus analysis HDF5 and response CSV.
-- Napari ROI and epoch visibility controls use stable internal keys, so
-  duplicate display names cannot toggle or restore the wrong plotted item.
+- Napari ROI and epoch visibility controls use displayed row indices, so
+  duplicate display names or duplicate epoch metadata cannot toggle, cache, or
+  restore the wrong plotted item.
 - Tests for config loading, MATLAB inspection/loading, recording inspection,
   database filtering/copy-cache behavior, conversion, converted-recording
   loading, ROI storage/extraction, photodiode synchronization, response windows,

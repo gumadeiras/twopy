@@ -15,8 +15,9 @@ twopy is a two-photon imaging analysis tool.
   repeated logic when the shared version stays easy to read.
 - Keep data flow explicit. Avoid hidden global state, surprising side effects, and clever indirection.
 - Favor small functions with clear names over broad abstractions.
-- Do not extract helpers just to avoid repeating one or two obvious lines.
-  Simple local code is better than docstring-heavy indirection.
+- Do not extract helpers just to avoid repeating one or two obvious lines, or
+  to return a simple expression. Simple local code is better than
+  docstring-heavy indirection.
 - A simplification must reduce cognitive load at the call site and the helper
   definition together. If it only moves simple code elsewhere, leave it inline.
 - When tradeoffs exist, choose the path that a scientist can inspect and trust.
