@@ -166,6 +166,17 @@ twopy is a two-photon imaging analysis tool.
 - All Python functions and methods must have type annotations for inputs and return values.
 - Use Python 3.13 for development and verification.
 - Avoid `Any` unless there is no honest narrower type.
+- Treat `typing.cast` as a last-resort boundary marker, not validation. Before
+  adding one, prefer runtime checks, typed helper functions, Protocols, or
+  narrowing control flow that proves the value's contract.
+- Casts at external boundaries such as HDF5, JSON, YAML, MATLAB, Qt, napari, or
+  NumPy must sit next to the validation that makes the target type true. For
+  persisted literals and nested decoded structures, validate allowed values and
+  inner shapes before narrowing.
+- Do not use `cast(Any, ...)` to silence the checker. Parse the value explicitly
+  or define the smallest useful Protocol/helper for the operation being used.
+- When a cast remains necessary, keep it narrow and local. Avoid passing a
+  casted object deeper into the code than the exact operation that needs it.
 - Use standard library types where possible.
 - Type checking is part of the gate:
 
