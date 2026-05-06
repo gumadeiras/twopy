@@ -17,6 +17,7 @@ from twopy.napari.display import (
     display_image_from_movie_image,
     display_metadata_for_spatial_crop,
 )
+from twopy.napari.layout import place_response_options_after_recording_list
 from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
 from twopy.napari.plotting import (
     add_twopy_response_options_widget,
@@ -119,6 +120,8 @@ def open_recording_in_napari(
         )
     controls_widget = None
     controls_dock = None
+    loaded_recordings_widget = None
+    loaded_recordings_dock = None
     save_rois_widget = None
     save_rois_dock = None
     response_plot_widget = None
@@ -141,9 +144,13 @@ def open_recording_in_napari(
             ),
             recording=recording,
             response_plot_widget=response_plot_widget,
+            mean_image_layer=mean_layer,
+            movie_layer=movie_layer,
         )
         controls_widget = control_docks.load_widget
         controls_dock = control_docks.load_dock_widget
+        loaded_recordings_widget = control_docks.loaded_recordings_widget
+        loaded_recordings_dock = control_docks.loaded_recordings_dock_widget
         save_rois_widget = control_docks.save_rois_widget
         save_rois_dock = control_docks.save_rois_dock_widget
         response_options_widget, response_options_dock = (
@@ -152,9 +159,9 @@ def open_recording_in_napari(
                 response_plot_widget,
             )
         )
-        _place_response_options_after_load_dock(
+        place_response_options_after_recording_list(
             resolved_viewer,
-            controls_dock,
+            loaded_recordings_dock,
             response_options_dock,
         )
 
@@ -166,6 +173,8 @@ def open_recording_in_napari(
         roi_labels_layer=roi_layer,
         controls_widget=controls_widget,
         controls_dock_widget=controls_dock,
+        loaded_recordings_widget=loaded_recordings_widget,
+        loaded_recordings_dock_widget=loaded_recordings_dock,
         save_rois_widget=save_rois_widget,
         save_rois_dock_widget=save_rois_dock,
         response_plot_widget=response_plot_widget,
@@ -187,48 +196,3 @@ def create_viewer() -> NapariViewer:
     import napari
 
     return cast(NapariViewer, napari.Viewer())
-
-
-def _place_response_options_after_load_dock(
-    viewer: NapariViewer,
-    controls_dock_widget: object | None,
-    response_options_dock_widget: object | None,
-) -> None:
-    """Stack response options immediately under the Load Recording dock.
-
-    Args:
-        viewer: Napari viewer that owns the dock widgets.
-        controls_dock_widget: Dock widget returned for the load controls.
-        response_options_dock_widget: Dock widget returned for response options.
-
-    Returns:
-        None.
-
-    This is only a visual napari layout tweak. The controls and options widgets
-    remain separate so a future plugin wrapper can place them however it wants.
-    """
-    if controls_dock_widget is None or response_options_dock_widget is None:
-        return
-    try:
-        from qtpy.QtCore import Qt
-    except ImportError:
-        return
-
-    qt_window = getattr(viewer.window, "_qt_window", None)
-    if qt_window is None:
-        return
-    if not hasattr(qt_window, "splitDockWidget") or not hasattr(
-        qt_window,
-        "resizeDocks",
-    ):
-        return
-    qt_window.splitDockWidget(
-        controls_dock_widget,
-        response_options_dock_widget,
-        Qt.Orientation.Vertical,
-    )
-    qt_window.resizeDocks(
-        [controls_dock_widget, response_options_dock_widget],
-        [260, 10000],
-        Qt.Orientation.Vertical,
-    )

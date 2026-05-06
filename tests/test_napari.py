@@ -18,7 +18,7 @@ import numpy as np
 from matplotlib.figure import Figure
 from napari.layers import Labels
 from qtpy.QtGui import QColor
-from qtpy.QtWidgets import QApplication, QTabWidget, QWidget
+from qtpy.QtWidgets import QApplication, QListWidget, QPushButton, QTabWidget, QWidget
 
 from twopy import (
     add_twopy_magicgui_controls,
@@ -244,6 +244,8 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNotNone(opened.roi_labels_layer)
             self.assertIsNotNone(opened.controls_widget)
             self.assertIsNotNone(opened.controls_dock_widget)
+            self.assertIsNotNone(opened.loaded_recordings_widget)
+            self.assertIsNotNone(opened.loaded_recordings_dock_widget)
             self.assertIsNotNone(opened.save_rois_widget)
             self.assertIsNotNone(opened.save_rois_dock_widget)
             self.assertIsNotNone(opened.response_plot_widget)
@@ -253,17 +255,22 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.labels), 1)
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
-            self.assertEqual(len(viewer.window.dock_widgets), 4)
+            self.assertEqual(len(viewer.window.dock_widgets), 5)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
-            self.assertEqual(viewer.window.dock_widgets[2].name, "twopy save ROIs")
-            self.assertEqual(viewer.window.dock_widgets[2].area, "left")
             self.assertEqual(
-                viewer.window.dock_widgets[3].name,
+                viewer.window.dock_widgets[2].name,
+                "twopy loaded recordings",
+            )
+            self.assertEqual(viewer.window.dock_widgets[2].area, "right")
+            self.assertEqual(viewer.window.dock_widgets[3].name, "twopy save ROIs")
+            self.assertEqual(viewer.window.dock_widgets[3].area, "left")
+            self.assertEqual(
+                viewer.window.dock_widgets[4].name,
                 "twopy response options",
             )
-            self.assertEqual(viewer.window.dock_widgets[3].area, "right")
+            self.assertEqual(viewer.window.dock_widgets[4].area, "right")
             options_widget = cast(QTabWidget, opened.response_options_widget)
             self.assertEqual(
                 tuple(
@@ -421,6 +428,61 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Saved 1 ROI", str(result))
             self.assertTrue((root / "rois.h5").exists())
 
+    def test_loaded_recordings_panel_selects_and_unloads_layers(self) -> None:
+        """Confirm multi-recording selection controls save and layer ownership.
+
+        Inputs: two converted folders loaded into one fake viewer.
+        Outputs: selected recording controls the ROI save default, and unload
+        removes only that recording's layers.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            _write_converted_recording(first)
+            _write_converted_recording(second)
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            controls = cast(_ControlWidget, control_docks.load_widget)
+            load_widget = cast(Any, controls[1])
+            save_widget = cast(Any, control_docks.save_rois_widget)
+            panel = cast(QWidget, control_docks.loaded_recordings_widget)
+            loaded_list = panel.findChild(QListWidget)
+            unload_button = next(
+                button
+                for button in panel.findChildren(QPushButton)
+                if button.text() == "Unload Recording"
+            )
+
+            load_widget(recording_folder=first)
+            load_widget(recording_folder=second)
+
+            self.assertEqual(loaded_list.count(), 2)
+            self.assertEqual(loaded_list.currentRow(), 1)
+            self.assertEqual(len(viewer.images), 4)
+            self.assertEqual(len(viewer.labels), 2)
+
+            loaded_list.setCurrentRow(0)
+            viewer.labels[0].data = np.array([[1, 0], [0, 0]])
+            result = save_widget()
+            self.assertIn("Saved 1 ROI", str(result))
+            self.assertTrue((first / "rois.h5").is_file())
+
+            unload_button.click()
+
+            self.assertEqual(loaded_list.count(), 1)
+            self.assertEqual(len(viewer.images), 2)
+            self.assertEqual(len(viewer.labels), 1)
+            remaining_item = loaded_list.item(0)
+            assert remaining_item is not None
+            self.assertIn(str(second), remaining_item.text())
+
     def test_controls_hide_remembered_recording_folder(self) -> None:
         """Confirm the Load Recording control keeps long remembered paths hidden.
 
@@ -534,7 +596,7 @@ class NapariAdapterTest(unittest.TestCase):
             load_widget.movie_frame_range.value = (0, 1)
 
             self.assertEqual(load_widget.movie_frame_range.value, (0, 1))
-            self.assertGreaterEqual(len(viewer.images), 4)
+            self.assertEqual(len(viewer.images), 2)
 
     def test_recording_path_resolution_reports_available_files(self) -> None:
         """Confirm folder resolution finds optional movie and ROI paths.

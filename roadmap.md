@@ -146,6 +146,10 @@ decided.
 - Napari recording controls show the loaded path tail instead of `default`
   after a selection, and the Save ROIs control lives in a left-side dock placed
   between napari's layer controls and layer list.
+- Napari sessions can keep multiple recordings loaded at once. A Loaded
+  Recordings panel lists loaded paths, switches Save ROIs and response options
+  to the selected recording, and unloads the selected recording with its
+  associated image/movie/ROI layers.
 - Napari response plotting code is scoped under `twopy.napari.plotting` with
   separate modules for plot data, option controls, drawing widgets, and docks.
 - Napari response options now include a Plot-size control and an Export tab

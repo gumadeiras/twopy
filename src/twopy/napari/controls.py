@@ -9,7 +9,7 @@ still go through the same typed helpers used by scripts.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -18,6 +18,10 @@ from magicgui.widgets import FileEdit
 
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
+from twopy.napari.layout import (
+    place_loaded_recordings_dock_after_load,
+    place_save_rois_dock_before_layer_list,
+)
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import (
@@ -25,9 +29,17 @@ from twopy.napari.paths import (
     is_default_path,
     resolve_widget_output_path,
 )
-from twopy.napari.plotting import refresh_response_plot_widget
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import roi_label_image_from_layer, save_napari_label_rois
+from twopy.napari.session import (
+    LoadedNapariRecording,
+    LoadedRecordingsPanel,
+    record_loaded_view,
+    render_loaded_recordings_panel,
+    select_loaded_recording,
+    unload_loaded_recording,
+    update_selected_roi_save_file,
+)
 from twopy.napari.state import (
     read_last_recording_folder,
     recording_folder_for_state,
@@ -47,6 +59,8 @@ class NapariControlDocks:
 
     load_widget: object
     load_dock_widget: object
+    loaded_recordings_widget: object
+    loaded_recordings_dock_widget: object
     save_rois_widget: object
     save_rois_dock_widget: object
 
@@ -68,9 +82,13 @@ class NapariControlState:
     roi_save_file: Path
     recording: RecordingData | None
     response_plot_widget: object | None
+    loaded_recordings: list[LoadedNapariRecording] = field(default_factory=list)
+    selected_recording_index: int | None = None
+    loaded_recordings_panel: LoadedRecordingsPanel | None = None
     recording_picker_path: Path | None = None
     recording_picker_display_text: str = DEFAULT_PATH_TEXT
     is_loading: bool = False
+    replace_selected_on_next_load: bool = False
 
 
 def add_twopy_magicgui_controls(
@@ -80,6 +98,8 @@ def add_twopy_magicgui_controls(
     roi_save_file: Path,
     recording: RecordingData | None = None,
     response_plot_widget: object | None = None,
+    mean_image_layer: object | None = None,
+    movie_layer: object | None = None,
     dock_name: str = "twopy",
     dock_area: str = "right",
 ) -> NapariControlDocks:
@@ -94,6 +114,10 @@ def add_twopy_magicgui_controls(
         recording: Optional loaded recording used to populate GUI defaults.
         response_plot_widget: Optional response plotting widget to refresh
             after a new recording is loaded.
+        mean_image_layer: Optional mean-image layer for an already loaded
+            startup recording.
+        movie_layer: Optional movie layer for an already loaded startup
+            recording.
         dock_name: Dock widget title.
         dock_area: Napari dock area.
 
@@ -111,11 +135,34 @@ def add_twopy_magicgui_controls(
         recording=recording,
         response_plot_widget=response_plot_widget,
     )
+    if recording is not None and mean_image_layer is not None:
+        state.loaded_recordings.append(
+            LoadedNapariRecording(
+                display_path=recording.path.parent,
+                recording=recording,
+                roi_save_file=roi_save_file,
+                mean_image_layer=mean_image_layer,
+                movie_layer=movie_layer,
+                roi_labels_layer=roi_labels_layer,
+            )
+        )
+        state.selected_recording_index = 0
     load_widget = _make_twopy_load_widget(state)
     load_dock_widget = viewer.window.add_dock_widget(
         load_widget,
         name=dock_name,
         area=dock_area,
+    )
+    loaded_recordings_widget = _make_loaded_recordings_widget(state)
+    loaded_recordings_dock_widget = viewer.window.add_dock_widget(
+        loaded_recordings_widget,
+        name="twopy loaded recordings",
+        area=dock_area,
+    )
+    place_loaded_recordings_dock_after_load(
+        viewer,
+        load_dock_widget,
+        loaded_recordings_dock_widget,
     )
     save_rois_widget = _make_twopy_save_rois_widget(state)
     save_rois_dock_widget = viewer.window.add_dock_widget(
@@ -123,10 +170,12 @@ def add_twopy_magicgui_controls(
         name="twopy save ROIs",
         area="left",
     )
-    _place_save_rois_dock_before_layer_list(viewer, save_rois_dock_widget)
+    place_save_rois_dock_before_layer_list(viewer, save_rois_dock_widget)
     return NapariControlDocks(
         load_widget=load_widget,
         load_dock_widget=load_dock_widget,
+        loaded_recordings_widget=loaded_recordings_widget,
+        loaded_recordings_dock_widget=loaded_recordings_dock_widget,
         save_rois_widget=save_rois_widget,
         save_rois_dock_widget=save_rois_dock_widget,
     )
@@ -183,6 +232,8 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         if state.is_loading:
             return "Recording load already in progress."
         state.is_loading = True
+        replace_selected = state.replace_selected_on_next_load
+        state.replace_selected_on_next_load = False
         selected_recording_path = _resolve_recording_folder_value(
             recording_folder,
             state,
@@ -221,9 +272,12 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
                 movie_frame_range=movie_range,
                 add_controls=False,
             )
-            state.roi_labels_layer = view.roi_labels_layer
-            state.roi_save_file = paths.roi_save_file
-            state.recording = view.recording
+            record_loaded_view(
+                state,
+                view=view,
+                roi_save_file=paths.roi_save_file,
+                replace_selected=replace_selected,
+            )
             write_last_recording_folder(
                 recording_folder_for_state(
                     selected_recording_path,
@@ -238,16 +292,12 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
                 state,
                 paths.recording_data_path.parent,
             )
-            refresh_response_plot_widget(
-                state.response_plot_widget,
-                recording=view.recording,
-                roi_labels_layer=view.roi_labels_layer,
-            )
             status = (
                 "Converted and loaded" if resolved_recording.was_converted else "Loaded"
             )
             return f"{status} {paths.recording_data_path}"
         finally:
+            state.replace_selected_on_next_load = False
             state.is_loading = False
 
     load_recording.recording_folder.mode = "d"
@@ -297,6 +347,7 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
             state,
         ):
             return
+        state.replace_selected_on_next_load = True
         load_recording(
             recording_folder=_current_recording_path_for_reload(
                 load_recording.recording_folder.value,
@@ -317,6 +368,24 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         layout="vertical",
         labels=False,
     )
+
+
+def _make_loaded_recordings_widget(state: NapariControlState) -> object:
+    """Create the loaded-recordings list panel.
+
+    Args:
+        state: Mutable napari control state.
+
+    Returns:
+        Qt panel that lists loaded recordings and can unload the selected one.
+    """
+    panel = LoadedRecordingsPanel(
+        on_select=lambda index: select_loaded_recording(state, index),
+        on_unload=lambda index: unload_loaded_recording(state, index),
+    )
+    state.loaded_recordings_panel = panel
+    render_loaded_recordings_panel(state)
+    return panel
 
 
 def _make_twopy_save_rois_widget(state: NapariControlState) -> object:
@@ -353,61 +422,12 @@ def _make_twopy_save_rois_widget(state: NapariControlState) -> object:
         )
         roi_set = save_napari_label_rois(label_image, resolved_output_path)
         state.roi_save_file = resolved_output_path
+        update_selected_roi_save_file(state, resolved_output_path)
         return f"Saved {len(roi_set.labels)} ROI(s) to {resolved_output_path}"
 
     save_rois.roi_save_file.mode = "w"
     save_rois.roi_save_file.label = "ROI save file"
     return save_rois
-
-
-def _place_save_rois_dock_before_layer_list(
-    viewer: NapariViewer,
-    save_rois_dock_widget: object,
-) -> None:
-    """Place Save ROIs between napari layer controls and layer list.
-
-    Args:
-        viewer: Napari viewer that owns the dock widgets.
-        save_rois_dock_widget: Dock widget returned for the Save ROIs panel.
-
-    Returns:
-        None.
-
-    Napari exposes layer controls and layer list as Qt dock widgets. Twopy keeps
-    this layout tweak inside the napari adapter because it is only visual: the
-    ROI save behavior stays in the typed helper above.
-    """
-    try:
-        from qtpy.QtCore import Qt
-    except ImportError:
-        return
-
-    window = viewer.window
-    qt_window = getattr(window, "_qt_window", None)
-    qt_viewer = getattr(window, "_qt_viewer", None)
-    if qt_window is None or qt_viewer is None:
-        return
-
-    layer_controls = getattr(qt_viewer, "dockLayerControls", None)
-    layer_list = getattr(qt_viewer, "dockLayerList", None)
-    if layer_controls is None or layer_list is None:
-        return
-    if not hasattr(qt_window, "splitDockWidget") or not hasattr(
-        qt_window,
-        "resizeDocks",
-    ):
-        return
-
-    qt_window.splitDockWidget(
-        layer_controls,
-        save_rois_dock_widget,
-        Qt.Orientation.Vertical,
-    )
-    qt_window.resizeDocks(
-        [layer_controls, save_rois_dock_widget, layer_list],
-        [layer_controls.minimumHeight(), 120, 10000],
-        Qt.Orientation.Vertical,
-    )
 
 
 def _configure_recording_folder_picker(
