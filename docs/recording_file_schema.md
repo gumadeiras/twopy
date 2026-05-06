@@ -508,14 +508,16 @@ The twopy ROI HDF5 file contains:
   coordinates.
 - `labels`: one human-readable label per ROI.
 
-ROI trace extraction reads `movie/aligned` in chunks and writes frame-by-ROI
-arrays in memory for the requested frame range. Frame-window response splitting
-uses explicit imaging-frame boundaries, usually from paired photodiode events.
-Global percentile background correction reads only the selected spatial domain
-from the aligned movie. The default domain is `alignment_valid_crop`, so the
-background pixels come from the alignment-valid crop rather than invalid motion
-border pixels. ROI masks remain full-frame; crop-domain analysis validates that
-all ROI pixels lie inside the selected crop before extracting traces.
+The lower-level `extract_roi_traces` helper reads `movie/aligned` in chunks and
+writes full-frame ROI traces in memory for the requested frame range. Analysis
+trace extraction through `extract_background_corrected_roi_traces` reads only
+the selected spatial domain from the aligned movie, including `method="none"`
+when uncorrected crop-domain traces are needed. The default domain is
+`alignment_valid_crop`, so background pixels and ROI pixels come from the
+alignment-valid crop rather than invalid motion border pixels. ROI masks remain
+full-frame; crop-domain analysis validates that all ROI pixels lie inside the
+selected crop before extracting traces. Frame-window response splitting uses
+explicit imaging-frame boundaries, usually from paired photodiode events.
 
 By default, the mean image uses the entire aligned movie. Callers can pass
 `mean_start_frame` and `mean_stop_frame` to compute it over a frame range.

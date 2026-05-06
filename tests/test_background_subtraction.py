@@ -25,12 +25,28 @@ class BackgroundSubtractionTest(unittest.TestCase):
         """Confirm the no-background mode keeps raw traces inspectable.
 
         Inputs: one ROI over a tiny converted movie.
-        Outputs: raw and corrected traces that match, plus zero background.
+        Outputs: raw and corrected crop-domain traces that match, plus zero
+        background.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
-            recording = self._write_recording(Path(temp_dir))
+            movie = np.array(
+                [
+                    [[99.0, 99.0], [10.0, 20.0]],
+                    [[99.0, 99.0], [12.0, 22.0]],
+                    [[99.0, 99.0], [14.0, 24.0]],
+                ],
+            )
+            crop = SpatialCrop(
+                axis0_start=1,
+                axis0_stop=2,
+                axis1_start=0,
+                axis1_stop=2,
+                original_shape=(2, 2),
+                source="alignment_valid_crop",
+            )
+            recording = self._write_recording(Path(temp_dir), movie=movie, crop=crop)
             roi_set = make_roi_set(
-                np.array([[[True, False], [False, False]]]),
+                np.array([[[False, False], [True, False]]]),
                 labels=("single_pixel",),
             )
 
@@ -42,12 +58,51 @@ class BackgroundSubtractionTest(unittest.TestCase):
             )
 
             self.assertEqual(traces.method, "none")
+            self.assertEqual(traces.metadata["spatial_domain"], "alignment_valid_crop")
+            self.assertEqual(traces.metadata["spatial_axis0_start"], 1)
             np.testing.assert_array_equal(
                 traces.raw_values,
-                np.array([[0.0], [4.0], [8.0]]),
+                np.array([[10.0], [12.0], [14.0]]),
             )
             np.testing.assert_array_equal(traces.background_values, np.zeros((3, 1)))
             np.testing.assert_array_equal(traces.corrected_values, traces.raw_values)
+
+    def test_none_method_can_explicitly_use_full_frame(self) -> None:
+        """Confirm scripts can request full-frame raw analysis traces.
+
+        Inputs: an ROI in the invalid border and explicit ``full_frame`` domain.
+        Outputs: raw traces from the full movie frame.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            movie = np.array(
+                [
+                    [[1.0, 2.0], [10.0, 20.0]],
+                    [[3.0, 4.0], [12.0, 22.0]],
+                ],
+            )
+            crop = SpatialCrop(
+                axis0_start=1,
+                axis0_stop=2,
+                axis1_start=0,
+                axis1_stop=2,
+                original_shape=(2, 2),
+                source="alignment_valid_crop",
+            )
+            recording = self._write_recording(Path(temp_dir), movie=movie, crop=crop)
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("border",),
+            )
+
+            traces = extract_background_corrected_roi_traces(
+                recording,
+                roi_set,
+                method="none",
+                spatial_domain="full_frame",
+            )
+
+            self.assertEqual(traces.metadata["spatial_domain"], "full_frame")
+            np.testing.assert_array_equal(traces.raw_values, np.array([[1.0], [3.0]]))
 
     def test_extracts_movie_global_percentile_corrected_traces(self) -> None:
         """Confirm global movie background subtraction is pixel-level.
@@ -232,7 +287,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
                 extract_background_corrected_roi_traces(
                     recording,
                     roi_set,
-                    method="movie_global_percentile",
+                    method="none",
                 )
 
     def test_extracts_roi_local_y_corrected_traces(self) -> None:

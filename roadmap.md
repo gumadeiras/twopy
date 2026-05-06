@@ -72,6 +72,9 @@ decided.
 - Global movie percentile background correction defaults to the saved
   alignment-valid crop, validates full-frame ROI masks against that crop, and
   streams only the selected crop from HDF5 for lower I/O.
+- Analysis trace extraction with `method="none"` also honors the selected
+  spatial domain; lower-level ROI trace extraction remains the full-frame raw
+  primitive.
 - Trial/frame-window response helpers live in `twopy.analysis.trials`.
 - Stimulus epoch runs from `stimulus/data` can be mapped onto photodiode-aligned
   imaging-frame windows when their counts agree.
