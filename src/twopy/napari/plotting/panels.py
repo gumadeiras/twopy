@@ -50,6 +50,7 @@ def response_update_tab(
     reload_saved_button: QPushButton,
     recompute_preview_button: QPushButton,
     save_analysis_button: QPushButton,
+    recording_summary_label: QLabel,
     analysis_output_label: QLabel,
     roi_output_label: QLabel,
     status_label: QLabel,
@@ -61,6 +62,8 @@ def response_update_tab(
         recompute_preview_button: Button that computes responses from current
             Labels ROIs.
         save_analysis_button: Button that saves ROIs and persisted analysis.
+        recording_summary_label: Label showing root, genotype, and recording
+            time for the selected recording.
         analysis_output_label: Label showing the analysis output path.
         roi_output_label: Label showing the ROI output path.
         status_label: Label showing the latest save or reload status.
@@ -73,6 +76,7 @@ def response_update_tab(
     layout.addWidget(save_analysis_button)
     layout.addWidget(recompute_preview_button)
     layout.addWidget(reload_saved_button)
+    layout.addWidget(recording_summary_label)
     layout.addWidget(analysis_output_label)
     layout.addWidget(roi_output_label)
     layout.addWidget(status_label)

@@ -108,7 +108,7 @@ decided.
   matrix per trial and compact per-ROI summary rows.
 - Analysis outputs can be persisted to one inspectable HDF5 file containing ROI
   masks, fluorescence/background traces, dF/F arrays, epoch windows, and grouped
-  responses, with optional CSV response summaries.
+  responses, with optional trial-level and epoch-grouped CSV response summaries.
 - Script-facing response workflow loads a converted recording and ROI set, runs
   trace extraction, dF/F, response grouping, and persistence in one call.
 - Persisted analysis HDF5 files can be reloaded into typed twopy analysis
@@ -262,7 +262,11 @@ decided.
 - Napari response update controls now separate preview, reload, and persistence:
   "Recompute preview now" refreshes live plots in memory, "Reload saved
   analysis" reads existing analysis output from disk, and "Save analysis +
-  ROIs" writes the current ROI file plus analysis HDF5 and response CSV.
+  ROIs" writes the current ROI file plus analysis HDF5, trial-level response
+  CSV, and epoch-grouped response CSV.
+- Napari response options now show recording identity as root, genotype, and
+  recording time instead of full raw paths. Analysis, ROI, and export statuses
+  show compact `./twopy/...` output folders.
 - Napari ROI and epoch visibility controls use displayed row indices, so
   duplicate display names or duplicate epoch metadata cannot toggle, cache, or
   restore the wrong plotted item.

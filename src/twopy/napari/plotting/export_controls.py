@@ -15,6 +15,7 @@ from pathlib import Path
 from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from twopy.converted import RecordingData
+from twopy.napari.display_paths import format_output_folder
 from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.plotting.export import (
     export_epoch_plots,
@@ -178,18 +179,23 @@ def _button(
 
     def run_export() -> None:
         """Run the export action and show a short status."""
-        result = callback(get_state())
-        status_label.setText(_export_status(result))
+        state = get_state()
+        result = callback(state)
+        status_label.setText(_export_status(result, state.recording))
 
     button.clicked.connect(run_export)
     return button
 
 
-def _export_status(result: tuple[Path, ...] | str) -> str:
+def _export_status(
+    result: tuple[Path, ...] | str,
+    recording: RecordingData | None,
+) -> str:
     """Return a compact export status message.
 
     Args:
         result: Either an error/status string or written files.
+        recording: Optional selected recording for compact folder display.
 
     Returns:
         User-facing status string.
@@ -198,5 +204,5 @@ def _export_status(result: tuple[Path, ...] | str) -> str:
         return result
     if len(result) == 0:
         return "No files exported."
-    folder = result[0].parent
+    folder = format_output_folder(result[0].parent, recording)
     return f"Saved {len(result)} file(s) to {folder}"

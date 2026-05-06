@@ -28,6 +28,11 @@ from qtpy.QtWidgets import (
 from twopy.analysis.responses import is_gray_epoch_name
 from twopy.analysis.workflow import analyze_recording_responses
 from twopy.converted import RecordingData
+from twopy.napari.display_paths import (
+    format_output_folder,
+    format_twopy_h5_output,
+    recording_display_summary,
+)
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.plotting.data import (
     ResponsePlotData,
@@ -270,6 +275,8 @@ class _ResponsePlotWidget(QWidget):
         recompute_preview_button.clicked.connect(self.update_from_current_rois)
         save_analysis_button = QPushButton("Save analysis + ROIs")
         save_analysis_button.clicked.connect(self.save_analysis_and_rois)
+        self._recording_summary_label = QLabel("No recording loaded.")
+        self._recording_summary_label.setWordWrap(True)
         self._analysis_path_label = QLabel("Analysis output: default")
         self._analysis_path_label.setWordWrap(True)
         self._roi_save_path_label = QLabel("ROI output: default")
@@ -297,6 +304,7 @@ class _ResponsePlotWidget(QWidget):
                 reload_saved_button=reload_saved_button,
                 recompute_preview_button=recompute_preview_button,
                 save_analysis_button=save_analysis_button,
+                recording_summary_label=self._recording_summary_label,
                 analysis_output_label=self._analysis_path_label,
                 roi_output_label=self._roi_save_path_label,
                 status_label=self._update_status_label,
@@ -354,9 +362,7 @@ class _ResponsePlotWidget(QWidget):
             None.
         """
         self._roi_save_file = roi_save_file
-        self._roi_save_path_label.setText(
-            f"ROI output: {self._resolved_roi_save_file()}"
-        )
+        self._refresh_update_path_labels()
 
     def clear_recording(self) -> None:
         """Reset the widget to the empty-launch state.
@@ -372,6 +378,7 @@ class _ResponsePlotWidget(QWidget):
         self._plot_data = None
         self._live_controller.set_context(None, None)
         self._reset_plot_state()
+        self._recording_summary_label.setText("No recording loaded.")
         self._analysis_path_label.setText("Analysis output: default")
         self._roi_save_path_label.setText("ROI output: default")
         self._update_status_label.setText("")
@@ -389,10 +396,7 @@ class _ResponsePlotWidget(QWidget):
         """
         self._recording = recording
         self._analysis_path = default_analysis_output_path(recording)
-        self._analysis_path_label.setText(f"Analysis output: {self._analysis_path}")
-        self._roi_save_path_label.setText(
-            f"ROI output: {self._resolved_roi_save_file()}"
-        )
+        self._refresh_update_path_labels()
         self.reload()
         self._live_controller.set_context(self._recording, self._roi_labels_layer)
 
@@ -457,13 +461,10 @@ class _ResponsePlotWidget(QWidget):
 
         self._roi_save_file = roi_output_path
         self._analysis_path = run.output_path
-        self._analysis_path_label.setText(f"Analysis output: {run.output_path}")
-        self._roi_save_path_label.setText(f"ROI output: {roi_output_path}")
-        summary = ""
-        if run.response_summary_csv_path is not None:
-            summary = f" and {run.response_summary_csv_path}"
+        self._refresh_update_path_labels()
+        output_folder = format_output_folder(run.output_path, self._recording)
         self._update_status_label.setText(
-            f"Saved {len(roi_set.labels)} ROI(s), {run.output_path}{summary}"
+            f"Saved {len(roi_set.labels)} ROI(s) to {output_folder}"
         )
 
     def set_response_plot_data(
@@ -705,6 +706,30 @@ class _ResponsePlotWidget(QWidget):
         if self._recording is not None:
             return self._recording.path.parent / "rois.h5"
         return Path("rois.h5")
+
+    def _refresh_update_path_labels(self) -> None:
+        """Refresh compact recording and output labels in the Update tab.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+        """
+        if self._recording is None:
+            self._recording_summary_label.setText("No recording loaded.")
+            self._analysis_path_label.setText("Analysis output: default")
+            self._roi_save_path_label.setText("ROI output: default")
+            return
+
+        summary = recording_display_summary(self._recording)
+        self._recording_summary_label.setText("\n".join(summary.lines()))
+        self._analysis_path_label.setText(
+            f"Analysis output: {format_twopy_h5_output(self._resolved_analysis_path())}"
+        )
+        self._roi_save_path_label.setText(
+            f"ROI output: {format_twopy_h5_output(self._resolved_roi_save_file())}"
+        )
 
     def _roi_color_hex(self) -> tuple[str, ...]:
         """Return ROI colors as hex strings in plot ROI order."""

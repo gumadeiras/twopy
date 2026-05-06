@@ -24,8 +24,10 @@ from twopy.analysis.background_subtraction import (
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.responses import (
     GroupedRoiResponses,
+    GroupedRoiResponseSummary,
     RoiResponseSummary,
     RoiResponseTrial,
+    summarize_epoch_roi_responses,
     summarize_grouped_responses,
 )
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
@@ -42,7 +44,8 @@ __all__ = [
     "LoadedAnalysisOutputs",
     "load_analysis_outputs",
     "save_analysis_outputs",
-    "write_response_summary_csv",
+    "write_response_summary_grouped_csv",
+    "write_response_summary_trials_csv",
 ]
 
 ANALYSIS_OUTPUT_FILE_FORMAT = "twopy-analysis-outputs"
@@ -58,6 +61,14 @@ _SUMMARY_CSV_COLUMNS = (
     "mean_response",
     "peak_response",
     "min_response",
+)
+_GROUPED_SUMMARY_CSV_COLUMNS = (
+    "epoch_number",
+    "epoch_name",
+    "roi_label",
+    "mean_response",
+    "sem_response",
+    "n_trials",
 )
 _TRACE_STATISTICS: tuple[TraceStatistic, ...] = ("mean",)
 _BACKGROUND_CORRECTION_METHODS: tuple[BackgroundCorrectionMethod, ...] = (
@@ -94,9 +105,10 @@ def save_analysis_outputs(
     dff: RoiDeltaFOverF | None = None,
     epoch_windows: Sequence[EpochFrameWindow] = (),
     grouped_responses: GroupedRoiResponses | None = None,
-    response_summary_csv: Path | None = None,
+    response_summary_trials_csv: Path | None = None,
+    response_summary_grouped_csv: Path | None = None,
 ) -> None:
-    """Save analysis outputs to one HDF5 file and optional CSV summary.
+    """Save analysis outputs to one HDF5 file and optional CSV summaries.
 
     Args:
         path: Destination HDF5 path.
@@ -105,22 +117,25 @@ def save_analysis_outputs(
         dff: Optional ROI dF/F result.
         epoch_windows: Optional stimulus windows used for response grouping.
         grouped_responses: Optional grouped trial responses.
-        response_summary_csv: Optional CSV path for one-row-per-trial-ROI
-            response summaries.
+        response_summary_trials_csv: Optional CSV path for one row per trial
+            and ROI.
+        response_summary_grouped_csv: Optional CSV path for one row per epoch
+            and ROI, collapsed across trials.
 
     Returns:
         None.
 
     The HDF5 file stores arrays with gzip compression where arrays can be large.
-    The CSV is intentionally small and summary-only; frame-by-frame values stay
-    in HDF5.
+    CSV files are intentionally small summaries; frame-by-frame values stay in
+    HDF5.
     """
-    summary_output: tuple[GroupedRoiResponses, Path] | None = None
-    if response_summary_csv is not None:
-        if grouped_responses is None:
-            msg = "response_summary_csv requires grouped_responses"
-            raise ValueError(msg)
-        summary_output = (grouped_responses, response_summary_csv)
+    summary_outputs = (
+        response_summary_trials_csv,
+        response_summary_grouped_csv,
+    )
+    if any(path is not None for path in summary_outputs) and grouped_responses is None:
+        msg = "response summary CSV outputs require grouped_responses"
+        raise ValueError(msg)
 
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,9 +155,17 @@ def save_analysis_outputs(
                 grouped_responses,
             )
 
-    if summary_output is not None:
-        summary_grouped_responses, summary_csv_path = summary_output
-        write_response_summary_csv(summary_grouped_responses, summary_csv_path)
+    if grouped_responses is not None:
+        if response_summary_trials_csv is not None:
+            write_response_summary_trials_csv(
+                grouped_responses,
+                response_summary_trials_csv,
+            )
+        if response_summary_grouped_csv is not None:
+            write_response_summary_grouped_csv(
+                grouped_responses,
+                response_summary_grouped_csv,
+            )
 
 
 def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
@@ -185,11 +208,11 @@ def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
         )
 
 
-def write_response_summary_csv(
+def write_response_summary_trials_csv(
     grouped_responses: GroupedRoiResponses,
     path: Path,
 ) -> None:
-    """Write compact response summaries to CSV.
+    """Write trial-level response summaries to CSV.
 
     Args:
         grouped_responses: Grouped response object to summarize.
@@ -206,6 +229,29 @@ def write_response_summary_csv(
         writer.writeheader()
         for summary in summaries:
             writer.writerow(_summary_row(summary))
+
+
+def write_response_summary_grouped_csv(
+    grouped_responses: GroupedRoiResponses,
+    path: Path,
+) -> None:
+    """Write epoch-level response summaries to CSV.
+
+    Args:
+        grouped_responses: Grouped response object to summarize.
+        path: Destination CSV path.
+
+    Returns:
+        None.
+    """
+    output_path = path.expanduser()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    summaries = summarize_epoch_roi_responses(grouped_responses)
+    with output_path.open("w", encoding="utf-8", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=_GROUPED_SUMMARY_CSV_COLUMNS)
+        writer.writeheader()
+        for summary in summaries:
+            writer.writerow(_grouped_summary_row(summary))
 
 
 def _write_roi_set(group: h5py.Group, roi_set: RoiSet) -> None:
@@ -663,6 +709,27 @@ def _summary_row(summary: RoiResponseSummary) -> dict[str, str | int | float]:
         "mean_response": summary.mean_response,
         "peak_response": summary.peak_response,
         "min_response": summary.min_response,
+    }
+
+
+def _grouped_summary_row(
+    summary: GroupedRoiResponseSummary,
+) -> dict[str, str | int | float]:
+    """Convert one grouped summary object to a CSV row.
+
+    Args:
+        summary: Grouped response summary object.
+
+    Returns:
+        Dictionary keyed by grouped CSV column name.
+    """
+    return {
+        "epoch_number": summary.epoch_number,
+        "epoch_name": summary.epoch_name,
+        "roi_label": summary.roi_label,
+        "mean_response": summary.mean_response,
+        "sem_response": summary.sem_response,
+        "n_trials": summary.n_trials,
     }
 
 

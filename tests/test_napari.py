@@ -51,6 +51,11 @@ from twopy.napari.display import (
     display_metadata_for_spatial_crop,
     movie_labels_from_display_layer,
 )
+from twopy.napari.display_paths import (
+    format_output_folder,
+    format_twopy_h5_output,
+    recording_display_summary,
+)
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
@@ -617,7 +622,8 @@ class NapariAdapterTest(unittest.TestCase):
                 response_widget.update_from_current_rois()
 
             self.assertFalse((root / "analysis_outputs.h5").exists())
-            self.assertFalse((root / "response_summary.csv").exists())
+            self.assertFalse((root / "response_summary_trials.csv").exists())
+            self.assertFalse((root / "response_summary_grouped.csv").exists())
             self.assertIsNotNone(response_widget._plot_data)
 
     def test_save_analysis_button_writes_roi_and_analysis_outputs(self) -> None:
@@ -630,7 +636,6 @@ class NapariAdapterTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             analysis_path = root / "analysis_outputs.h5"
-            summary_path = root / "response_summary.csv"
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
             opened = open_recording_in_napari(recording_path, viewer=viewer)
@@ -643,7 +648,6 @@ class NapariAdapterTest(unittest.TestCase):
                 "twopy.napari.plotting.docks.analyze_recording_responses",
                 return_value=SimpleNamespace(
                     output_path=analysis_path,
-                    response_summary_csv_path=summary_path,
                     grouped_responses=_tiny_grouped_responses(),
                 ),
             ) as analyze:
@@ -656,6 +660,53 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(roi_set.labels, ("roi_0001",))
             self.assertEqual(analyze.call_args.kwargs["output_path"], analysis_path)
             self.assertIs(response_widget._plot_data, preview_plot_data)
+
+            labels_text = "\n".join(
+                (
+                    response_widget._analysis_path_label.text(),
+                    response_widget._roi_save_path_label.text(),
+                    response_widget._update_status_label.text(),
+                ),
+            )
+            self.assertIn("Analysis output: ./twopy/analysis_outputs.h5", labels_text)
+            self.assertIn("ROI output: ./twopy/rois.h5", labels_text)
+            self.assertIn("Saved 1 ROI(s) to ./twopy", labels_text)
+
+    def test_response_display_paths_use_recording_identity(self) -> None:
+        """Confirm response widgets show compact recording and output paths.
+
+        Inputs: converted recording whose source path follows the lab date
+        layout.
+        Outputs: parsed root, genotype, recording time, and twopy-relative
+        output paths.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = (
+                root / "data" / "gh146" / "combo_stim" / "2025" / "12_21" / "17_42_22"
+            )
+            recording_path = _write_converted_recording(
+                root,
+                source_session_dir=source_dir,
+            )
+            recording = load_converted_recording(recording_path)
+
+            summary = recording_display_summary(recording)
+
+            self.assertEqual(summary.root, root / "data")
+            self.assertEqual(summary.genotype, "gh146")
+            self.assertEqual(summary.recording, "2025-12-21 17:42:22")
+            self.assertEqual(
+                format_twopy_h5_output(recording.path.parent / "rois.h5"),
+                "./twopy/rois.h5",
+            )
+            self.assertEqual(
+                format_output_folder(
+                    recording.path.parent / "exports" / "plots" / "plot.png",
+                    recording,
+                ),
+                "./twopy/exports/plots",
+            )
 
     def test_live_response_controller_updates_after_paint_event(self) -> None:
         """Confirm committed Labels painting triggers a response plot refresh.
@@ -1958,6 +2009,7 @@ def _write_converted_recording(
     *,
     movie_values: npt.NDArray[np.float64] | None = None,
     alignment_valid_crop: SpatialCrop | None = None,
+    source_session_dir: Path | None = None,
 ) -> Path:
     """Write a tiny converted recording for adapter tests.
 
@@ -1965,6 +2017,8 @@ def _write_converted_recording(
         root: Temporary directory receiving HDF5 files.
         movie_values: Optional movie array shaped ``(frames, axis0, axis1)``.
         alignment_valid_crop: Optional spatial crop metadata.
+        source_session_dir: Optional source recording folder stored in the
+            converted recording metadata.
 
     Returns:
         Path to ``recording_data.h5``.
@@ -1990,7 +2044,7 @@ def _write_converted_recording(
     recording_path = root / "recording_data.h5"
     with h5py.File(recording_path, "w") as h5_file:
         h5_file.attrs["twopy_format"] = "converted-recording"
-        h5_file.attrs["source_session_dir"] = str(root / "source")
+        h5_file.attrs["source_session_dir"] = str(source_session_dir or root / "source")
         movie_group = h5_file.create_group("movie")
         movie_group.attrs["aligned_movie_file"] = "aligned_movie.h5"
         movie_group.attrs["aligned_movie_dataset"] = "movie/aligned"

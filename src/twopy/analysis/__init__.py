@@ -28,14 +28,17 @@ from twopy.analysis.persistence import (
     LoadedAnalysisOutputs,
     load_analysis_outputs,
     save_analysis_outputs,
-    write_response_summary_csv,
+    write_response_summary_grouped_csv,
+    write_response_summary_trials_csv,
 )
 from twopy.analysis.responses import (
     GroupedRoiResponses,
+    GroupedRoiResponseSummary,
     RoiResponseSummary,
     RoiResponseTrial,
     group_delta_f_over_f_by_epoch,
     is_gray_epoch_name,
+    summarize_epoch_roi_responses,
     summarize_grouped_responses,
 )
 from twopy.analysis.trials import (
@@ -75,6 +78,7 @@ __all__ = [
     "frame_windows_from_photodiode_alignment",
     "FrameWindow",
     "group_delta_f_over_f_by_epoch",
+    "GroupedRoiResponseSummary",
     "GroupedRoiResponses",
     "InterpolatedEpochMapping",
     "interpolate_stimulus_epochs_to_frame_windows",
@@ -89,7 +93,9 @@ __all__ = [
     "save_analysis_outputs",
     "select_epoch_frame_windows",
     "split_traces_by_frame_windows",
+    "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
     "WindowedRoiResponse",
-    "write_response_summary_csv",
+    "write_response_summary_grouped_csv",
+    "write_response_summary_trials_csv",
 ]

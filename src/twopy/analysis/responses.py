@@ -18,11 +18,13 @@ from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.trials import EpochFrameWindow
 
 __all__ = [
+    "GroupedRoiResponseSummary",
     "GroupedRoiResponses",
     "RoiResponseSummary",
     "RoiResponseTrial",
     "group_delta_f_over_f_by_epoch",
     "is_gray_epoch_name",
+    "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
 ]
 
@@ -88,6 +90,25 @@ class RoiResponseSummary:
     mean_response: float
     peak_response: float
     min_response: float
+
+
+@dataclass(frozen=True)
+class GroupedRoiResponseSummary:
+    """Response metrics collapsed across trials for one epoch and ROI.
+
+    Inputs: trial-level response summaries for one ``(epoch, ROI)`` pair.
+    Outputs: mean response, SEM, and the trial count behind those values.
+
+    A single usable trial gets SEM ``0`` because there is no across-trial spread
+    to estimate. Empty or all-NaN groups are not emitted.
+    """
+
+    epoch_number: int
+    epoch_name: str
+    roi_label: str
+    mean_response: float
+    sem_response: float
+    n_trials: int
 
 
 def group_delta_f_over_f_by_epoch(
@@ -210,6 +231,52 @@ def summarize_grouped_responses(
                 ),
             )
     return tuple(summaries)
+
+
+def summarize_epoch_roi_responses(
+    grouped: GroupedRoiResponses,
+) -> tuple[GroupedRoiResponseSummary, ...]:
+    """Summarize responses across trials with one row per epoch and ROI.
+
+    Args:
+        grouped: Grouped response object.
+
+    Returns:
+        Tuple of grouped summary rows.
+
+    The grouped mean and SEM are computed from trial-level mean responses, not
+    from every frame pooled together. That keeps each trial at equal weight even
+    if window lengths differ slightly.
+    """
+    trial_summaries = summarize_grouped_responses(grouped)
+    grouped_values: dict[tuple[int, str, str], list[float]] = {}
+    for summary in trial_summaries:
+        if np.isnan(summary.mean_response):
+            continue
+        key = (summary.epoch_number, summary.epoch_name, summary.roi_label)
+        grouped_values.setdefault(key, []).append(summary.mean_response)
+
+    rows: list[GroupedRoiResponseSummary] = []
+    for key, values in grouped_values.items():
+        epoch_number, epoch_name, roi_label = key
+        response_values = np.asarray(values, dtype=np.float64)
+        trial_count = int(response_values.size)
+        sem = (
+            float(np.nanstd(response_values, ddof=1) / np.sqrt(trial_count))
+            if trial_count > 1
+            else 0.0
+        )
+        rows.append(
+            GroupedRoiResponseSummary(
+                epoch_number=epoch_number,
+                epoch_name=epoch_name,
+                roi_label=roi_label,
+                mean_response=float(np.nanmean(response_values)),
+                sem_response=sem,
+                n_trials=trial_count,
+            ),
+        )
+    return tuple(rows)
 
 
 def is_gray_epoch_name(epoch_name: str) -> bool:

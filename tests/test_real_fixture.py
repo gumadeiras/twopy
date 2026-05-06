@@ -57,7 +57,8 @@ class RealDataFixtureTest(unittest.TestCase):
                 FIXTURE_ROOT / "recording_data.h5",
                 load_roi_set(FIXTURE_ROOT / "rois.h5"),
                 output_path=root / "analysis_outputs.h5",
-                response_summary_csv_path=root / "response_summary.csv",
+                response_summary_trials_csv_path=root / "response_summary_trials.csv",
+                response_summary_grouped_csv_path=root / "response_summary_grouped.csv",
                 epoch_windows=windows,
                 background_method="none",
                 seconds_interleave_use=None,
@@ -83,7 +84,8 @@ class RealDataFixtureTest(unittest.TestCase):
             self.assertEqual(len(summaries), 9)
             self.assertAlmostEqual(summaries[0].mean_response, -0.18435099954739279)
             self.assertTrue(run.output_path.exists())
-            self.assertTrue((root / "response_summary.csv").exists())
+            self.assertTrue((root / "response_summary_trials.csv").exists())
+            self.assertTrue((root / "response_summary_grouped.csv").exists())
 
 
 if __name__ == "__main__":

@@ -31,12 +31,13 @@ class PersistenceTest(unittest.TestCase):
         """Confirm analysis objects are saved in auditable HDF5 groups.
 
         Inputs: one ROI set, traces, dF/F, epoch window, and grouped response.
-        Outputs: one HDF5 file plus one CSV summary row per ROI.
+        Outputs: one HDF5 file plus trial-level and grouped CSV summaries.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             h5_path = root / "analysis_outputs.h5"
-            csv_path = root / "response_summary.csv"
+            trials_csv_path = root / "response_summary_trials.csv"
+            grouped_csv_path = root / "response_summary_grouped.csv"
             roi_set = make_roi_set(
                 np.array(
                     [
@@ -62,7 +63,8 @@ class PersistenceTest(unittest.TestCase):
                 dff=dff,
                 epoch_windows=windows,
                 grouped_responses=grouped,
-                response_summary_csv=csv_path,
+                response_summary_trials_csv=trials_csv_path,
+                response_summary_grouped_csv=grouped_csv_path,
             )
 
             with h5py.File(h5_path, "r") as h5_file:
@@ -81,12 +83,29 @@ class PersistenceTest(unittest.TestCase):
                     np.array([[0.0, 1.0], [2.0, 3.0]]),
                 )
 
-            with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+            with trials_csv_path.open(
+                "r",
+                encoding="utf-8",
+                newline="",
+            ) as csv_file:
                 rows = list(csv.DictReader(csv_file))
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["epoch_name"], "Gray")
             self.assertEqual(rows[0]["roi_label"], "roi_1")
             self.assertEqual(float(rows[0]["mean_response"]), 1.0)
+
+            with grouped_csv_path.open(
+                "r",
+                encoding="utf-8",
+                newline="",
+            ) as csv_file:
+                grouped_rows = list(csv.DictReader(csv_file))
+            self.assertEqual(len(grouped_rows), 2)
+            self.assertEqual(grouped_rows[0]["epoch_name"], "Gray")
+            self.assertEqual(grouped_rows[0]["roi_label"], "roi_1")
+            self.assertEqual(float(grouped_rows[0]["mean_response"]), 1.0)
+            self.assertEqual(float(grouped_rows[0]["sem_response"]), 0.0)
+            self.assertEqual(int(grouped_rows[0]["n_trials"]), 1)
 
             loaded = load_analysis_outputs(h5_path)
 
@@ -118,7 +137,7 @@ class PersistenceTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "grouped_responses"):
                 save_analysis_outputs(
                     h5_path,
-                    response_summary_csv=Path(temp_dir) / "summary.csv",
+                    response_summary_trials_csv=Path(temp_dir) / "summary.csv",
                 )
             self.assertFalse(h5_path.exists())
 

@@ -67,8 +67,12 @@ class WorkflowTest(unittest.TestCase):
 
             self.assertEqual(run.output_path, root / "analysis_outputs.h5")
             self.assertEqual(
-                run.response_summary_csv_path,
-                root / "response_summary.csv",
+                run.response_summary_trials_csv_path,
+                root / "response_summary_trials.csv",
+            )
+            self.assertEqual(
+                run.response_summary_grouped_csv_path,
+                root / "response_summary_grouped.csv",
             )
             self.assertEqual(len(run.grouped_responses.trials), 2)
             self.assertEqual(run.interleave_windows, (windows[0].window,))
@@ -80,8 +84,8 @@ class WorkflowTest(unittest.TestCase):
             if loaded.grouped_responses is not None:
                 self.assertEqual(len(loaded.grouped_responses.trials), 2)
 
-            self.assertIsNotNone(run.response_summary_csv_path)
-            summary_csv_path = run.response_summary_csv_path
+            self.assertIsNotNone(run.response_summary_trials_csv_path)
+            summary_csv_path = run.response_summary_trials_csv_path
             if summary_csv_path is None:
                 raise AssertionError("workflow should write a response summary CSV")
             with summary_csv_path.open(
@@ -125,7 +129,8 @@ class WorkflowTest(unittest.TestCase):
 
             self.assertEqual(len(result.grouped_responses.trials), 2)
             self.assertFalse((root / "analysis_outputs.h5").exists())
-            self.assertFalse((root / "response_summary.csv").exists())
+            self.assertFalse((root / "response_summary_trials.csv").exists())
+            self.assertFalse((root / "response_summary_grouped.csv").exists())
 
     def _write_converted_recording(self, root: Path) -> Path:
         """Write a minimal converted recording and movie pair.

@@ -224,6 +224,9 @@ Save ROIs dock. Use `--no-movie` to skip the movie preview, or `--movie-start`
 and `--movie-end` to choose a different preview range. Save ROIs writes
 `rois.h5` beside the current recording by default. The response dock can reload
 existing `analysis_outputs.h5` or update plots from the current Labels layer.
+Saving analysis writes `rois.h5`, `analysis_outputs.h5`,
+`response_summary_trials.csv`, and `response_summary_grouped.csv` beside the
+converted recording.
 Response plots share one y-axis across epochs and show two seconds before
 stimulus onset and two seconds after stimulus offset by default, when gray
 interleave frames are available in the grouped responses. Epoch plots are laid

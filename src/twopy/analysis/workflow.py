@@ -88,7 +88,8 @@ class AnalysisResponseRun(AnalysisResponseComputation):
     """
 
     output_path: Path
-    response_summary_csv_path: Path | None
+    response_summary_trials_csv_path: Path | None
+    response_summary_grouped_csv_path: Path | None
 
 
 def analyze_recording_responses(
@@ -96,7 +97,8 @@ def analyze_recording_responses(
     roi_set: RoiSet | Path,
     *,
     output_path: Path | None = None,
-    response_summary_csv_path: Path | None = None,
+    response_summary_trials_csv_path: Path | None = None,
+    response_summary_grouped_csv_path: Path | None = None,
     write_summary_csv: bool = True,
     epoch_windows: Sequence[EpochFrameWindow] | None = None,
     interleave_epoch_number: int | None = 1,
@@ -118,10 +120,13 @@ def analyze_recording_responses(
         roi_set: ``RoiSet`` object or path to a saved ROI HDF5 file.
         output_path: Optional destination HDF5 path. When omitted, output is
             written beside ``recording_data.h5`` as ``analysis_outputs.h5``.
-        response_summary_csv_path: Optional CSV path. When omitted and
-            ``write_summary_csv`` is true, output is written beside the HDF5 file
-            as ``response_summary.csv``.
-        write_summary_csv: Whether to write the compact CSV summary.
+        response_summary_trials_csv_path: Optional trial-level CSV path. When
+            omitted and ``write_summary_csv`` is true, output is written beside
+            the HDF5 file as ``response_summary_trials.csv``.
+        response_summary_grouped_csv_path: Optional grouped CSV path. When
+            omitted and ``write_summary_csv`` is true, output is written beside
+            the HDF5 file as ``response_summary_grouped.csv``.
+        write_summary_csv: Whether to write compact CSV summaries.
         epoch_windows: Optional explicit epoch windows. When omitted, twopy
             interpolates epochs from converted stimulus data.
         interleave_epoch_number: Optional baseline epoch number selector.
@@ -171,10 +176,17 @@ def analyze_recording_responses(
         response_post_window_seconds=response_post_window_seconds,
     )
     resolved_output_path = _resolve_output_path(recording.path, output_path)
-    resolved_summary_path = _resolve_summary_csv_path(
+    resolved_trials_summary_path = _resolve_summary_csv_path(
         output_path=resolved_output_path,
-        response_summary_csv_path=response_summary_csv_path,
+        requested_path=response_summary_trials_csv_path,
         write_summary_csv=write_summary_csv,
+        filename="response_summary_trials.csv",
+    )
+    resolved_grouped_summary_path = _resolve_summary_csv_path(
+        output_path=resolved_output_path,
+        requested_path=response_summary_grouped_csv_path,
+        write_summary_csv=write_summary_csv,
+        filename="response_summary_grouped.csv",
     )
     save_analysis_outputs(
         resolved_output_path,
@@ -183,7 +195,8 @@ def analyze_recording_responses(
         dff=computation.dff,
         epoch_windows=computation.epoch_windows,
         grouped_responses=computation.grouped_responses,
-        response_summary_csv=resolved_summary_path,
+        response_summary_trials_csv=resolved_trials_summary_path,
+        response_summary_grouped_csv=resolved_grouped_summary_path,
     )
 
     return AnalysisResponseRun(
@@ -196,7 +209,8 @@ def analyze_recording_responses(
         interleave_windows=computation.interleave_windows,
         grouped_responses=computation.grouped_responses,
         output_path=resolved_output_path,
-        response_summary_csv_path=resolved_summary_path,
+        response_summary_trials_csv_path=resolved_trials_summary_path,
+        response_summary_grouped_csv_path=resolved_grouped_summary_path,
     )
 
 
@@ -421,21 +435,23 @@ def _resolve_output_path(recording_data_path: Path, output_path: Path | None) ->
 def _resolve_summary_csv_path(
     *,
     output_path: Path,
-    response_summary_csv_path: Path | None,
+    requested_path: Path | None,
     write_summary_csv: bool,
+    filename: str,
 ) -> Path | None:
     """Resolve the optional response summary CSV path.
 
     Args:
         output_path: Analysis HDF5 output path.
-        response_summary_csv_path: Optional caller path.
+        requested_path: Optional caller path.
         write_summary_csv: Whether a CSV should be written.
+        filename: Default CSV filename when the caller does not provide one.
 
     Returns:
         CSV path, or ``None`` when disabled.
     """
     if not write_summary_csv:
         return None
-    if response_summary_csv_path is not None:
-        return response_summary_csv_path.expanduser()
-    return output_path.parent / "response_summary.csv"
+    if requested_path is not None:
+        return requested_path.expanduser()
+    return output_path.parent / filename

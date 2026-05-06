@@ -16,6 +16,7 @@ from twopy.analysis import (
     EpochFrameWindow,
     FrameWindow,
     GroupedRoiResponses,
+    GroupedRoiResponseSummary,
     InterpolatedEpochMapping,
     LoadedAnalysisOutputs,
     RoiDeltaFOverF,
@@ -37,8 +38,10 @@ from twopy.analysis import (
     save_analysis_outputs,
     select_epoch_frame_windows,
     split_traces_by_frame_windows,
+    summarize_epoch_roi_responses,
     summarize_grouped_responses,
-    write_response_summary_csv,
+    write_response_summary_grouped_csv,
+    write_response_summary_trials_csv,
 )
 from twopy.api import find_recordings
 from twopy.conversion import convert_recording_to_twopy, load_source_conversion_inputs
@@ -115,6 +118,7 @@ __all__ = [
     "FrameWindow",
     "full_frame_crop",
     "group_delta_f_over_f_by_epoch",
+    "GroupedRoiResponseSummary",
     "GroupedRoiResponses",
     "InterpolatedEpochMapping",
     "interpolate_stimulus_epochs_to_frame_windows",
@@ -154,9 +158,11 @@ __all__ = [
     "SpatialCrop",
     "SpatialDomain",
     "StimulusSpecificColumnMapping",
+    "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
     "WindowedRoiResponse",
-    "write_response_summary_csv",
+    "write_response_summary_grouped_csv",
+    "write_response_summary_trials_csv",
 ]
 
 __version__ = "0.1.0"
