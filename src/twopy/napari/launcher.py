@@ -11,8 +11,8 @@ analysis workflows belong in dedicated helpers that the controls call.
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
-from twopy.napari.constants import DEFAULT_MOVIE_PREVIEW_FRAMES
 from twopy.napari.controls import add_twopy_magicgui_controls
+from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 from twopy.napari.types import NapariRecordingView
 from twopy.napari.viewer import create_viewer, open_recording_in_napari
 
@@ -25,7 +25,8 @@ def launch_napari(
     roi_set: Path | None = None,
     roi_output_path: Path | None = None,
     movie_start_frame: int = 0,
-    movie_stop_frame: int | None = DEFAULT_MOVIE_PREVIEW_FRAMES,
+    movie_stop_frame: int | None = None,
+    load_movie_preview: bool = True,
 ) -> NapariRecordingView | None:
     """Launch napari and start the event loop.
 
@@ -37,8 +38,9 @@ def launch_napari(
         roi_set: Optional saved ROI HDF5 path to reopen.
         roi_output_path: Optional ROI output path for the Save ROIs button.
         movie_start_frame: First movie preview frame.
-        movie_stop_frame: Exclusive movie preview stop frame. ``None`` skips
-            the movie preview and shows only the mean image.
+        movie_stop_frame: Exclusive movie preview stop frame. ``None`` means
+            the final movie frame.
+        load_movie_preview: Whether to add the aligned movie layer.
 
     Returns:
         ``NapariRecordingView`` when a recording is loaded at startup,
@@ -50,9 +52,7 @@ def launch_napari(
     """
     resolved_recording_path = resolve_launch_recording_path(recording_data_path)
     movie_range = (
-        None
-        if movie_stop_frame is None
-        else (int(movie_start_frame), int(movie_stop_frame))
+        (int(movie_start_frame), movie_stop_frame) if load_movie_preview else None
     )
     viewer = create_viewer()
     if resolved_recording_path is None:
@@ -67,11 +67,13 @@ def launch_napari(
         )
         view = None
     else:
+        paths = resolve_recording_paths(resolved_recording_path)
         view = open_recording_in_napari(
-            resolved_recording_path,
+            paths.recording_data_path,
             viewer=viewer,
             roi_set=roi_set,
             roi_output_path=roi_output_path,
+            movie_path=paths.movie_path,
             movie_frame_range=movie_range,
         )
 
@@ -79,51 +81,6 @@ def launch_napari(
 
     napari.run()
     return view
-
-
-def resolve_launch_recording_path(recording_data_path: Path | None) -> Path | None:
-    """Resolve a command-line recording path.
-
-    Args:
-        recording_data_path: Optional caller path.
-
-    Returns:
-        Existing ``recording_data.h5`` path, or ``None`` when no path was
-        supplied and no default recording exists.
-
-    Raises:
-        ValueError: If an explicit path was supplied and does not exist.
-
-    Running from a converted output directory or from a source recording
-    directory should be enough for day-to-day use.
-    """
-    candidates: list[Path] = []
-    if recording_data_path is not None:
-        candidates.append(recording_data_path.expanduser())
-    else:
-        cwd = Path.cwd()
-        candidates.extend(
-            (
-                cwd / "recording_data.h5",
-                cwd / "twopy" / "recording_data.h5",
-            ),
-        )
-
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate.resolve()
-
-    if recording_data_path is None:
-        return None
-
-    candidate_list = "\n".join(f"- {candidate}" for candidate in candidates)
-    msg = (
-        "Could not find recording_data.h5. Pass a path, run from a twopy output "
-        "directory, or run from a recording directory that contains "
-        "twopy/recording_data.h5.\n"
-        f"Checked:\n{candidate_list}"
-    )
-    raise ValueError(msg)
 
 
 def parse_launch_args() -> Namespace:
@@ -168,9 +125,8 @@ def parse_launch_args() -> Namespace:
     )
     parser.add_argument(
         "--movie-stop",
-        type=int,
-        default=DEFAULT_MOVIE_PREVIEW_FRAMES,
-        help="Exclusive stop frame for the movie preview.",
+        default="last",
+        help="Exclusive stop frame for the movie preview, or 'last'.",
     )
     parser.add_argument(
         "--no-movie",
@@ -195,5 +151,20 @@ def main() -> None:
         roi_set=args.roi_set,
         roi_output_path=args.roi_output,
         movie_start_frame=args.movie_start,
-        movie_stop_frame=None if args.no_movie else args.movie_stop,
+        movie_stop_frame=_parse_cli_movie_stop(args.movie_stop),
+        load_movie_preview=not args.no_movie,
     )
+
+
+def _parse_cli_movie_stop(value: str) -> int | None:
+    """Parse the command-line movie stop value.
+
+    Args:
+        value: ``last`` or an integer string.
+
+    Returns:
+        Integer stop frame, or ``None`` for the final movie frame.
+    """
+    if value.strip().lower() == "last":
+        return None
+    return int(value)

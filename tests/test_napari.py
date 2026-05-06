@@ -24,7 +24,8 @@ from twopy import (
     save_napari_label_rois,
     save_roi_set,
 )
-from twopy.napari.launcher import resolve_launch_recording_path
+from twopy.napari.controls import resolve_movie_frame_range
+from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 
 
 class _ControlWidget(Protocol):
@@ -263,7 +264,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             viewer.labels[0].data = np.array([[0, 1], [2, 2]])
             controls = cast(_ControlWidget, opened.controls_widget)
-            save_widget = controls[1]
+            save_widget = controls[3]
             result = save_widget(output_path=roi_output_path)
 
             self.assertIn("Saved 2 ROI", str(result))
@@ -288,10 +289,10 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_output_path=roi_output_path,
             )
             controls = cast(_ControlWidget, controls_widget)
-            load_widget = controls[0]
+            load_widget = controls[1]
 
             result = load_widget(
-                recording_data_path=recording_path,
+                recording_path=recording_path,
                 roi_output_path=roi_output_path,
                 load_movie_preview=True,
             )
@@ -320,15 +321,78 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_output_path=Path("unused.h5"),
             )
             controls = cast(_ControlWidget, controls_widget)
-            load_widget = controls[0]
-            save_widget = controls[1]
+            load_widget = controls[1]
+            save_widget = controls[3]
 
-            load_widget(recording_data_path=recording_path)
+            load_widget(recording_path=recording_path)
             viewer.labels[0].data = np.array([[1, 0], [0, 0]])
             result = save_widget()
 
             self.assertIn("Saved 1 ROI", str(result))
             self.assertTrue((root / "rois.h5").exists())
+
+    def test_load_button_resolves_recording_folder_defaults(self) -> None:
+        """Confirm folder loading finds recording, movie, and ROI files.
+
+        Inputs: converted output folder containing recording/movie/ROI files.
+        Outputs: loaded layers and default ROI save path from that folder.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            roi_path = root / "rois.h5"
+            save_roi_set(
+                make_roi_set(np.array([[[True, False], [False, False]]])),
+                roi_path,
+            )
+            viewer = _FakeViewer()
+            controls_widget, _dock = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_output_path=Path("unused.h5"),
+            )
+            controls = cast(_ControlWidget, controls_widget)
+            load_widget = controls[1]
+
+            result = load_widget(recording_path=root)
+
+            self.assertIn(str(recording_path), str(result))
+            self.assertEqual(len(viewer.images), 2)
+            np.testing.assert_array_equal(
+                np.unique(roi_label_image_from_layer(viewer.labels[0])),
+                np.array([0, 1]),
+            )
+
+    def test_recording_path_resolution_reports_available_files(self) -> None:
+        """Confirm folder resolution finds optional movie and ROI paths.
+
+        Inputs: converted output folder with ``aligned_movie.h5`` and
+            ``rois.h5``.
+        Outputs: concrete paths for the viewer and controls.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            roi_path = root / "rois.h5"
+            roi_path.touch()
+
+            paths = resolve_recording_paths(root)
+
+            self.assertEqual(paths.recording_data_path, recording_path.resolve())
+            self.assertEqual(paths.movie_path, (root / "aligned_movie.h5").resolve())
+            self.assertEqual(paths.roi_set_path, roi_path.resolve())
+            self.assertEqual(paths.roi_output_path, roi_path.resolve())
+
+    def test_movie_frame_range_accepts_last_default(self) -> None:
+        """Confirm widget defaults request the full movie.
+
+        Inputs: start frame zero and ``last`` stop text.
+        Outputs: ``None`` stop marker used by the lazy movie loader.
+        """
+        self.assertEqual(
+            resolve_movie_frame_range(start_frame=0, stop_frame="last"),
+            (0, None),
+        )
 
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
         """Confirm no-path app launch can start empty instead of failing.
