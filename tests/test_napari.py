@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import chdir, environ
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Protocol, cast
 from unittest.mock import patch
 
@@ -38,7 +39,7 @@ from twopy import (
     save_roi_set,
 )
 from twopy.analysis.dff import RoiDeltaFOverF
-from twopy.analysis.responses import group_delta_f_over_f_by_epoch
+from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
 from twopy.converted import load_converted_recording
@@ -365,6 +366,12 @@ class NapariAdapterTest(unittest.TestCase):
                 ),
                 ("Update", "Plot", "ROIs", "Epochs", "Export"),
             )
+            update_buttons = {
+                button.text() for button in options_widget.findChildren(QPushButton)
+            }
+            self.assertIn("Save analysis + ROIs", update_buttons)
+            self.assertIn("Recompute preview now", update_buttons)
+            self.assertIn("Reload saved analysis", update_buttons)
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
@@ -595,6 +602,41 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertFalse((root / "analysis_outputs.h5").exists())
             self.assertFalse((root / "response_summary.csv").exists())
+            self.assertIsNotNone(response_widget._plot_data)
+
+    def test_save_analysis_button_writes_roi_and_analysis_outputs(self) -> None:
+        """Confirm the Update tab can persist current ROI analysis.
+
+        Inputs: edited Labels layer and a patched analysis workflow.
+        Outputs: ROI HDF5 file written beside the recording and plot data
+        updated from the saved analysis run.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            analysis_path = root / "analysis_outputs.h5"
+            summary_path = root / "response_summary.csv"
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            with patch(
+                "twopy.napari.plotting.docks.analyze_recording_responses",
+                return_value=SimpleNamespace(
+                    output_path=analysis_path,
+                    response_summary_csv_path=summary_path,
+                    grouped_responses=_tiny_grouped_responses(),
+                ),
+            ) as analyze:
+                response_widget.save_analysis_and_rois()
+
+            roi_path = root / "rois.h5"
+            self.assertTrue(roi_path.is_file())
+            analyze.assert_called_once()
+            _, roi_set = analyze.call_args.args
+            self.assertEqual(roi_set.labels, ("roi_0001",))
+            self.assertEqual(analyze.call_args.kwargs["output_path"], analysis_path)
             self.assertIsNotNone(response_widget._plot_data)
 
     def test_live_response_controller_updates_after_paint_event(self) -> None:
@@ -1632,6 +1674,18 @@ def _tiny_response_plot_data() -> ResponsePlotData:
     Returns:
         Plot-ready response data with one ROI and one epoch.
     """
+    return response_plot_data_from_grouped(_tiny_grouped_responses())
+
+
+def _tiny_grouped_responses() -> GroupedRoiResponses:
+    """Build one tiny grouped response object for napari plot tests.
+
+    Args:
+        None.
+
+    Returns:
+        Grouped response data with one ROI and one epoch.
+    """
     dff = RoiDeltaFOverF(
         fluorescence=np.ones((2, 1), dtype=np.float64),
         baseline=np.ones((2, 1), dtype=np.float64),
@@ -1645,12 +1699,11 @@ def _tiny_response_plot_data() -> ResponsePlotData:
         interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
         metadata={"method": "test"},
     )
-    grouped = group_delta_f_over_f_by_epoch(
+    return group_delta_f_over_f_by_epoch(
         dff,
         (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),),
         data_rate_hz=1.0,
     )
-    return response_plot_data_from_grouped(grouped)
 
 
 def _write_source_recording_shape(root: Path) -> None:

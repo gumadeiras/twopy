@@ -11,7 +11,7 @@ still go through the same typed helpers used by scripts.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import numpy as np
 from magicgui.widgets import FileEdit
@@ -50,6 +50,22 @@ from twopy.napari.state import (
 )
 
 __all__ = ["NapariControlDocks", "add_twopy_magicgui_controls"]
+
+
+class _RoiSavePathReceiver(Protocol):
+    """Small protocol for widgets that mirror the selected ROI save path."""
+
+    def set_roi_save_file(self, roi_save_file: Path | None) -> None:
+        """Store the ROI HDF5 path for the selected recording.
+
+        Args:
+            roi_save_file: ROI output path, or ``None`` when no recording is
+                selected.
+
+        Returns:
+            None.
+        """
+        ...
 
 
 @dataclass
@@ -434,6 +450,10 @@ def _make_twopy_save_rois_widget(state: NapariControlState) -> object:
         roi_set = save_napari_label_rois(label_image, resolved_output_path)
         state.roi_save_file = resolved_output_path
         update_selected_roi_save_file(state, resolved_output_path)
+        if hasattr(state.response_plot_widget, "set_roi_save_file"):
+            cast(_RoiSavePathReceiver, state.response_plot_widget).set_roi_save_file(
+                resolved_output_path
+            )
         return f"Saved {len(roi_set.labels)} ROI(s) to {resolved_output_path}"
 
     save_rois.roi_save_file.mode = "w"

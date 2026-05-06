@@ -254,6 +254,7 @@ def select_loaded_recording(
             state.response_plot_widget,
             recording=None,
             roi_labels_layer=None,
+            roi_save_file=None,
         )
         render_loaded_recordings_panel(state)
         return
@@ -268,6 +269,7 @@ def select_loaded_recording(
         state.response_plot_widget,
         recording=selected.recording,
         roi_labels_layer=selected.roi_labels_layer,
+        roi_save_file=selected.roi_save_file,
     )
     render_loaded_recordings_panel(state)
 

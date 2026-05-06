@@ -244,6 +244,10 @@ decided.
   with additive blending, ROI Labels use additive blending with brush size 6,
   and live response updates are triggered by committed paint/data edits rather
   than display-refresh events during mouse movement.
+- Napari response update controls now separate preview, reload, and persistence:
+  "Recompute preview now" refreshes live plots in memory, "Reload saved
+  analysis" reads existing analysis output from disk, and "Save analysis +
+  ROIs" writes the current ROI file plus analysis HDF5 and response CSV.
 - Tests for config loading, MATLAB inspection/loading, recording inspection,
   database filtering/copy-cache behavior, conversion, converted-recording
   loading, ROI storage/extraction, photodiode synchronization, response windows,

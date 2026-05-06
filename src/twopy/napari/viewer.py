@@ -145,19 +145,21 @@ def open_recording_in_napari(
     response_options_widget = None
     response_options_dock = None
     if add_controls:
+        resolved_roi_save_file = resolve_roi_save_file(
+            recording_data_path=recording.path,
+            roi_set=roi_set,
+            explicit_roi_save_file=roi_save_file,
+        )
         response_plot_widget, response_plot_dock = add_twopy_response_plot_widget(
             resolved_viewer,
             recording=recording,
             roi_labels_layer=roi_layer,
+            roi_save_file=resolved_roi_save_file,
         )
         control_docks = add_twopy_magicgui_controls(
             resolved_viewer,
             roi_labels_layer=roi_layer,
-            roi_save_file=resolve_roi_save_file(
-                recording_data_path=recording.path,
-                roi_set=roi_set,
-                explicit_roi_save_file=roi_save_file,
-            ),
+            roi_save_file=resolved_roi_save_file,
             recording=recording,
             response_plot_widget=response_plot_widget,
             mean_image_layer=mean_layer,

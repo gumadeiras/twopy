@@ -47,26 +47,35 @@ def epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
 
 def response_update_tab(
     *,
-    refresh_button: QPushButton,
-    update_from_rois_button: QPushButton,
-    analysis_path_label: QLabel,
+    reload_saved_button: QPushButton,
+    recompute_preview_button: QPushButton,
+    save_analysis_button: QPushButton,
+    analysis_output_label: QLabel,
+    roi_output_label: QLabel,
+    status_label: QLabel,
 ) -> QWidget:
     """Create the tab that owns response recompute/reload actions.
 
     Args:
-        refresh_button: Button that reloads persisted response outputs.
-        update_from_rois_button: Button that computes responses from current
+        reload_saved_button: Button that reloads persisted response outputs.
+        recompute_preview_button: Button that computes responses from current
             Labels ROIs.
-        analysis_path_label: Label showing the analysis output path.
+        save_analysis_button: Button that saves ROIs and persisted analysis.
+        analysis_output_label: Label showing the analysis output path.
+        roi_output_label: Label showing the ROI output path.
+        status_label: Label showing the latest save or reload status.
 
     Returns:
         Qt widget for the Update tab.
     """
     tab = QWidget()
     layout = QVBoxLayout()
-    layout.addWidget(refresh_button)
-    layout.addWidget(update_from_rois_button)
-    layout.addWidget(analysis_path_label)
+    layout.addWidget(save_analysis_button)
+    layout.addWidget(recompute_preview_button)
+    layout.addWidget(reload_saved_button)
+    layout.addWidget(analysis_output_label)
+    layout.addWidget(roi_output_label)
+    layout.addWidget(status_label)
     layout.addStretch(1)
     tab.setLayout(layout)
     return tab

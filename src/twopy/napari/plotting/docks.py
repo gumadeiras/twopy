@@ -11,6 +11,7 @@ responses from the current Labels layer, this module converts labels to a
 
 from pathlib import Path
 
+import numpy as np
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -25,12 +26,14 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.analysis.responses import is_gray_epoch_name
+from twopy.analysis.workflow import analyze_recording_responses
 from twopy.converted import RecordingData
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.plotting.data import (
     ResponsePlotData,
     default_analysis_output_path,
     load_response_plot_data,
+    response_plot_data_from_grouped,
 )
 from twopy.napari.plotting.export_controls import (
     ResponseExportState,
@@ -62,6 +65,10 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_label_values,
 )
 from twopy.napari.protocols import NapariViewer
+from twopy.napari.roi import (
+    roi_label_image_from_layer_for_recording,
+    save_napari_label_rois,
+)
 
 __all__ = [
     "add_twopy_response_options_widget",
@@ -77,6 +84,7 @@ def add_twopy_response_plot_widget(
     *,
     recording: RecordingData | None,
     roi_labels_layer: object | None = None,
+    roi_save_file: Path | None = None,
     dock_name: str = "twopy responses",
     dock_area: str = "top",
 ) -> tuple[object, object]:
@@ -87,6 +95,7 @@ def add_twopy_response_plot_widget(
         recording: Optional loaded converted recording.
         roi_labels_layer: Optional napari Labels layer used for analysis
             previews from current ROIs.
+        roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
         dock_name: Dock widget title.
         dock_area: Napari dock area.
 
@@ -97,6 +106,7 @@ def add_twopy_response_plot_widget(
         recording,
         viewer=viewer,
         roi_labels_layer=roi_labels_layer,
+        roi_save_file=roi_save_file,
     )
     dock_widget = viewer.window.add_dock_widget(
         widget,
@@ -141,6 +151,7 @@ def create_response_plot_widget(
     *,
     viewer: object | None = None,
     roi_labels_layer: object | None = None,
+    roi_save_file: Path | None = None,
 ) -> object:
     """Create a response plotting widget.
 
@@ -149,6 +160,7 @@ def create_response_plot_widget(
         viewer: Optional napari viewer used for figure export.
         roi_labels_layer: Optional napari Labels layer used when the user asks
             to compute responses from the current ROIs.
+        roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
 
     Returns:
         Qt widget as a plain object for napari docking.
@@ -159,6 +171,7 @@ def create_response_plot_widget(
         widget,
         recording=recording,
         roi_labels_layer=roi_labels_layer,
+        roi_save_file=roi_save_file,
     )
     return widget
 
@@ -168,6 +181,7 @@ def refresh_response_plot_widget(
     *,
     recording: RecordingData | None,
     roi_labels_layer: object | None = None,
+    roi_save_file: Path | None = None,
 ) -> None:
     """Refresh a response plotting widget after a recording is loaded.
 
@@ -175,6 +189,7 @@ def refresh_response_plot_widget(
         widget: Optional widget returned by ``create_response_plot_widget``.
         recording: Optional loaded converted recording.
         roi_labels_layer: Optional current ROI Labels layer.
+        roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
 
     Returns:
         None.
@@ -182,6 +197,7 @@ def refresh_response_plot_widget(
     if not isinstance(widget, _ResponsePlotWidget):
         return
     widget.set_roi_labels_layer(roi_labels_layer)
+    widget.set_roi_save_file(roi_save_file)
     if recording is None:
         widget.clear_recording()
         return
@@ -219,6 +235,7 @@ class _ResponsePlotWidget(QWidget):
         self._recording: RecordingData | None = None
         self._roi_labels_layer: object | None = None
         self._analysis_path: Path | None = None
+        self._roi_save_file: Path | None = None
         self._plot_data: ResponsePlotData | None = None
         self._show_sem = True
         self._plot_size = 360
@@ -247,12 +264,18 @@ class _ResponsePlotWidget(QWidget):
         self._show_sem_checkbox = QCheckBox("Show SEM")
         self._show_sem_checkbox.setChecked(True)
         self._show_sem_checkbox.stateChanged.connect(self._set_show_sem)
-        refresh_button = QPushButton("Refresh responses")
-        refresh_button.clicked.connect(self.reload)
-        update_from_rois_button = QPushButton("Update from current ROIs")
-        update_from_rois_button.clicked.connect(self.update_from_current_rois)
-        self._analysis_path_label = QLabel("Analysis file: default")
+        reload_saved_button = QPushButton("Reload saved analysis")
+        reload_saved_button.clicked.connect(self.reload)
+        recompute_preview_button = QPushButton("Recompute preview now")
+        recompute_preview_button.clicked.connect(self.update_from_current_rois)
+        save_analysis_button = QPushButton("Save analysis + ROIs")
+        save_analysis_button.clicked.connect(self.save_analysis_and_rois)
+        self._analysis_path_label = QLabel("Analysis output: default")
         self._analysis_path_label.setWordWrap(True)
+        self._roi_save_path_label = QLabel("ROI output: default")
+        self._roi_save_path_label.setWordWrap(True)
+        self._update_status_label = QLabel("")
+        self._update_status_label.setWordWrap(True)
         self._plot_options_layout = QVBoxLayout()
         self._plot_axis_layout = QVBoxLayout()
         plot_axis_widget = QWidget()
@@ -271,9 +294,12 @@ class _ResponsePlotWidget(QWidget):
         self._epoch_options_layout = QVBoxLayout()
         self._options_tabs.addTab(
             response_update_tab(
-                refresh_button=refresh_button,
-                update_from_rois_button=update_from_rois_button,
-                analysis_path_label=self._analysis_path_label,
+                reload_saved_button=reload_saved_button,
+                recompute_preview_button=recompute_preview_button,
+                save_analysis_button=save_analysis_button,
+                analysis_output_label=self._analysis_path_label,
+                roi_output_label=self._roi_save_path_label,
+                status_label=self._update_status_label,
             ),
             "Update",
         )
@@ -318,6 +344,20 @@ class _ResponsePlotWidget(QWidget):
         self._live_controller.set_context(self._recording, self._roi_labels_layer)
         self._render_plots()
 
+    def set_roi_save_file(self, roi_save_file: Path | None) -> None:
+        """Store the ROI HDF5 path used by Save Analysis.
+
+        Args:
+            roi_save_file: Optional ROI output path for the selected recording.
+
+        Returns:
+            None.
+        """
+        self._roi_save_file = roi_save_file
+        self._roi_save_path_label.setText(
+            f"ROI output: {self._resolved_roi_save_file()}"
+        )
+
     def clear_recording(self) -> None:
         """Reset the widget to the empty-launch state.
 
@@ -332,7 +372,9 @@ class _ResponsePlotWidget(QWidget):
         self._plot_data = None
         self._live_controller.set_context(None, None)
         self._reset_plot_state()
-        self._analysis_path_label.setText("Analysis file: default")
+        self._analysis_path_label.setText("Analysis output: default")
+        self._roi_save_path_label.setText("ROI output: default")
+        self._update_status_label.setText("")
         self._clear_dynamic_option_tabs()
         self._set_status("No recording loaded.")
 
@@ -347,7 +389,10 @@ class _ResponsePlotWidget(QWidget):
         """
         self._recording = recording
         self._analysis_path = default_analysis_output_path(recording)
-        self._analysis_path_label.setText(f"Analysis file: {self._analysis_path}")
+        self._analysis_path_label.setText(f"Analysis output: {self._analysis_path}")
+        self._roi_save_path_label.setText(
+            f"ROI output: {self._resolved_roi_save_file()}"
+        )
         self.reload()
         self._live_controller.set_context(self._recording, self._roi_labels_layer)
 
@@ -364,6 +409,69 @@ class _ResponsePlotWidget(QWidget):
         files. Explicit analysis saves remain separate from plot previews.
         """
         self._live_controller.update_now()
+
+    def save_analysis_and_rois(self) -> None:
+        """Save current ROI labels plus persisted analysis outputs.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        Live response plots are previews. This method is the explicit
+        persistence action: it saves the current Labels layer as ROI HDF5, then
+        runs the normal script-facing analysis workflow to write analysis HDF5
+        and response CSV outputs.
+        """
+        if self._recording is None:
+            self._set_status("No recording loaded.")
+            return
+        if self._roi_labels_layer is None:
+            self._set_status("No ROI Labels layer is available.")
+            return
+        try:
+            label_image = roi_label_image_from_layer_for_recording(
+                self._roi_labels_layer,
+                self._recording,
+            )
+        except ValueError as error:
+            self._set_status(str(error))
+            return
+        if not np.any(label_image > 0):
+            self._set_status("No ROI labels to save or analyze.")
+            return
+
+        roi_output_path = self._resolved_roi_save_file()
+        analysis_output_path = self._resolved_analysis_path()
+        try:
+            roi_set = save_napari_label_rois(label_image, roi_output_path)
+            run = analyze_recording_responses(
+                self._recording.path,
+                roi_set,
+                output_path=analysis_output_path,
+            )
+        except ValueError as error:
+            self._set_status(str(error))
+            return
+
+        self._roi_save_file = roi_output_path
+        self._analysis_path = run.output_path
+        self._analysis_path_label.setText(f"Analysis output: {run.output_path}")
+        self._roi_save_path_label.setText(f"ROI output: {roi_output_path}")
+        summary = ""
+        if run.response_summary_csv_path is not None:
+            summary = f" and {run.response_summary_csv_path}"
+        self._update_status_label.setText(
+            f"Saved {len(roi_set.labels)} ROI(s), {run.output_path}{summary}"
+        )
+        self.set_response_plot_data(
+            response_plot_data_from_grouped(
+                run.grouped_responses,
+                source_path=run.output_path,
+            ),
+            reset_axes=True,
+        )
 
     def set_response_plot_data(
         self,
@@ -589,6 +697,22 @@ class _ResponsePlotWidget(QWidget):
         if self._recording is None:
             return Path("exports")
         return self._recording.path.parent / "exports"
+
+    def _resolved_analysis_path(self) -> Path:
+        """Return the analysis HDF5 path for the selected recording."""
+        if self._analysis_path is not None:
+            return self._analysis_path
+        if self._recording is not None:
+            return default_analysis_output_path(self._recording)
+        return Path("analysis_outputs.h5")
+
+    def _resolved_roi_save_file(self) -> Path:
+        """Return the ROI HDF5 path for the selected recording."""
+        if self._roi_save_file is not None:
+            return self._roi_save_file
+        if self._recording is not None:
+            return self._recording.path.parent / "rois.h5"
+        return Path("rois.h5")
 
     def _roi_color_hex(self) -> tuple[str, ...]:
         """Return ROI colors as hex strings in plot ROI order."""
