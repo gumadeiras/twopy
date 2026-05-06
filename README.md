@@ -14,6 +14,8 @@ the converted files, so the original source files remain separate from twopy's o
 
 ### Install
 
+Examples use micromamba, but any conda-compatible environment manager should work.
+
 Run this once from the twopy folder to install everything you need:
 
 ```sh
