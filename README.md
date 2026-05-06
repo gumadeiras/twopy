@@ -1,11 +1,11 @@
 # twopy
 
-Two-photon imaging analysis tool with a napari interface.
+Two-photon imaging analysis tool for the Clark Lab output format.
 
 ## Getting Started
 
-twopy lets you open two-photon recordings, draw ROIs, save them, and plot
-responses in real time.
+twopy lets you open two-photon recordings, draw ROIs, plot responses in real time,
+process and analyze them, and save them.
 
 When you first load a recording, twopy converts it to a standardized HDF5 format.
 The converted format includes the aligned movie, mean image, stimulus tables,
