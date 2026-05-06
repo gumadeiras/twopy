@@ -34,6 +34,7 @@ from twopy.napari.plotting.data import (
 )
 from twopy.napari.plotting.label_visibility import (
     apply_roi_visibility_to_labels_layer,
+    roi_label_value_from_label,
 )
 from twopy.napari.plotting.options import (
     axis_options_widget,
@@ -46,7 +47,7 @@ from twopy.napari.plotting.widgets import (
     global_time_bounds,
     global_value_bounds,
     ordered_bounds,
-    roi_colors_from_layer,
+    roi_colors_from_label_values,
 )
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import roi_label_image_from_layer
@@ -396,7 +397,11 @@ class _ResponsePlotWidget(QWidget):
             for roi_label in roi_labels
         }
         self._roi_colors = _opaque_colors(
-            roi_colors_from_layer(self._roi_labels_layer, len(roi_labels))
+            roi_colors_from_label_values(
+                self._roi_labels_layer,
+                _label_values_from_roi_labels(roi_labels),
+                fallback_count=len(roi_labels),
+            )
         )
         self._epoch_visibility = {
             (epoch.epoch_number, epoch.epoch_name): self._epoch_visibility.get(
@@ -676,3 +681,18 @@ def _opaque_colors(colors: tuple[QColor, ...]) -> tuple[QColor, ...]:
         updated.setAlpha(255)
         opaque.append(updated)
     return tuple(opaque)
+
+
+def _label_values_from_roi_labels(roi_labels: tuple[str, ...]) -> tuple[int, ...]:
+    """Return napari label values for plot ROI labels.
+
+    Args:
+        roi_labels: ROI labels in plot order.
+
+    Returns:
+        Integer Labels-layer values in the same order.
+    """
+    return tuple(
+        roi_label_value_from_label(roi_label, fallback=index + 1)
+        for index, roi_label in enumerate(roi_labels)
+    )

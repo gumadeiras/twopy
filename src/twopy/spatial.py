@@ -6,7 +6,7 @@ analysis coordinates explicit.
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -91,8 +91,8 @@ class SpatialCrop:
 
     def crop_image(
         self,
-        image: npt.NDArray[np.float64],
-    ) -> npt.NDArray[np.float64]:
+        image: npt.NDArray[Any],
+    ) -> npt.NDArray[Any]:
         """Return the crop view from a full-frame image.
 
         Args:

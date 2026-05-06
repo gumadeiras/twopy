@@ -16,6 +16,10 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.converted import RecordingData
+from twopy.napari.display import (
+    display_labels_from_movie_labels,
+    movie_labels_from_display_layer,
+)
 from twopy.napari.protocols import NapariLayerWithData
 from twopy.roi import (
     RoiSet,
@@ -24,6 +28,7 @@ from twopy.roi import (
     roi_set_to_label_image,
     save_roi_set,
 )
+from twopy.spatial import SpatialCrop, full_frame_crop
 
 __all__ = [
     "roi_label_image_from_layer",
@@ -38,12 +43,15 @@ def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
         layer: Napari Labels layer, or a test object with a ``data`` attribute.
 
     Returns:
-        Two-dimensional integer label image.
+        Full-frame movie-coordinate integer label image.
 
     This small helper keeps scripts from reaching into napari layer internals
     in several different ways. The label image can be passed directly to
-    ``save_napari_label_rois``.
+    ``save_napari_label_rois``. When twopy opened a cropped/transposed display
+    layer, crop metadata on the layer is used to restore movie coordinates.
     """
+    if hasattr(layer, "metadata") or hasattr(layer, "options"):
+        return movie_labels_from_display_layer(layer)
     data = cast(NapariLayerWithData, layer).data
     return np.asarray(data, dtype=np.int64)
 
@@ -83,21 +91,31 @@ def save_napari_label_rois(
 def roi_label_image_for_display(
     roi_set: RoiSet | Path | None,
     recording: RecordingData,
+    *,
+    spatial_crop: SpatialCrop | None = None,
 ) -> npt.NDArray[np.int64]:
     """Create the label image shown in napari for ROI drawing/editing.
 
     Args:
         roi_set: Optional existing ROI set or saved ROI HDF5 path.
         recording: Loaded converted recording.
+        spatial_crop: Optional crop shown in napari. When omitted, the full
+            movie frame is displayed.
 
     Returns:
-        Integer label image with the movie spatial shape.
+        Integer label image in napari display coordinates.
     """
+    crop = spatial_crop
+    if crop is None:
+        crop = full_frame_crop(recording.movie.shape[1:])
     if roi_set is None:
-        return np.zeros(recording.movie.shape[1:], dtype=np.int64)
+        return np.zeros((crop.shape[1], crop.shape[0]), dtype=np.int64)
     loaded_roi_set = resolve_roi_set(roi_set)
     validate_roi_shape(loaded_roi_set, recording)
-    return roi_set_to_label_image(loaded_roi_set)
+    return display_labels_from_movie_labels(
+        roi_set_to_label_image(loaded_roi_set),
+        crop,
+    )
 
 
 def resolve_roi_save_file(

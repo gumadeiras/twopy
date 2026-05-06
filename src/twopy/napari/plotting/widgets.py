@@ -25,6 +25,7 @@ __all__ = [
     "global_time_bounds",
     "global_value_bounds",
     "ordered_bounds",
+    "roi_colors_from_label_values",
     "roi_colors_from_layer",
 ]
 
@@ -261,11 +262,34 @@ def roi_colors_from_layer(layer: object | None, count: int) -> tuple[QColor, ...
     Returns:
         Tuple of Qt colors.
     """
+    return roi_colors_from_label_values(
+        layer,
+        tuple(range(1, count + 1)),
+        fallback_count=count,
+    )
+
+
+def roi_colors_from_label_values(
+    layer: object | None,
+    label_values: tuple[int, ...],
+    *,
+    fallback_count: int,
+) -> tuple[QColor, ...]:
+    """Return ROI colors for explicit napari Labels-layer values.
+
+    Args:
+        layer: Current napari Labels layer.
+        label_values: Integer label values to sample.
+        fallback_count: Number of fallback colors when no layer is available.
+
+    Returns:
+        Tuple of Qt colors.
+    """
     if layer is not None and hasattr(layer, "get_color"):
         labels_layer = cast(_LabelsColorLayer, layer)
         return tuple(
-            _qcolor_from_rgba(labels_layer.get_color(roi_index + 1))
-            for roi_index in range(count)
+            _qcolor_from_rgba(labels_layer.get_color(label_value))
+            for label_value in label_values
         )
     base = (
         QColor("#4cc9f0"),
@@ -275,7 +299,7 @@ def roi_colors_from_layer(layer: object | None, count: int) -> tuple[QColor, ...
         QColor("#b5179e"),
         QColor("#43aa8b"),
     )
-    return tuple(base[index % len(base)] for index in range(count))
+    return tuple(base[index % len(base)] for index in range(fallback_count))
 
 
 def epoch_key_label(epoch_number: int, epoch_name: str) -> str:

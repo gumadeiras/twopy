@@ -13,6 +13,10 @@ from typing import cast
 
 from twopy.converted import load_converted_recording
 from twopy.napari.controls import add_twopy_magicgui_controls
+from twopy.napari.display import (
+    display_image_from_movie_image,
+    display_metadata_for_spatial_crop,
+)
 from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
 from twopy.napari.plotting import (
     add_twopy_response_options_widget,
@@ -72,10 +76,13 @@ def open_recording_in_napari(
     """
     recording = load_converted_recording(recording_data_path, movie_path=movie_path)
     resolved_viewer = create_viewer() if viewer is None else viewer
+    display_crop = recording.alignment_valid_crop
+    layer_metadata = display_metadata_for_spatial_crop(display_crop)
     mean_layer = resolved_viewer.add_image(
-        recording.mean_image,
+        display_image_from_movie_image(display_crop.crop_image(recording.mean_image)),
         name=mean_image_layer_name,
         colormap="gray",
+        metadata=layer_metadata,
     )
 
     movie_layer = None
@@ -85,20 +92,30 @@ def open_recording_in_napari(
             end_frame=movie_frame_range[1],
             frame_count=recording.movie.shape[0],
         )
-        movie = recording.movie.read_frames(start_frame, exclusive_stop(end_frame))
+        movie = recording.movie.read_frames(
+            start_frame,
+            exclusive_stop(end_frame),
+            spatial_crop=display_crop,
+        )
         movie_layer = resolved_viewer.add_image(
-            movie,
+            display_image_from_movie_image(movie),
             name=movie_layer_name,
             colormap="gray",
+            metadata=layer_metadata,
         )
 
     roi_layer = None
     if add_roi_labels_layer:
         roi_layer = resolved_viewer.add_labels(
-            roi_label_image_for_display(roi_set, recording),
+            roi_label_image_for_display(
+                roi_set,
+                recording,
+                spatial_crop=display_crop,
+            ),
             name=roi_layer_name,
             opacity=0.5,
             blending="additive",
+            metadata=layer_metadata,
         )
     controls_widget = None
     controls_dock = None

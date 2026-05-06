@@ -150,6 +150,13 @@ decided.
   separate modules for plot data, option controls, drawing widgets, and docks.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
+- Napari displays the alignment-valid crop with explicit movie-axis to
+  display-axis transposition, then converts drawn Labels ROIs back to full-frame
+  movie coordinates before saving or analysis. This keeps the viewer orientation
+  natural while preserving the analysis spatial contract.
+- ROI visibility controls hide existing label values without making future
+  newly drawn label numbers transparent, so users can keep adding ROIs after
+  filtering plots.
 - Launch script for opening napari from a converted output directory, a source
   recording directory, or an explicit `recording_data.h5` path. When a source
   recording has no converted twopy files yet, napari runs conversion first and

@@ -8,11 +8,12 @@ This module only changes how labels are displayed. It never edits the label
 image, so hiding an ROI in the plot options cannot delete ROI data.
 """
 
+from collections import defaultdict
 from typing import Protocol, cast
 
 from qtpy.QtGui import QColor
 
-__all__ = ["apply_roi_visibility_to_labels_layer"]
+__all__ = ["apply_roi_visibility_to_labels_layer", "roi_label_value_from_label"]
 
 
 class _LabelsLayerWithColormap(Protocol):
@@ -51,9 +52,16 @@ def apply_roi_visibility_to_labels_layer(
     except ImportError:
         return
 
-    color_dict: dict[int | None, object] = {0: "transparent", None: "transparent"}
+    default_color = _qcolor_rgba(QColor("#4cc9f0"), visible=True)
+    color_dict: defaultdict[int | None, object] = defaultdict(
+        lambda: default_color,
+        {0: "transparent", None: default_color},
+    )
     for roi_index, roi_label in enumerate(roi_labels):
-        label_value = roi_index + 1
+        label_value = roi_label_value_from_label(
+            roi_label,
+            fallback=roi_index + 1,
+        )
         color = colors[roi_index] if roi_index < len(colors) else QColor("#4cc9f0")
         color_dict[label_value] = _qcolor_rgba(
             color,
@@ -62,6 +70,28 @@ def apply_roi_visibility_to_labels_layer(
 
     labels_layer = cast(_LabelsLayerWithColormap, layer)
     labels_layer.colormap = direct_colormap(color_dict)
+
+
+def roi_label_value_from_label(label: str, *, fallback: int) -> int:
+    """Return the napari integer label represented by one ROI label.
+
+    Args:
+        label: ROI label from analysis output, usually ``roi_0001``.
+        fallback: One-based ROI position used when the label has no numeric
+            suffix.
+
+    Returns:
+        Positive integer label value for the napari Labels layer.
+
+    napari lets users draw label ``10`` without drawing labels ``1`` through
+    ``9``. ``make_roi_set_from_label_image`` preserves that value in labels like
+    ``roi_0010``, so visibility needs to target label ``10`` instead of the
+    first plotted ROI position.
+    """
+    suffix = label.rsplit("_", maxsplit=1)[-1]
+    if suffix.isdecimal():
+        return int(suffix)
+    return fallback
 
 
 def _qcolor_rgba(color: QColor, *, visible: bool) -> tuple[float, float, float, float]:

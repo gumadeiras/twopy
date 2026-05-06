@@ -32,6 +32,12 @@ from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
+from twopy.napari.display import (
+    display_image_from_movie_image,
+    display_labels_from_movie_labels,
+    display_metadata_for_spatial_crop,
+    movie_labels_from_display_layer,
+)
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
@@ -45,6 +51,7 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_layer,
 )
 from twopy.napari.state import write_last_recording_folder
+from twopy.spatial import SpatialCrop
 
 
 class _ControlWidget(Protocol):
@@ -664,6 +671,81 @@ class NapariAdapterTest(unittest.TestCase):
         np.testing.assert_array_equal(layer.data, label_image)
         self.assertEqual(layer.get_color(1)[3], 0.0)
         self.assertEqual(layer.get_color(2)[3], 1.0)
+
+    def test_roi_visibility_keeps_new_labels_drawable(self) -> None:
+        """Confirm hiding ROIs does not make future Labels values transparent.
+
+        Inputs: Labels layer with one hidden high-numbered ROI label.
+        Outputs: that ROI is hidden, but a new unseen label keeps visible color.
+        """
+        label_image = np.zeros((2, 2), dtype=np.int64)
+        layer = Labels(label_image)
+
+        apply_roi_visibility_to_labels_layer(
+            layer,
+            roi_labels=("roi_0010",),
+            visibility={"roi_0010": False},
+            colors=(QColor("#ff0000"),),
+        )
+
+        self.assertEqual(layer.get_color(10)[3], 0.0)
+        self.assertEqual(layer.get_color(11)[3], 1.0)
+
+    def test_display_helpers_transpose_movie_axes_for_napari(self) -> None:
+        """Confirm movie axes are transposed only at the napari boundary.
+
+        Inputs: non-square movie-coordinate image.
+        Outputs: display image with swapped spatial axes.
+        """
+        movie_image = np.arange(6, dtype=np.float64).reshape(2, 3)
+
+        display_image = display_image_from_movie_image(movie_image)
+
+        np.testing.assert_array_equal(display_image, movie_image.T)
+
+    def test_display_labels_round_trip_through_alignment_crop(self) -> None:
+        """Confirm napari labels return to full-frame movie coordinates.
+
+        Inputs: full-frame labels plus an alignment-valid crop.
+        Outputs: cropped/transposed display labels and restored full-frame
+        labels with zeros outside the displayed crop.
+        """
+        crop = SpatialCrop(
+            axis0_start=1,
+            axis0_stop=3,
+            axis1_start=0,
+            axis1_stop=3,
+            original_shape=(3, 4),
+            source="alignment_valid_crop",
+        )
+        movie_labels = np.array(
+            [
+                [0, 0, 0, 0],
+                [1, 0, 2, 0],
+                [0, 3, 0, 0],
+            ],
+            dtype=np.int64,
+        )
+
+        display_labels = display_labels_from_movie_labels(movie_labels, crop)
+        layer = _FakeLayer(
+            name="rois",
+            data=display_labels,
+            options={"metadata": display_metadata_for_spatial_crop(crop)},
+        )
+
+        self.assertEqual(display_labels.shape, (3, 2))
+        np.testing.assert_array_equal(
+            movie_labels_from_display_layer(layer),
+            np.array(
+                [
+                    [0, 0, 0, 0],
+                    [1, 0, 2, 0],
+                    [0, 3, 0, 0],
+                ],
+                dtype=np.int64,
+            ),
+        )
 
     def test_movie_frame_range_accepts_last_default(self) -> None:
         """Confirm empty-launch widget defaults request the full movie.
