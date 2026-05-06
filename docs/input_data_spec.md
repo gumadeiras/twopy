@@ -1,21 +1,21 @@
 # Input Data Spec
 
-This is the current observed input contract for one twopy recording. It is based
-on the example two-photon microscope session Gustavo provided.
+This is the short input contract for one twopy recording. Keep this file
+high-level. The canonical file-by-file reference, observed example details,
+MATLAB/TIFF metadata, conversion load set, and converted HDF5 schema live in
+`docs/recording_file_schema.md`.
 
-For detailed file-by-file contents, source-of-truth choices, and response
-analysis load recommendations, see `docs/recording_file_schema.md`.
+## Recording Folder Contract
 
-## Session Folder
-
-A recording starts from one timestamped microscope output folder. The stimulus
-name and raw movie stem can change.
+A recording starts from one timestamped microscope output folder. Stimulus names,
+raw movie stems, dates, and timestamps vary between experiments, so twopy should
+detect variable files by stable patterns rather than hard-coded full names.
 
 Required top-level contents:
 
 - `stimulusData/`
 - `alignedMovie.mat`
-- one `*.tif` raw movie
+- one raw `*.tif` movie
 - one `*_alignment.txt` alignment file
 - `defaultAlignChannel.txt`
 - `highResPd.mat`
@@ -26,122 +26,76 @@ Optional top-level contents:
 
 - `savedAnalysis/`
 
-`savedAnalysis/` exists only when the recording was analyzed before with the lab
-MATLAB package.
+`savedAnalysis/` exists only when the recording was already analyzed with the
+lab MATLAB package. It is useful for prior-result inspection, but new twopy
+analysis must not require it.
 
-## Timing Model
+## Source-Of-Truth Summary
 
-The imaging computer and stimulus computer are separate machines with separate
-clocks and different frame rates. The imaging computer records the movie at a
-relatively low frame rate and records photodiode signals. The stimulus computer
-presents stimuli at a relatively high frame rate and flashes the photodiode at
-key timepoints: start, trial transitions, and end.
+- `imageDescription.mat`: primary acquisition metadata.
+- `alignedMovie.mat`: primary movie for ROI drawing and trace extraction.
+- `stimulusData/stimParams.mat`: primary structured stimulus epoch metadata.
+- `stimulusData/stimdata.mat`: primary structured stimulus time series.
+- `stimulusData/filebackup.zip`: exact stimulus/runtime code provenance and
+  source for stimulus-specific column meanings.
+- `highResPd.mat`: preferred photodiode signal for precise event detection.
+- `imagingResPd.mat`: frame-resolution photodiode vector for mapping events to
+  imaging frames.
+- Raw `*.tif`: raw interleaved frame access and metadata audit path.
+- `savedAnalysis/`: optional prior MATLAB analysis output only.
 
-Different photodiode flash patterns or durations identify different event
-types. twopy must use these photodiode signals to align stimulus events to
-imaging frames before trial-level response analysis. Nominal frame rates are not
-enough by themselves.
+Do not treat TIFF `XResolution` or `YResolution` as microscope pixel size.
+Physical pixel size needs scanner/objective calibration beyond the observed
+recording metadata.
 
-## Observed Example Files
+## Timing Contract
 
-Top-level files observed in the example session:
+Imaging and stimulus presentation run on separate computers with separate clocks
+and different frame rates. The imaging computer records the movie and photodiode
+signals. The stimulus computer presents stimuli and flashes the photodiode at
+key timepoints such as stimulus start, trial transitions, and stimulus end.
 
-- `.DS_Store`
-- `alignedMovie.mat`
-- `combo_stim_singles=3s_blank=3s_intensity=20_-8503.4down004.tif`
-- `combo_stim_singles=3s_blank=3s_intensity=20_-8503.4down004_ch1_disinterleaved_alignment.txt`
-- `defaultAlignChannel.txt`
-- `highResPd.mat`
-- `imageDescription.mat`
-- `imagingResPd.mat`
-- `sftpTransferComands.batch`
-- `transferComplete.txt`
+Response analysis must align stimulus events to imaging frames through the
+photodiode signal. Nominal frame rates are not enough.
 
-Files observed under `stimulusData/`:
+The expected workflow is:
 
-- `chosenparams.mat`
-- `combo_stim_singles=3s_blank=3s_intensity=20.txt`
-- `filebackup.zip`
-- `fileinfo.txt`
-- `metadata.txt`
-- `runDetails.mat`
-- `seedState.mat`
-- `stimParams.mat`
-- `stimdata.mat`
-- `textStimData.csv`
+1. Load converted stimulus data and photodiode signals.
+2. Detect photodiode events, using `highResPd.mat` when precise timing is
+   needed.
+3. Pair those events with `imagingResPd.mat` frames.
+4. Classify stimulus windows against `stimulusData/stimdata.mat`.
+5. Split ROI traces by explicit imaging-frame windows.
 
-Files observed under `savedAnalysis/`:
+## Conversion Contract
 
-- MATLAB `.mat` files produced by prior lab analysis.
+Analysis code operates on twopy-owned converted HDF5 files, not directly on
+source MAT/TIFF files. Source files stay read-only conversion inputs.
 
-## MATLAB Layer
+Conversion writes:
 
-twopy needs a MATLAB layer because microscope data arrives as MATLAB files.
+- `recording_data.h5`: acquisition metadata, frame-count audit data, run
+  metadata, stimulus data and labels, stimulus parameters, stimulus-function
+  lookup data, stimulus-specific column metadata, photodiode signals,
+  synchronization metadata, mean image, and alignment-valid crop bounds.
+- `aligned_movie.h5`: copied aligned movie in `movie/aligned`, kept separate
+  because the movie dominates file size.
+- ROI HDF5 files: twopy-owned ROI masks and labels, independent from napari.
 
-Current layer goals:
+Large compressible arrays use gzip compression. Small direct-access datasets,
+such as the mean image, stay uncompressed. The mean image defaults to the full
+aligned movie and can be computed over a requested frame range.
 
-- Inspect `.mat` files without requiring analysis code to know MATLAB details.
-- Report variable names, shapes, dtypes, and Python types.
-- Support older MAT files through SciPy.
-- Support HDF5-backed MAT files through h5py.
+## Detail Index
 
-Observed MATLAB variables in the example session:
+Use `docs/recording_file_schema.md` for:
 
-- `alignedMovie.mat`: HDF5-backed, variable `imgFrames_ch1`
-- `highResPd.mat`: older MAT file, variable `highResPd`
-- `imageDescription.mat`: older MAT file, variable `state`
-- `imagingResPd.mat`: older MAT file, variable `imagingResPd`
-- `stimulusData/chosenparams.mat`: older MAT file, variable `params`
-- `stimulusData/runDetails.mat`: older MAT file, variables `flyId`,
-  `genotype`, `rigName`, `rigTemperature`
-- `stimulusData/seedState.mat`: older MAT file, variables `Seed`, `State`,
-  `Type`
-- `stimulusData/stimParams.mat`: older MAT file, variable `stimParams`
-- `stimulusData/stimdata.mat`: older MAT file, variable `stimData`
-- `stimulusData/filebackup.zip`: zip archive with backed-up stimulus/runtime
-  MATLAB code
-- `savedAnalysis/*.mat`: HDF5-backed prior MATLAB analysis files
-
-`stimulusData/stimdata.mat` uses a stable leading column contract written by
-the backed-up stimulus code: time seconds, stimulus frame number, epoch number,
-ten closed-loop slots, twenty stimulus-specific slots, photodiode flash, and a
-trailing empty field from the CSV writer. Stimulus-specific slot meanings come
-from `stimtype` -> `filebackup/paramfiles/stimulus_lookup.txt` ->
-`filebackup/stimfunctions/<name>.m`.
-
-Observed TIFF metadata in the example session:
-
-- one raw movie with one TIFF series
-- shape `(8334, 127, 256)`
-- page count `8334`
-- first-page shape `(127, 256)`
-- pixel dtype `uint16`
-- TIFF tags include `ImageWidth`, `ImageLength`, `BitsPerSample`,
-  `SamplesPerPixel`, `XResolution`, `YResolution`, `ResolutionUnit`, and
-  `ImageDescription`
-- `ImageDescription` contains ScanImage `state.*` fields, including
-  `configName`, `software.version`, `acq.linesPerFrame`, `acq.pixelsPerLine`,
-  `acq.numberOfFrames`, `acq.numberOfChannelsSave`, `acq.frameRate`,
-  `acq.zoomFactor`, `acq.pixelTime`, `acq.msPerLine`, `acq.zStepSize`,
-  `acq.scanAngleMultiplierFast`, `acq.scanAngleMultiplierSlow`,
-  `acq.scanRotation`, `acq.scanShiftFast`, `acq.scanShiftSlow`, `acq.xstep`,
-  `acq.ystep`, and motor absolute positions
-- `XResolution` and `YResolution` appear to be display DPI metadata, not
-  physical microscope pixel size
-
-The same ScanImage state is available as the MATLAB struct in
-`imageDescription.mat`, which should be the primary source for recording
-metadata. The raw TIFF metadata path is mainly for audit or raw-frame access.
-
-## Converted Data
-
-twopy will convert MATLAB-derived source data into twopy-owned HDF5 files before
-any analysis or processing. Large compressible arrays use gzip compression;
-small direct-access datasets such as the mean image stay uncompressed.
-
-The conversion writes the aligned movie to a separate `aligned_movie.h5` file
-because it usually dominates file size. It writes acquisition metadata, run
-metadata from `stimulusData/runDetails.mat`, stimulus parameters, stimulus data
-plus column labels, photodiode signals, synchronization metadata, and a
-mean image to `recording_data.h5`. The mean image defaults to the full movie and
-can be computed over a requested frame range.
+- observed example files and non-contract acquisition/transfer artifacts
+- MATLAB loader goals and observed MAT file formats
+- per-file variables, shapes, dtypes, and usage rules
+- TIFF tag and ScanImage field details
+- `stimulusData/stimdata.mat` column definitions
+- conversion load set versus full folder contents
+- converted HDF5 group/dataset layout
+- analysis output routing
+- frame-count audit rules

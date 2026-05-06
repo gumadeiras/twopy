@@ -25,6 +25,27 @@ prior MATLAB analysis.
 - Use `savedAnalysis/` only as optional prior MATLAB analysis output. New
   recordings may not have it.
 
+## MATLAB File Layer
+
+twopy needs a MATLAB file layer because microscope source data arrives as a mix
+of older MAT files and HDF5-backed MAT files.
+
+The MATLAB layer should:
+
+- Inspect `.mat` files without requiring analysis code to know MATLAB details.
+- Report variable names, shapes, dtypes, and Python types.
+- Support older MAT files through SciPy.
+- Support HDF5-backed MAT files through h5py.
+
+Observed formats in the inspected example:
+
+- `alignedMovie.mat`: HDF5-backed MAT file.
+- `savedAnalysis/*.mat`: HDF5-backed prior MATLAB analysis files.
+- `highResPd.mat`, `imageDescription.mat`, `imagingResPd.mat`,
+  `stimulusData/chosenparams.mat`, `stimulusData/runDetails.mat`,
+  `stimulusData/seedState.mat`, `stimulusData/stimParams.mat`, and
+  `stimulusData/stimdata.mat`: older MAT files.
+
 ## Timing And Synchronization
 
 Imaging and stimulus presentation happen on different computers.
@@ -50,7 +71,7 @@ The correct workflow is:
 3. Map decoded stimulus events onto imaging frames.
 4. Extract ROI responses by trial or epoch from that aligned frame map.
 
-twopy now represents this in four GUI-independent layers:
+twopy now represents this in GUI-independent layers:
 
 - `load_converted_recording(...)` loads `recording_data.h5` and keeps
   `aligned_movie.h5` lazy.
@@ -76,6 +97,14 @@ Example path:
 ```
 
 The genotype, stimulus name, date, and timestamp vary between experiments.
+
+Observed non-contract top-level files in the inspected example:
+
+- `.DS_Store`
+- `sftpTransferComands.batch`
+- `transferComplete.txt`
+
+Treat these as acquisition or transfer artifacts, not twopy input contracts.
 
 ## Required Top-Level Files
 
@@ -109,10 +138,16 @@ vary. There should be exactly one top-level raw TIFF in a session.
 
 Observed example contents:
 
+- One TIFF series.
 - Shape: `(8334, 127, 256)`.
+- Page count: `8334`.
+- First-page shape: `(127, 256)`.
 - Dtype: `uint16`.
 - Two channels are interleaved: the actual imaging recording and a photodiode
   channel.
+- TIFF tags include `ImageWidth`, `ImageLength`, `BitsPerSample`,
+  `SamplesPerPixel`, `XResolution`, `YResolution`, `ResolutionUnit`, and
+  `ImageDescription`.
 - Each page contains a ScanImage `ImageDescription` text block with `state.*`
   assignments.
 
@@ -179,6 +214,11 @@ Observed example contents:
   - `acq.zStepSize`: `1`
   - `acq.scanAngleMultiplierFast`: `1`
   - `acq.scanAngleMultiplierSlow`: `0.57744`
+  - `acq.scanRotation`
+  - `acq.scanShiftFast`
+  - `acq.scanShiftSlow`
+  - `acq.xstep`
+  - `acq.ystep`
   - `motor.absXPosition`: `199006.1`
   - `motor.absYPosition`: `-4694.3`
   - `motor.absZPosition`: `-8503.4`
@@ -468,6 +508,11 @@ twopy reads this set with `load_source_conversion_inputs(recording_dir)` and
 writes converted HDF5 files with `convert_recording_to_twopy(...)`. The source
 files are read-only conversion inputs. Response analysis should use the
 converted HDF5 files rather than reading MATLAB files directly.
+
+This load set is smaller than the full required top-level folder contract. The
+raw `*.tif` movie and `defaultAlignChannel.txt` remain part of the source
+recording contract for raw-data access, metadata audit, and alignment provenance,
+but normal conversion does not need to read them.
 
 The converted `recording_data.h5` file contains:
 
