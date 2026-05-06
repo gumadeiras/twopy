@@ -18,6 +18,7 @@ from typing import Protocol, cast
 import numpy as np
 from qtpy.QtCore import QTimer
 
+from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.converted import RecordingData
 from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.responses import compute_response_plot_data_from_roi_set
@@ -106,10 +107,12 @@ class LiveResponseController:
             run_async: Whether heavy analysis should run in a worker thread.
                 Tests can turn this off to verify behavior synchronously.
         """
-        self._plot_widget = plot_widget
+        self._plot_widget: ResponsePlotReceiver | None = plot_widget
         self._recording: RecordingData | None = None
         self._roi_labels_layer: object | None = None
+        self._response_processing_options = ResponseProcessingOptions()
         self._connections: list[_ConnectedEmitter] = []
+        self._is_shutdown = False
         self._version = 0
         self._active_version: int | None = None
         self._pending_after_active_job = False
@@ -143,11 +146,30 @@ class LiveResponseController:
             None.
         """
         self._disconnect_layer_events()
+        if self._is_shutdown:
+            return
         self._recording = recording
         self._roi_labels_layer = roi_labels_layer
         self._version += 1
         self._pending_after_active_job = False
         self._connect_layer_events(roi_labels_layer)
+
+    def set_response_processing_options(
+        self,
+        options: ResponseProcessingOptions,
+    ) -> None:
+        """Store processing options used by the next live response update.
+
+        Args:
+            options: GUI-selected response-processing settings.
+
+        Returns:
+            None.
+        """
+        if self._is_shutdown:
+            return
+        self._response_processing_options = options
+        self._version += 1
 
     def request_update(self, *_event_args: object) -> None:
         """Schedule a live response update after an ROI edit.
@@ -159,6 +181,8 @@ class LiveResponseController:
         Returns:
             None.
         """
+        if self._is_shutdown:
+            return
         self._version += 1
         if self._debounce_ms <= 0:
             self._start_latest_job()
@@ -178,16 +202,18 @@ class LiveResponseController:
         button click should report validation errors immediately. Continuous ROI
         edits use ``request_update`` so heavier work can run in the background.
         """
+        if self._is_shutdown:
+            return
         self._version += 1
         version = self._version
         try:
             plot_data = self._compute_current_plot_data()
         except ValueError as error:
             if version == self._version:
-                self._plot_widget.show_response_status(str(error))
+                self._show_response_status(str(error))
             return
         if version == self._version:
-            self._plot_widget.set_response_plot_data(plot_data, reset_axes=True)
+            self._set_response_plot_data(plot_data)
 
     def shutdown(self) -> None:
         """Disconnect layer events and stop background work.
@@ -198,14 +224,30 @@ class LiveResponseController:
         Returns:
             None.
         """
+        if self._is_shutdown:
+            return
+        self._is_shutdown = True
+        self._version += 1
+        self._pending_after_active_job = False
+        future = self._future
+        self._future = None
+        self._active_version = None
+        if future is not None:
+            future.cancel()
         self._disconnect_layer_events()
         self._debounce_timer.stop()
         self._poll_timer.stop()
         if self._executor is not None:
             self._executor.shutdown(wait=False, cancel_futures=True)
+            self._executor = None
+        self._recording = None
+        self._roi_labels_layer = None
+        self._plot_widget = None
 
     def _start_latest_job(self) -> None:
         """Start the newest queued response computation."""
+        if self._is_shutdown:
+            return
         if self._executor is None:
             self.update_now()
             return
@@ -218,11 +260,11 @@ class LiveResponseController:
             label_image = self._current_label_image()
         except ValueError as error:
             if version == self._version:
-                self._plot_widget.show_response_status(str(error))
+                self._show_response_status(str(error))
             return
         if not np.any(label_image > 0):
             if version == self._version:
-                self._plot_widget.show_response_status("No ROI labels to analyze.")
+                self._show_response_status("No ROI labels to analyze.")
             return
 
         recording = self._require_recording()
@@ -233,11 +275,14 @@ class LiveResponseController:
             recording,
             roi_set,
             source_path=None,
+            response_processing_options=self._response_processing_options,
         )
         self._poll_timer.start()
 
     def _collect_finished_job(self) -> None:
         """Apply a finished worker result when it is still current."""
+        if self._is_shutdown:
+            return
         future = self._future
         if future is None or not future.done():
             return
@@ -250,10 +295,10 @@ class LiveResponseController:
             plot_data = future.result()
         except ValueError as error:
             if version == self._version:
-                self._plot_widget.show_response_status(str(error))
+                self._show_response_status(str(error))
         else:
             if version == self._version:
-                self._plot_widget.set_response_plot_data(plot_data, reset_axes=True)
+                self._set_response_plot_data(plot_data)
 
         if self._pending_after_active_job or version != self._version:
             self._pending_after_active_job = False
@@ -269,6 +314,7 @@ class LiveResponseController:
             self._require_recording(),
             make_roi_set_from_label_image(label_image),
             source_path=None,
+            response_processing_options=self._response_processing_options,
         )
 
     def _current_label_image(self) -> np.ndarray:
@@ -286,6 +332,16 @@ class LiveResponseController:
             msg = "No recording loaded."
             raise ValueError(msg)
         return self._recording
+
+    def _set_response_plot_data(self, plot_data: ResponsePlotData) -> None:
+        """Send computed plot data to the receiver when it is still alive."""
+        if self._plot_widget is not None:
+            self._plot_widget.set_response_plot_data(plot_data, reset_axes=True)
+
+    def _show_response_status(self, text: str) -> None:
+        """Send status text to the receiver when it is still alive."""
+        if self._plot_widget is not None:
+            self._plot_widget.show_response_status(text)
 
     def _connect_layer_events(self, layer: object | None) -> None:
         """Connect Labels data-change events to debounced updates."""

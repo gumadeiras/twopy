@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
+from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.workflow import compute_recording_responses
 from twopy.converted import RecordingData
 from twopy.napari.plotting.data import (
@@ -32,6 +33,7 @@ def compute_response_plot_data_from_labels(
     roi_labels_layer: object,
     *,
     source_path: Path | None = None,
+    response_processing_options: ResponseProcessingOptions | None = None,
 ) -> ResponsePlotData:
     """Compute plot-ready ROI responses from the current napari Labels layer.
 
@@ -39,6 +41,8 @@ def compute_response_plot_data_from_labels(
         recording: Loaded converted recording shown in napari.
         roi_labels_layer: Active napari Labels layer containing ROI pixels.
         source_path: Optional display path attached to the plot data.
+        response_processing_options: Optional smoothing, low-pass, and
+            correlation-QC settings.
 
     Returns:
         Plot-ready response means and SEMs grouped by stimulus epoch.
@@ -61,6 +65,7 @@ def compute_response_plot_data_from_labels(
         recording,
         roi_set,
         source_path=source_path,
+        response_processing_options=response_processing_options,
     )
 
 
@@ -69,6 +74,7 @@ def compute_response_plot_data_from_roi_set(
     roi_set: RoiSet,
     *,
     source_path: Path | None = None,
+    response_processing_options: ResponseProcessingOptions | None = None,
 ) -> ResponsePlotData:
     """Compute plot-ready ROI responses from a prepared ROI set.
 
@@ -76,6 +82,8 @@ def compute_response_plot_data_from_roi_set(
         recording: Loaded converted recording shown in napari.
         roi_set: ROI masks created from the current Labels layer.
         source_path: Optional display path attached to the plot data.
+        response_processing_options: Optional smoothing, low-pass, and
+            correlation-QC settings.
 
     Returns:
         Plot-ready response means and SEMs grouped by stimulus epoch.
@@ -84,7 +92,11 @@ def compute_response_plot_data_from_roi_set(
     label pixels on the GUI thread, then run the heavier movie streaming work in
     a worker thread.
     """
-    computation = compute_recording_responses(recording, roi_set)
+    computation = compute_recording_responses(
+        recording,
+        roi_set,
+        response_processing_options=response_processing_options,
+    )
     return response_plot_data_from_grouped(
         computation.grouped_responses,
         source_path=source_path,

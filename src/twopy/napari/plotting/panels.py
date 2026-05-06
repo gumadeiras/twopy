@@ -96,7 +96,10 @@ def plot_size_widget(spin_box: QSpinBox) -> QWidget:
     """
     widget = QWidget()
     layout = QHBoxLayout()
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
     layout.addWidget(QLabel("Plot size"))
+    layout.addStretch(1)
     layout.addWidget(spin_box)
     widget.setLayout(layout)
     return widget

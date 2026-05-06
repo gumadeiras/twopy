@@ -16,6 +16,9 @@ import numpy.typing as npt
 
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.persistence import load_analysis_outputs
+from twopy.analysis.response_processing import (
+    mask_grouped_roi_responses_by_included_rois,
+)
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseTrial,
@@ -144,6 +147,11 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
                 pre_window_seconds=DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
                 post_window_seconds=post_window_seconds,
             )
+            if outputs.correlation_scores is not None:
+                grouped = mask_grouped_roi_responses_by_included_rois(
+                    grouped,
+                    included_mask=outputs.correlation_scores.included_mask,
+                )
             return response_plot_data_from_grouped(grouped, source_path=outputs.path)
     if outputs.grouped_responses is None:
         return f"No grouped responses in: {path}"

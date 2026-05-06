@@ -20,10 +20,11 @@ import numpy.typing as npt
 from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 from napari.layers import Labels
-from qtpy.QtGui import QColor
+from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
+    QGroupBox,
     QLabel,
     QListWidget,
     QPushButton,
@@ -41,6 +42,7 @@ from twopy import (
     save_roi_set,
 )
 from twopy.analysis.dff import RoiDeltaFOverF
+from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
@@ -403,6 +405,11 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Save analysis + ROIs", update_buttons)
             self.assertIn("Recompute preview now", update_buttons)
             self.assertIn("Reload saved analysis", update_buttons)
+            group_titles = {
+                group.title() for group in options_widget.findChildren(QGroupBox)
+            }
+            self.assertIn("Plot", group_titles)
+            self.assertIn("Smoothing", group_titles)
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
@@ -672,6 +679,10 @@ class NapariAdapterTest(unittest.TestCase):
             _, roi_set = analyze.call_args.args
             self.assertEqual(roi_set.labels, ("roi_0001",))
             self.assertEqual(analyze.call_args.kwargs["output_path"], analysis_path)
+            self.assertIsInstance(
+                analyze.call_args.kwargs["response_processing_options"],
+                ResponseProcessingOptions,
+            )
             self.assertIs(response_widget._plot_data, preview_plot_data)
 
             recording_summary_text = response_widget._recording_summary_label.text()
@@ -686,6 +697,46 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Analysis output: ./twopy/analysis_outputs.h5", labels_text)
             self.assertIn("ROI output: ./twopy/rois.h5", labels_text)
             self.assertIn("Saved 1 ROI to ./twopy", labels_text)
+
+    def test_processing_option_changes_request_preview_update(self) -> None:
+        """Confirm processing controls trigger debounced preview recompute.
+
+        Inputs: loaded recording, active ROI Labels layer, and a processing
+        settings change.
+        Outputs: the live response controller receives an update request.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            requests: list[str] = []
+            response_widget._live_controller.request_update = lambda: requests.append(
+                "requested"
+            )
+
+            response_widget._set_response_processing_options(
+                ResponseProcessingOptions(),
+            )
+
+            self.assertEqual(requests, ["requested"])
+
+    def test_response_widget_close_shuts_down_live_controller(self) -> None:
+        """Confirm closing the response widget releases live-update resources.
+
+        Inputs: a response plot widget with its live controller patched.
+        Outputs: Qt close handling calls the controller shutdown path.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        shutdowns: list[str] = []
+        response_widget._live_controller.shutdown = lambda: shutdowns.append("shutdown")
+
+        response_widget.closeEvent(QCloseEvent())
+
+        self.assertEqual(shutdowns, ["shutdown"])
+        self.assertTrue(response_widget._is_shutdown)
 
     def test_response_display_paths_use_recording_identity(self) -> None:
         """Confirm response widgets show compact recording and output paths.
@@ -758,6 +809,44 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertIsNotNone(receiver.plot_data)
             self.assertIsNone(receiver.status)
+
+    def test_live_response_controller_shutdown_disconnects_events(self) -> None:
+        """Confirm shutdown breaks event callbacks and ignores later updates.
+
+        Inputs: selected recording, fake Labels events, and a synchronous
+        controller.
+        Outputs: event emitters no longer hold callbacks or run analysis after
+        shutdown.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            events = _FakeLabelEvents()
+            layer = _FakeLayer(
+                name="rois",
+                data=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                options={},
+                events=events,
+            )
+            receiver = _FakePlotReceiver()
+            controller = LiveResponseController(
+                receiver,
+                debounce_ms=0,
+                run_async=False,
+            )
+            controller.set_context(recording, layer)
+
+            controller.shutdown()
+            with patch(
+                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+            ) as compute:
+                events.paint.emit()
+                controller.request_update()
+
+            compute.assert_not_called()
+            self.assertEqual(events.paint._callbacks, [])
+            self.assertEqual(events.data._callbacks, [])
 
     def test_live_response_controller_ignores_labels_update_event(self) -> None:
         """Confirm display refresh events do not recompute responses.

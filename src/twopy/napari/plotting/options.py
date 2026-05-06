@@ -60,6 +60,9 @@ def axis_options_widget(
     callback = cast(CallableAxisBounds, on_change)
     widget = QWidget()
     layout = QGridLayout()
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setHorizontalSpacing(8)
+    layout.setVerticalSpacing(3)
     layout.addWidget(QLabel("Axis limits"), 0, 0, 1, 2)
     x_min_spin = _axis_spin_box(x_min)
     x_max_spin = _axis_spin_box(x_max)
@@ -73,6 +76,8 @@ def axis_options_widget(
     layout.addWidget(y_min_spin, 3, 1)
     layout.addWidget(QLabel("y max"), 4, 0)
     layout.addWidget(y_max_spin, 4, 1)
+    layout.setColumnStretch(0, 1)
+    layout.setColumnStretch(1, 2)
 
     def update_bounds() -> None:
         """Pass current spin-box values back to the response widget."""

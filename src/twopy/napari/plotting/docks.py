@@ -9,12 +9,15 @@ responses from the current Labels layer, this module converts labels to a
 ``RoiSet`` and calls the normal analysis workflow.
 """
 
+from contextlib import suppress
 from pathlib import Path
 
 import numpy as np
-from qtpy.QtGui import QColor
+from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
+    QApplication,
     QCheckBox,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -25,6 +28,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.responses import is_gray_epoch_name
 from twopy.analysis.workflow import analyze_recording_responses
 from twopy.converted import RecordingData
@@ -57,6 +61,7 @@ from twopy.napari.plotting.panels import (
     response_update_tab,
     scrolling_tab,
 )
+from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     clear_layout,
@@ -217,11 +222,33 @@ def _ensure_qapplication() -> None:
     Returns:
         None.
     """
-    from qtpy.QtWidgets import QApplication
-
     global _QT_APPLICATION
     if QApplication.instance() is None:
         _QT_APPLICATION = QApplication([])
+
+
+def _plot_display_options_group(
+    *,
+    plot_size_control: QWidget,
+    axis_control: QWidget,
+) -> QGroupBox:
+    """Create the outlined Plot option group.
+
+    Args:
+        plot_size_control: Widget containing the plot-size input.
+        axis_control: Widget containing dynamic axis-limit controls.
+
+    Returns:
+        Qt group box with plot display controls.
+    """
+    group = QGroupBox("Plot")
+    layout = QVBoxLayout()
+    layout.setContentsMargins(8, 6, 8, 8)
+    layout.setSpacing(6)
+    layout.addWidget(plot_size_control)
+    layout.addWidget(axis_control)
+    group.setLayout(layout)
+    return group
 
 
 class _ResponsePlotWidget(QWidget):
@@ -252,7 +279,15 @@ class _ResponsePlotWidget(QWidget):
         self._manual_x_max: float | None = None
         self._manual_y_min: float | None = None
         self._manual_y_max: float | None = None
+        self._response_processing_options = ResponseProcessingOptions()
+        self._is_shutdown = False
         self._live_controller = LiveResponseController(self)
+        self._live_controller.set_response_processing_options(
+            self._response_processing_options,
+        )
+        self._quit_application = QApplication.instance()
+        if self._quit_application is not None:
+            self._quit_application.aboutToQuit.connect(self.shutdown)
         self._status_label = QLabel("No recording loaded.")
         self._plot_layout = QHBoxLayout()
         self._plot_layout.addWidget(self._status_label)
@@ -294,9 +329,18 @@ class _ResponsePlotWidget(QWidget):
         self._plot_size_spin.setSuffix(" px")
         self._plot_size_spin.setValue(self._plot_size)
         self._plot_size_spin.valueChanged.connect(self._set_plot_size)
+        self._processing_options_widget = ResponseProcessingOptionsWidget(
+            self._response_processing_options,
+            on_change=self._set_response_processing_options,
+        )
         self._plot_options_layout.addWidget(self._show_sem_checkbox)
-        self._plot_options_layout.addWidget(plot_size_widget(self._plot_size_spin))
-        self._plot_options_layout.addWidget(plot_axis_widget)
+        self._plot_options_layout.addWidget(
+            _plot_display_options_group(
+                plot_size_control=plot_size_widget(self._plot_size_spin),
+                axis_control=plot_axis_widget,
+            )
+        )
+        self._plot_options_layout.addWidget(self._processing_options_widget)
         self._plot_options_layout.addStretch(1)
         self._roi_options_layout = QVBoxLayout()
         self._epoch_options_layout = QVBoxLayout()
@@ -339,6 +383,48 @@ class _ResponsePlotWidget(QWidget):
             Tabbed Qt widget with response plot controls.
         """
         return self._options_tabs
+
+    def shutdown(self) -> None:
+        """Release worker, layer, and plot state owned by this widget.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        The live controller owns a worker thread plus napari layer event
+        connections. Closing napari must stop those resources explicitly so they
+        cannot keep the Python process or loaded imaging arrays alive.
+        """
+        if self._is_shutdown:
+            return
+        self._is_shutdown = True
+        if self._quit_application is not None:
+            with suppress(RuntimeError, TypeError):
+                self._quit_application.aboutToQuit.disconnect(self.shutdown)
+            self._quit_application = None
+        self._live_controller.shutdown()
+        self._recording = None
+        self._roi_labels_layer = None
+        self._plot_data = None
+        self._viewer = None
+        self._clear_epoch_plot_cache()
+        self._clear_dynamic_option_tabs()
+        clear_layout(self._plot_layout)
+
+    def closeEvent(self, a0: QCloseEvent | None) -> None:
+        """Shut down background work before Qt closes the widget.
+
+        Args:
+            a0: Qt close event supplied by the application.
+
+        Returns:
+            None.
+        """
+        self.shutdown()
+        if a0 is not None:
+            super().closeEvent(a0)
 
     def set_roi_labels_layer(self, roi_labels_layer: object | None) -> None:
         """Store the current editable ROI Labels layer.
@@ -455,6 +541,7 @@ class _ResponsePlotWidget(QWidget):
                 self._recording.path,
                 roi_set,
                 output_path=analysis_output_path,
+                response_processing_options=self._response_processing_options,
             )
         except ValueError as error:
             self._set_status(str(error))
@@ -526,6 +613,19 @@ class _ResponsePlotWidget(QWidget):
         """Update the square pixel size used for live response plots."""
         self._plot_size = int(value)
         self._update_visible_plot_widgets(apply_roi_layer_visibility=False)
+
+    def _set_response_processing_options(
+        self,
+        options: ResponseProcessingOptions,
+    ) -> None:
+        """Store Plot-tab processing settings for preview and save actions."""
+        self._response_processing_options = options
+        self._live_controller.set_response_processing_options(options)
+        if self._recording is not None and self._roi_labels_layer is not None:
+            self._live_controller.request_update()
+            self._update_status_label.setText("Processing settings updated.")
+            return
+        self._update_status_label.setText("Processing settings updated for next run.")
 
     def _sync_plot_state(self, *, reset_axes: bool) -> None:
         """Synchronize option state with currently loaded plot data.
