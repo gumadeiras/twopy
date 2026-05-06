@@ -9,6 +9,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from zipfile import ZipFile
 
 import h5py
 import numpy as np
@@ -59,6 +60,14 @@ class ConversionTest(unittest.TestCase):
             self.assertEqual(
                 loaded.stimulus_parameters.epochs[0]["epochName"],
                 "Gray Interleave",
+            )
+            self.assertEqual(
+                loaded.stimulus_code.function_lookup,
+                {"62002": "LEDMovingBars"},
+            )
+            self.assertEqual(
+                loaded.stimulus_code.stimulus_specific_columns["62002"]["function"],
+                "LEDMovingBars",
             )
             np.testing.assert_array_equal(
                 loaded.stimulus_data.epoch_numbers,
@@ -245,6 +254,17 @@ class ConversionTest(unittest.TestCase):
                 )
                 parameters = json.loads(h5_file["stimulus/parameters_json"][()])
                 self.assertEqual(parameters[1]["epochName"], "LR20")
+                function_lookup = json.loads(
+                    h5_file["stimulus/function_lookup_json"][()],
+                )
+                self.assertEqual(function_lookup, {"62002": "LEDMovingBars"})
+                stimulus_columns = json.loads(
+                    h5_file["stimulus/stimulus_specific_columns_json"][()],
+                )
+                self.assertEqual(
+                    stimulus_columns["62002"]["columns"][0]["source_expression"],
+                    "p.antenna",
+                )
                 self.assertNotIn("aligned", h5_file["movie"])
 
             with h5py.File(converted.movie_path, "r") as h5_file:
@@ -426,10 +446,12 @@ class ConversionTest(unittest.TestCase):
                     [
                         {
                             "epochName": "Gray Interleave",
+                            "stimtype": 62002,
                             "intensity": 0.0,
                         },
                         {
                             "epochName": "LR20",
+                            "stimtype": 62002,
                             "intensity": 20.0,
                         },
                     ],
@@ -457,6 +479,7 @@ class ConversionTest(unittest.TestCase):
             "Time,FrameNumber,Epoch,Flash\n0.0,1,1,1\n0.1,2,2,0\n0.2,3,2,0\n",
             encoding="utf-8",
         )
+        self._write_filebackup_zip(stimulus_dir / "filebackup.zip")
         scipy.io.savemat(
             session_dir / "imagingResPd.mat",
             {
@@ -477,6 +500,31 @@ class ConversionTest(unittest.TestCase):
             session_dir / "stimulus_name_changes_001_ch1_disinterleaved_alignment.txt"
         ).touch()
         (session_dir / "defaultAlignChannel.txt").write_text("1\n", encoding="utf-8")
+
+    def _write_filebackup_zip(self, path: Path) -> None:
+        """Write the tiny stimulus-code backup required for conversion.
+
+        Args:
+            path: Destination ``filebackup.zip`` path.
+
+        Returns:
+            None. The zip contains the lookup and one stimulus function.
+        """
+        with ZipFile(path, "w") as archive:
+            archive.writestr("paramfiles/stimulus_lookup.txt", "62002,LEDMovingBars\n")
+            archive.writestr(
+                "stimfunctions/LEDMovingBars.m",
+                "\n".join(
+                    (
+                        "function stimData = LEDMovingBars(Q)",
+                        "p = Q.stims.currParam;",
+                        "stimData = Q.stims.stimData;",
+                        "stimData.mat(1) = p.antenna;",
+                        "stimData.mat(2) = p.intensity; % epoch intensity",
+                        "end",
+                    ),
+                ),
+            )
 
     def _stimulus_data_table(self, column_count: int) -> np.ndarray:
         """Build a small ``stimData`` table with a requested column count.

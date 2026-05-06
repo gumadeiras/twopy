@@ -139,6 +139,8 @@ class SynchronizationTest(unittest.TestCase):
             stimulus_data=np.zeros((0, 0), dtype=np.float64),
             stimulus_data_column_names=(),
             stimulus_parameters=(),
+            stimulus_function_lookup={},
+            stimulus_specific_columns={},
             imaging_res_pd=imaging_res_pd,
             high_res_pd=high_res_pd,
             mean_image=np.zeros((2, 2), dtype=np.float64),

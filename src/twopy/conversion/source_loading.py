@@ -16,6 +16,7 @@ from twopy.conversion.matlab_values import (
     matlab_struct_to_dict,
     nested_matlab_field,
 )
+from twopy.conversion.stimulus_code import load_stimulus_code_metadata
 from twopy.conversion.types import (
     AcquisitionMetadata,
     AlignedMovieSource,
@@ -120,13 +121,18 @@ def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
         acquisition=acquisition,
         photodiode=photodiode,
     )
+    stimulus_parameters = _load_stimulus_parameters(
+        files.stimulus_data_dir / "stimParams.mat",
+    )
     return SourceConversionInputs(
         session_files=files,
         aligned_movie=aligned_movie,
         acquisition=acquisition,
         run=_load_run_metadata(files.stimulus_data_dir / "runDetails.mat"),
-        stimulus_parameters=_load_stimulus_parameters(
-            files.stimulus_data_dir / "stimParams.mat",
+        stimulus_parameters=stimulus_parameters,
+        stimulus_code=load_stimulus_code_metadata(
+            files.stimulus_filebackup_zip,
+            stimulus_parameters,
         ),
         stimulus_data=_load_stimulus_data(
             files.stimulus_data_dir / "stimdata.mat",

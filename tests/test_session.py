@@ -34,6 +34,10 @@ class DiscoverSessionFilesTest(unittest.TestCase):
                 files.alignment_text.name,
                 "stimulus_name_changes_001_ch1_disinterleaved_alignment.txt",
             )
+            self.assertEqual(
+                files.stimulus_filebackup_zip,
+                session_dir / "stimulusData" / "filebackup.zip",
+            )
             self.assertEqual(files.saved_analysis_dir, session_dir / "savedAnalysis")
 
     def test_saved_analysis_is_optional(self) -> None:
@@ -100,6 +104,7 @@ class DiscoverSessionFilesTest(unittest.TestCase):
         (session_dir / "highResPd.mat").touch()
         (session_dir / "imageDescription.mat").touch()
         (session_dir / "imagingResPd.mat").touch()
+        (session_dir / "stimulusData" / "filebackup.zip").touch()
 
 
 if __name__ == "__main__":

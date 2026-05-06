@@ -98,6 +98,8 @@ Observed MATLAB variables in the example session:
   `Type`
 - `stimulusData/stimParams.mat`: older MAT file, variable `stimParams`
 - `stimulusData/stimdata.mat`: older MAT file, variable `stimData`
+- `stimulusData/filebackup.zip`: zip archive with backed-up stimulus/runtime
+  MATLAB code
 - `savedAnalysis/*.mat`: HDF5-backed prior MATLAB analysis files
 
 `stimulusData/stimdata.mat` uses a stable leading column contract written by

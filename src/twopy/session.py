@@ -33,6 +33,7 @@ class TwoPhotonSessionFiles:
     high_res_pd_mat: Path
     image_description_mat: Path
     imaging_res_pd_mat: Path
+    stimulus_filebackup_zip: Path
     saved_analysis_dir: Path | None
 
 
@@ -83,6 +84,10 @@ def discover_session_files(session_dir: Path) -> TwoPhotonSessionFiles:
         imaging_res_pd_mat=_require_file(
             root / "imagingResPd.mat",
             "imaging-resolution PD",
+        ),
+        stimulus_filebackup_zip=_require_file(
+            root / "stimulusData" / "filebackup.zip",
+            "stimulus code backup",
         ),
         saved_analysis_dir=saved_analysis if saved_analysis.is_dir() else None,
     )

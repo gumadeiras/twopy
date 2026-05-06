@@ -76,6 +76,8 @@ decided.
 - Documented how stimulus-specific data slots are decoded from
   `stimtype` through `filebackup/paramfiles/stimulus_lookup.txt` and the
   backed-up stimulus functions.
+- Conversion reads `stimulusData/filebackup.zip` and stores per-`stimtype`
+  stimulus-specific slot metadata in `recording_data.h5`.
 - `movie/mean_image` is stored uncompressed because it is a single small image.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.

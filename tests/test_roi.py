@@ -135,6 +135,8 @@ class RoiTest(unittest.TestCase):
             stimulus_data=np.zeros((0, 0), dtype=np.float64),
             stimulus_data_column_names=(),
             stimulus_parameters=(),
+            stimulus_function_lookup={},
+            stimulus_specific_columns={},
             imaging_res_pd=np.zeros(3, dtype=np.float64),
             high_res_pd=np.zeros(0, dtype=np.float64),
             mean_image=np.zeros((2, 2), dtype=np.float64),

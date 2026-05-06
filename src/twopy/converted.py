@@ -128,6 +128,8 @@ class RecordingData:
     stimulus_data: npt.NDArray[np.float64]
     stimulus_data_column_names: tuple[str, ...]
     stimulus_parameters: tuple[dict[str, object], ...]
+    stimulus_function_lookup: dict[str, str]
+    stimulus_specific_columns: dict[str, dict[str, object]]
     imaging_res_pd: npt.NDArray[np.float64]
     high_res_pd: npt.NDArray[np.float64]
     mean_image: npt.NDArray[np.float64]
@@ -195,6 +197,8 @@ def load_converted_recording(
                 "stimulus/data_column_names",
             ),
             stimulus_parameters=_read_stimulus_parameters(h5_file),
+            stimulus_function_lookup=_read_stimulus_function_lookup(h5_file),
+            stimulus_specific_columns=_read_stimulus_specific_columns(h5_file),
             imaging_res_pd=cast(
                 npt.NDArray[np.float64],
                 h5_file["photodiode/imaging_res_pd"][()],
@@ -410,12 +414,7 @@ def _read_stimulus_parameters(
     Returns:
         Tuple of per-epoch dictionaries.
     """
-    raw_json = h5_file["stimulus/parameters_json"][()]
-    if isinstance(raw_json, bytes):
-        json_text = raw_json.decode("utf-8")
-    else:
-        json_text = str(raw_json)
-    decoded = json.loads(json_text)
+    decoded = _read_json_dataset(h5_file, "stimulus/parameters_json")
     if not isinstance(decoded, list):
         msg = "stimulus/parameters_json must decode to a list"
         raise ValueError(msg)
@@ -428,6 +427,58 @@ def _read_stimulus_parameters(
         parameters.append(cast(dict[str, object], item))
 
     return tuple(parameters)
+
+
+def _read_stimulus_function_lookup(h5_file: h5py.File) -> dict[str, str]:
+    """Read converted ``stimtype`` to MATLAB function-name mapping.
+
+    Args:
+        h5_file: Open ``recording_data.h5`` file.
+
+    Returns:
+        Dictionary mapping ``stimtype`` text to function name.
+    """
+    decoded = _read_json_dataset(h5_file, "stimulus/function_lookup_json")
+    if not isinstance(decoded, dict):
+        msg = "stimulus/function_lookup_json must decode to a dictionary"
+        raise ValueError(msg)
+    return {str(key): str(value) for key, value in decoded.items()}
+
+
+def _read_stimulus_specific_columns(
+    h5_file: h5py.File,
+) -> dict[str, dict[str, object]]:
+    """Read per-``stimtype`` stimulus-specific column metadata.
+
+    Args:
+        h5_file: Open ``recording_data.h5`` file.
+
+    Returns:
+        Dictionary keyed by ``stimtype`` text.
+    """
+    decoded = _read_json_dataset(h5_file, "stimulus/stimulus_specific_columns_json")
+    if not isinstance(decoded, dict):
+        msg = "stimulus/stimulus_specific_columns_json must decode to a dictionary"
+        raise ValueError(msg)
+    return cast(dict[str, dict[str, object]], decoded)
+
+
+def _read_json_dataset(h5_file: h5py.File, dataset_name: str) -> object:
+    """Read one scalar JSON HDF5 dataset.
+
+    Args:
+        h5_file: Open ``recording_data.h5`` file.
+        dataset_name: Dataset path.
+
+    Returns:
+        Decoded JSON object.
+    """
+    raw_json = h5_file[dataset_name][()]
+    if isinstance(raw_json, bytes):
+        json_text = raw_json.decode("utf-8")
+    else:
+        json_text = str(raw_json)
+    return json.loads(json_text)
 
 
 def _read_string_dataset(h5_file: h5py.File, dataset_name: str) -> tuple[str, ...]:

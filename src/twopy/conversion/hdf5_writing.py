@@ -19,6 +19,7 @@ from twopy.conversion.types import (
     AlignedMovieSource,
     PhotodiodeSignals,
     SourceConversionInputs,
+    StimulusCodeMetadata,
     StimulusData,
     StimulusParameters,
 )
@@ -94,6 +95,7 @@ def write_recording_data_file(
             h5_file,
             inputs.stimulus_data,
             inputs.stimulus_parameters,
+            inputs.stimulus_code,
         )
         _write_photodiode_group(h5_file, inputs.photodiode)
         _write_frame_count_audit_group(h5_file, inputs)
@@ -157,6 +159,7 @@ def _write_stimulus_group(
     h5_file: h5py.File,
     stimulus_data: StimulusData,
     parameters: StimulusParameters,
+    code_metadata: StimulusCodeMetadata,
 ) -> None:
     """Write converted stimulus data and epoch parameters.
 
@@ -164,6 +167,7 @@ def _write_stimulus_group(
         h5_file: Open ``recording_data.h5`` file.
         stimulus_data: Stimulus data loaded from ``stimdata.mat``.
         parameters: Stimulus epoch parameters loaded from ``stimParams.mat``.
+        code_metadata: Stimulus-code metadata decoded from ``filebackup.zip``.
 
     Returns:
         None. The function writes the ``stimulus`` group.
@@ -182,6 +186,14 @@ def _write_stimulus_group(
     stimulus_group.create_dataset(
         "parameters_json",
         data=json.dumps(json_ready(parameters.epochs)),
+    )
+    stimulus_group.create_dataset(
+        "function_lookup_json",
+        data=json.dumps(json_ready(code_metadata.function_lookup)),
+    )
+    stimulus_group.create_dataset(
+        "stimulus_specific_columns_json",
+        data=json.dumps(json_ready(code_metadata.stimulus_specific_columns)),
     )
 
 

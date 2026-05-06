@@ -436,8 +436,10 @@ Use this for stimulus reproducibility.
 
 Archive of stimulus/runtime code files.
 
-Use this as provenance for the exact stimulus code state. Do not extract or
-modify it during normal analysis.
+Use this as provenance for the exact stimulus code state. During conversion,
+twopy reads `paramfiles/stimulus_lookup.txt` and the stimulus functions used by
+the recording to decode experiment-specific `stimulus_specific_*` slot
+metadata. Do not extract or modify it during normal analysis.
 
 ### `stimulusData/fileinfo.txt`
 
@@ -455,6 +457,7 @@ Minimum source-file load set for conversion:
 - `stimulusData/runDetails.mat`
 - `stimulusData/stimParams.mat`
 - `stimulusData/stimdata.mat`
+- `stimulusData/filebackup.zip`
 - `imagingResPd.mat`
 
 twopy reads this set with `load_source_conversion_inputs(recording_dir)` and
@@ -474,6 +477,10 @@ The converted `recording_data.h5` file contains:
 - `stimulus/data`: numeric stimulus data.
 - `stimulus/data_column_names`: one label per data column.
 - `stimulus/parameters_json`: stimulus epoch parameters.
+- `stimulus/function_lookup_json`: `stimtype` to backed-up MATLAB stimulus
+  function names used by this recording.
+- `stimulus/stimulus_specific_columns_json`: per-`stimtype` assignments from
+  `stimData.mat(N)` slots to the source MATLAB expression and line number.
 - `photodiode`: synchronization metadata explaining the two-computer timing
   model.
 - `photodiode/imaging_res_pd`: frame-resolution photodiode vector, one sample

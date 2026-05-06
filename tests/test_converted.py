@@ -7,6 +7,7 @@ Outputs: assertions that analysis-facing objects load and validate them.
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 import h5py
 import numpy as np
@@ -36,6 +37,18 @@ class ConvertedRecordingTest(unittest.TestCase):
             self.assertEqual(recording.acquisition_metadata["acq.frameRate"], 10.0)
             self.assertEqual(recording.run_metadata["rig_name"], "OdorRig")
             self.assertEqual(recording.stimulus_parameters[1]["epochName"], "LR20")
+            self.assertEqual(
+                recording.stimulus_function_lookup,
+                {"62002": "LEDMovingBars"},
+            )
+            columns = cast(
+                list[dict[str, object]],
+                recording.stimulus_specific_columns["62002"]["columns"],
+            )
+            self.assertEqual(
+                columns[0]["source_expression"],
+                "p.antenna",
+            )
             self.assertEqual(
                 recording.stimulus_data_column_names,
                 ("time_seconds", "stimulus_frame_number", "epoch_number"),
@@ -171,7 +184,23 @@ class ConvertedRecordingTest(unittest.TestCase):
             )
             stimulus_group.create_dataset(
                 "parameters_json",
-                data=('[{"epochName": "Gray Interleave"}, {"epochName": "LR20"}]'),
+                data=(
+                    '[{"epochName": "Gray Interleave", "stimtype": 62002}, '
+                    '{"epochName": "LR20", "stimtype": 62002}]'
+                ),
+            )
+            stimulus_group.create_dataset(
+                "function_lookup_json",
+                data='{"62002": "LEDMovingBars"}',
+            )
+            stimulus_group.create_dataset(
+                "stimulus_specific_columns_json",
+                data=(
+                    '{"62002": {"stimtype": "62002", "function": "LEDMovingBars", '
+                    '"source_path": "stimfunctions/LEDMovingBars.m", "columns": ['
+                    '{"mat_slot": 1, "column_name": "stimulus_specific_01", '
+                    '"source_expression": "p.antenna", "source_line": 4}]}}'
+                ),
             )
 
             photodiode_group = h5_file.create_group("photodiode")

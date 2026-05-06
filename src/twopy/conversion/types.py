@@ -128,6 +128,24 @@ class StimulusParameters:
 
 
 @dataclass(frozen=True)
+class StimulusCodeMetadata:
+    """Stimulus-code metadata decoded from ``stimulusData/filebackup.zip``.
+
+    Inputs: Backed-up MATLAB stimulus code from the exact recording.
+    Outputs: ``stimtype`` to function-name lookup and per-function assignments
+    into the stimulus-specific ``stimData`` slots.
+
+    This keeps the stable numeric ``stimulus/data`` table unchanged while
+    preserving experiment-specific meaning for columns such as
+    ``stimulus_specific_04``.
+    """
+
+    path: Path
+    function_lookup: dict[str, str]
+    stimulus_specific_columns: dict[str, dict[str, object]]
+
+
+@dataclass(frozen=True)
 class RunMetadata:
     """Stimulus-run metadata from ``stimulusData/runDetails.mat``.
 
@@ -225,6 +243,7 @@ class SourceConversionInputs:
     acquisition: AcquisitionMetadata
     run: RunMetadata
     stimulus_parameters: StimulusParameters
+    stimulus_code: StimulusCodeMetadata
     stimulus_data: StimulusData
     photodiode: PhotodiodeSignals
     frame_counts: FrameCountAudit
