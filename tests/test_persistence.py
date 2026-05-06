@@ -16,6 +16,7 @@ from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.persistence import (
     ANALYSIS_OUTPUT_FILE_FORMAT,
+    load_analysis_outputs,
     save_analysis_outputs,
 )
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
@@ -86,6 +87,25 @@ class PersistenceTest(unittest.TestCase):
             self.assertEqual(rows[0]["epoch_name"], "Gray")
             self.assertEqual(rows[0]["roi_label"], "roi_1")
             self.assertEqual(float(rows[0]["mean_response"]), 1.0)
+
+            loaded = load_analysis_outputs(h5_path)
+
+            self.assertIsNotNone(loaded.roi_set)
+            self.assertIsNotNone(loaded.traces)
+            self.assertIsNotNone(loaded.dff)
+            self.assertIsNotNone(loaded.grouped_responses)
+            self.assertEqual(len(loaded.epoch_windows), 1)
+            if loaded.roi_set is not None:
+                self.assertEqual(loaded.roi_set.labels, ("roi_1", "roi_2"))
+            if loaded.traces is not None:
+                np.testing.assert_array_equal(
+                    loaded.traces.raw_values,
+                    traces.raw_values,
+                )
+            if loaded.dff is not None:
+                np.testing.assert_array_equal(loaded.dff.values, dff.values)
+            if loaded.grouped_responses is not None:
+                self.assertEqual(len(loaded.grouped_responses.trials), 1)
 
     def test_csv_requires_grouped_responses(self) -> None:
         """Confirm summary CSV is not written without response groups.

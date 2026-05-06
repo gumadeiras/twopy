@@ -109,6 +109,10 @@ decided.
 - Analysis outputs can be persisted to one inspectable HDF5 file containing ROI
   masks, fluorescence/background traces, dF/F arrays, epoch windows, and grouped
   responses, with optional CSV response summaries.
+- Script-facing response workflow loads a converted recording and ROI set, runs
+  trace extraction, dF/F, response grouping, and persistence in one call.
+- Persisted analysis HDF5 files can be reloaded into typed twopy analysis
+  objects.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
   snake_case twopy field names such as `rig_name`.
 - Conversion stores one code-derived label per stimulus data column using the

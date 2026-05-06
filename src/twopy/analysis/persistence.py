@@ -11,23 +11,32 @@ MATLAB/TIFF files or decide analysis parameters.
 import csv
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import h5py
 import numpy as np
+import numpy.typing as npt
 
-from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
+from twopy.analysis.background_subtraction import (
+    BackgroundCorrectedRoiTraces,
+    BackgroundCorrectionMethod,
+)
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseSummary,
+    RoiResponseTrial,
     summarize_grouped_responses,
 )
-from twopy.analysis.trials import EpochFrameWindow
-from twopy.roi import RoiSet
+from twopy.analysis.trials import EpochFrameWindow, FrameWindow
+from twopy.roi import RoiSet, TraceStatistic, make_roi_set
 
 __all__ = [
     "ANALYSIS_OUTPUT_FILE_FORMAT",
+    "LoadedAnalysisOutputs",
+    "load_analysis_outputs",
     "save_analysis_outputs",
     "write_response_summary_csv",
 ]
@@ -46,6 +55,25 @@ _SUMMARY_CSV_COLUMNS = (
     "peak_response",
     "min_response",
 )
+
+
+@dataclass(frozen=True)
+class LoadedAnalysisOutputs:
+    """Analysis objects loaded from one twopy analysis HDF5 file.
+
+    Inputs: one file written by ``save_analysis_outputs``.
+    Outputs: optional ROI, trace, dF/F, window, and response objects.
+
+    Groups are optional because scripts can save only the products they have
+    computed. Missing groups load as ``None`` or an empty window tuple.
+    """
+
+    path: Path
+    roi_set: RoiSet | None
+    traces: BackgroundCorrectedRoiTraces | None
+    dff: RoiDeltaFOverF | None
+    epoch_windows: tuple[EpochFrameWindow, ...]
+    grouped_responses: GroupedRoiResponses | None
 
 
 def save_analysis_outputs(
@@ -107,6 +135,46 @@ def save_analysis_outputs(
         write_response_summary_csv(summary_grouped_responses, summary_csv_path)
 
 
+def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
+    """Load twopy analysis outputs from HDF5.
+
+    Args:
+        path: Analysis HDF5 file written by ``save_analysis_outputs``.
+
+    Returns:
+        ``LoadedAnalysisOutputs`` with present groups reconstructed as typed
+        Python objects.
+
+    Raises:
+        ValueError: If the file is not a twopy analysis output file.
+    """
+    input_path = path.expanduser()
+    with h5py.File(input_path, "r") as h5_file:
+        _require_analysis_format(h5_file, input_path)
+        return LoadedAnalysisOutputs(
+            path=input_path,
+            roi_set=(
+                _read_roi_set(h5_file["roi_set"]) if "roi_set" in h5_file else None
+            ),
+            traces=(
+                _read_background_traces(h5_file["traces"])
+                if "traces" in h5_file
+                else None
+            ),
+            dff=_read_dff(h5_file["dff"]) if "dff" in h5_file else None,
+            epoch_windows=(
+                _read_epoch_windows(h5_file["epoch_windows"])
+                if "epoch_windows" in h5_file
+                else ()
+            ),
+            grouped_responses=(
+                _read_grouped_responses(h5_file["responses"])
+                if "responses" in h5_file
+                else None
+            ),
+        )
+
+
 def write_response_summary_csv(
     grouped_responses: GroupedRoiResponses,
     path: Path,
@@ -144,6 +212,21 @@ def _write_roi_set(group: h5py.Group, roi_set: RoiSet) -> None:
     _write_string_dataset(group, "labels", roi_set.labels)
 
 
+def _read_roi_set(group: h5py.Group) -> RoiSet:
+    """Read a persisted ROI set.
+
+    Args:
+        group: HDF5 ``roi_set`` group.
+
+    Returns:
+        ``RoiSet`` with validated masks and labels.
+    """
+    return make_roi_set(
+        cast(npt.NDArray[np.bool_], group["masks"][()]),
+        labels=_read_string_dataset(group, "labels"),
+    )
+
+
 def _write_background_traces(
     group: h5py.Group,
     traces: BackgroundCorrectedRoiTraces,
@@ -176,6 +259,37 @@ def _write_background_traces(
     )
 
 
+def _read_background_traces(group: h5py.Group) -> BackgroundCorrectedRoiTraces:
+    """Read persisted background-corrected traces.
+
+    Args:
+        group: HDF5 ``traces`` group.
+
+    Returns:
+        ``BackgroundCorrectedRoiTraces`` reconstructed from arrays and attrs.
+    """
+    return BackgroundCorrectedRoiTraces(
+        raw_values=cast(npt.NDArray[np.float64], group["raw_values"][()]),
+        background_values=cast(
+            npt.NDArray[np.float64],
+            group["background_values"][()],
+        ),
+        corrected_values=cast(
+            npt.NDArray[np.float64],
+            group["corrected_values"][()],
+        ),
+        labels=_read_string_dataset(group, "labels"),
+        start_frame=int(group.attrs["start_frame"]),
+        stop_frame=int(group.attrs["stop_frame"]),
+        statistic=cast(TraceStatistic, _plain_attr_value(group.attrs["statistic"])),
+        method=cast(
+            BackgroundCorrectionMethod,
+            _plain_attr_value(group.attrs["method"]),
+        ),
+        metadata=_read_metadata(group["metadata"]),
+    )
+
+
 def _write_dff(group: h5py.Group, dff: RoiDeltaFOverF) -> None:
     """Write ROI dF/F arrays and fit metadata.
 
@@ -200,6 +314,36 @@ def _write_dff(group: h5py.Group, dff: RoiDeltaFOverF) -> None:
         "interleave_fluorescence",
         data=dff.interleave_fluorescence,
         compression="gzip",
+    )
+
+
+def _read_dff(group: h5py.Group) -> RoiDeltaFOverF:
+    """Read persisted ROI dF/F arrays and metadata.
+
+    Args:
+        group: HDF5 ``dff`` group.
+
+    Returns:
+        ``RoiDeltaFOverF`` reconstructed from saved datasets.
+    """
+    return RoiDeltaFOverF(
+        fluorescence=cast(npt.NDArray[np.float64], group["fluorescence"][()]),
+        baseline=cast(npt.NDArray[np.float64], group["baseline"][()]),
+        values=cast(npt.NDArray[np.float64], group["values"][()]),
+        labels=_read_string_dataset(group, "labels"),
+        start_frame=int(group.attrs["start_frame"]),
+        stop_frame=int(group.attrs["stop_frame"]),
+        tau=float(group.attrs["tau"]),
+        amplitudes=cast(npt.NDArray[np.float64], group["amplitudes"][()]),
+        interleave_frame_numbers=cast(
+            npt.NDArray[np.float64],
+            group["interleave_frame_numbers"][()],
+        ),
+        interleave_fluorescence=cast(
+            npt.NDArray[np.float64],
+            group["interleave_fluorescence"][()],
+        ),
+        metadata=_read_metadata(group["metadata"]),
     )
 
 
@@ -250,6 +394,51 @@ def _write_epoch_windows(
     )
 
 
+def _read_epoch_windows(group: h5py.Group) -> tuple[EpochFrameWindow, ...]:
+    """Read persisted epoch windows.
+
+    Args:
+        group: HDF5 ``epoch_windows`` group.
+
+    Returns:
+        Tuple of stimulus-labeled frame windows.
+    """
+    window_indices = cast(npt.NDArray[np.int64], group["window_index"][()])
+    start_frames = cast(npt.NDArray[np.int64], group["start_frame"][()])
+    stop_frames = cast(npt.NDArray[np.int64], group["stop_frame"][()])
+    epoch_numbers = cast(npt.NDArray[np.int64], group["epoch_number"][()])
+    epoch_names = _read_string_dataset(group, "epoch_name")
+    labels = _read_string_dataset(group, "label")
+    return tuple(
+        EpochFrameWindow(
+            window=FrameWindow(
+                index=int(window_index),
+                start_frame=int(start_frame),
+                stop_frame=int(stop_frame),
+                label=label,
+            ),
+            epoch_number=int(epoch_number),
+            epoch_name=epoch_name,
+        )
+        for (
+            window_index,
+            start_frame,
+            stop_frame,
+            epoch_number,
+            epoch_name,
+            label,
+        ) in zip(
+            window_indices,
+            start_frames,
+            stop_frames,
+            epoch_numbers,
+            epoch_names,
+            labels,
+            strict=True,
+        )
+    )
+
+
 def _write_grouped_responses(
     group: h5py.Group,
     grouped: GroupedRoiResponses,
@@ -282,6 +471,48 @@ def _write_grouped_responses(
         trial_group.create_dataset("values", data=trial.values, compression="gzip")
 
 
+def _read_grouped_responses(group: h5py.Group) -> GroupedRoiResponses:
+    """Read persisted grouped response arrays.
+
+    Args:
+        group: HDF5 ``responses`` group.
+
+    Returns:
+        ``GroupedRoiResponses`` with one object per trial subgroup.
+    """
+    trials_group = group["trials"]
+    return GroupedRoiResponses(
+        roi_labels=_read_string_dataset(group, "roi_labels"),
+        data_rate_hz=float(group.attrs["data_rate_hz"]),
+        trials=tuple(
+            _read_response_trial(trials_group[name])
+            for name in sorted(trials_group.keys())
+        ),
+    )
+
+
+def _read_response_trial(group: h5py.Group) -> RoiResponseTrial:
+    """Read one persisted response trial group.
+
+    Args:
+        group: HDF5 trial subgroup.
+
+    Returns:
+        ``RoiResponseTrial`` with frame/time vectors and values.
+    """
+    return RoiResponseTrial(
+        epoch_number=int(group.attrs["epoch_number"]),
+        epoch_name=str(_plain_attr_value(group.attrs["epoch_name"])),
+        trial_index=int(group.attrs["trial_index"]),
+        window_index=int(group.attrs["window_index"]),
+        start_frame=int(group.attrs["start_frame"]),
+        stop_frame=int(group.attrs["stop_frame"]),
+        frame_numbers=cast(npt.NDArray[np.int64], group["frame_numbers"][()]),
+        time_seconds=cast(npt.NDArray[np.float64], group["time_seconds"][()]),
+        values=cast(npt.NDArray[np.float64], group["values"][()]),
+    )
+
+
 def _write_metadata(
     group: h5py.Group,
     metadata: Mapping[str, str | int | float | bool],
@@ -300,6 +531,18 @@ def _write_metadata(
             group.attrs[key] = value
         else:
             group.attrs[key] = json.dumps(value)
+
+
+def _read_metadata(group: h5py.Group) -> dict[str, str | int | float | bool]:
+    """Read simple metadata attributes.
+
+    Args:
+        group: HDF5 metadata group.
+
+    Returns:
+        Plain Python metadata dictionary.
+    """
+    return {key: _plain_attr_value(value) for key, value in group.attrs.items()}
 
 
 def _write_string_dataset(
@@ -321,6 +564,19 @@ def _write_string_dataset(
         name,
         data=np.asarray(values, dtype=h5py.string_dtype("utf-8")),
     )
+
+
+def _read_string_dataset(group: h5py.Group, name: str) -> tuple[str, ...]:
+    """Read a UTF-8 string dataset.
+
+    Args:
+        group: HDF5 group containing the dataset.
+        name: Dataset name.
+
+    Returns:
+        Tuple of decoded strings.
+    """
+    return tuple(_decode_string(value) for value in group[name][()])
 
 
 def _summary_row(summary: RoiResponseSummary) -> dict[str, str | int | float]:
@@ -345,3 +601,53 @@ def _summary_row(summary: RoiResponseSummary) -> dict[str, str | int | float]:
         "peak_response": summary.peak_response,
         "min_response": summary.min_response,
     }
+
+
+def _require_analysis_format(h5_file: h5py.File, path: Path) -> None:
+    """Validate the twopy analysis HDF5 format marker.
+
+    Args:
+        h5_file: Open analysis HDF5 file.
+        path: Path used in error messages.
+
+    Returns:
+        None.
+    """
+    actual = str(_plain_attr_value(h5_file.attrs.get("twopy_format", "")))
+    if actual != ANALYSIS_OUTPUT_FILE_FORMAT:
+        msg = f"Expected {ANALYSIS_OUTPUT_FILE_FORMAT!r} file at {path}"
+        raise ValueError(msg)
+
+
+def _plain_attr_value(value: object) -> str | int | float | bool:
+    """Convert one HDF5 attribute value to a plain Python scalar.
+
+    Args:
+        value: Raw HDF5 attribute value.
+
+    Returns:
+        Plain string, integer, float, or boolean.
+    """
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    if isinstance(value, np.bool_ | bool):
+        return bool(value)
+    if isinstance(value, np.integer | int):
+        return int(value)
+    if isinstance(value, np.floating | float):
+        return float(value)
+    return str(value)
+
+
+def _decode_string(value: object) -> str:
+    """Decode one HDF5 string scalar.
+
+    Args:
+        value: Raw scalar read from a string dataset.
+
+    Returns:
+        Decoded text.
+    """
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value)

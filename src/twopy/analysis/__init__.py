@@ -25,6 +25,8 @@ from twopy.analysis.epoch_mapping import (
 from twopy.analysis.motion import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.persistence import (
     ANALYSIS_OUTPUT_FILE_FORMAT,
+    LoadedAnalysisOutputs,
+    load_analysis_outputs,
     save_analysis_outputs,
     write_response_summary_csv,
 )
@@ -45,8 +47,11 @@ from twopy.analysis.trials import (
     select_epoch_frame_windows,
     split_traces_by_frame_windows,
 )
+from twopy.analysis.workflow import AnalysisResponseRun, analyze_recording_responses
 
 __all__ = [
+    "analyze_recording_responses",
+    "AnalysisResponseRun",
     "apply_motion_artifact_mask_to_delta_f_over_f",
     "ANALYSIS_OUTPUT_FILE_FORMAT",
     "BackgroundCorrectedRoiTraces",
@@ -61,6 +66,8 @@ __all__ = [
     "GroupedRoiResponses",
     "InterpolatedEpochMapping",
     "interpolate_stimulus_epochs_to_frame_windows",
+    "load_analysis_outputs",
+    "LoadedAnalysisOutputs",
     "make_frame_windows",
     "map_stimulus_epochs_to_frame_windows",
     "RoiDeltaFOverF",
