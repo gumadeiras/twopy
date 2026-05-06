@@ -293,13 +293,7 @@ class ResponseProcessingOptionsWidget(QWidget):
 
     def _refresh_enabled_state(self) -> None:
         """Enable parameters only when their processing method is active."""
-        if (
-            self._smoothing_method.currentText() == "savgol"
-            and self._smoothing_window_frames.value() % 2 == 0
-        ):
-            self._smoothing_window_frames.setValue(
-                self._nearest_odd_smoothing_window(),
-            )
+        self._refresh_smoothing_window_constraints()
         self._smoothing_window_frames.setEnabled(
             self._smoothing_method.currentText() in {"moving_average", "savgol"},
         )
@@ -317,10 +311,33 @@ class ResponseProcessingOptionsWidget(QWidget):
         )
         self._correlation_window_has_stop.setEnabled(correlation_enabled)
 
-    def _nearest_odd_smoothing_window(self) -> int:
-        """Return the nearest valid odd smoothing window."""
+    def _refresh_smoothing_window_constraints(self) -> None:
+        """Keep the smoothing window spinbox aligned with the selected method."""
+        if self._smoothing_method.currentText() != "savgol":
+            self._smoothing_window_frames.setMinimum(1)
+            self._smoothing_window_frames.setSingleStep(1)
+            return
+
+        blocker = QSignalBlocker(self._smoothing_window_frames)
+        self._smoothing_window_frames.setMinimum(
+            _minimum_savgol_window(self._smoothing_polynomial_order.value()),
+        )
+        self._smoothing_window_frames.setSingleStep(2)
+        self._smoothing_window_frames.setValue(
+            self._nearest_valid_savgol_window(),
+        )
+        del blocker
+
+    def _nearest_valid_savgol_window(self) -> int:
+        """Return the nearest valid Savitzky-Golay smoothing window."""
         value = self._smoothing_window_frames.value()
-        if value < self._smoothing_window_frames.maximum():
+        minimum = self._smoothing_window_frames.minimum()
+        maximum = self._smoothing_window_frames.maximum()
+        if value < minimum:
+            return minimum
+        if value % 2 == 1:
+            return value
+        if value < maximum:
             return value + 1
         return value - 1
 
@@ -344,6 +361,14 @@ def _spin_box(*, minimum: int, maximum: int, value: int) -> QSpinBox:
     spin_box.setRange(minimum, maximum)
     spin_box.setValue(value)
     return spin_box
+
+
+def _minimum_savgol_window(polynomial_order: int) -> int:
+    """Return the smallest odd Savitzky-Golay window for one polynomial order."""
+    minimum = max(1, polynomial_order + 1)
+    if minimum % 2 == 0:
+        minimum += 1
+    return minimum
 
 
 def _double_spin_box(

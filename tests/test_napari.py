@@ -79,6 +79,7 @@ from twopy.napari.plotting.export import (
 )
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.options import visibility_options_widget
+from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     global_time_bounds,
@@ -753,6 +754,66 @@ class NapariAdapterTest(unittest.TestCase):
             options.smoothing,
         )
         self.assertEqual(response_widget._response_processing_options, options)
+
+    def test_savgol_window_control_steps_through_valid_values(self) -> None:
+        """Confirm Savitzky-Golay window clicks stay on valid values.
+
+        Inputs: processing controls configured for second-order Savitzky-Golay.
+        Outputs: the window spinbox uses odd values above the polynomial order.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = cast(
+            Any,
+            ResponseProcessingOptionsWidget(
+                ResponseProcessingOptions(
+                    smoothing=SmoothingOptions(
+                        method="savgol",
+                        window_frames=7,
+                        polynomial_order=2,
+                    ),
+                ),
+            ),
+        )
+        window_spin_box = widget._smoothing_window_frames
+
+        self.assertEqual(window_spin_box.minimum(), 3)
+        self.assertEqual(window_spin_box.singleStep(), 2)
+
+        window_spin_box.stepUp()
+        self.assertEqual(window_spin_box.value(), 9)
+
+        window_spin_box.stepDown()
+        self.assertEqual(window_spin_box.value(), 7)
+
+        window_spin_box.setValue(8)
+        self.assertEqual(window_spin_box.value(), 9)
+
+    def test_savgol_window_minimum_tracks_polynomial_order(self) -> None:
+        """Confirm Savitzky-Golay window minimum follows polynomial order.
+
+        Inputs: processing controls with a small Savitzky-Golay window.
+        Outputs: increasing polynomial order raises the window to the next
+        valid odd length.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = cast(
+            Any,
+            ResponseProcessingOptionsWidget(
+                ResponseProcessingOptions(
+                    smoothing=SmoothingOptions(
+                        method="savgol",
+                        window_frames=3,
+                        polynomial_order=2,
+                    ),
+                ),
+            ),
+        )
+
+        widget._smoothing_polynomial_order.setValue(4)
+
+        self.assertEqual(widget._smoothing_window_frames.minimum(), 5)
+        self.assertEqual(widget._smoothing_window_frames.value(), 5)
+        self.assertEqual(widget.options().smoothing.window_frames, 5)
 
     def test_response_widget_close_shuts_down_live_controller(self) -> None:
         """Confirm closing the response widget releases live-update resources.
