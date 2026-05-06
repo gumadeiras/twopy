@@ -9,7 +9,7 @@ read source MATLAB/TIFF files, or perform analysis.
 """
 
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -32,6 +32,12 @@ from twopy.napari.types import NapariRecordingView
 from twopy.roi import RoiSet
 
 __all__ = ["open_recording_in_napari"]
+
+
+class _LabelsLayerWithBrushSize(Protocol):
+    """Small layer shape needed to configure ROI painting defaults."""
+
+    brush_size: int
 
 
 def open_recording_in_napari(
@@ -131,9 +137,9 @@ def open_recording_in_napari(
             name=roi_layer_name,
             opacity=0.5,
             blending="additive",
-            brush_size=6,
             metadata=layer_metadata,
         )
+        set_labels_brush_size(roi_layer, brush_size=6)
     controls_widget = None
     controls_dock = None
     loaded_recordings_widget = None
@@ -214,6 +220,25 @@ def create_viewer() -> NapariViewer:
     import napari
 
     return cast(NapariViewer, napari.Viewer())
+
+
+def set_labels_brush_size(layer: object, *, brush_size: int) -> None:
+    """Set the brush size on a napari Labels layer after creation.
+
+    Args:
+        layer: Labels layer returned by ``viewer.add_labels``.
+        brush_size: Brush diameter used by the ROI painting tool.
+
+    Returns:
+        None.
+
+    Napari exposes ``brush_size`` as a layer property, not a
+    ``Viewer.add_labels`` argument in all supported versions. Setting it here
+    keeps ROI drawing defaults explicit without making recording loading depend
+    on version-specific layer-constructor keywords.
+    """
+    labels_layer = cast(_LabelsLayerWithBrushSize, layer)
+    labels_layer.brush_size = brush_size
 
 
 def contrast_limits_from_data_range(

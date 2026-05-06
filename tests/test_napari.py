@@ -102,6 +102,7 @@ class _FakeLayer:
     data: object
     options: dict[str, object]
     visible: bool = True
+    brush_size: int | None = None
     events: object | None = None
 
 
@@ -340,7 +341,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.labels), 1)
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
-            self.assertEqual(viewer.labels[0].options["brush_size"], 6)
+            self.assertEqual(viewer.labels[0].brush_size, 6)
             self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
             self.assertEqual(len(viewer.window.dock_widgets), 5)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
