@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 - 2026-05-06
+
+### Features
+
+- Added `twopy --version` and `twopy -v` so users can check the installed
+  package version from the command line.
+
 ## 0.1.1 - 2026-05-06
 
 ### Features
