@@ -16,6 +16,8 @@ from twopy import (
     extract_roi_traces,
     load_roi_set,
     make_roi_set,
+    make_roi_set_from_label_image,
+    roi_set_to_label_image,
     save_roi_set,
 )
 from twopy.conversion.types import FrameCountAudit
@@ -122,6 +124,43 @@ class RoiTest(unittest.TestCase):
                     roi_set,
                     statistic=cast(TraceStatistic, "median"),
                 )
+
+    def test_converts_label_image_to_roi_set_and_back(self) -> None:
+        """Confirm label images become deterministic ROI masks.
+
+        Inputs: one integer label image with background and two ROI labels.
+        Outputs: a ``RoiSet`` plus a one-based label image representation.
+        """
+        roi_set = make_roi_set_from_label_image(
+            np.array([[0, 2], [5, 5]]),
+            label_prefix="drawn",
+        )
+
+        self.assertEqual(roi_set.labels, ("drawn_0002", "drawn_0005"))
+        np.testing.assert_array_equal(
+            roi_set.masks,
+            np.array(
+                [
+                    [[False, True], [False, False]],
+                    [[False, False], [True, True]],
+                ],
+            ),
+        )
+        np.testing.assert_array_equal(
+            roi_set_to_label_image(roi_set),
+            np.array([[0, 1], [2, 2]]),
+        )
+
+    def test_rejects_overlapping_roi_set_for_label_image(self) -> None:
+        """Confirm overlapping masks cannot silently collapse into labels.
+
+        Inputs: two ROI masks that share one pixel.
+        Outputs: a clear validation error before display or saving.
+        """
+        roi_set = make_roi_set(np.array([[[True]], [[True]]]))
+
+        with self.assertRaisesRegex(ValueError, "overlap"):
+            roi_set_to_label_image(roi_set)
 
     def _write_recording(
         self,

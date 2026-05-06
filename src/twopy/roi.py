@@ -23,7 +23,9 @@ __all__ = [
     "RoiTraces",
     "extract_roi_traces",
     "load_roi_set",
+    "make_roi_set_from_label_image",
     "make_roi_set",
+    "roi_set_to_label_image",
     "save_roi_set",
 ]
 
@@ -112,6 +114,69 @@ def make_roi_set(
         raise ValueError(msg)
 
     return RoiSet(masks=bool_masks, labels=resolved_labels)
+
+
+def make_roi_set_from_label_image(
+    label_image: npt.ArrayLike,
+    *,
+    labels: tuple[str, ...] | None = None,
+    label_prefix: str = "roi",
+) -> RoiSet:
+    """Create a ROI set from one two-dimensional integer label image.
+
+    Args:
+        label_image: Two-dimensional image where ``0`` is background and each
+            positive integer is one ROI.
+        labels: Optional text label for each positive ROI value, sorted by
+            numeric label.
+        label_prefix: Prefix used when ``labels`` is omitted.
+
+    Returns:
+        ``RoiSet`` with one boolean mask per positive label.
+
+    Raises:
+        ValueError: If the label image is not two-dimensional, contains
+            negative labels, non-integer values, or no positive ROIs.
+
+    This is the bridge from label-editing tools such as napari into the core ROI
+    object used by scripts and analysis. Sorting by numeric label keeps saved
+    output deterministic.
+    """
+    integer_labels = _integer_label_image(label_image)
+    label_values = _positive_label_values(integer_labels)
+    masks = np.stack(tuple(integer_labels == value for value in label_values))
+    resolved_labels = labels
+    if resolved_labels is None:
+        resolved_labels = tuple(f"{label_prefix}_{value:04d}" for value in label_values)
+    return make_roi_set(masks, labels=resolved_labels)
+
+
+def roi_set_to_label_image(roi_set: RoiSet) -> npt.NDArray[np.int64]:
+    """Convert non-overlapping ROI masks into one integer label image.
+
+    Args:
+        roi_set: ROI masks in movie coordinates.
+
+    Returns:
+        Two-dimensional integer image where ``0`` is background and each ROI is
+        labeled by its one-based position in ``roi_set``.
+
+    Raises:
+        ValueError: If ROI masks overlap.
+
+    napari label layers represent one integer per pixel. Overlapping masks
+    cannot be represented without hiding one ROI, so this helper fails loudly
+    instead of silently losing pixels.
+    """
+    overlap_counts = roi_set.masks.sum(axis=0)
+    if np.any(overlap_counts > 1):
+        msg = "ROI masks overlap and cannot be represented as one label image"
+        raise ValueError(msg)
+
+    label_image = np.zeros(roi_set.masks.shape[1:], dtype=np.int64)
+    for roi_index, mask in enumerate(roi_set.masks, start=1):
+        label_image[mask] = roi_index
+    return label_image
 
 
 def save_roi_set(roi_set: RoiSet, path: Path) -> None:
@@ -237,6 +302,50 @@ def validate_trace_statistic(statistic: TraceStatistic) -> None:
     if statistic != "mean":
         msg = f"Unknown trace statistic {statistic!r}; supported statistics: mean"
         raise ValueError(msg)
+
+
+def _integer_label_image(label_image: npt.ArrayLike) -> npt.NDArray[np.int64]:
+    """Return a two-dimensional label image as validated integer labels.
+
+    Args:
+        label_image: Candidate label image.
+
+    Returns:
+        Integer label image with finite, nonnegative labels.
+    """
+    values = np.asarray(label_image, dtype=np.float64)
+    if values.ndim != 2:
+        msg = f"ROI label image must be two-dimensional; got {values.shape}"
+        raise ValueError(msg)
+
+    finite = np.isfinite(values)
+    rounded = np.rint(values)
+    if not np.allclose(values[finite], rounded[finite]):
+        msg = "ROI label image values must be integer-like"
+        raise ValueError(msg)
+
+    labels = np.zeros(values.shape, dtype=np.int64)
+    labels[finite] = rounded[finite].astype(np.int64)
+    if np.any(labels < 0):
+        msg = "ROI label image values cannot be negative"
+        raise ValueError(msg)
+    return labels
+
+
+def _positive_label_values(label_image: npt.NDArray[np.int64]) -> tuple[int, ...]:
+    """Return sorted positive ROI label values from one label image.
+
+    Args:
+        label_image: Integer label image.
+
+    Returns:
+        Sorted positive integer label values.
+    """
+    label_values = tuple(int(value) for value in np.unique(label_image) if value > 0)
+    if len(label_values) == 0:
+        msg = "ROI label image contains no positive ROI labels"
+        raise ValueError(msg)
+    return label_values
 
 
 def _roi_pixel_indices(roi_set: RoiSet) -> tuple[npt.NDArray[np.int64], ...]:

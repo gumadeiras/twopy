@@ -15,7 +15,7 @@ import numpy.typing as npt
 
 from twopy.converted import RecordingData
 from twopy.parity.saved_analysis import SavedAnalysisLastRoi
-from twopy.roi import RoiSet, make_roi_set
+from twopy.roi import RoiSet, make_roi_set_from_label_image
 
 __all__ = [
     "SavedAnalysisRoiSet",
@@ -70,12 +70,11 @@ def roi_set_from_saved_analysis(
         label_image,
         recording,
     )
-    label_values = _positive_label_values(full_frame_labels)
-    masks = np.stack(
-        tuple(full_frame_labels == label_value for label_value in label_values),
+    label_values = tuple(
+        int(value) for value in np.unique(full_frame_labels) if value > 0
     )
-    roi_set = make_roi_set(
-        masks,
+    roi_set = make_roi_set_from_label_image(
+        full_frame_labels,
         labels=tuple(f"saved_roi_{label_value:04d}" for label_value in label_values),
     )
     return SavedAnalysisRoiSet(
@@ -144,19 +143,3 @@ def _label_image_in_movie_coordinates(
         f"crop; got {label_image.shape}, movie={movie_shape}, crop={crop.shape}"
     )
     raise ValueError(msg)
-
-
-def _positive_label_values(label_image: npt.NDArray[np.int64]) -> tuple[int, ...]:
-    """Return sorted positive ROI label values.
-
-    Args:
-        label_image: Full-frame integer ROI label image.
-
-    Returns:
-        Positive labels sorted by numeric value.
-    """
-    labels = tuple(int(value) for value in np.unique(label_image) if value > 0)
-    if len(labels) == 0:
-        msg = "Saved ROI mask contains no positive ROI labels"
-        raise ValueError(msg)
-    return labels

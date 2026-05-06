@@ -38,6 +38,11 @@ from twopy.analysis import (
 from twopy.api import find_recordings
 from twopy.conversion import convert_recording_to_twopy, load_source_conversion_inputs
 from twopy.converted import load_converted_recording
+from twopy.napari import (
+    NapariRecordingView,
+    open_recording_in_napari,
+    save_napari_label_rois,
+)
 from twopy.photodiode_classification import (
     ClassifiedPhotodiodeEvent,
     ClassifiedStimulusTiming,
@@ -52,6 +57,8 @@ from twopy.roi import (
     extract_roi_traces,
     load_roi_set,
     make_roi_set,
+    make_roi_set_from_label_image,
+    roi_set_to_label_image,
     save_roi_set,
 )
 from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
@@ -102,10 +109,13 @@ __all__ = [
     "load_roi_set",
     "load_source_conversion_inputs",
     "LoadedAnalysisOutputs",
+    "make_roi_set_from_label_image",
     "make_frame_windows",
     "make_roi_set",
     "map_stimulus_epochs_to_frame_windows",
     "map_stimulus_specific_column",
+    "NapariRecordingView",
+    "open_recording_in_napari",
     "pair_photodiode_events_to_imaging_frames",
     "PhotodiodeAlignment",
     "PhotodiodeDurationClass",
@@ -117,7 +127,9 @@ __all__ = [
     "RoiResponseTrial",
     "RoiSet",
     "RoiTraces",
+    "roi_set_to_label_image",
     "save_analysis_outputs",
+    "save_napari_label_rois",
     "save_roi_set",
     "select_epoch_frame_windows",
     "split_traces_by_frame_windows",

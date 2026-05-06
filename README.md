@@ -125,3 +125,25 @@ dF/F uses corrected ROI fluorescence plus gray interleave windows to fit one
 shared exponential tau and one amplitude per ROI. The default dF/F fit mode is
 `robust`; pass `fit_mode="source_bounds"` when you need original source-bound
 behavior for audit comparisons.
+
+## Open In Napari
+
+```python
+from pathlib import Path
+
+from twopy import open_recording_in_napari, save_napari_label_rois
+
+view = open_recording_in_napari(
+    Path("/path/to/recording_data.h5"),
+    roi_set=Path("/path/to/rois.h5"),
+    movie_frame_range=(0, 200),
+)
+
+# After editing a napari labels layer:
+roi_set = save_napari_label_rois(view.roi_labels_layer.data, Path("/path/to/rois.h5"))
+```
+
+Napari code is a thin adapter. It loads converted twopy files, displays the
+mean image, optionally displays a bounded movie preview, and saves label-layer
+edits through the core ROI HDF5 helpers. It does not read source MATLAB/TIFF
+files or own analysis decisions.
