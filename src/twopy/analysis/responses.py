@@ -94,6 +94,7 @@ def group_delta_f_over_f_by_epoch(
     epoch_windows: Sequence[EpochFrameWindow],
     *,
     data_rate_hz: float,
+    pre_window_seconds: float = 0.0,
 ) -> GroupedRoiResponses:
     """Group dF/F values by stimulus epoch windows.
 
@@ -101,6 +102,9 @@ def group_delta_f_over_f_by_epoch(
         dff: Computed ROI dF/F with absolute frame coordinates.
         epoch_windows: Stimulus-labeled windows to slice.
         data_rate_hz: Imaging frame rate in hertz for relative trial time.
+        pre_window_seconds: Seconds before each epoch window to include. This
+            is useful for plots that show the gray interleave baseline before
+            stimulus onset.
 
     Returns:
         ``GroupedRoiResponses`` with one response object per input window.
@@ -111,26 +115,31 @@ def group_delta_f_over_f_by_epoch(
     The function only groups existing dF/F values. It does not decide which
     windows are trials and does not recompute fluorescence.
     """
-    _validate_grouping_inputs(dff, epoch_windows, data_rate_hz)
+    _validate_grouping_inputs(dff, epoch_windows, data_rate_hz, pre_window_seconds)
 
     trials: list[RoiResponseTrial] = []
     epoch_counts: dict[tuple[int, str], int] = {}
+    pre_window_frames = int(round(pre_window_seconds * data_rate_hz))
     for epoch_window in epoch_windows:
         key = (epoch_window.epoch_number, epoch_window.epoch_name)
         epoch_counts[key] = epoch_counts.get(key, 0) + 1
         window = epoch_window.window
-        local_start = window.start_frame - dff.start_frame
+        response_start_frame = max(
+            window.start_frame - pre_window_frames, dff.start_frame
+        )
+        local_start = response_start_frame - dff.start_frame
         local_stop = window.stop_frame - dff.start_frame
-        frame_count = window.stop_frame - window.start_frame
-        frame_numbers = np.arange(window.start_frame, window.stop_frame, dtype=np.int64)
-        time_seconds = np.arange(frame_count) / data_rate_hz
+        frame_numbers = np.arange(
+            response_start_frame, window.stop_frame, dtype=np.int64
+        )
+        time_seconds = (frame_numbers - window.start_frame) / data_rate_hz
         trials.append(
             RoiResponseTrial(
                 epoch_number=epoch_window.epoch_number,
                 epoch_name=epoch_window.epoch_name,
                 trial_index=epoch_counts[key],
                 window_index=window.index,
-                start_frame=window.start_frame,
+                start_frame=response_start_frame,
                 stop_frame=window.stop_frame,
                 frame_numbers=frame_numbers,
                 time_seconds=time_seconds.astype(np.float64, copy=False),
@@ -191,6 +200,7 @@ def _validate_grouping_inputs(
     dff: RoiDeltaFOverF,
     epoch_windows: Sequence[EpochFrameWindow],
     data_rate_hz: float,
+    pre_window_seconds: float,
 ) -> None:
     """Validate response grouping inputs.
 
@@ -198,6 +208,7 @@ def _validate_grouping_inputs(
         dff: Candidate dF/F result.
         epoch_windows: Candidate windows.
         data_rate_hz: Candidate frame rate.
+        pre_window_seconds: Candidate prestimulus duration.
 
     Returns:
         None.
@@ -213,6 +224,9 @@ def _validate_grouping_inputs(
         raise ValueError(msg)
     if data_rate_hz <= 0:
         msg = f"data_rate_hz must be positive; got {data_rate_hz}"
+        raise ValueError(msg)
+    if pre_window_seconds < 0:
+        msg = f"pre_window_seconds must be nonnegative; got {pre_window_seconds}"
         raise ValueError(msg)
     for epoch_window in epoch_windows:
         window = epoch_window.window

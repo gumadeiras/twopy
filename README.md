@@ -159,7 +159,9 @@ By default the launcher opens the mean image, the full movie, an editable
 `--no-movie` to skip the movie preview, or `--movie-start` and `--movie-end` to
 choose a different preview range. The dock panel saves ROIs to `rois.h5` beside
 the current recording by default. The response dock can reload existing
-`analysis_outputs.h5` or update plots from the current Labels layer.
+`analysis_outputs.h5` or update plots from the current Labels layer. Response
+plots share one y-axis across epochs and show two seconds before stimulus onset
+by default, when those frames are available in the grouped responses.
 
 ```python
 from pathlib import Path

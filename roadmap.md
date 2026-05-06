@@ -133,7 +133,9 @@ decided.
   slider.
 - Napari has an initial response plotting dock with tabs for epoch response
   plots and plot options; it can reload persisted analysis outputs or update
-  plots from the current Labels ROIs through the core analysis workflow.
+  plots from the current Labels ROIs through the core analysis workflow. Plots
+  now share one y-axis and preserve two seconds of prestimulus baseline by
+  default when those frames are available.
 - Launch script for opening napari from a converted output directory, a source
   recording directory with `twopy/recording_data.h5`, or an explicit
   `recording_data.h5` path.

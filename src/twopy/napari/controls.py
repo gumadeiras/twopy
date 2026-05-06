@@ -8,10 +8,13 @@ The control panel owns GUI callbacks only. Loading recordings and saving ROIs
 still go through the same typed helpers used by scripts.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import numpy as np
+from magicgui.widgets import FileEdit
 
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
@@ -113,7 +116,6 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
     from magicgui.widgets import Container, Label
 
     default_movie_end_frame = _default_movie_end_frame(state.recording)
-    default_recording_folder = _default_recording_folder(state.recording)
 
     @magicgui(
         call_button=False,
@@ -127,7 +129,7 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         },
     )
     def load_recording(
-        recording_folder: Path = default_recording_folder,
+        recording_folder: Path = Path(DEFAULT_PATH_TEXT),
         roi_file_to_load: Path = Path(DEFAULT_PATH_TEXT),
         roi_save_file: Path = Path(DEFAULT_PATH_TEXT),
         movie_frame_range: tuple[int, int] = (0, default_movie_end_frame),
@@ -154,7 +156,9 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         if state.is_loading:
             return "Recording load already in progress."
         state.is_loading = True
-        paths = resolve_recording_paths(recording_folder)
+        paths = resolve_recording_paths(
+            _resolve_recording_folder_value(recording_folder, state),
+        )
         try:
             roi_path = (
                 paths.roi_file_to_load
@@ -200,6 +204,7 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
             frame_end = _default_movie_end_frame(view.recording)
             load_recording.movie_frame_range.max = frame_end
             load_recording.movie_frame_range.value = movie_range or (0, frame_end)
+            _set_recording_picker_display_default(load_recording.recording_folder)
             refresh_response_plot_widget(
                 state.response_plot_widget,
                 recording=view.recording,
@@ -245,6 +250,11 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
     load_recording.movie_frame_range.label = "movie frames"
     load_recording.load_movie.label = "load movie"
     save_rois.roi_save_file.label = "ROI save file"
+    _configure_recording_folder_picker(
+        cast(FileEdit, load_recording.recording_folder),
+        state,
+        lambda path: load_recording(recording_folder=path),
+    )
 
     def load_after_selection(_value: object) -> None:
         """Load when the user changes a load-relevant widget.
@@ -255,7 +265,10 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         Returns:
             None.
         """
-        if state.is_loading or is_default_path(load_recording.recording_folder.value):
+        if state.is_loading or not _has_recording_to_load(
+            load_recording.recording_folder.value,
+            state,
+        ):
             return
         load_recording()
 
@@ -274,6 +287,112 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         layout="vertical",
         labels=False,
     )
+
+
+def _configure_recording_folder_picker(
+    widget: FileEdit,
+    state: NapariControlState,
+    load_selected_path: Callable[[Path], object],
+) -> None:
+    """Keep the picker display compact while remembering dialog start folders.
+
+    Args:
+        widget: Recording-folder FileEdit widget.
+        state: Current napari control state.
+        load_selected_path: Callback that loads the selected recording path.
+
+    Returns:
+        None.
+
+    Magicgui normally uses the visible path field as the next dialog start
+    directory. For twopy that clutters the dock with long recording paths, so
+    the field stays at ``default`` and the remembered/current folder is supplied
+    only when the user clicks the chooser.
+    """
+    widget.choose_btn.changed.disconnect(widget._on_choose_clicked)
+
+    def choose_recording_folder() -> None:
+        """Open the folder dialog and load even when the same folder is picked."""
+        result = widget._show_file_dialog(
+            widget.mode,
+            caption="Choose directory",
+            start_path=_recording_picker_start_path(state),
+            filter=widget.filter,
+        )
+        if result is None or isinstance(result, tuple):
+            return
+        with widget.changed.blocked():
+            widget.line_edit.value = str(result)
+        load_selected_path(result)
+        _set_recording_picker_display_default(widget)
+
+    widget.choose_btn.changed.connect(choose_recording_folder)
+    _set_recording_picker_display_default(widget)
+
+
+def _set_recording_picker_display_default(widget: FileEdit) -> None:
+    """Show ``default`` instead of a long recording path in the picker field.
+
+    Args:
+        widget: Recording-folder FileEdit widget.
+
+    Returns:
+        None.
+    """
+    with widget.changed.blocked():
+        widget.line_edit.value = DEFAULT_PATH_TEXT
+
+
+def _recording_picker_start_path(state: NapariControlState) -> str | None:
+    """Return the folder shown first when choosing a recording.
+
+    Args:
+        state: Current napari control state.
+
+    Returns:
+        Absolute path string, or ``None`` for the platform default.
+    """
+    if state.recording is not None:
+        return str(state.recording.path.expanduser().parent.resolve())
+    remembered_folder = read_last_recording_folder()
+    if remembered_folder is None:
+        return None
+    return str(remembered_folder.resolve())
+
+
+def _resolve_recording_folder_value(
+    recording_folder: Path,
+    state: NapariControlState,
+) -> Path:
+    """Resolve the picker value into the recording path to load.
+
+    Args:
+        recording_folder: Value from the visible picker field.
+        state: Current napari control state.
+
+    Returns:
+        Selected path, or the current recording when the field shows
+        ``default``.
+    """
+    if not is_default_path(recording_folder):
+        return recording_folder
+    if state.recording is not None:
+        return state.recording.path
+    return recording_folder
+
+
+def _has_recording_to_load(recording_folder: Path, state: NapariControlState) -> bool:
+    """Return whether a load-relevant widget change can load a recording.
+
+    Args:
+        recording_folder: Visible recording picker value.
+        state: Current napari control state.
+
+    Returns:
+        ``True`` when a concrete path is selected or a recording is already
+        loaded.
+    """
+    return not is_default_path(recording_folder) or state.recording is not None
 
 
 def _resolve_optional_roi_path(path: Path) -> Path | None:
@@ -306,23 +425,6 @@ def _default_movie_end_frame(recording: RecordingData | None) -> int:
     if recording is None:
         return 0
     return max(recording.movie.shape[0] - 1, 0)
-
-
-def _default_recording_folder(recording: RecordingData | None) -> Path:
-    """Return the default recording folder shown in the load control.
-
-    Args:
-        recording: Optional loaded recording.
-
-    Returns:
-        Loaded recording folder, last selected folder, or ``default``.
-    """
-    if recording is not None:
-        return recording.path.expanduser().parent
-    remembered_folder = read_last_recording_folder()
-    if remembered_folder is not None:
-        return remembered_folder
-    return Path(DEFAULT_PATH_TEXT)
 
 
 def _load_recording_for_defaults(

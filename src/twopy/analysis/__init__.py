@@ -47,11 +47,16 @@ from twopy.analysis.trials import (
     select_epoch_frame_windows,
     split_traces_by_frame_windows,
 )
-from twopy.analysis.workflow import AnalysisResponseRun, analyze_recording_responses
+from twopy.analysis.workflow import (
+    DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+    AnalysisResponseRun,
+    analyze_recording_responses,
+)
 
 __all__ = [
     "analyze_recording_responses",
     "AnalysisResponseRun",
+    "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
     "apply_motion_artifact_mask_to_delta_f_over_f",
     "ANALYSIS_OUTPUT_FILE_FORMAT",
     "BackgroundCorrectedRoiTraces",

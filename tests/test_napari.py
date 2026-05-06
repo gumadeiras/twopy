@@ -360,11 +360,12 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Saved 1 ROI", str(result))
             self.assertTrue((root / "rois.h5").exists())
 
-    def test_controls_remember_last_recording_folder(self) -> None:
-        """Confirm the Load Recording control starts from the last folder.
+    def test_controls_hide_remembered_recording_folder(self) -> None:
+        """Confirm the Load Recording control keeps long remembered paths hidden.
 
         Inputs: one folder stored in the napari state file.
-        Outputs: recording-folder widget prefilled with that folder.
+        Outputs: recording-folder widget displays ``default`` instead of the
+        remembered path.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -379,7 +380,7 @@ class NapariAdapterTest(unittest.TestCase):
             controls = cast(_ControlWidget, controls_widget)
             load_widget = cast(Any, controls[1])
 
-            self.assertEqual(load_widget.recording_folder.value, root.resolve())
+            self.assertEqual(load_widget.recording_folder.value, Path("default"))
 
     def test_recording_folder_resolves_recording_defaults(self) -> None:
         """Confirm folder loading finds recording, movie, and ROI files.
@@ -502,6 +503,43 @@ class NapariAdapterTest(unittest.TestCase):
         np.testing.assert_allclose(
             epoch.sem_values,
             np.array([[2.0, 2.0], [3.0, 3.0]]),
+        )
+
+    def test_response_plot_data_uses_prestimulus_time_axis(self) -> None:
+        """Confirm response plots preserve negative prestimulus times.
+
+        Inputs: dF/F grouped with one second before stimulus onset.
+        Outputs: plot-ready time axis starts at ``-1`` seconds.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((4, 1), dtype=np.float64),
+            baseline=np.ones((4, 1), dtype=np.float64),
+            values=np.array([[0.0], [1.0], [2.0], [3.0]], dtype=np.float64),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=4,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            interleave_frame_numbers=np.array([0.0]),
+            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (EpochFrameWindow(FrameWindow(0, 2, 4, "odor"), 2, "Odor"),),
+            data_rate_hz=2.0,
+            pre_window_seconds=1.0,
+        )
+
+        plot_data = response_plot_data_from_grouped(grouped)
+
+        np.testing.assert_allclose(
+            plot_data.epochs[0].time_seconds,
+            np.array([-1.0, -0.5, 0.0, 0.5]),
+        )
+        np.testing.assert_allclose(
+            plot_data.epochs[0].mean_values,
+            np.array([[0.0, 1.0, 2.0, 3.0]]),
         )
 
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:

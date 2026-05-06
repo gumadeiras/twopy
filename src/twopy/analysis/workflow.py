@@ -41,8 +41,11 @@ from twopy.spatial import SpatialDomain
 
 __all__ = [
     "AnalysisResponseRun",
+    "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
     "analyze_recording_responses",
 ]
+
+DEFAULT_RESPONSE_PRE_WINDOW_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,7 @@ def analyze_recording_responses(
     data_rate_hz: float | None = None,
     chunk_frames: int = 128,
     spatial_domain: SpatialDomain = "alignment_valid_crop",
+    response_pre_window_seconds: float = DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
 ) -> AnalysisResponseRun:
     """Run the standard ROI response analysis workflow.
 
@@ -110,6 +114,9 @@ def analyze_recording_responses(
             ``acq.frameRate`` from converted metadata.
         chunk_frames: Number of movie frames to read per HDF5 chunk.
         spatial_domain: Spatial domain used for trace extraction.
+        response_pre_window_seconds: Seconds before each stimulus window to
+            include in grouped responses. The default shows the transition from
+            gray interleave baseline into the stimulus.
 
     Returns:
         ``AnalysisResponseRun`` with computed objects and output paths.
@@ -161,6 +168,7 @@ def analyze_recording_responses(
         dff,
         resolved_epoch_windows,
         data_rate_hz=frame_rate_hz,
+        pre_window_seconds=response_pre_window_seconds,
     )
     resolved_output_path = _resolve_output_path(recording.path, output_path)
     resolved_summary_path = _resolve_summary_csv_path(

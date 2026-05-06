@@ -6,6 +6,7 @@ Outputs: package constants and helper functions imported by users and scripts.
 """
 
 from twopy.analysis import (
+    DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
     AnalysisResponseRun,
     BackgroundCorrectedRoiTraces,
     BackgroundCorrectionMethod,
@@ -94,6 +95,7 @@ __all__ = [
     "classify_recording_photodiode_events",
     "compute_roi_delta_f_over_f",
     "convert_recording_to_twopy",
+    "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
     "detect_photodiode_events",
     "detect_recording_photodiode_events",
     "DeltaFOverFFitMode",

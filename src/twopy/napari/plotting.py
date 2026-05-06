@@ -26,9 +26,17 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.persistence import load_analysis_outputs
-from twopy.analysis.responses import GroupedRoiResponses, RoiResponseTrial
-from twopy.analysis.workflow import analyze_recording_responses
+from twopy.analysis.responses import (
+    GroupedRoiResponses,
+    RoiResponseTrial,
+    group_delta_f_over_f_by_epoch,
+)
+from twopy.analysis.workflow import (
+    DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+    analyze_recording_responses,
+)
 from twopy.converted import RecordingData
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import roi_label_image_from_layer
@@ -210,13 +218,18 @@ def _epoch_plot_data(
     Returns:
         Mean and SEM traces with shape ``(rois, frames)``.
     """
-    max_frames = max(trial.values.shape[0] for trial in trials)
+    time_seconds = _shared_time_axis(trials, data_rate_hz)
+    first_time = float(time_seconds[0])
+    max_frames = len(time_seconds)
     trial_count = len(trials)
     roi_count = len(roi_labels)
     values = np.full((trial_count, max_frames, roi_count), np.nan, dtype=np.float64)
     for trial_index, trial in enumerate(trials):
-        frame_count = trial.values.shape[0]
-        values[trial_index, :frame_count, :] = trial.values
+        offsets = np.rint((trial.time_seconds - first_time) * data_rate_hz).astype(
+            np.int64,
+            copy=False,
+        )
+        values[trial_index, offsets, :] = trial.values
 
     mean_values = np.nanmean(values, axis=0).T
     valid_counts = np.sum(~np.isnan(values), axis=0).T
@@ -227,7 +240,6 @@ def _epoch_plot_data(
         sem_values[variable_mask] = std_values[variable_mask] / np.sqrt(
             valid_counts[variable_mask]
         )
-    time_seconds = np.arange(max_frames, dtype=np.float64) / data_rate_hz
     return EpochResponsePlotData(
         epoch_name=epoch_name,
         epoch_number=epoch_number,
@@ -236,6 +248,26 @@ def _epoch_plot_data(
         mean_values=mean_values,
         sem_values=sem_values,
     )
+
+
+def _shared_time_axis(
+    trials: tuple[RoiResponseTrial, ...],
+    data_rate_hz: float,
+) -> npt.NDArray[np.float64]:
+    """Return one relative time axis that covers all trials in an epoch.
+
+    Args:
+        trials: Trial responses for one epoch type.
+        data_rate_hz: Imaging frame rate in hertz.
+
+    Returns:
+        Relative time in seconds, usually starting at ``-2`` when grouped
+        responses include two prestimulus seconds.
+    """
+    first_time = min(float(trial.time_seconds[0]) for trial in trials)
+    last_time = max(float(trial.time_seconds[-1]) for trial in trials)
+    frame_count = int(round((last_time - first_time) * data_rate_hz)) + 1
+    return first_time + (np.arange(frame_count, dtype=np.float64) / data_rate_hz)
 
 
 def _default_analysis_output_path(recording: RecordingData) -> Path:
@@ -277,12 +309,49 @@ def _load_plot_data(path: Path) -> ResponsePlotData | str:
     if not path.is_file():
         return f"No analysis output found: {path}"
     outputs = load_analysis_outputs(path)
+    if outputs.dff is not None and len(outputs.epoch_windows) > 0:
+        data_rate_hz = _analysis_output_data_rate_hz(
+            grouped=outputs.grouped_responses,
+            dff=outputs.dff,
+        )
+        if data_rate_hz is not None:
+            grouped = group_delta_f_over_f_by_epoch(
+                outputs.dff,
+                outputs.epoch_windows,
+                data_rate_hz=data_rate_hz,
+                pre_window_seconds=DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+            )
+            return response_plot_data_from_grouped(grouped, source_path=outputs.path)
     if outputs.grouped_responses is None:
         return f"No grouped responses in: {path}"
     return response_plot_data_from_grouped(
         outputs.grouped_responses,
         source_path=outputs.path,
     )
+
+
+def _analysis_output_data_rate_hz(
+    *,
+    grouped: GroupedRoiResponses | None,
+    dff: RoiDeltaFOverF,
+) -> float | None:
+    """Return the saved response frame rate when available.
+
+    Args:
+        grouped: Optional grouped responses loaded from analysis outputs.
+        dff: dF/F result with audit metadata.
+
+    Returns:
+        Data rate in hertz, or ``None`` when unavailable.
+    """
+    if grouped is not None:
+        return grouped.data_rate_hz
+    value = dff.metadata.get("data_rate_hz")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return None
 
 
 class _ResponsePlotTabs(QTabWidget):
@@ -455,11 +524,17 @@ class _ResponsePlotTabs(QTabWidget):
         if self._plot_data is None or len(self._plot_data.epochs) == 0:
             self._set_status("No responses available.")
             return
+        value_min, value_max = _global_value_bounds(self._plot_data)
         for epoch in self._plot_data.epochs:
             title = f"Epoch {epoch.epoch_number}: {epoch.epoch_name}"
             self._plot_layout.addWidget(QLabel(title))
             self._plot_layout.addWidget(
-                _EpochPlotWidget(epoch, show_sem=self._show_sem),
+                _EpochPlotWidget(
+                    epoch,
+                    show_sem=self._show_sem,
+                    value_min=value_min,
+                    value_max=value_max,
+                ),
             )
         self._plot_layout.addStretch(1)
 
@@ -467,16 +542,27 @@ class _ResponsePlotTabs(QTabWidget):
 class _EpochPlotWidget(QWidget):
     """Small custom Qt plot for one stimulus epoch type."""
 
-    def __init__(self, data: EpochResponsePlotData, *, show_sem: bool) -> None:
+    def __init__(
+        self,
+        data: EpochResponsePlotData,
+        *,
+        show_sem: bool,
+        value_min: float,
+        value_max: float,
+    ) -> None:
         """Create a plot widget.
 
         Args:
             data: Plot data for one epoch.
             show_sem: Whether SEM bands should be drawn.
+            value_min: Shared y-axis minimum.
+            value_max: Shared y-axis maximum.
         """
         super().__init__()
         self._data = data
         self._show_sem = show_sem
+        self._value_min = value_min
+        self._value_max = value_max
         self.setMinimumHeight(220)
 
     def paintEvent(self, a0: QPaintEvent | None) -> None:
@@ -495,7 +581,6 @@ class _EpochPlotWidget(QWidget):
         painter.fillRect(self.rect(), QColor("#20252d"))
         painter.setPen(QPen(QColor("#8c96a3"), 1))
         painter.drawRect(plot_rect)
-        value_min, value_max = _value_bounds(self._data)
         colors = _roi_colors(len(self._data.roi_labels))
         for roi_index, color in enumerate(colors):
             if self._show_sem:
@@ -505,8 +590,8 @@ class _EpochPlotWidget(QWidget):
                     time_values=self._data.time_seconds,
                     mean_values=self._data.mean_values[roi_index],
                     sem_values=self._data.sem_values[roi_index],
-                    value_min=value_min,
-                    value_max=value_max,
+                    value_min=self._value_min,
+                    value_max=self._value_max,
                     color=color,
                 )
             _draw_trace(
@@ -514,23 +599,23 @@ class _EpochPlotWidget(QWidget):
                 rect=plot_rect,
                 time_values=self._data.time_seconds,
                 values=self._data.mean_values[roi_index],
-                value_min=value_min,
-                value_max=value_max,
+                value_min=self._value_min,
+                value_max=self._value_max,
                 color=color,
             )
         painter.setPen(QPen(QColor("#cfd6df"), 1))
-        painter.drawText(10, 20, f"{value_max:.3g}")
-        painter.drawText(QPointF(10.0, plot_rect.bottom()), f"{value_min:.3g}")
+        painter.drawText(10, 20, f"{self._value_max:.1f}")
+        painter.drawText(QPointF(10.0, plot_rect.bottom()), f"{self._value_min:.1f}")
         painter.drawText(
             QPointF(plot_rect.left(), float(self.rect().bottom() - 8)),
-            "0 s",
+            f"{self._data.time_seconds[0]:.1f} s",
         )
         painter.drawText(
             QPointF(
                 plot_rect.right() - 45.0,
                 float(self.rect().bottom() - 8),
             ),
-            f"{self._data.time_seconds[-1]:.2g} s",
+            f"{self._data.time_seconds[-1]:.1f} s",
         )
         painter.end()
 
@@ -553,23 +638,34 @@ def _clear_layout(layout: QVBoxLayout) -> None:
             widget.deleteLater()
 
 
-def _value_bounds(data: EpochResponsePlotData) -> tuple[float, float]:
-    """Return y-axis bounds for one epoch plot.
+def _global_value_bounds(data: ResponsePlotData) -> tuple[float, float]:
+    """Return shared y-axis bounds across all epoch plots.
 
     Args:
-        data: Epoch plot data.
+        data: Full response plot data.
 
     Returns:
-        ``(min, max)`` bounds with padding.
+        ``(min, max)`` bounds expanded by 20 percent and rounded to one decimal.
     """
-    lower = data.mean_values - data.sem_values
-    upper = data.mean_values + data.sem_values
+    lower = np.concatenate(
+        tuple(epoch.mean_values - epoch.sem_values for epoch in data.epochs),
+        axis=None,
+    )
+    upper = np.concatenate(
+        tuple(epoch.mean_values + epoch.sem_values for epoch in data.epochs),
+        axis=None,
+    )
     value_min = float(np.nanmin(lower))
     value_max = float(np.nanmax(upper))
     if value_min == value_max:
         return value_min - 1.0, value_max + 1.0
-    padding = (value_max - value_min) * 0.08
-    return value_min - padding, value_max + padding
+    lower_bound = value_min * 1.2 if value_min < 0 else value_min * 0.8
+    upper_bound = value_max * 1.2 if value_max > 0 else value_max * 0.8
+    rounded_min = round(lower_bound, 1)
+    rounded_max = round(upper_bound, 1)
+    if rounded_min >= rounded_max:
+        return rounded_min - 0.1, rounded_max + 0.1
+    return rounded_min, rounded_max
 
 
 def _roi_colors(count: int) -> tuple[QColor, ...]:
@@ -655,6 +751,7 @@ def _draw_sem_band(
             rect,
             time_values[index],
             lower[index],
+            time_values[0],
             time_values[-1],
             value_min,
             value_max,
@@ -686,12 +783,21 @@ def _trace_path(
     """
     path = QPainterPath()
     first = True
-    time_max = time_values[-1] if len(time_values) > 1 else 1.0
+    time_min = float(time_values[0])
+    time_max = float(time_values[-1])
     for time_value, value in zip(time_values, values, strict=True):
         if np.isnan(value):
             first = True
             continue
-        point = _plot_point(rect, time_value, value, time_max, value_min, value_max)
+        point = _plot_point(
+            rect,
+            time_value,
+            value,
+            time_min,
+            time_max,
+            value_min,
+            value_max,
+        )
         if first:
             path.moveTo(point)
             first = False
@@ -704,6 +810,7 @@ def _plot_point(
     rect: QRectF,
     time_value: float,
     value: float,
+    time_min: float,
     time_max: float,
     value_min: float,
     value_max: float,
@@ -714,6 +821,7 @@ def _plot_point(
         rect: Plot rectangle.
         time_value: X value in seconds.
         value: Y value.
+        time_min: Minimum time value.
         time_max: Maximum time value.
         value_min: Minimum y value.
         value_max: Maximum y value.
@@ -721,7 +829,8 @@ def _plot_point(
     Returns:
         Qt point in widget coordinates.
     """
-    x_fraction = 0.0 if time_max == 0 else time_value / time_max
+    time_span = time_max - time_min
+    x_fraction = 0.0 if time_span == 0 else (time_value - time_min) / time_span
     y_fraction = (value - value_min) / (value_max - value_min)
     x = rect.left() + x_fraction * rect.width()
     y = rect.bottom() - y_fraction * rect.height()
