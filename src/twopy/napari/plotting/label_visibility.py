@@ -8,6 +8,7 @@ This module only changes how labels are displayed. It never edits the label
 image, so hiding an ROI in the plot options cannot delete ROI data.
 """
 
+from collections.abc import Hashable, Mapping
 from typing import Any, Protocol, cast
 
 from qtpy.QtGui import QColor
@@ -20,6 +21,7 @@ __all__ = [
 
 _LABEL_COLOR_LOOKAHEAD = 4096
 _BASE_LABEL_COLORMAP_METADATA_KEY = "twopy_base_label_colormap"
+type VisibilityState = Mapping[str, bool] | Mapping[tuple[int, str], bool]
 
 
 class _LabelsLayerWithColormap(Protocol):
@@ -41,16 +43,19 @@ def apply_roi_visibility_to_labels_layer(
     layer: object | None,
     *,
     roi_labels: tuple[str, ...],
-    visibility: dict[str, bool],
+    visibility: VisibilityState,
     colors: tuple[QColor, ...],
+    keys: tuple[Hashable, ...] | None = None,
 ) -> None:
     """Apply ROI visibility state to the napari Labels layer display.
 
     Args:
         layer: Current napari Labels layer, if available.
         roi_labels: ROI names in analysis/plot order.
-        visibility: Visibility by ROI name.
+        visibility: Visibility by ROI name, or by ``keys`` when keys are
+            provided.
         colors: ROI colors in the same order as ``roi_labels``.
+        keys: Optional stable visibility keys matching ``roi_labels``.
 
     Returns:
         None.
@@ -69,6 +74,7 @@ def apply_roi_visibility_to_labels_layer(
         return
 
     labels_layer = cast(_LabelsLayerWithColormap, layer)
+    visibility_lookup: dict[Hashable, bool] = dict(visibility.items())
     color_dict = _visible_label_color_dict(
         labels_layer,
         roi_labels=roi_labels,
@@ -78,10 +84,13 @@ def apply_roi_visibility_to_labels_layer(
             roi_label,
             fallback=roi_index + 1,
         )
+        key = (
+            keys[roi_index] if keys is not None and roi_index < len(keys) else roi_label
+        )
         color = colors[roi_index] if roi_index < len(colors) else QColor("#4cc9f0")
         color_dict[label_value] = _qcolor_rgba(
             color,
-            visible=visibility.get(roi_label, True),
+            visible=visibility_lookup.get(key, True),
         )
 
     labels_layer.colormap = direct_colormap(color_dict)

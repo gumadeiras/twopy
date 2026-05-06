@@ -8,7 +8,7 @@ This module owns option-panel widgets only. It does not draw response traces,
 load analysis files, or compute responses.
 """
 
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Mapping
 from typing import cast
 
 from qtpy.QtCore import QSignalBlocker
@@ -33,6 +33,7 @@ __all__ = [
 type CallableAxisBounds = Callable[..., None]
 type CallableVisibility = Callable[[Hashable, bool], None]
 type CallableVisibilityBatch = Callable[[dict[Hashable, bool]], None]
+type VisibilityState = Mapping[str, bool] | Mapping[tuple[int, str], bool]
 
 
 def axis_options_widget(
@@ -93,7 +94,7 @@ def visibility_options_widget(
     *,
     title: str,
     labels: tuple[str, ...],
-    visibility: dict[str, bool],
+    visibility: VisibilityState,
     on_change: object,
     on_change_batch: object | None = None,
     keys: tuple[Hashable, ...] | None = None,
@@ -104,7 +105,8 @@ def visibility_options_widget(
     Args:
         title: Section label.
         labels: Checkbox labels.
-        visibility: Current visibility by label.
+        visibility: Current visibility by label or by ``keys`` when keys are
+            provided.
         on_change: Callback receiving ``(label, visible)``.
         on_change_batch: Optional callback receiving all labels changed by
             Select all or None. This prevents one bulk click from redrawing the
@@ -124,6 +126,7 @@ def visibility_options_widget(
         else None
     )
     widget = QWidget()
+    visibility_lookup: dict[Hashable, bool] = dict(visibility.items())
     layout = QVBoxLayout()
     layout.addWidget(QLabel(title))
     button_row = QHBoxLayout()
@@ -141,7 +144,7 @@ def visibility_options_widget(
     for index, label in enumerate(labels):
         key = keys[index] if keys is not None and index < len(keys) else label
         checkbox = QCheckBox(label)
-        checkbox.setChecked(visibility.get(label, True))
+        checkbox.setChecked(visibility_lookup.get(key, True))
         checkbox.stateChanged.connect(
             lambda _state, item=key, box=checkbox: callback(item, box.isChecked())
         )
