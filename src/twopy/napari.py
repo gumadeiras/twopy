@@ -663,7 +663,8 @@ def _parse_launch_args() -> Namespace:
         type=Path,
         help=(
             "Path to recording_data.h5. If omitted, twopy checks the current "
-            "directory and ./twopy/recording_data.h5."
+            "directory and ./twopy/recording_data.h5, then opens an empty "
+            "viewer if neither exists."
         ),
     )
     parser.add_argument(
