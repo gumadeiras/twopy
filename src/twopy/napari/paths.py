@@ -37,8 +37,8 @@ class NapariRecordingPaths:
 
     recording_data_path: Path
     movie_path: Path | None
-    roi_set_path: Path | None
-    roi_output_path: Path
+    roi_file_to_load: Path | None
+    roi_save_file: Path
 
 
 def resolve_recording_paths(path: Path) -> NapariRecordingPaths:
@@ -64,8 +64,8 @@ def resolve_recording_paths(path: Path) -> NapariRecordingPaths:
     return NapariRecordingPaths(
         recording_data_path=recording_path,
         movie_path=movie_path,
-        roi_set_path=roi_path,
-        roi_output_path=roi_path or recording_dir / DEFAULT_ROI_FILENAME,
+        roi_file_to_load=roi_path,
+        roi_save_file=roi_path or recording_dir / DEFAULT_ROI_FILENAME,
     )
 
 

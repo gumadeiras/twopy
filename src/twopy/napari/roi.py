@@ -100,24 +100,24 @@ def roi_label_image_for_display(
     return roi_set_to_label_image(loaded_roi_set)
 
 
-def resolve_roi_output_path(
+def resolve_roi_save_file(
     *,
     recording_data_path: Path,
     roi_set: RoiSet | Path | None,
-    explicit_roi_output_path: Path | None,
+    explicit_roi_save_file: Path | None,
 ) -> Path:
     """Resolve the default path used by the magicgui Save ROIs button.
 
     Args:
         recording_data_path: Converted recording manifest path.
         roi_set: Optional ROI object or path opened in napari.
-        explicit_roi_output_path: Optional caller-provided output path.
+        explicit_roi_save_file: Optional caller-provided save path.
 
     Returns:
         Path for saving ROI HDF5 files.
     """
-    if explicit_roi_output_path is not None:
-        return explicit_roi_output_path.expanduser()
+    if explicit_roi_save_file is not None:
+        return explicit_roi_save_file.expanduser()
     if isinstance(roi_set, Path):
         return roi_set.expanduser()
     return recording_data_path.expanduser().parent / "rois.h5"

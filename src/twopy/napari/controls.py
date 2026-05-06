@@ -13,7 +13,10 @@ from pathlib import Path
 
 import numpy as np
 
+from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
+from twopy.napari.metadata import format_recording_metadata
+from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import (
     is_default_path,
     resolve_recording_paths,
@@ -39,14 +42,16 @@ class NapariControlState:
 
     viewer: NapariViewer
     roi_labels_layer: object | None
-    roi_output_path: Path
+    roi_save_file: Path
+    recording: RecordingData | None
 
 
 def add_twopy_magicgui_controls(
     viewer: NapariViewer,
     *,
     roi_labels_layer: object | None,
-    roi_output_path: Path,
+    roi_save_file: Path,
+    recording: RecordingData | None = None,
     dock_name: str = "twopy",
     dock_area: str = "right",
 ) -> tuple[object, object]:
@@ -57,7 +62,9 @@ def add_twopy_magicgui_controls(
         roi_labels_layer: Editable napari Labels layer that contains ROI
             integer labels. ``None`` creates a disabled save path with a clear
             status message.
-        roi_output_path: Default destination for saved ROI HDF5 files.
+        roi_save_file: Default destination for saved ROI HDF5 files.
+        recording: Optional loaded recording used to populate defaults and the
+            metadata panel.
         dock_name: Dock widget title.
         dock_area: Napari dock area.
 
@@ -71,7 +78,8 @@ def add_twopy_magicgui_controls(
     state = NapariControlState(
         viewer=viewer,
         roi_labels_layer=roi_labels_layer,
-        roi_output_path=roi_output_path,
+        roi_save_file=roi_save_file,
+        recording=recording,
     )
     widget = _make_twopy_control_widget(state)
     dock_widget = viewer.window.add_dock_widget(
@@ -92,52 +100,59 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         magicgui container with Load Recording and Save ROIs buttons.
     """
     from magicgui import magicgui
-    from magicgui.widgets import Container, Label
+    from magicgui.widgets import Container, Label, TextEdit, ToggleButton
+
+    default_movie_end_frame = _default_movie_end_frame(state.recording)
 
     @magicgui(call_button="Load Recording", layout="vertical")
     def load_recording(
-        recording_path: Path = Path(DEFAULT_PATH_TEXT),
-        roi_set_path: Path = Path(DEFAULT_PATH_TEXT),
-        roi_output_path: Path = Path(DEFAULT_PATH_TEXT),
+        recording_folder: Path = Path(DEFAULT_PATH_TEXT),
+        roi_file_to_load: Path = Path(DEFAULT_PATH_TEXT),
+        roi_save_file: Path = Path(DEFAULT_PATH_TEXT),
         movie_start_frame: int = 0,
-        movie_stop_frame: str = "last",
-        load_movie_preview: bool = True,
+        movie_end_frame: int = default_movie_end_frame,
+        load_movie: bool = True,
     ) -> str:
         """Load a converted recording into the current napari viewer.
 
         Args:
-            recording_path: Converted folder, source recording folder with
+            recording_folder: Converted folder, source recording folder with
                 ``twopy`` output, or direct ``recording_data.h5`` path.
-            roi_set_path: Optional existing ``rois.h5`` file. ``default`` uses
+            roi_file_to_load: Optional existing ROI HDF5 file. ``default`` uses
                 ``rois.h5`` in the selected recording folder when it exists.
-            roi_output_path: Output path used by Save ROIs after loading.
+            roi_save_file: Output path used by Save ROIs after loading.
                 ``default`` writes ``rois.h5`` in the selected recording folder.
             movie_start_frame: First movie preview frame.
-            movie_stop_frame: Exclusive stop frame, or ``last`` for the final
-                movie frame.
-            load_movie_preview: Whether to load preview movie frames.
+            movie_end_frame: Last movie frame to load. When the empty-launch
+                widget still shows ``0``, twopy resolves it to the recording's
+                final frame after the folder is selected.
+            load_movie: Whether to load movie frames.
 
         Returns:
             Human-readable status for the dock widget.
         """
-        paths = resolve_recording_paths(recording_path)
+        paths = resolve_recording_paths(recording_folder)
         roi_path = (
-            paths.roi_set_path
-            if is_default_path(roi_set_path)
-            else _resolve_optional_roi_path(roi_set_path)
+            paths.roi_file_to_load
+            if is_default_path(roi_file_to_load)
+            else _resolve_optional_roi_path(roi_file_to_load)
         )
-        resolved_roi_output_path = resolve_widget_output_path(
-            roi_output_path,
-            default=paths.roi_output_path,
+        resolved_roi_save_file = resolve_widget_output_path(
+            roi_save_file,
+            default=paths.roi_save_file,
         )
-        movie_range = (
-            resolve_movie_frame_range(
+        loaded_recording = _load_recording_for_defaults(
+            recording_data_path=paths.recording_data_path,
+            movie_path=paths.movie_path,
+        )
+        movie_range = None
+        if load_movie:
+            movie_range = resolve_movie_frame_range(
                 start_frame=movie_start_frame,
-                stop_frame=movie_stop_frame,
+                end_frame=movie_end_frame,
+                frame_count=loaded_recording.movie.shape[0],
+                zero_end_means_last=True,
             )
-            if load_movie_preview
-            else None
-        )
 
         # Import here to avoid a top-level cycle: viewer creates controls, while
         # controls can load recordings into that same viewer.
@@ -147,21 +162,26 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
             paths.recording_data_path,
             viewer=state.viewer,
             roi_set=roi_path,
-            roi_output_path=resolved_roi_output_path,
+            roi_save_file=resolved_roi_save_file,
             movie_path=paths.movie_path,
             movie_frame_range=movie_range,
             add_controls=False,
         )
         state.roi_labels_layer = view.roi_labels_layer
-        state.roi_output_path = resolved_roi_output_path
+        state.roi_save_file = resolved_roi_save_file
+        state.recording = view.recording
+        load_recording.movie_end_frame.value = _default_movie_end_frame(view.recording)
+        metadata_text.value = format_recording_metadata(view.recording)
+        metadata_toggle.value = True
+        metadata_text.visible = True
         return f"Loaded {paths.recording_data_path}"
 
     @magicgui(call_button="Save ROIs", layout="vertical")
-    def save_rois(output_path: Path = Path(DEFAULT_PATH_TEXT)) -> str:
+    def save_rois(roi_save_file: Path = Path(DEFAULT_PATH_TEXT)) -> str:
         """Save current napari ROI labels to twopy ROI HDF5.
 
         Args:
-            output_path: Destination ROI HDF5 path. ``default`` uses the
+            roi_save_file: Destination ROI HDF5 path. ``default`` uses the
                 current recording's default ROI output path.
 
         Returns:
@@ -174,58 +194,47 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
             return "No ROI labels to save."
 
         resolved_output_path = resolve_widget_output_path(
-            output_path,
-            default=state.roi_output_path,
+            roi_save_file,
+            default=state.roi_save_file,
         )
         roi_set = save_napari_label_rois(label_image, resolved_output_path)
-        state.roi_output_path = resolved_output_path
+        state.roi_save_file = resolved_output_path
         return f"Saved {len(roi_set.labels)} ROI(s) to {resolved_output_path}"
 
-    load_recording.recording_path.mode = "d"
-    load_recording.roi_set_path.mode = "r"
-    load_recording.roi_output_path.mode = "w"
-    save_rois.output_path.mode = "w"
+    metadata_toggle = ToggleButton(text="Recording Metadata", value=False)
+    metadata_text = TextEdit(value=format_recording_metadata(state.recording))
+    metadata_text.read_only = True
+    metadata_text.min_height = 220
+    metadata_text.visible = False
+    metadata_toggle.changed.connect(
+        lambda visible: setattr(metadata_text, "visible", bool(visible)),
+    )
+
+    load_recording.recording_folder.mode = "d"
+    load_recording.roi_file_to_load.mode = "r"
+    load_recording.roi_save_file.mode = "w"
+    save_rois.roi_save_file.mode = "w"
+
+    load_recording.recording_folder.label = "recording folder or file"
+    load_recording.roi_file_to_load.label = "ROI file to load"
+    load_recording.roi_save_file.label = "ROI save file"
+    load_recording.movie_start_frame.label = "movie start frame"
+    load_recording.movie_end_frame.label = "movie end frame"
+    load_recording.load_movie.label = "load movie"
+    save_rois.roi_save_file.label = "ROI save file"
 
     return Container(
         widgets=[
             Label(value="Load Recording"),
             load_recording,
+            metadata_toggle,
+            metadata_text,
             Label(value="Save ROIs"),
             save_rois,
         ],
         layout="vertical",
         labels=False,
     )
-
-
-def resolve_movie_frame_range(
-    *,
-    start_frame: int,
-    stop_frame: str,
-) -> tuple[int, int | None]:
-    """Resolve movie preview frame inputs from the widget.
-
-    Args:
-        start_frame: First movie frame.
-        stop_frame: Exclusive stop frame text, or ``last``.
-
-    Returns:
-        ``(start, stop)`` where ``stop=None`` means the final movie frame.
-    """
-    if start_frame < 0:
-        msg = f"movie_start_frame must be at least 0; got {start_frame}"
-        raise ValueError(msg)
-    if stop_frame.strip().lower() in {"last", DEFAULT_PATH_TEXT, ""}:
-        return (start_frame, None)
-
-    stop = int(stop_frame)
-    if stop < start_frame:
-        msg = (
-            "movie_stop_frame must be greater than or equal to "
-            f"movie_start_frame; got {stop} < {start_frame}"
-        )
-        raise ValueError(msg)
-    return (start_frame, stop)
 
 
 def _resolve_optional_roi_path(path: Path) -> Path | None:
@@ -244,3 +253,39 @@ def _resolve_optional_roi_path(path: Path) -> Path | None:
         msg = f"ROI file does not exist: {resolved}"
         raise ValueError(msg)
     return resolved.resolve()
+
+
+def _default_movie_end_frame(recording: RecordingData | None) -> int:
+    """Return the default inclusive movie end frame for a loaded recording.
+
+    Args:
+        recording: Optional loaded recording.
+
+    Returns:
+        Last available frame index, or ``0`` before a recording is loaded.
+    """
+    if recording is None:
+        return 0
+    return max(recording.movie.shape[0] - 1, 0)
+
+
+def _load_recording_for_defaults(
+    *,
+    recording_data_path: Path,
+    movie_path: Path | None,
+) -> RecordingData:
+    """Load recording metadata before resolving frame defaults.
+
+    Args:
+        recording_data_path: Converted ``recording_data.h5`` path.
+        movie_path: Optional explicit converted movie path.
+
+    Returns:
+        Loaded recording object.
+
+    Loading the small manifest lets the empty-launch widget convert its initial
+    ``0`` end frame into the actual final frame before adding the movie layer.
+    """
+    from twopy.converted import load_converted_recording
+
+    return load_converted_recording(recording_data_path, movie_path=movie_path)

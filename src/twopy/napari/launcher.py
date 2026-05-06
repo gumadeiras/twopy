@@ -22,11 +22,11 @@ __all__ = ["launch_napari", "main"]
 def launch_napari(
     recording_data_path: Path | None = None,
     *,
-    roi_set: Path | None = None,
-    roi_output_path: Path | None = None,
+    roi_file_to_load: Path | None = None,
+    roi_save_file: Path | None = None,
     movie_start_frame: int = 0,
-    movie_stop_frame: int | None = None,
-    load_movie_preview: bool = True,
+    movie_end_frame: int | None = None,
+    load_movie: bool = True,
 ) -> NapariRecordingView | None:
     """Launch napari and start the event loop.
 
@@ -35,12 +35,12 @@ def launch_napari(
             omitted, twopy opens the current directory or ``./twopy`` recording
             if one exists; otherwise it opens an empty viewer with a Load
             Recording button.
-        roi_set: Optional saved ROI HDF5 path to reopen.
-        roi_output_path: Optional ROI output path for the Save ROIs button.
+        roi_file_to_load: Optional saved ROI HDF5 path to reopen.
+        roi_save_file: Optional ROI output path for the Save ROIs button.
         movie_start_frame: First movie preview frame.
-        movie_stop_frame: Exclusive movie preview stop frame. ``None`` means
-            the final movie frame.
-        load_movie_preview: Whether to add the aligned movie layer.
+        movie_end_frame: Last movie frame to load. ``None`` means the final
+            movie frame.
+        load_movie: Whether to add the aligned movie layer.
 
     Returns:
         ``NapariRecordingView`` when a recording is loaded at startup,
@@ -51,17 +51,15 @@ def launch_napari(
     ``open_recording_in_napari`` directly.
     """
     resolved_recording_path = resolve_launch_recording_path(recording_data_path)
-    movie_range = (
-        (int(movie_start_frame), movie_stop_frame) if load_movie_preview else None
-    )
+    movie_range = (int(movie_start_frame), movie_end_frame) if load_movie else None
     viewer = create_viewer()
     if resolved_recording_path is None:
         add_twopy_magicgui_controls(
             viewer,
             roi_labels_layer=None,
-            roi_output_path=(
-                roi_output_path.expanduser()
-                if roi_output_path is not None
+            roi_save_file=(
+                roi_save_file.expanduser()
+                if roi_save_file is not None
                 else Path.cwd() / "rois.h5"
             ),
         )
@@ -71,8 +69,8 @@ def launch_napari(
         view = open_recording_in_napari(
             paths.recording_data_path,
             viewer=viewer,
-            roi_set=roi_set,
-            roi_output_path=roi_output_path,
+            roi_set=roi_file_to_load,
+            roi_save_file=roi_save_file,
             movie_path=paths.movie_path,
             movie_frame_range=movie_range,
         )
@@ -106,16 +104,18 @@ def parse_launch_args() -> Namespace:
         ),
     )
     parser.add_argument(
-        "--roi-set",
+        "--roi-file-to-load",
+        dest="roi_file_to_load",
         type=Path,
         default=None,
-        help="Optional existing rois.h5 file to load into the Labels layer.",
+        help="Optional existing ROI HDF5 file to load into the Labels layer.",
     )
     parser.add_argument(
-        "--roi-output",
+        "--roi-save-file",
+        dest="roi_save_file",
         type=Path,
         default=None,
-        help="Optional output path for the Save ROIs button.",
+        help="Optional ROI HDF5 output path for the Save ROIs button.",
     )
     parser.add_argument(
         "--movie-start",
@@ -124,9 +124,10 @@ def parse_launch_args() -> Namespace:
         help="First frame for the movie preview.",
     )
     parser.add_argument(
-        "--movie-stop",
-        default="last",
-        help="Exclusive stop frame for the movie preview, or 'last'.",
+        "--movie-end",
+        type=int,
+        default=None,
+        help="Last frame for the movie preview. Defaults to the final frame.",
     )
     parser.add_argument(
         "--no-movie",
@@ -148,23 +149,9 @@ def main() -> None:
     args = parse_launch_args()
     launch_napari(
         args.recording_data_path,
-        roi_set=args.roi_set,
-        roi_output_path=args.roi_output,
+        roi_file_to_load=args.roi_file_to_load,
+        roi_save_file=args.roi_save_file,
         movie_start_frame=args.movie_start,
-        movie_stop_frame=_parse_cli_movie_stop(args.movie_stop),
-        load_movie_preview=not args.no_movie,
+        movie_end_frame=args.movie_end,
+        load_movie=not args.no_movie,
     )
-
-
-def _parse_cli_movie_stop(value: str) -> int | None:
-    """Parse the command-line movie stop value.
-
-    Args:
-        value: ``last`` or an integer string.
-
-    Returns:
-        Integer stop frame, or ``None`` for the final movie frame.
-    """
-    if value.strip().lower() == "last":
-        return None
-    return int(value)

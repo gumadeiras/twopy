@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import chdir
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 import h5py
 import numpy as np
@@ -24,7 +24,7 @@ from twopy import (
     save_napari_label_rois,
     save_roi_set,
 )
-from twopy.napari.controls import resolve_movie_frame_range
+from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 
 
@@ -209,7 +209,7 @@ class NapariAdapterTest(unittest.TestCase):
                 recording_path,
                 roi_set=roi_path,
                 viewer=viewer,
-                movie_frame_range=(0, 2),
+                movie_frame_range=(0, 1),
             )
 
             self.assertIs(opened.viewer, viewer)
@@ -254,21 +254,21 @@ class NapariAdapterTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
-            roi_output_path = root / "drawn_rois.h5"
+            roi_save_file = root / "drawn_rois.h5"
             viewer = _FakeViewer()
             opened = open_recording_in_napari(
                 recording_path,
                 viewer=viewer,
-                roi_output_path=roi_output_path,
+                roi_save_file=roi_save_file,
             )
 
             viewer.labels[0].data = np.array([[0, 1], [2, 2]])
             controls = cast(_ControlWidget, opened.controls_widget)
-            save_widget = controls[3]
-            result = save_widget(output_path=roi_output_path)
+            save_widget = cast(Any, controls[5])
+            result = save_widget(roi_save_file=roi_save_file)
 
             self.assertIn("Saved 2 ROI", str(result))
-            loaded = load_roi_set(roi_output_path)
+            loaded = load_roi_set(roi_save_file)
             self.assertEqual(loaded.labels, ("roi_0001", "roi_0002"))
 
     def test_magicgui_load_button_adds_recording_layers(self) -> None:
@@ -280,24 +280,25 @@ class NapariAdapterTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
-            roi_output_path = root / "drawn_rois.h5"
+            roi_save_file = root / "drawn_rois.h5"
             viewer = _FakeViewer()
 
             controls_widget, _dock = add_twopy_magicgui_controls(
                 viewer,
                 roi_labels_layer=None,
-                roi_output_path=roi_output_path,
+                roi_save_file=roi_save_file,
             )
             controls = cast(_ControlWidget, controls_widget)
-            load_widget = controls[1]
+            load_widget = cast(Any, controls[1])
 
             result = load_widget(
-                recording_path=recording_path,
-                roi_output_path=roi_output_path,
-                load_movie_preview=True,
+                recording_folder=recording_path,
+                roi_save_file=roi_save_file,
+                load_movie=True,
             )
 
             self.assertIn("Loaded", str(result))
+            self.assertEqual(load_widget.movie_end_frame.value, 2)
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(len(viewer.labels), 1)
             np.testing.assert_array_equal(
@@ -318,13 +319,13 @@ class NapariAdapterTest(unittest.TestCase):
             controls_widget, _dock = add_twopy_magicgui_controls(
                 viewer,
                 roi_labels_layer=None,
-                roi_output_path=Path("unused.h5"),
+                roi_save_file=Path("unused.h5"),
             )
             controls = cast(_ControlWidget, controls_widget)
-            load_widget = controls[1]
-            save_widget = controls[3]
+            load_widget = cast(Any, controls[1])
+            save_widget = cast(Any, controls[5])
 
-            load_widget(recording_path=recording_path)
+            load_widget(recording_folder=recording_path)
             viewer.labels[0].data = np.array([[1, 0], [0, 0]])
             result = save_widget()
 
@@ -349,12 +350,12 @@ class NapariAdapterTest(unittest.TestCase):
             controls_widget, _dock = add_twopy_magicgui_controls(
                 viewer,
                 roi_labels_layer=None,
-                roi_output_path=Path("unused.h5"),
+                roi_save_file=Path("unused.h5"),
             )
             controls = cast(_ControlWidget, controls_widget)
-            load_widget = controls[1]
+            load_widget = cast(Any, controls[1])
 
-            result = load_widget(recording_path=root)
+            result = load_widget(recording_folder=root)
 
             self.assertIn(str(recording_path), str(result))
             self.assertEqual(len(viewer.images), 2)
@@ -362,6 +363,27 @@ class NapariAdapterTest(unittest.TestCase):
                 np.unique(roi_label_image_from_layer(viewer.labels[0])),
                 np.array([0, 1]),
             )
+
+    def test_controls_show_loaded_recording_metadata(self) -> None:
+        """Confirm metadata panel text is populated from converted data.
+
+        Inputs: tiny converted recording with acquisition and run metadata.
+        Outputs: metadata widget text with general recording fields.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            controls = cast(_ControlWidget, opened.controls_widget)
+            load_widget = cast(Any, controls[1])
+            metadata_text = cast(Any, controls[3])
+
+            self.assertEqual(load_widget.movie_end_frame.value, 2)
+            self.assertIn("Movie shape: 3 frames x 2 x 2 pixels", metadata_text.value)
+            self.assertIn("rig_name: TestRig", metadata_text.value)
+            self.assertIn("acq.frameRate: 10.0", metadata_text.value)
 
     def test_recording_path_resolution_reports_available_files(self) -> None:
         """Confirm folder resolution finds optional movie and ROI paths.
@@ -380,18 +402,27 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertEqual(paths.recording_data_path, recording_path.resolve())
             self.assertEqual(paths.movie_path, (root / "aligned_movie.h5").resolve())
-            self.assertEqual(paths.roi_set_path, roi_path.resolve())
-            self.assertEqual(paths.roi_output_path, roi_path.resolve())
+            self.assertEqual(paths.roi_file_to_load, roi_path.resolve())
+            self.assertEqual(paths.roi_save_file, roi_path.resolve())
 
     def test_movie_frame_range_accepts_last_default(self) -> None:
-        """Confirm widget defaults request the full movie.
+        """Confirm empty-launch widget defaults request the full movie.
 
-        Inputs: start frame zero and ``last`` stop text.
-        Outputs: ``None`` stop marker used by the lazy movie loader.
+        Inputs: start/end frame zero before a recording is selected.
+        Outputs: the actual final frame after frame count is known.
         """
         self.assertEqual(
-            resolve_movie_frame_range(start_frame=0, stop_frame="last"),
-            (0, None),
+            resolve_movie_frame_range(start_frame=0, end_frame=0, frame_count=3),
+            (0, 0),
+        )
+        self.assertEqual(
+            resolve_movie_frame_range(
+                start_frame=0,
+                end_frame=0,
+                frame_count=3,
+                zero_end_means_last=True,
+            ),
+            (0, 2),
         )
 
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
@@ -495,8 +526,11 @@ def _write_converted_recording(root: Path) -> Path:
             "motion_artifact_mask",
             data=np.zeros(3, dtype=np.bool_),
         )
-        h5_file.create_group("metadata")
-        h5_file.create_group("run")
+        metadata_group = h5_file.create_group("metadata")
+        metadata_group.attrs["acq.frameRate"] = 10.0
+        metadata_group.attrs["acq.zoomFactor"] = 2.0
+        run_group = h5_file.create_group("run")
+        run_group.attrs["rig_name"] = "TestRig"
         stimulus_group = h5_file.create_group("stimulus")
         stimulus_group.create_dataset("data", data=np.zeros((1, 2), dtype=np.float64))
         stimulus_group.create_dataset(

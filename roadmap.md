@@ -128,7 +128,9 @@ decided.
   recording by default.
 - Napari Load Recording control accepts a converted output folder or source
   recording folder, auto-detects `recording_data.h5`, `aligned_movie.h5`, and
-  `rois.h5`, and loads the movie lazily from HDF5 by default.
+  `rois.h5`, and loads the full movie by default.
+- Napari controls use intuitive ROI file labels, numeric movie start/end frames,
+  and a collapsible general recording metadata panel.
 - Launch script for opening napari from a converted output directory, a source
   recording directory with `twopy/recording_data.h5`, or an explicit
   `recording_data.h5` path.
