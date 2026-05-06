@@ -64,7 +64,7 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_label_values,
 )
 from twopy.napari.protocols import NapariViewer
-from twopy.napari.roi import roi_label_image_from_layer
+from twopy.napari.roi import roi_label_image_from_layer_for_recording
 from twopy.roi import make_roi_set_from_label_image
 
 __all__ = [
@@ -369,7 +369,14 @@ class _ResponsePlotWidget(QWidget):
         if self._roi_labels_layer is None:
             self._set_status("No ROI Labels layer is available.")
             return
-        label_image = roi_label_image_from_layer(self._roi_labels_layer)
+        try:
+            label_image = roi_label_image_from_layer_for_recording(
+                self._roi_labels_layer,
+                self._recording,
+            )
+        except ValueError as error:
+            self._set_status(str(error))
+            return
         if not np.any(label_image > 0):
             self._set_status("No ROI labels to analyze.")
             return

@@ -19,7 +19,14 @@ import numpy.typing as npt
 from matplotlib.figure import Figure
 from napari.layers import Labels
 from qtpy.QtGui import QColor
-from qtpy.QtWidgets import QApplication, QListWidget, QPushButton, QTabWidget, QWidget
+from qtpy.QtWidgets import (
+    QApplication,
+    QLabel,
+    QListWidget,
+    QPushButton,
+    QTabWidget,
+    QWidget,
+)
 
 from twopy import (
     add_twopy_magicgui_controls,
@@ -377,6 +384,115 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Saved 2 ROI", str(result))
             loaded = load_roi_set(roi_save_file)
             self.assertEqual(loaded.labels, ("roi_0001", "roi_0002"))
+
+    def test_napari_roi_save_uses_cropped_view_and_full_frame_storage(self) -> None:
+        """Confirm napari saves crop-native labels as full-frame ROI masks.
+
+        Inputs: recording whose valid display crop is smaller than the movie
+        frame, and one drawn ROI in the cropped Labels layer.
+        Outputs: saved ROI masks keep the full movie shape with zeros outside
+        the displayed crop.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            roi_save_file = root / "rois.h5"
+            recording_path = _write_converted_recording(
+                root,
+                movie_values=np.arange(27, dtype=np.float64).reshape(3, 3, 3),
+                alignment_valid_crop=SpatialCrop(
+                    axis0_start=1,
+                    axis0_stop=3,
+                    axis1_start=0,
+                    axis1_stop=2,
+                    original_shape=(3, 3),
+                    source="alignment_valid_crop",
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(
+                recording_path,
+                viewer=viewer,
+                roi_save_file=roi_save_file,
+            )
+            viewer.labels[0].data = np.array([[0, 1], [0, 1]], dtype=np.int64)
+            save_widget = cast(Any, opened.save_rois_widget)
+
+            result = save_widget()
+
+            self.assertIn("Saved 1 ROI", str(result))
+            loaded = load_roi_set(roi_save_file)
+            self.assertEqual(loaded.masks.shape, (1, 3, 3))
+            self.assertFalse(np.any(loaded.masks[:, 0, :]))
+            self.assertFalse(np.any(loaded.masks[:, :, 2]))
+            self.assertTrue(np.any(loaded.masks[:, 1:3, 0:2]))
+
+    def test_napari_roi_save_rejects_full_frame_labels_layer(self) -> None:
+        """Confirm Save ROIs fails when the active layer is not crop-native.
+
+        Inputs: cropped recording display plus a stale full-frame Labels image.
+        Outputs: clear status instead of silently saving an invalid GUI mask.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                movie_values=np.arange(27, dtype=np.float64).reshape(3, 3, 3),
+                alignment_valid_crop=SpatialCrop(
+                    axis0_start=1,
+                    axis0_stop=3,
+                    axis1_start=0,
+                    axis1_stop=2,
+                    original_shape=(3, 3),
+                    source="alignment_valid_crop",
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.ones((3, 3), dtype=np.int64)
+            save_widget = cast(Any, opened.save_rois_widget)
+
+            result = save_widget()
+
+            self.assertIn(
+                "ROI Labels layer must use the cropped recording view",
+                str(result),
+            )
+
+    def test_response_update_rejects_full_frame_labels_layer(self) -> None:
+        """Confirm response updates use the same crop-native ROI contract.
+
+        Inputs: cropped recording display plus a stale full-frame Labels image.
+        Outputs: response widget status explains that the layer shape is
+        invalid before analysis runs.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                movie_values=np.arange(27, dtype=np.float64).reshape(3, 3, 3),
+                alignment_valid_crop=SpatialCrop(
+                    axis0_start=1,
+                    axis0_stop=3,
+                    axis1_start=0,
+                    axis1_stop=2,
+                    original_shape=(3, 3),
+                    source="alignment_valid_crop",
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.ones((3, 3), dtype=np.int64)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            response_widget.update_from_current_rois()
+
+            status_text = "\n".join(
+                label.text() for label in response_widget.findChildren(QLabel)
+            )
+            self.assertIn(
+                "ROI Labels layer must use the cropped recording view",
+                status_text,
+            )
 
     def test_recording_folder_selection_loads_recording_layers(self) -> None:
         """Confirm selecting a recording folder populates an empty viewer.

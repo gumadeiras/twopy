@@ -30,7 +30,10 @@ from twopy.napari.paths import (
     resolve_widget_output_path,
 )
 from twopy.napari.protocols import NapariViewer
-from twopy.napari.roi import roi_label_image_from_layer, save_napari_label_rois
+from twopy.napari.roi import (
+    roi_label_image_from_layer_for_recording,
+    save_napari_label_rois,
+)
 from twopy.napari.session import (
     LoadedNapariRecording,
     LoadedRecordingsPanel,
@@ -412,7 +415,15 @@ def _make_twopy_save_rois_widget(state: NapariControlState) -> object:
         """
         if state.roi_labels_layer is None:
             return "No ROI Labels layer is available."
-        label_image = roi_label_image_from_layer(state.roi_labels_layer)
+        if state.recording is None:
+            return "No recording is selected."
+        try:
+            label_image = roi_label_image_from_layer_for_recording(
+                state.roi_labels_layer,
+                state.recording,
+            )
+        except ValueError as error:
+            return str(error)
         if not np.any(label_image > 0):
             return "No ROI labels to save."
 

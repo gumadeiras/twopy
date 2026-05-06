@@ -167,6 +167,9 @@ decided.
   display-axis transposition, then converts drawn Labels ROIs back to full-frame
   movie coordinates before saving or analysis. This keeps the viewer orientation
   natural while preserving the analysis spatial contract.
+- Napari ROI editing is crop-native end to end. Save ROIs and Update Responses
+  require the active Labels layer to match the displayed alignment-valid crop,
+  then persist or analyze full-frame ROI masks with zeros outside that crop.
 - ROI visibility controls hide existing label values without making future
   newly drawn label numbers transparent or forcing them to share one fallback
   color, so users can keep adding ROIs after filtering plots.

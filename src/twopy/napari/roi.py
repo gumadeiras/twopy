@@ -17,6 +17,7 @@ import numpy.typing as npt
 
 from twopy.converted import RecordingData
 from twopy.napari.display import (
+    display_image_from_movie_image,
     display_labels_from_movie_labels,
     movie_labels_from_display_layer,
 )
@@ -32,7 +33,9 @@ from twopy.spatial import SpatialCrop, full_frame_crop
 
 __all__ = [
     "roi_label_image_from_layer",
+    "roi_label_image_from_layer_for_recording",
     "save_napari_label_rois",
+    "validate_roi_layer_matches_recording_crop",
 ]
 
 
@@ -54,6 +57,68 @@ def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
         return movie_labels_from_display_layer(layer)
     data = cast(NapariLayerWithData, layer).data
     return np.asarray(data, dtype=np.int64)
+
+
+def roi_label_image_from_layer_for_recording(
+    layer: object,
+    recording: RecordingData,
+) -> npt.NDArray[np.int64]:
+    """Return full-frame movie-coordinate ROI labels from a crop-native layer.
+
+    Args:
+        layer: Napari Labels layer, or a test layer with ``data``.
+        recording: Loaded converted recording that defines the displayed crop.
+
+    Returns:
+        Full-frame movie-coordinate label image with zeros outside the crop.
+
+    Raises:
+        ValueError: If the Labels layer is not shaped like the recording's
+            displayed alignment-valid crop.
+
+    Napari ROI editing is intentionally crop-native: users see and edit only
+    the pixels that analysis accepts by default. Persisted ROI files stay
+    full-frame so core scripts and analysis have one stable mask shape.
+    """
+    validate_roi_layer_matches_recording_crop(layer, recording)
+    display_labels = np.asarray(cast(NapariLayerWithData, layer).data, dtype=np.int64)
+    crop = recording.alignment_valid_crop
+    movie_crop_labels = display_image_from_movie_image(display_labels)
+    full_frame = np.zeros(crop.original_shape, dtype=np.int64)
+    full_frame[
+        crop.axis0_start : crop.axis0_stop,
+        crop.axis1_start : crop.axis1_stop,
+    ] = movie_crop_labels
+    return full_frame
+
+
+def validate_roi_layer_matches_recording_crop(
+    layer: object,
+    recording: RecordingData,
+) -> None:
+    """Validate that a napari Labels layer matches the displayed recording crop.
+
+    Args:
+        layer: Napari Labels layer, or a test layer with ``data``.
+        recording: Loaded converted recording that defines the displayed crop.
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: If the Labels layer does not have the cropped display
+            shape.
+    """
+    display_labels = np.asarray(cast(NapariLayerWithData, layer).data)
+    crop = recording.alignment_valid_crop
+    expected_shape = (crop.shape[1], crop.shape[0])
+    if display_labels.shape != expected_shape:
+        msg = (
+            "ROI Labels layer must use the cropped recording view. "
+            f"Expected display shape {expected_shape} from "
+            f"{crop.source}; got {display_labels.shape}."
+        )
+        raise ValueError(msg)
 
 
 def save_napari_label_rois(
