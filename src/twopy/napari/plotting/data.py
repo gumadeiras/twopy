@@ -17,6 +17,7 @@ import numpy.typing as npt
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.persistence import load_analysis_outputs
 from twopy.analysis.response_processing import (
+    ResponseProcessingOptions,
     mask_grouped_roi_responses_by_included_rois,
 )
 from twopy.analysis.responses import (
@@ -71,18 +72,22 @@ class ResponsePlotData:
 
     source_path: Path | None
     epochs: tuple[EpochResponsePlotData, ...]
+    response_processing_options: ResponseProcessingOptions | None = None
 
 
 def response_plot_data_from_grouped(
     grouped: GroupedRoiResponses,
     *,
     source_path: Path | None = None,
+    response_processing_options: ResponseProcessingOptions | None = None,
 ) -> ResponsePlotData:
     """Summarize grouped responses into mean and SEM traces for plotting.
 
     Args:
         grouped: Grouped response object from analysis.
         source_path: Optional analysis output path used for display.
+        response_processing_options: Optional processing settings used to
+            produce the grouped responses.
 
     Returns:
         Plot-ready data with one item per stimulus epoch type.
@@ -106,7 +111,11 @@ def response_plot_data_from_grouped(
         )
         for epoch_number, epoch_name in sorted(epoch_keys)
     )
-    return ResponsePlotData(source_path=source_path, epochs=epochs)
+    return ResponsePlotData(
+        source_path=source_path,
+        epochs=epochs,
+        response_processing_options=response_processing_options,
+    )
 
 
 def default_analysis_output_path(recording: RecordingData) -> Path:
@@ -152,12 +161,17 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
                     grouped,
                     included_mask=outputs.correlation_scores.included_mask,
                 )
-            return response_plot_data_from_grouped(grouped, source_path=outputs.path)
+            return response_plot_data_from_grouped(
+                grouped,
+                source_path=outputs.path,
+                response_processing_options=outputs.response_processing_options,
+            )
     if outputs.grouped_responses is None:
         return f"No grouped responses in: {path}"
     return response_plot_data_from_grouped(
         outputs.grouped_responses,
         source_path=outputs.path,
+        response_processing_options=outputs.response_processing_options,
     )
 
 

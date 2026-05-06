@@ -9,6 +9,7 @@ owns validation, math, and persistence of the selected settings.
 
 from collections.abc import Callable
 
+from qtpy.QtCore import QSignalBlocker
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -179,6 +180,58 @@ class ResponseProcessingOptionsWidget(QWidget):
                 ),
             ),
         )
+
+    def set_options(self, options: ResponseProcessingOptions) -> None:
+        """Update controls from typed options without emitting changes.
+
+        Args:
+            options: Processing settings loaded from saved analysis output.
+
+        Returns:
+            None.
+
+        Saved analysis reloads should update the visible controls, but they
+        must not trigger a new preview computation. The loaded plot already
+        reflects these settings.
+        """
+        blockers = [
+            QSignalBlocker(self._smoothing_method),
+            QSignalBlocker(self._smoothing_window_frames),
+            QSignalBlocker(self._smoothing_polynomial_order),
+            QSignalBlocker(self._low_pass_method),
+            QSignalBlocker(self._low_pass_cutoff_hz),
+            QSignalBlocker(self._low_pass_order),
+            QSignalBlocker(self._correlation_reference),
+            QSignalBlocker(self._minimum_correlation),
+            QSignalBlocker(self._correlation_window_start),
+            QSignalBlocker(self._correlation_window_stop),
+            QSignalBlocker(self._correlation_window_has_stop),
+        ]
+        self._set_combo_value(self._smoothing_method, options.smoothing.method)
+        self._smoothing_window_frames.setValue(options.smoothing.window_frames)
+        self._smoothing_polynomial_order.setValue(
+            options.smoothing.polynomial_order,
+        )
+        self._set_combo_value(self._low_pass_method, options.low_pass.method)
+        if options.low_pass.cutoff_hz is not None:
+            self._low_pass_cutoff_hz.setValue(options.low_pass.cutoff_hz)
+        self._low_pass_order.setValue(options.low_pass.order)
+        self._set_combo_value(
+            self._correlation_reference,
+            options.correlation_filter.reference,
+        )
+        self._minimum_correlation.setValue(
+            options.correlation_filter.minimum_correlation,
+        )
+        start_seconds, stop_seconds = options.correlation_filter.window_seconds
+        self._correlation_window_start.setValue(
+            0.0 if start_seconds is None else start_seconds,
+        )
+        self._correlation_window_has_stop.setChecked(stop_seconds is not None)
+        if stop_seconds is not None:
+            self._correlation_window_stop.setValue(stop_seconds)
+        del blockers
+        self._refresh_enabled_state()
 
     def _smoothing_group(self) -> QGroupBox:
         """Create the smoothing control group."""

@@ -574,6 +574,10 @@ class _ResponsePlotWidget(QWidget):
         """
         self._clear_epoch_plot_cache()
         self._plot_data = plot_data
+        if plot_data.response_processing_options is not None:
+            self._load_response_processing_options(
+                plot_data.response_processing_options,
+            )
         self._sync_plot_state(reset_axes=reset_axes)
         self._render_plots()
 
@@ -626,6 +630,22 @@ class _ResponsePlotWidget(QWidget):
             self._update_status_label.setText("Processing settings updated.")
             return
         self._update_status_label.setText("Processing settings updated for next run.")
+
+    def _load_response_processing_options(
+        self,
+        options: ResponseProcessingOptions,
+    ) -> None:
+        """Load saved processing settings into Plot-tab controls.
+
+        Args:
+            options: Processing settings read from analysis persistence.
+
+        Returns:
+            None.
+        """
+        self._response_processing_options = options
+        self._processing_options_widget.set_options(options)
+        self._live_controller.set_response_processing_options(options)
 
     def _sync_plot_state(self, *, reset_axes: bool) -> None:
         """Synchronize option state with currently loaded plot data.

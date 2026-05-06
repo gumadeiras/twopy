@@ -100,4 +100,5 @@ def compute_response_plot_data_from_roi_set(
     return response_plot_data_from_grouped(
         computation.grouped_responses,
         source_path=source_path,
+        response_processing_options=computation.response_processing_options,
     )

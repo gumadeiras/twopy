@@ -42,7 +42,10 @@ from twopy import (
     save_roi_set,
 )
 from twopy.analysis.dff import RoiDeltaFOverF
-from twopy.analysis.response_processing import ResponseProcessingOptions
+from twopy.analysis.response_processing import (
+    ResponseProcessingOptions,
+    SmoothingOptions,
+)
 from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
@@ -721,6 +724,35 @@ class NapariAdapterTest(unittest.TestCase):
             )
 
             self.assertEqual(requests, ["requested"])
+
+    def test_saved_processing_options_update_plot_tab_controls(self) -> None:
+        """Confirm saved analysis settings hydrate Plot-tab controls.
+
+        Inputs: plot data carrying persisted response-processing options.
+        Outputs: response widget controls show the saved smoothing settings.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        options = ResponseProcessingOptions(
+            smoothing=SmoothingOptions(
+                method="savgol",
+                window_frames=11,
+                polynomial_order=3,
+            ),
+        )
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=_tiny_response_plot_data().epochs,
+            response_processing_options=options,
+        )
+
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+
+        self.assertEqual(
+            response_widget._processing_options_widget.options().smoothing,
+            options.smoothing,
+        )
+        self.assertEqual(response_widget._response_processing_options, options)
 
     def test_response_widget_close_shuts_down_live_controller(self) -> None:
         """Confirm closing the response widget releases live-update resources.
