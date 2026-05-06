@@ -15,6 +15,7 @@ from typing import Literal
 import numpy as np
 import numpy.typing as npt
 
+from twopy._segments import true_segments
 from twopy.converted import RecordingData
 
 __all__ = [
@@ -281,7 +282,7 @@ def _detect_events(
         threshold=resolved_threshold,
         polarity=polarity,
     )
-    segments = _active_segments(active)
+    segments = true_segments(active)
     merged_segments = _merge_close_segments(segments, merge_gap_samples)
     events = tuple(
         _event_from_segment(values, start, stop)
@@ -324,26 +325,6 @@ def _threshold_signal(
     if polarity == "above":
         return values > threshold
     return values < threshold
-
-
-def _active_segments(active: npt.NDArray[np.bool_]) -> tuple[tuple[int, int], ...]:
-    """Find contiguous true runs in an active-event mask.
-
-    Args:
-        active: Boolean threshold mask.
-
-    Returns:
-        Tuple of inclusive-start, exclusive-stop index pairs.
-    """
-    if active.size == 0:
-        return ()
-
-    padded = np.concatenate(([False], active, [False]))
-    changes = np.flatnonzero(padded[1:] != padded[:-1])
-    return tuple(
-        (int(changes[index]), int(changes[index + 1]))
-        for index in range(0, len(changes), 2)
-    )
 
 
 def _merge_close_segments(

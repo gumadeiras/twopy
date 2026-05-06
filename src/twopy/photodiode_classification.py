@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
-import numpy.typing as npt
 
+from twopy._segments import constant_segments, true_segments
 from twopy.converted import RecordingData
 from twopy.synchronization import AlignedPhotodiodeEvent, PhotodiodeAlignment
 
@@ -220,7 +220,7 @@ def _stimulus_flash_segments(
     flash_column = _stimulus_column_index(recording, "photodiode_flash")
     flash_values = recording.stimulus_data[:, flash_column]
     active = np.asarray(flash_values > flash_threshold, dtype=np.bool_)
-    segments = _active_segments(active)
+    segments = true_segments(active)
     if len(segments) == 0:
         msg = "stimulus/data photodiode_flash column has no active flash segments"
         raise ValueError(msg)
@@ -241,7 +241,7 @@ def _stimulus_epoch_runs(recording: RecordingData) -> tuple[_StimulusEpochRun, .
     """
     epoch_column = _stimulus_column_index(recording, "epoch_number")
     epoch_numbers = recording.stimulus_data[:, epoch_column].astype(np.int64)
-    all_segments = _constant_segments(epoch_numbers)
+    all_segments = constant_segments(epoch_numbers)
     epoch_runs = tuple(
         _StimulusEpochRun(
             epoch_number=int(epoch_numbers[start]),
@@ -514,41 +514,3 @@ def _epoch_names_by_number(recording: RecordingData) -> dict[int, str]:
         raw_name = parameters.get("epochName", f"epoch_{index}")
         names[index] = str(raw_name)
     return names
-
-
-def _active_segments(active: npt.NDArray[np.bool_]) -> tuple[tuple[int, int], ...]:
-    """Find contiguous true runs in a Boolean vector.
-
-    Args:
-        active: Boolean vector.
-
-    Returns:
-        Tuple of inclusive-start, exclusive-stop index pairs.
-    """
-    if active.size == 0:
-        return ()
-    padded = np.concatenate(([False], active, [False]))
-    changes = np.flatnonzero(padded[1:] != padded[:-1])
-    return tuple(
-        (int(changes[index]), int(changes[index + 1]))
-        for index in range(0, len(changes), 2)
-    )
-
-
-def _constant_segments(values: npt.NDArray[np.int64]) -> tuple[tuple[int, int], ...]:
-    """Find contiguous runs with the same integer value.
-
-    Args:
-        values: One-dimensional integer vector.
-
-    Returns:
-        Tuple of inclusive-start, exclusive-stop index pairs.
-    """
-    if values.size == 0:
-        return ()
-    changes = np.flatnonzero(values[1:] != values[:-1]) + 1
-    starts = np.r_[0, changes]
-    stops = np.r_[changes, values.size]
-    return tuple(
-        (int(start), int(stop)) for start, stop in zip(starts, stops, strict=True)
-    )
