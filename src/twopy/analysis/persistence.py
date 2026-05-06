@@ -77,14 +77,12 @@ def save_analysis_outputs(
     The CSV is intentionally small and summary-only; frame-by-frame values stay
     in HDF5.
     """
-    summary_grouped_responses: GroupedRoiResponses | None = None
-    summary_csv_path: Path | None = None
+    summary_output: tuple[GroupedRoiResponses, Path] | None = None
     if response_summary_csv is not None:
         if grouped_responses is None:
             msg = "response_summary_csv requires grouped_responses"
             raise ValueError(msg)
-        summary_grouped_responses = grouped_responses
-        summary_csv_path = response_summary_csv
+        summary_output = (grouped_responses, response_summary_csv)
 
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -104,7 +102,8 @@ def save_analysis_outputs(
                 grouped_responses,
             )
 
-    if summary_grouped_responses is not None and summary_csv_path is not None:
+    if summary_output is not None:
+        summary_grouped_responses, summary_csv_path = summary_output
         write_response_summary_csv(summary_grouped_responses, summary_csv_path)
 
 

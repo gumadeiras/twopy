@@ -121,8 +121,9 @@ def group_delta_f_over_f_by_epoch(
         window = epoch_window.window
         local_start = window.start_frame - dff.start_frame
         local_stop = window.stop_frame - dff.start_frame
+        frame_count = window.stop_frame - window.start_frame
         frame_numbers = np.arange(window.start_frame, window.stop_frame, dtype=np.int64)
-        time_seconds = np.arange(window.stop_frame - window.start_frame) / data_rate_hz
+        time_seconds = np.arange(frame_count) / data_rate_hz
         trials.append(
             RoiResponseTrial(
                 epoch_number=epoch_window.epoch_number,
