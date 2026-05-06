@@ -5,6 +5,7 @@ Outputs: unittest assertions that confirm basic package metadata is available.
 """
 
 import unittest
+from importlib.metadata import version
 
 import twopy
 
@@ -18,7 +19,7 @@ class ImportTest(unittest.TestCase):
         Inputs: imported twopy module.
         Outputs: a passing assertion when the version matches package metadata.
         """
-        self.assertEqual(twopy.__version__, "0.1.0")
+        self.assertEqual(twopy.__version__, version("twopy"))
 
 
 if __name__ == "__main__":

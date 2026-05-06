@@ -6,7 +6,12 @@ Outputs: assertions that command-line entry points stay wired to the launcher.
 
 import tomllib
 import unittest
+from contextlib import redirect_stdout
+from importlib.metadata import version
+from io import StringIO
 from pathlib import Path
+
+from twopy.napari.launcher import parse_launch_args
 
 
 class PackagingTest(unittest.TestCase):
@@ -26,6 +31,32 @@ class PackagingTest(unittest.TestCase):
             pyproject["project"]["scripts"]["twopy"],
             "twopy.napari:main",
         )
+
+    def test_twopy_cli_prints_version(self) -> None:
+        """Confirm ``twopy --version`` reports package metadata.
+
+        Inputs: launcher argument parser and installed package metadata.
+        Outputs: version text and a clean parser exit.
+        """
+        output = StringIO()
+        with self.assertRaises(SystemExit) as exit_context, redirect_stdout(output):
+            parse_launch_args(["--version"])
+
+        self.assertEqual(exit_context.exception.code, 0)
+        self.assertEqual(output.getvalue().strip(), f"twopy {version('twopy')}")
+
+    def test_twopy_cli_prints_short_version(self) -> None:
+        """Confirm ``twopy -v`` is an alias for ``twopy --version``.
+
+        Inputs: launcher argument parser and installed package metadata.
+        Outputs: version text and a clean parser exit.
+        """
+        output = StringIO()
+        with self.assertRaises(SystemExit) as exit_context, redirect_stdout(output):
+            parse_launch_args(["-v"])
+
+        self.assertEqual(exit_context.exception.code, 0)
+        self.assertEqual(output.getvalue().strip(), f"twopy {version('twopy')}")
 
 
 if __name__ == "__main__":

@@ -9,8 +9,10 @@ analysis workflows belong in dedicated helpers that the controls call.
 """
 
 from argparse import ArgumentParser, Namespace
+from collections.abc import Sequence
 from pathlib import Path
 
+from twopy._version import __version__
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.layout import place_response_options_after_recording_list
 from twopy.napari.loading import resolve_or_convert_launch_recording
@@ -99,17 +101,25 @@ def launch_napari(
     return view
 
 
-def parse_launch_args() -> Namespace:
+def parse_launch_args(args: Sequence[str] | None = None) -> Namespace:
     """Parse command-line arguments for ``python -m twopy.napari``.
 
     Args:
-        None.
+        args: Optional command-line arguments. ``None`` reads from
+            ``sys.argv``.
 
     Returns:
         Parsed argument namespace.
     """
     parser = ArgumentParser(
         description="Launch napari for a twopy-converted recording.",
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"twopy {__version__}",
+        help="Print the current twopy package version and exit.",
     )
     parser.add_argument(
         "recording_data_path",
@@ -152,7 +162,7 @@ def parse_launch_args() -> Namespace:
         action="store_true",
         help="Skip loading movie preview frames and show only the mean image.",
     )
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
 def main() -> None:

@@ -5,6 +5,7 @@ Inputs: none.
 Outputs: package constants and helper functions imported by users and scripts.
 """
 
+from twopy._version import __version__
 from twopy.analysis import (
     DEFAULT_RESPONSE_POST_WINDOW_SECONDS,
     DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
@@ -174,5 +175,3 @@ __all__ = [
     "write_response_summary_grouped_csv",
     "write_response_summary_trials_csv",
 ]
-
-__version__ = "0.1.0"
