@@ -13,7 +13,7 @@ from typing import Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
-from qtpy.QtCore import QPointF, QRectF, Qt
+from qtpy.QtCore import QPointF, QRectF
 from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -249,6 +250,9 @@ def visibility_options_widget(
     button_row.addWidget(all_button)
     button_row.addWidget(none_button)
     layout.addLayout(button_row)
+    list_widget = QWidget()
+    list_layout = QVBoxLayout()
+    list_layout.setContentsMargins(0, 0, 0, 0)
     checkboxes: list[QCheckBox] = []
     for label in labels:
         checkbox = QCheckBox(label)
@@ -257,7 +261,13 @@ def visibility_options_widget(
             lambda _state, item=label, box=checkbox: callback(item, box.isChecked())
         )
         checkboxes.append(checkbox)
-        layout.addWidget(checkbox)
+        list_layout.addWidget(checkbox)
+    list_widget.setLayout(list_layout)
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setWidget(list_widget)
+    scroll.setMaximumHeight(_visibility_list_height(checkboxes, visible_rows=5))
+    layout.addWidget(scroll)
 
     def set_all(checked: bool) -> None:
         """Set all checkboxes and visibility flags together."""
@@ -268,6 +278,27 @@ def visibility_options_widget(
     none_button.clicked.connect(lambda: set_all(False))
     widget.setLayout(layout)
     return widget
+
+
+def _visibility_list_height(
+    checkboxes: list[QCheckBox],
+    *,
+    visible_rows: int,
+) -> int:
+    """Return a compact maximum height for a checkbox list.
+
+    Args:
+        checkboxes: Checkbox widgets in one visibility section.
+        visible_rows: Number of rows to show before scrolling.
+
+    Returns:
+        Pixel height for the scroll area.
+    """
+    if len(checkboxes) == 0:
+        return 0
+    row_height = max(checkbox.sizeHint().height() for checkbox in checkboxes)
+    rows = min(len(checkboxes), visible_rows)
+    return row_height * rows + 8
 
 
 def global_time_bounds(
@@ -488,10 +519,20 @@ def _draw_axes(
             value_min,
             value_max,
         ).y()
-        zero_pen = QPen(grid_color, 1)
-        zero_pen.setStyle(Qt.PenStyle.DashLine)
-        painter.setPen(zero_pen)
+        painter.setPen(_zero_line_pen(grid_color))
         painter.drawLine(QPointF(rect.left(), zero_y), QPointF(rect.right(), zero_y))
+    if time_min <= 0 <= time_max:
+        zero_x = _plot_point(
+            rect,
+            0.0,
+            value_min,
+            time_min,
+            time_max,
+            value_min,
+            value_max,
+        ).x()
+        painter.setPen(_zero_line_pen(grid_color))
+        painter.drawLine(QPointF(zero_x, rect.bottom()), QPointF(zero_x, rect.top()))
 
     painter.setPen(QPen(axis_color, 1))
     for tick in _axis_ticks(time_min, time_max):
@@ -528,6 +569,20 @@ def _draw_axes(
     painter.rotate(-90.0)
     painter.drawText(QPointF(0.0, 0.0), "dF/F")
     painter.restore()
+
+
+def _zero_line_pen(color: QColor) -> QPen:
+    """Create the shared dashed pen for zero-reference plot lines.
+
+    Args:
+        color: Zero-line color.
+
+    Returns:
+        Thick dashed pen used for both ``x=0`` and ``y=0``.
+    """
+    pen = QPen(color, 2)
+    pen.setDashPattern([10.0, 8.0])
+    return pen
 
 
 def _axis_ticks(min_value: float, max_value: float) -> tuple[float, ...]:

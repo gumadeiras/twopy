@@ -94,6 +94,8 @@ def open_recording_in_napari(
         roi_layer = resolved_viewer.add_labels(
             roi_label_image_for_display(roi_set, recording),
             name=roi_layer_name,
+            opacity=0.5,
+            blending="additive",
         )
     controls_widget = None
     controls_dock = None

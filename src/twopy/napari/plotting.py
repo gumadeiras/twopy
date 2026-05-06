@@ -199,8 +199,12 @@ class _ResponsePlotTabs(QTabWidget):
         options_layout.addStretch(1)
         options.setLayout(options_layout)
 
+        options_scroll = QScrollArea()
+        options_scroll.setWidgetResizable(True)
+        options_scroll.setWidget(options)
+
         self.addTab(plot_scroll, "Responses")
-        self.addTab(options, "Options")
+        self.addTab(options_scroll, "Options")
 
     def set_roi_labels_layer(self, roi_labels_layer: object | None) -> None:
         """Store the current editable ROI Labels layer.

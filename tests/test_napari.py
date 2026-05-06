@@ -67,6 +67,7 @@ class _FakeLayer:
 
     name: str
     data: object
+    options: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -145,7 +146,7 @@ class _FakeViewer:
         Returns:
             Fake image layer.
         """
-        layer = _FakeLayer(name=name, data=data)
+        layer = _FakeLayer(name=name, data=data, options=dict(kwargs))
         self.images.append(layer)
         return layer
 
@@ -160,7 +161,7 @@ class _FakeViewer:
         Returns:
             Fake labels layer.
         """
-        layer = _FakeLayer(name=name, data=data)
+        layer = _FakeLayer(name=name, data=data, options=dict(kwargs))
         self.labels.append(layer)
         return layer
 
@@ -228,6 +229,8 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNotNone(opened.response_plot_widget)
             self.assertIsNotNone(opened.response_plot_dock_widget)
             self.assertEqual(len(viewer.labels), 1)
+            self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
+            self.assertEqual(viewer.labels[0].options["blending"], "additive")
             self.assertEqual(len(viewer.window.dock_widgets), 2)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")

@@ -137,7 +137,10 @@ decided.
   now use saved per-trial response time vectors, match ROI trace colors to the
   Labels layer, share axes, preserve two seconds before stimulus onset, extend
   two seconds after stimulus offset when gray interleave frames exist, hide gray
-  epochs by default, and expose ROI/epoch visibility plus manual axis controls.
+  epochs by default, draw thicker dashed zero-reference lines, and expose
+  ROI/epoch visibility plus manual axis controls in scrollable option panels.
+- Napari ROI Labels layers open with 50 percent opacity and additive blending so
+  ROI masks remain visible over the mean image and movie.
 - Launch script for opening napari from a converted output directory, a source
   recording directory with `twopy/recording_data.h5`, or an explicit
   `recording_data.h5` path.
