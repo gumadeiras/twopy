@@ -61,11 +61,13 @@ decided.
 - GUI-independent ROI mask storage in HDF5 with labels.
 - ROI fluorescence trace extraction from converted aligned movies using chunked
   reads.
+- GUI-independent `twopy.analysis` package for analysis-time modules.
 - ROI background-corrected trace extraction with raw, background, and corrected
   arrays kept side by side for audit.
 - Implemented three ROI background modes: no correction, MATLAB-compatible
   global movie percentile subtraction, and local y-neighborhood percentile
   subtraction.
+- Trial/frame-window response helpers live in `twopy.analysis.trials`.
 - Photodiode event segmentation for converted `high_res_pd` and
   `imaging_res_pd` signals.
 - Order-based pairing of high-resolution photodiode events to imaging-frame

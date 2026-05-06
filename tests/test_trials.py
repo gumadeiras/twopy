@@ -14,7 +14,7 @@ from twopy import (
     make_frame_windows,
     split_traces_by_frame_windows,
 )
-from twopy.responses import FrameWindow
+from twopy.analysis.trials import FrameWindow
 from twopy.roi import RoiTraces
 from twopy.synchronization import (
     AlignedPhotodiodeEvent,
