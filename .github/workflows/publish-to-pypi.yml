@@ -1,0 +1,83 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: publish-pypi-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Check release tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="$(
+            python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          print(tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"])
+          PY
+          )"
+
+          if [ "${tag}" != "${version}" ] && [ "${tag}" != "v${version}" ]; then
+            echo "Release tag ${tag} does not match pyproject.toml version ${version}."
+            echo "Use ${version} or v${version}."
+            exit 1
+          fi
+
+      - name: Install build tools
+        run: python3 -m pip install --upgrade build twine
+
+      - name: Build wheel and source distribution
+        run: python3 -m build
+
+      - name: Check package metadata
+        run: python3 -m twine check --strict dist/*
+
+      - name: Store distribution artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: python-package-distributions
+          path: dist/
+          retention-days: 7
+
+  publish:
+    name: Publish distribution to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/twopy
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v6
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@release/v1

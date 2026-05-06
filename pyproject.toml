@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Two-photon imaging analysis tool with a napari interface."
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
   { name = "Gustavo Madeira Santana", email = "fromweb1@gumadeiras.com" },
 ]
