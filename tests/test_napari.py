@@ -39,6 +39,7 @@ from twopy.napari.plotting.data import response_plot_data_from_grouped
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.options import visibility_options_widget
 from twopy.napari.plotting.widgets import (
+    EpochPlotWidget,
     global_time_bounds,
     global_value_bounds,
     roi_colors_from_layer,
@@ -238,15 +239,22 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNotNone(opened.save_rois_dock_widget)
             self.assertIsNotNone(opened.response_plot_widget)
             self.assertIsNotNone(opened.response_plot_dock_widget)
+            self.assertIsNotNone(opened.response_options_widget)
+            self.assertIsNotNone(opened.response_options_dock_widget)
             self.assertEqual(len(viewer.labels), 1)
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
-            self.assertEqual(len(viewer.window.dock_widgets), 3)
+            self.assertEqual(len(viewer.window.dock_widgets), 4)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
             self.assertEqual(viewer.window.dock_widgets[2].name, "twopy save ROIs")
             self.assertEqual(viewer.window.dock_widgets[2].area, "left")
+            self.assertEqual(
+                viewer.window.dock_widgets[3].name,
+                "twopy response options",
+            )
+            self.assertEqual(viewer.window.dock_widgets[3].area, "right")
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
@@ -850,6 +858,46 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(colors[0].blue(), 0)
         self.assertEqual(colors[1].red(), 0)
         self.assertEqual(colors[1].blue(), 255)
+
+    def test_epoch_plot_widget_prefers_square_size(self) -> None:
+        """Confirm response plots ask Qt for a square panel.
+
+        Inputs: plot-ready data for one epoch.
+        Outputs: equal preferred width and height.
+        """
+        _ = QApplication.instance() or QApplication([])
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((2, 1), dtype=np.float64),
+            baseline=np.ones((2, 1), dtype=np.float64),
+            values=np.array([[0.0], [1.0]], dtype=np.float64),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=2,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            interleave_frame_numbers=np.array([0.0]),
+            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),),
+            data_rate_hz=1.0,
+        )
+        plot_data = response_plot_data_from_grouped(grouped)
+
+        widget = EpochPlotWidget(
+            plot_data.epochs[0],
+            show_sem=True,
+            roi_indices=(0,),
+            roi_colors=(QColor("#ff0000"),),
+            time_min=0.0,
+            time_max=1.0,
+            value_min=0.0,
+            value_max=1.0,
+        )
+
+        self.assertEqual(widget.sizeHint().width(), widget.sizeHint().height())
 
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
         """Confirm no-path app launch can start empty instead of failing.

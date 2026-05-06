@@ -123,6 +123,7 @@ def add_twopy_magicgui_controls(
         name="twopy save ROIs",
         area="left",
     )
+    _place_save_rois_dock_before_layer_list(viewer, save_rois_dock_widget)
     return NapariControlDocks(
         load_widget=load_widget,
         load_dock_widget=load_dock_widget,
@@ -332,6 +333,56 @@ def _make_twopy_save_rois_widget(state: NapariControlState) -> object:
     save_rois.roi_save_file.mode = "w"
     save_rois.roi_save_file.label = "ROI save file"
     return save_rois
+
+
+def _place_save_rois_dock_before_layer_list(
+    viewer: NapariViewer,
+    save_rois_dock_widget: object,
+) -> None:
+    """Place Save ROIs between napari layer controls and layer list.
+
+    Args:
+        viewer: Napari viewer that owns the dock widgets.
+        save_rois_dock_widget: Dock widget returned for the Save ROIs panel.
+
+    Returns:
+        None.
+
+    Napari exposes layer controls and layer list as Qt dock widgets. Twopy keeps
+    this layout tweak inside the napari adapter because it is only visual: the
+    ROI save behavior stays in the typed helper above.
+    """
+    try:
+        from qtpy.QtCore import Qt
+    except ImportError:
+        return
+
+    window = viewer.window
+    qt_window = getattr(window, "_qt_window", None)
+    qt_viewer = getattr(window, "_qt_viewer", None)
+    if qt_window is None or qt_viewer is None:
+        return
+
+    layer_controls = getattr(qt_viewer, "dockLayerControls", None)
+    layer_list = getattr(qt_viewer, "dockLayerList", None)
+    if layer_controls is None or layer_list is None:
+        return
+    if not hasattr(qt_window, "splitDockWidget") or not hasattr(
+        qt_window,
+        "resizeDocks",
+    ):
+        return
+
+    qt_window.splitDockWidget(
+        layer_controls,
+        save_rois_dock_widget,
+        Qt.Orientation.Vertical,
+    )
+    qt_window.resizeDocks(
+        [layer_controls, save_rois_dock_widget, layer_list],
+        [layer_controls.minimumHeight(), 120, 10000],
+        Qt.Orientation.Vertical,
+    )
 
 
 def _configure_recording_folder_picker(

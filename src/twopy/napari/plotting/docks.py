@@ -1,8 +1,8 @@
 """Response plotting widgets for the twopy napari adapter.
 
 Inputs: loaded twopy analysis outputs or the current napari Labels ROI layer.
-Outputs: a Qt tab widget showing one response plot per stimulus epoch and a
-small options tab.
+Outputs: Qt widgets showing one response plot per stimulus epoch and a
+separate options panel.
 
 The plotting code only owns GUI state and drawing. When the user asks to update
 responses from the current Labels layer, this module converts labels to a
@@ -19,7 +19,6 @@ from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -54,6 +53,7 @@ from twopy.napari.roi import roi_label_image_from_layer
 from twopy.roi import make_roi_set_from_label_image
 
 __all__ = [
+    "add_twopy_response_options_widget",
     "add_twopy_response_plot_widget",
     "refresh_response_plot_widget",
 ]
@@ -92,6 +92,36 @@ def add_twopy_response_plot_widget(
     return widget, dock_widget
 
 
+def add_twopy_response_options_widget(
+    viewer: NapariViewer,
+    response_plot_widget: object,
+    *,
+    dock_name: str = "twopy response options",
+    dock_area: str = "right",
+) -> tuple[object, object] | tuple[None, None]:
+    """Add the response plot options as a separate napari dock.
+
+    Args:
+        viewer: Napari viewer that should receive the dock widget.
+        response_plot_widget: Widget returned by ``create_response_plot_widget``.
+        dock_name: Dock widget title.
+        dock_area: Napari dock area.
+
+    Returns:
+        ``(widget, dock_widget)`` when the plot widget owns options, otherwise
+        ``(None, None)``.
+    """
+    if not isinstance(response_plot_widget, _ResponsePlotWidget):
+        return None, None
+    widget = response_plot_widget.options_widget()
+    dock_widget = viewer.window.add_dock_widget(
+        widget,
+        name=dock_name,
+        area=dock_area,
+    )
+    return widget, dock_widget
+
+
 def create_response_plot_widget(
     recording: RecordingData | None,
     *,
@@ -105,10 +135,10 @@ def create_response_plot_widget(
             to compute responses from the current ROIs.
 
     Returns:
-        Qt tab widget as a plain object for napari docking.
+        Qt widget as a plain object for napari docking.
     """
     _ensure_qapplication()
-    widget = _ResponsePlotTabs()
+    widget = _ResponsePlotWidget()
     refresh_response_plot_widget(
         widget,
         recording=recording,
@@ -133,7 +163,7 @@ def refresh_response_plot_widget(
     Returns:
         None.
     """
-    if not isinstance(widget, _ResponsePlotTabs):
+    if not isinstance(widget, _ResponsePlotWidget):
         return
     widget.set_roi_labels_layer(roi_labels_layer)
     if recording is None:
@@ -157,11 +187,11 @@ def _ensure_qapplication() -> None:
         QApplication([])
 
 
-class _ResponsePlotTabs(QTabWidget):
-    """Qt tabs for response plots and plot options."""
+class _ResponsePlotWidget(QWidget):
+    """Qt widget for response plots plus a separately docked options panel."""
 
     def __init__(self) -> None:
-        """Create empty response plotting tabs."""
+        """Create empty response plots and an options panel."""
         super().__init__()
         self._recording: RecordingData | None = None
         self._roi_labels_layer: object | None = None
@@ -183,6 +213,10 @@ class _ResponsePlotTabs(QTabWidget):
         plot_scroll = QScrollArea()
         plot_scroll.setWidgetResizable(True)
         plot_scroll.setWidget(plot_content)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(plot_scroll)
+        self.setLayout(layout)
 
         options = QWidget()
         options_layout = QVBoxLayout()
@@ -210,9 +244,18 @@ class _ResponsePlotTabs(QTabWidget):
         options_scroll = QScrollArea()
         options_scroll.setWidgetResizable(True)
         options_scroll.setWidget(options)
+        self._options_scroll = options_scroll
 
-        self.addTab(plot_scroll, "Responses")
-        self.addTab(options_scroll, "Options")
+    def options_widget(self) -> object:
+        """Return the separately docked response-options widget.
+
+        Args:
+            None.
+
+        Returns:
+            Scrollable Qt widget with response plot controls.
+        """
+        return self._options_scroll
 
     def set_roi_labels_layer(self, roi_labels_layer: object | None) -> None:
         """Store the current editable ROI Labels layer.

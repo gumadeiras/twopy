@@ -14,7 +14,10 @@ from typing import cast
 from twopy.converted import load_converted_recording
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
-from twopy.napari.plotting import add_twopy_response_plot_widget
+from twopy.napari.plotting import (
+    add_twopy_response_options_widget,
+    add_twopy_response_plot_widget,
+)
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import resolve_roi_save_file, roi_label_image_for_display
 from twopy.napari.types import NapariRecordingView
@@ -103,6 +106,8 @@ def open_recording_in_napari(
     save_rois_dock = None
     response_plot_widget = None
     response_plot_dock = None
+    response_options_widget = None
+    response_options_dock = None
     if add_controls:
         response_plot_widget, response_plot_dock = add_twopy_response_plot_widget(
             resolved_viewer,
@@ -124,6 +129,12 @@ def open_recording_in_napari(
         controls_dock = control_docks.load_dock_widget
         save_rois_widget = control_docks.save_rois_widget
         save_rois_dock = control_docks.save_rois_dock_widget
+        response_options_widget, response_options_dock = (
+            add_twopy_response_options_widget(
+                resolved_viewer,
+                response_plot_widget,
+            )
+        )
 
     return NapariRecordingView(
         viewer=resolved_viewer,
@@ -137,6 +148,8 @@ def open_recording_in_napari(
         save_rois_dock_widget=save_rois_dock,
         response_plot_widget=response_plot_widget,
         response_plot_dock_widget=response_plot_dock,
+        response_options_widget=response_options_widget,
+        response_options_dock_widget=response_options_dock,
     )
 
 

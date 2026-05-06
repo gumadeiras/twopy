@@ -53,7 +53,10 @@ def launch_napari(
     movie_range = (int(movie_start_frame), movie_end_frame) if load_movie else None
     viewer = create_viewer()
     if resolved_recording is None:
-        from twopy.napari.plotting import add_twopy_response_plot_widget
+        from twopy.napari.plotting import (
+            add_twopy_response_options_widget,
+            add_twopy_response_plot_widget,
+        )
 
         response_plot_widget, _response_plot_dock = add_twopy_response_plot_widget(
             viewer,
@@ -69,6 +72,7 @@ def launch_napari(
             ),
             response_plot_widget=response_plot_widget,
         )
+        add_twopy_response_options_widget(viewer, response_plot_widget)
         view = None
     else:
         paths = resolved_recording.paths

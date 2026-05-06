@@ -12,9 +12,9 @@ from typing import Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
-from qtpy.QtCore import QPointF, QRectF
+from qtpy.QtCore import QPointF, QRectF, QSize
 from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
-from qtpy.QtWidgets import QLayout, QWidget
+from qtpy.QtWidgets import QLayout, QSizePolicy, QWidget
 
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
@@ -80,8 +80,19 @@ class EpochPlotWidget(QWidget):
         self._time_max = time_max
         self._value_min = value_min
         self._value_max = value_max
-        self.setMinimumHeight(220)
-        self.setMinimumWidth(640)
+        self.setMinimumSize(360, 360)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    def sizeHint(self) -> QSize:
+        """Return the preferred square size for one epoch plot.
+
+        Args:
+            None.
+
+        Returns:
+            Qt size with equal width and height.
+        """
+        return QSize(360, 360)
 
     def paintEvent(self, a0: QPaintEvent | None) -> None:
         """Draw response traces.
@@ -95,7 +106,7 @@ class EpochPlotWidget(QWidget):
         del a0
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        plot_rect = QRectF(self.rect().adjusted(88, 12, -18, -46))
+        plot_rect = _square_plot_rect(QRectF(self.rect()))
         painter.fillRect(self.rect(), QColor("#20252d"))
         _draw_axes(
             painter=painter,
@@ -132,6 +143,29 @@ class EpochPlotWidget(QWidget):
                 color=color,
             )
         painter.end()
+
+
+def _square_plot_rect(bounds: QRectF) -> QRectF:
+    """Return a square plot rectangle with room for axis labels.
+
+    Args:
+        bounds: Full widget rectangle.
+
+    Returns:
+        Square drawing rectangle inside the widget.
+    """
+    left_margin = 88.0
+    top_margin = 12.0
+    right_margin = 18.0
+    bottom_margin = 46.0
+    side = max(
+        1.0,
+        min(
+            bounds.width() - left_margin - right_margin,
+            bounds.height() - top_margin - bottom_margin,
+        ),
+    )
+    return QRectF(left_margin, top_margin, side, side)
 
 
 def clear_layout(layout: QLayout) -> None:

@@ -131,23 +131,23 @@ decided.
   `rois.h5`, and loads the full movie by default.
 - Napari controls use intuitive ROI file labels and a compact movie frame range
   slider.
-- Napari has an initial top response plotting dock with tabs for epoch response
-  plots and plot options; it can reload persisted analysis outputs or update
-  plots from the current Labels ROIs through the core analysis workflow. Plots
-  now lay out horizontally, use saved per-trial response time vectors, match ROI
-  trace colors to the Labels layer, share axes, preserve two seconds before
-  stimulus onset, extend two seconds after stimulus offset when gray interleave
-  frames exist, hide gray epochs by default, sort epochs by epoch number, draw
-  thicker dashed zero-reference lines, and expose
-  ROI/epoch visibility plus manual axis controls in scrollable option panels;
-  the ROI selection list shows each ROI's plot color beside its name, and
-  deselecting an ROI also hides that ROI in the napari Labels overlay without
-  editing label pixels.
+- Napari has a top response plotting dock and a separate right-side response
+  options dock; it can reload persisted analysis outputs or update plots from
+  the current Labels ROIs through the core analysis workflow. Plots now lay out
+  horizontally with square panels, use saved per-trial response time vectors,
+  match ROI trace colors to the Labels layer, share axes, preserve two seconds
+  before stimulus onset, extend two seconds after stimulus offset when gray
+  interleave frames exist, hide gray epochs by default, sort epochs by epoch
+  number, draw thicker dashed zero-reference lines, and expose ROI/epoch
+  visibility plus manual axis controls in scrollable option panels; the ROI
+  selection list shows each ROI's plot color beside its name, and deselecting an
+  ROI also hides that ROI in the napari Labels overlay without editing label
+  pixels.
 - Napari recording controls show the loaded path tail instead of `default`
-  after a selection, and the Save ROIs control lives in a left-side dock instead
-  of duplicating ROI save fields in the recording-load panel.
+  after a selection, and the Save ROIs control lives in a left-side dock placed
+  between napari's layer controls and layer list.
 - Napari response plotting code is scoped under `twopy.napari.plotting` with
-  separate modules for plot data, option controls, drawing widgets, and tabs.
+  separate modules for plot data, option controls, drawing widgets, and docks.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
 - Launch script for opening napari from a converted output directory, a source

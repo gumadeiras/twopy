@@ -71,7 +71,7 @@ def axis_options_widget(
     layout.addWidget(y_max_spin, 4, 1)
 
     def update_bounds() -> None:
-        """Pass current spin-box values back to the tabs widget."""
+        """Pass current spin-box values back to the response widget."""
         callback(
             x_min=x_min_spin.value(),
             x_max=x_max_spin.value(),
