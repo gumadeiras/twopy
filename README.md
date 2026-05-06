@@ -2,7 +2,19 @@
 
 Two-photon imaging analysis tool with a napari interface.
 
-## Setup
+## Getting Started
+
+twopy lets you open two-photon recordings, draw ROIs, save them, and plot
+responses in real time.
+
+When you first load a recording, twopy converts it to a standardized HDF5 format.
+The converted format includes the aligned movie, mean image, stimulus tables,
+photodiode signals, and  recording metadata. Analysis and the GUI both work from
+the converted files, so the original source files remain separate from twopy's outputs.
+
+### Install
+
+Run this once from the twopy folder to install everything you need:
 
 ```sh
 micromamba env create -f environment.yml
@@ -11,6 +23,57 @@ micromamba run -n twopy pre-commit install
 cp config.example.yml config.yml
 ```
 
+Then edit `config.yml` so the paths match your computer. The example file
+explains each setting in plain language. `config.yml` stays local to your
+machine and is not tracked by git.
+
+If the `twopy` command is missing after setup, refresh the editable install:
+
+```sh
+micromamba run -n twopy python -m pip install -e .
+```
+
+### Start The GUI
+
+Start napari from the twopy environment:
+
+```sh
+micromamba activate twopy
+twopy
+```
+
+Or run it without activating the environment first:
+
+```sh
+micromamba run -n twopy twopy
+```
+
+You can also open a recording directly:
+
+```sh
+twopy /path/to/source/recording
+```
+
+Or direct path to converted HDF5 files:
+
+```sh
+twopy /path/to/recording_data.h5
+```
+
+Inside napari, use the `twopy` panel to choose a recording folder or a
+`recording_data.h5` file. If a source recording has not been converted yet,
+twopy converts it first, then opens the converted files.
+
+Basic GUI flow:
+
+1. Start twopy.
+2. Choose a recording.
+3. Draw or edit ROIs in the `rois` Labels layer.
+4. Click Save ROIs.
+5. Use the response plot panel to update plots from the current ROIs.
+
+## Setup Details
+
 The environment installs twopy as an editable package, so the `twopy` terminal
 command is available after activating the environment. If the environment
 already existed before the command was added, refresh the editable install:
@@ -18,10 +81,6 @@ already existed before the command was added, refresh the editable install:
 ```sh
 micromamba run -n twopy python -m pip install -e .
 ```
-
-Edit `config.yml` after copying it. The example file describes every field in
-plain language. `config.yml` stays local to your machine and is not tracked by
-git.
 
 ## Check
 
@@ -162,12 +221,13 @@ By default the launcher opens the mean image, the full movie, an editable
 Save ROIs dock. Use `--no-movie` to skip the movie preview, or `--movie-start`
 and `--movie-end` to choose a different preview range. Save ROIs writes
 `rois.h5` beside the current recording by default. The response dock can reload
-existing `analysis_outputs.h5` or update plots from the current Labels layer. Response
-plots share one y-axis across epochs and show two seconds before stimulus onset
-and two seconds after stimulus offset by default, when gray interleave frames
-are available in the grouped responses. Epoch plots are laid out horizontally.
-Each saved response trial includes its own `time_seconds` vector, so plots use
-direct response time values rather than inferring time from array indices.
+existing `analysis_outputs.h5` or update plots from the current Labels layer.
+Response plots share one y-axis across epochs and show two seconds before
+stimulus onset and two seconds after stimulus offset by default, when gray
+interleave frames are available in the grouped responses. Epoch plots are laid
+out horizontally. Each saved response trial includes its own `time_seconds`
+vector, so plots use direct response time values rather than inferring time from
+array indices.
 
 ```python
 from pathlib import Path
