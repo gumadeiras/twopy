@@ -12,7 +12,7 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
 from twopy.napari.controls import add_twopy_magicgui_controls
-from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
+from twopy.napari.loading import resolve_or_convert_launch_recording
 from twopy.napari.types import NapariRecordingView
 from twopy.napari.viewer import create_viewer, open_recording_in_napari
 
@@ -31,10 +31,10 @@ def launch_napari(
     """Launch napari and start the event loop.
 
     Args:
-        recording_data_path: Optional path to ``recording_data.h5``. When
-            omitted, twopy opens the current directory or ``./twopy`` recording
-            if one exists; otherwise it opens an empty viewer with folder-based
-            recording selection.
+        recording_data_path: Optional path to a source recording, converted
+            folder, or ``recording_data.h5``. When omitted, twopy opens the
+            current directory or ``./twopy`` recording if one exists; otherwise
+            it opens an empty viewer with folder-based recording selection.
         roi_file_to_load: Optional saved ROI HDF5 path to reopen.
         roi_save_file: Optional ROI output path for the Save ROIs button.
         movie_start_frame: First movie preview frame.
@@ -46,14 +46,13 @@ def launch_napari(
         ``NapariRecordingView`` when a recording is loaded at startup,
         otherwise ``None``.
 
-    This is the script-facing launcher. It keeps command-line convenience
-    separate from the core GUI adapter so a future plugin can still call
-    ``open_recording_in_napari`` directly.
+    This is the script-facing launcher. It may convert source data before
+    opening napari, but all analysis still starts from converted HDF5 files.
     """
-    resolved_recording_path = resolve_launch_recording_path(recording_data_path)
+    resolved_recording = resolve_or_convert_launch_recording(recording_data_path)
     movie_range = (int(movie_start_frame), movie_end_frame) if load_movie else None
     viewer = create_viewer()
-    if resolved_recording_path is None:
+    if resolved_recording is None:
         from twopy.napari.plotting import add_twopy_response_plot_widget
 
         response_plot_widget, _response_plot_dock = add_twopy_response_plot_widget(
@@ -72,7 +71,7 @@ def launch_napari(
         )
         view = None
     else:
-        paths = resolve_recording_paths(resolved_recording_path)
+        paths = resolved_recording.paths
         view = open_recording_in_napari(
             paths.recording_data_path,
             viewer=viewer,
@@ -105,9 +104,9 @@ def parse_launch_args() -> Namespace:
         nargs="?",
         type=Path,
         help=(
-            "Path to recording_data.h5. If omitted, twopy checks the current "
-            "directory and ./twopy/recording_data.h5, then opens an empty "
-            "viewer if neither exists."
+            "Path to a source recording, converted folder, or recording_data.h5. "
+            "If omitted, twopy checks the current directory and ./twopy output, "
+            "then opens an empty viewer if neither exists."
         ),
     )
     parser.add_argument(

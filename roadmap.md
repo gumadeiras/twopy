@@ -138,12 +138,14 @@ decided.
   Labels layer, share axes, preserve two seconds before stimulus onset, extend
   two seconds after stimulus offset when gray interleave frames exist, hide gray
   epochs by default, draw thicker dashed zero-reference lines, and expose
-  ROI/epoch visibility plus manual axis controls in scrollable option panels.
+  ROI/epoch visibility plus manual axis controls in scrollable option panels;
+  the ROI selection list shows each ROI's plot color beside its name.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
 - Launch script for opening napari from a converted output directory, a source
-  recording directory with `twopy/recording_data.h5`, or an explicit
-  `recording_data.h5` path.
+  recording directory, or an explicit `recording_data.h5` path. When a source
+  recording has no converted twopy files yet, napari runs conversion first and
+  then opens the converted HDF5 files.
 - `twopy` terminal command registered as the application launcher for napari.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
   snake_case twopy field names such as `rig_name`.

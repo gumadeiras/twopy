@@ -31,16 +31,15 @@ from twopy.napari.plot_data import (
     load_response_plot_data,
     response_plot_data_from_grouped,
 )
+from twopy.napari.plot_options import axis_options_widget, visibility_options_widget
 from twopy.napari.plot_widgets import (
     EpochPlotWidget,
-    axis_options_widget,
     clear_layout,
     epoch_key_label,
     global_time_bounds,
     global_value_bounds,
     ordered_bounds,
     roi_colors_from_layer,
-    visibility_options_widget,
 )
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import roi_label_image_from_layer
@@ -394,12 +393,17 @@ class _ResponsePlotTabs(QTabWidget):
             on_change=self._set_manual_axis_bounds,
         )
         self._dynamic_options_layout.addWidget(axis_widget)
+        roi_colors = roi_colors_from_layer(
+            self._roi_labels_layer,
+            len(self._roi_labels()),
+        )
         self._dynamic_options_layout.addWidget(
             visibility_options_widget(
                 title="ROIs",
                 labels=self._roi_labels(),
                 visibility=self._roi_visibility,
                 on_change=self._set_roi_visibility,
+                colors=roi_colors,
             ),
         )
         self._dynamic_options_layout.addWidget(

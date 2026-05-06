@@ -138,19 +138,22 @@ behavior for audit comparisons.
 ## Open In Napari
 
 From a converted output directory that contains `recording_data.h5`, or from a
-source recording directory that contains `twopy/recording_data.h5`:
+source recording directory:
 
 ```sh
 twopy
 ```
 
-If no recording is found, `twopy` still opens napari. Choose a recording folder
-or `recording_data.h5` in the `twopy` dock panel; twopy loads it after
+If converted files are missing and the selected folder has the expected source
+recording files, twopy runs conversion first and then opens the converted HDF5
+files. If no recording is found, `twopy` still opens napari. Choose a recording
+folder or `recording_data.h5` in the `twopy` dock panel; twopy loads it after
 selection.
 
-Or pass the converted recording explicitly:
+Or pass a source folder or converted recording explicitly:
 
 ```sh
+twopy /path/to/source/recording
 twopy /path/to/recording_data.h5
 ```
 

@@ -2,13 +2,12 @@
 
 Inputs: plot-ready response data, ROI visibility state, and napari Labels
 colors.
-Outputs: Qt widgets that draw response traces and expose simple plot options.
+Outputs: Qt widgets that draw response traces.
 
-This module owns drawing and small option controls only. It does not load
-recordings or compute analysis outputs.
+This module owns drawing helpers only. It does not load recordings, compute
+analysis outputs, or build option panels.
 """
 
-from collections.abc import Callable
 from typing import Protocol, cast
 
 import numpy as np
@@ -16,13 +15,6 @@ import numpy.typing as npt
 from qtpy.QtCore import QPointF, QRectF
 from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
 from qtpy.QtWidgets import (
-    QCheckBox,
-    QDoubleSpinBox,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -31,14 +23,12 @@ from twopy.napari.plot_data import EpochResponsePlotData, ResponsePlotData
 
 __all__ = [
     "EpochPlotWidget",
-    "axis_options_widget",
     "clear_layout",
     "epoch_key_label",
     "global_time_bounds",
     "global_value_bounds",
     "ordered_bounds",
     "roi_colors_from_layer",
-    "visibility_options_widget",
 ]
 
 
@@ -55,10 +45,6 @@ class _LabelsColorLayer(Protocol):
             RGBA-like color object.
         """
         ...
-
-
-type CallableAxisBounds = Callable[..., None]
-type CallableVisibility = Callable[[str, bool], None]
 
 
 class EpochPlotWidget(QWidget):
@@ -166,139 +152,6 @@ def clear_layout(layout: QVBoxLayout) -> None:
         widget = item.widget()
         if widget is not None:
             widget.deleteLater()
-
-
-def axis_options_widget(
-    *,
-    x_min: float,
-    x_max: float,
-    y_min: float,
-    y_max: float,
-    on_change: object,
-) -> QWidget:
-    """Create manual axis-bound controls.
-
-    Args:
-        x_min: Initial x-axis minimum.
-        x_max: Initial x-axis maximum.
-        y_min: Initial y-axis minimum.
-        y_max: Initial y-axis maximum.
-        on_change: Callback receiving named axis bounds.
-
-    Returns:
-        Qt widget containing four numeric inputs.
-    """
-    callback = cast(CallableAxisBounds, on_change)
-    widget = QWidget()
-    layout = QGridLayout()
-    layout.addWidget(QLabel("Axis limits"), 0, 0, 1, 2)
-    x_min_spin = _axis_spin_box(x_min)
-    x_max_spin = _axis_spin_box(x_max)
-    y_min_spin = _axis_spin_box(y_min)
-    y_max_spin = _axis_spin_box(y_max)
-    layout.addWidget(QLabel("x min"), 1, 0)
-    layout.addWidget(x_min_spin, 1, 1)
-    layout.addWidget(QLabel("x max"), 2, 0)
-    layout.addWidget(x_max_spin, 2, 1)
-    layout.addWidget(QLabel("y min"), 3, 0)
-    layout.addWidget(y_min_spin, 3, 1)
-    layout.addWidget(QLabel("y max"), 4, 0)
-    layout.addWidget(y_max_spin, 4, 1)
-
-    def update_bounds() -> None:
-        """Pass current spin-box values back to the tabs widget."""
-        callback(
-            x_min=x_min_spin.value(),
-            x_max=x_max_spin.value(),
-            y_min=y_min_spin.value(),
-            y_max=y_max_spin.value(),
-        )
-
-    x_min_spin.valueChanged.connect(update_bounds)
-    x_max_spin.valueChanged.connect(update_bounds)
-    y_min_spin.valueChanged.connect(update_bounds)
-    y_max_spin.valueChanged.connect(update_bounds)
-    widget.setLayout(layout)
-    return widget
-
-
-def visibility_options_widget(
-    *,
-    title: str,
-    labels: tuple[str, ...],
-    visibility: dict[str, bool],
-    on_change: object,
-) -> QWidget:
-    """Create select-all/select-none checkboxes for plot visibility.
-
-    Args:
-        title: Section label.
-        labels: Checkbox labels.
-        visibility: Current visibility by label.
-        on_change: Callback receiving ``(label, visible)``.
-
-    Returns:
-        Qt widget containing controls.
-    """
-    callback = cast(CallableVisibility, on_change)
-    widget = QWidget()
-    layout = QVBoxLayout()
-    layout.addWidget(QLabel(title))
-    button_row = QHBoxLayout()
-    all_button = QPushButton("Select all")
-    none_button = QPushButton("None")
-    button_row.addWidget(all_button)
-    button_row.addWidget(none_button)
-    layout.addLayout(button_row)
-    list_widget = QWidget()
-    list_layout = QVBoxLayout()
-    list_layout.setContentsMargins(0, 0, 0, 0)
-    checkboxes: list[QCheckBox] = []
-    for label in labels:
-        checkbox = QCheckBox(label)
-        checkbox.setChecked(visibility.get(label, True))
-        checkbox.stateChanged.connect(
-            lambda _state, item=label, box=checkbox: callback(item, box.isChecked())
-        )
-        checkboxes.append(checkbox)
-        list_layout.addWidget(checkbox)
-    list_widget.setLayout(list_layout)
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setWidget(list_widget)
-    scroll.setMaximumHeight(_visibility_list_height(checkboxes, visible_rows=5))
-    layout.addWidget(scroll)
-
-    def set_all(checked: bool) -> None:
-        """Set all checkboxes and visibility flags together."""
-        for checkbox in checkboxes:
-            checkbox.setChecked(checked)
-
-    all_button.clicked.connect(lambda: set_all(True))
-    none_button.clicked.connect(lambda: set_all(False))
-    widget.setLayout(layout)
-    return widget
-
-
-def _visibility_list_height(
-    checkboxes: list[QCheckBox],
-    *,
-    visible_rows: int,
-) -> int:
-    """Return a compact maximum height for a checkbox list.
-
-    Args:
-        checkboxes: Checkbox widgets in one visibility section.
-        visible_rows: Number of rows to show before scrolling.
-
-    Returns:
-        Pixel height for the scroll area.
-    """
-    if len(checkboxes) == 0:
-        return 0
-    row_height = max(checkbox.sizeHint().height() for checkbox in checkboxes)
-    rows = min(len(checkboxes), visible_rows)
-    return row_height * rows + 8
 
 
 def global_time_bounds(
@@ -421,23 +274,6 @@ def ordered_bounds(min_value: float, max_value: float) -> tuple[float, float]:
     if min_value > max_value:
         return max_value, min_value
     return min_value - 0.5, max_value + 0.5
-
-
-def _axis_spin_box(value: float) -> QDoubleSpinBox:
-    """Create one numeric axis-limit input.
-
-    Args:
-        value: Initial value.
-
-    Returns:
-        Configured spin box.
-    """
-    spin_box = QDoubleSpinBox()
-    spin_box.setRange(-1_000_000.0, 1_000_000.0)
-    spin_box.setDecimals(3)
-    spin_box.setSingleStep(0.1)
-    spin_box.setValue(value)
-    return spin_box
 
 
 def _selected_epochs(

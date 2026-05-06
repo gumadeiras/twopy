@@ -18,11 +18,11 @@ from magicgui.widgets import FileEdit
 
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
+from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import (
     PathInput,
     is_default_path,
-    resolve_recording_paths,
     resolve_widget_output_path,
 )
 from twopy.napari.plotting import refresh_response_plot_widget
@@ -111,7 +111,7 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         state: Mutable napari control state.
 
     Returns:
-        magicgui container with Load Recording and Save ROIs buttons.
+        magicgui container with recording-load and Save ROIs controls.
     """
     from magicgui import magicgui
     from magicgui.widgets import Container, Label
@@ -136,11 +136,12 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         movie_frame_range: tuple[int, int] = (0, default_movie_end_frame),
         load_movie: bool = True,
     ) -> str:
-        """Load a converted recording into the current napari viewer.
+        """Load a recording into the current napari viewer.
 
         Args:
-            recording_folder: Converted folder, source recording folder with
-                ``twopy`` output, or direct ``recording_data.h5`` path.
+            recording_folder: Source recording folder, converted folder, or
+                direct ``recording_data.h5`` path. Source folders are converted
+                first when twopy output does not exist yet.
             roi_file_to_load: Optional existing ROI HDF5 file. ``default`` uses
                 ``rois.h5`` in the selected recording folder when it exists.
             roi_save_file: Output path used by Save ROIs after loading.
@@ -161,8 +162,9 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
             recording_folder,
             state,
         )
-        paths = resolve_recording_paths(selected_recording_path)
         try:
+            resolved_recording = resolve_or_convert_recording(selected_recording_path)
+            paths = resolved_recording.paths
             roi_path = (
                 paths.roi_file_to_load
                 if is_default_path(roi_file_to_load)
@@ -216,7 +218,10 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
                 recording=view.recording,
                 roi_labels_layer=view.roi_labels_layer,
             )
-            return f"Loaded {paths.recording_data_path}"
+            status = (
+                "Converted and loaded" if resolved_recording.was_converted else "Loaded"
+            )
+            return f"{status} {paths.recording_data_path}"
         finally:
             state.is_loading = False
 

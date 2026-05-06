@@ -11,9 +11,12 @@ from dataclasses import dataclass
 from os import chdir, environ
 from pathlib import Path
 from typing import Any, Protocol, cast
+from unittest.mock import patch
 
 import h5py
 import numpy as np
+from qtpy.QtGui import QColor
+from qtpy.QtWidgets import QApplication, QWidget
 
 from twopy import (
     add_twopy_magicgui_controls,
@@ -27,9 +30,12 @@ from twopy import (
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
+from twopy.conversion.types import ConvertedRecording
+from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 from twopy.napari.plot_data import response_plot_data_from_grouped
+from twopy.napari.plot_options import visibility_options_widget
 from twopy.napari.plot_widgets import (
     global_time_bounds,
     global_value_bounds,
@@ -479,6 +485,118 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(paths.roi_file_to_load, roi_path.resolve())
             self.assertEqual(paths.roi_save_file, roi_path.resolve())
 
+    def test_recording_path_resolution_converts_source_folder_when_output_missing(
+        self,
+    ) -> None:
+        """Confirm source folders are converted before napari opens them.
+
+        Inputs: source-shaped recording folder without twopy output.
+        Outputs: converted paths plus a flag saying conversion ran.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_dir = Path(temp_dir)
+            _write_source_recording_shape(source_dir)
+
+            with patch(
+                "twopy.napari.loading.convert_recording_to_twopy",
+                side_effect=_fake_convert_recording,
+            ) as convert:
+                resolved = resolve_or_convert_recording(source_dir)
+
+            self.assertTrue(resolved.was_converted)
+            convert.assert_called_once_with(source_dir.resolve())
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (source_dir / "twopy" / "recording_data.h5").resolve(),
+            )
+            self.assertEqual(
+                resolved.paths.movie_path,
+                (source_dir / "twopy" / "aligned_movie.h5").resolve(),
+            )
+
+    def test_recording_path_resolution_repairs_missing_converted_movie(self) -> None:
+        """Confirm incomplete source-local twopy output is regenerated in place.
+
+        Inputs: source-shaped folder with ``twopy/recording_data.h5`` but no
+            ``aligned_movie.h5``.
+        Outputs: conversion called with that existing output directory.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_dir = Path(temp_dir)
+            output_dir = source_dir / "twopy"
+            _write_source_recording_shape(source_dir)
+            output_dir.mkdir()
+            (output_dir / "recording_data.h5").touch()
+
+            with patch(
+                "twopy.napari.loading.convert_recording_to_twopy",
+                side_effect=_fake_convert_recording,
+            ) as convert:
+                resolved = resolve_or_convert_recording(source_dir)
+
+            self.assertTrue(resolved.was_converted)
+            convert.assert_called_once_with(
+                source_dir.resolve(),
+                output_dir=output_dir.resolve(),
+            )
+            self.assertEqual(
+                resolved.paths.movie_path,
+                (output_dir / "aligned_movie.h5").resolve(),
+            )
+
+    def test_recording_path_resolution_repairs_mirrored_output_from_source_attr(
+        self,
+    ) -> None:
+        """Confirm missing movie repair works outside the source folder.
+
+        Inputs: converted ``recording_data.h5`` with a ``source_session_dir``
+            attribute and no ``aligned_movie.h5``.
+        Outputs: conversion called with the selected converted output folder.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = root / "source"
+            output_dir = root / "converted"
+            _write_source_recording_shape(source_dir)
+            output_dir.mkdir()
+            with h5py.File(output_dir / "recording_data.h5", "w") as h5_file:
+                h5_file.attrs["source_session_dir"] = str(source_dir)
+
+            with patch(
+                "twopy.napari.loading.convert_recording_to_twopy",
+                side_effect=_fake_convert_recording,
+            ) as convert:
+                resolved = resolve_or_convert_recording(output_dir)
+
+            self.assertTrue(resolved.was_converted)
+            convert.assert_called_once_with(
+                source_dir.resolve(),
+                output_dir=output_dir.resolve(),
+            )
+            self.assertEqual(
+                resolved.paths.movie_path,
+                (output_dir / "aligned_movie.h5").resolve(),
+            )
+
+    def test_roi_visibility_options_show_color_swatches(self) -> None:
+        """Confirm ROI visibility rows include color squares.
+
+        Inputs: two ROI labels and two Qt colors.
+        Outputs: option widget with swatch styles for both colors.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = visibility_options_widget(
+            title="ROIs",
+            labels=("roi_1", "roi_2"),
+            visibility={"roi_1": True, "roi_2": False},
+            on_change=lambda _label, _visible: None,
+            colors=(QColor("#ff0000"), QColor("#0000ff")),
+        )
+
+        styles = "\n".join(child.styleSheet() for child in widget.findChildren(QWidget))
+        self.assertIn("#ff0000", styles)
+        self.assertIn("#0000ff", styles)
+
     def test_movie_frame_range_accepts_last_default(self) -> None:
         """Confirm empty-launch widget defaults request the full movie.
 
@@ -772,6 +890,63 @@ def _write_converted_recording(root: Path) -> Path:
         frame_counts.attrs["imaging_res_pd_minus_movie"] = 0
         frame_counts.attrs["acquisition_minus_movie"] = 0
     return recording_path
+
+
+def _write_source_recording_shape(root: Path) -> None:
+    """Write the required source file names without real imaging contents.
+
+    Args:
+        root: Temporary source recording folder.
+
+    Returns:
+        None. The folder shape is enough for napari conversion routing tests
+        because the actual converter is patched there.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    stimulus_dir = root / "stimulusData"
+    stimulus_dir.mkdir()
+    for path in (
+        root / "alignedMovie.mat",
+        root / "stimulus_name_changes_001.tif",
+        root / "stimulus_name_changes_001_ch1_disinterleaved_alignment.txt",
+        root / "defaultAlignChannel.txt",
+        root / "highResPd.mat",
+        root / "imageDescription.mat",
+        root / "imagingResPd.mat",
+        stimulus_dir / "filebackup.zip",
+    ):
+        path.touch()
+
+
+def _fake_convert_recording(
+    source_dir: Path,
+    output_dir: Path | None = None,
+    **_kwargs: object,
+) -> ConvertedRecording:
+    """Create tiny placeholder converted files for routing tests.
+
+    Args:
+        source_dir: Source recording folder passed by napari loading.
+        output_dir: Optional output folder requested by napari loading.
+        _kwargs: Ignored converter keyword arguments.
+
+    Returns:
+        Converted recording summary pointing at placeholder files.
+    """
+    destination = output_dir or source_dir / "twopy"
+    destination.mkdir(parents=True, exist_ok=True)
+    recording_path = destination / "recording_data.h5"
+    movie_path = destination / "aligned_movie.h5"
+    recording_path.touch()
+    movie_path.touch()
+    return ConvertedRecording(
+        path=recording_path,
+        movie_path=movie_path,
+        source_session_dir=source_dir,
+        movie_shape=(1, 1, 1),
+        mean_image_start_frame=0,
+        mean_image_stop_frame=1,
+    )
 
 
 if __name__ == "__main__":
