@@ -1,7 +1,7 @@
 """Magicgui controls for the twopy napari adapter.
 
 Inputs: napari viewer, current ROI Labels layer, and paths chosen by the user.
-Outputs: a small dock widget for loading converted recordings and saving ROI
+Outputs: small dock widgets for loading converted recordings and saving ROI
 masks.
 
 The control panel owns GUI callbacks only. Loading recordings and saving ROIs
@@ -34,7 +34,21 @@ from twopy.napari.state import (
     write_last_recording_folder,
 )
 
-__all__ = ["add_twopy_magicgui_controls"]
+__all__ = ["NapariControlDocks", "add_twopy_magicgui_controls"]
+
+
+@dataclass
+class NapariControlDocks:
+    """Dock widgets created for twopy napari controls.
+
+    Inputs: Qt widgets and napari dock objects.
+    Outputs: grouped references for scripts and tests.
+    """
+
+    load_widget: object
+    load_dock_widget: object
+    save_rois_widget: object
+    save_rois_dock_widget: object
 
 
 @dataclass
@@ -54,6 +68,8 @@ class NapariControlState:
     roi_save_file: Path
     recording: RecordingData | None
     response_plot_widget: object | None
+    recording_picker_path: Path | None = None
+    recording_picker_display_text: str = DEFAULT_PATH_TEXT
     is_loading: bool = False
 
 
@@ -66,7 +82,7 @@ def add_twopy_magicgui_controls(
     response_plot_widget: object | None = None,
     dock_name: str = "twopy",
     dock_area: str = "right",
-) -> tuple[object, object]:
+) -> NapariControlDocks:
     """Add the first twopy magicgui control panel to a napari viewer.
 
     Args:
@@ -82,7 +98,7 @@ def add_twopy_magicgui_controls(
         dock_area: Napari dock area.
 
     Returns:
-        ``(widget, dock_widget)`` created by magicgui and napari.
+        Created load and save-ROI widgets plus their napari dock widgets.
 
     The panel is intentionally small. It loads converted recordings and saves
     the current Labels layer through the same helpers used by scripts, so a
@@ -95,23 +111,34 @@ def add_twopy_magicgui_controls(
         recording=recording,
         response_plot_widget=response_plot_widget,
     )
-    widget = _make_twopy_control_widget(state)
-    dock_widget = viewer.window.add_dock_widget(
-        widget,
+    load_widget = _make_twopy_load_widget(state)
+    load_dock_widget = viewer.window.add_dock_widget(
+        load_widget,
         name=dock_name,
         area=dock_area,
     )
-    return widget, dock_widget
+    save_rois_widget = _make_twopy_save_rois_widget(state)
+    save_rois_dock_widget = viewer.window.add_dock_widget(
+        save_rois_widget,
+        name="twopy save ROIs",
+        area="left",
+    )
+    return NapariControlDocks(
+        load_widget=load_widget,
+        load_dock_widget=load_dock_widget,
+        save_rois_widget=save_rois_widget,
+        save_rois_dock_widget=save_rois_dock_widget,
+    )
 
 
-def _make_twopy_control_widget(state: NapariControlState) -> object:
-    """Create a magicgui widget for loading recordings and saving ROIs.
+def _make_twopy_load_widget(state: NapariControlState) -> object:
+    """Create the right-side magicgui widget for loading recordings.
 
     Args:
         state: Mutable napari control state.
 
     Returns:
-        magicgui container with recording-load and Save ROIs controls.
+        magicgui container with recording-load controls.
     """
     from magicgui import magicgui
     from magicgui.widgets import Container, Label
@@ -132,7 +159,6 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
     def load_recording(
         recording_folder: Path = Path(DEFAULT_PATH_TEXT),
         roi_file_to_load: Path = Path(DEFAULT_PATH_TEXT),
-        roi_save_file: Path = Path(DEFAULT_PATH_TEXT),
         movie_frame_range: tuple[int, int] = (0, default_movie_end_frame),
         load_movie: bool = True,
     ) -> str:
@@ -144,8 +170,6 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
                 first when twopy output does not exist yet.
             roi_file_to_load: Optional existing ROI HDF5 file. ``default`` uses
                 ``rois.h5`` in the selected recording folder when it exists.
-            roi_save_file: Output path used by Save ROIs after loading.
-                ``default`` writes ``rois.h5`` in the selected recording folder.
             movie_frame_range: First and last movie frames to load. When the
                 empty-launch widget still shows ``(0, 0)``, twopy resolves it
                 to the recording's full frame range after the folder is
@@ -170,10 +194,6 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
                 if is_default_path(roi_file_to_load)
                 else _resolve_optional_roi_path(roi_file_to_load)
             )
-            resolved_roi_save_file = resolve_widget_output_path(
-                roi_save_file,
-                default=paths.roi_save_file,
-            )
             loaded_recording = _load_recording_for_defaults(
                 recording_data_path=paths.recording_data_path,
                 movie_path=paths.movie_path,
@@ -195,13 +215,13 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
                 paths.recording_data_path,
                 viewer=state.viewer,
                 roi_set=roi_path,
-                roi_save_file=resolved_roi_save_file,
+                roi_save_file=paths.roi_save_file,
                 movie_path=paths.movie_path,
                 movie_frame_range=movie_range,
                 add_controls=False,
             )
             state.roi_labels_layer = view.roi_labels_layer
-            state.roi_save_file = resolved_roi_save_file
+            state.roi_save_file = paths.roi_save_file
             state.recording = view.recording
             write_last_recording_folder(
                 recording_folder_for_state(
@@ -212,7 +232,11 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
             frame_end = _default_movie_end_frame(view.recording)
             load_recording.movie_frame_range.max = frame_end
             load_recording.movie_frame_range.value = movie_range or (0, frame_end)
-            _set_recording_picker_display_default(load_recording.recording_folder)
+            _set_recording_picker_display_path(
+                cast(FileEdit, load_recording.recording_folder),
+                state,
+                paths.recording_data_path.parent,
+            )
             refresh_response_plot_widget(
                 state.response_plot_widget,
                 recording=view.recording,
@@ -225,42 +249,13 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         finally:
             state.is_loading = False
 
-    @magicgui(call_button="Save ROIs", layout="vertical")
-    def save_rois(roi_save_file: Path = Path(DEFAULT_PATH_TEXT)) -> str:
-        """Save current napari ROI labels to twopy ROI HDF5.
-
-        Args:
-            roi_save_file: Destination ROI HDF5 path. ``default`` uses the
-                current recording's default ROI output path.
-
-        Returns:
-            Human-readable status for the dock widget.
-        """
-        if state.roi_labels_layer is None:
-            return "No ROI Labels layer is available."
-        label_image = roi_label_image_from_layer(state.roi_labels_layer)
-        if not np.any(label_image > 0):
-            return "No ROI labels to save."
-
-        resolved_output_path = resolve_widget_output_path(
-            roi_save_file,
-            default=state.roi_save_file,
-        )
-        roi_set = save_napari_label_rois(label_image, resolved_output_path)
-        state.roi_save_file = resolved_output_path
-        return f"Saved {len(roi_set.labels)} ROI(s) to {resolved_output_path}"
-
     load_recording.recording_folder.mode = "d"
     load_recording.roi_file_to_load.mode = "r"
-    load_recording.roi_save_file.mode = "w"
-    save_rois.roi_save_file.mode = "w"
 
     load_recording.recording_folder.label = "recording folder or file"
     load_recording.roi_file_to_load.label = "ROI file to load"
-    load_recording.roi_save_file.label = "ROI save file"
     load_recording.movie_frame_range.label = "movie frames"
     load_recording.load_movie.label = "load movie"
-    save_rois.roi_save_file.label = "ROI save file"
     _configure_recording_folder_picker(
         cast(FileEdit, load_recording.recording_folder),
         state,
@@ -292,12 +287,51 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         widgets=[
             Label(value="Load Recording"),
             load_recording,
-            Label(value="Save ROIs"),
-            save_rois,
         ],
         layout="vertical",
         labels=False,
     )
+
+
+def _make_twopy_save_rois_widget(state: NapariControlState) -> object:
+    """Create the left-side magicgui widget for saving ROI labels.
+
+    Args:
+        state: Mutable napari control state.
+
+    Returns:
+        magicgui widget with one Save ROIs button.
+    """
+    from magicgui import magicgui
+
+    @magicgui(call_button="Save ROIs", layout="vertical")
+    def save_rois(roi_save_file: Path = Path(DEFAULT_PATH_TEXT)) -> str:
+        """Save current napari ROI labels to twopy ROI HDF5.
+
+        Args:
+            roi_save_file: Destination ROI HDF5 path. ``default`` uses the
+                current recording's default ROI output path.
+
+        Returns:
+            Human-readable status for the dock widget.
+        """
+        if state.roi_labels_layer is None:
+            return "No ROI Labels layer is available."
+        label_image = roi_label_image_from_layer(state.roi_labels_layer)
+        if not np.any(label_image > 0):
+            return "No ROI labels to save."
+
+        resolved_output_path = resolve_widget_output_path(
+            roi_save_file,
+            default=state.roi_save_file,
+        )
+        roi_set = save_napari_label_rois(label_image, resolved_output_path)
+        state.roi_save_file = resolved_output_path
+        return f"Saved {len(roi_set.labels)} ROI(s) to {resolved_output_path}"
+
+    save_rois.roi_save_file.mode = "w"
+    save_rois.roi_save_file.label = "ROI save file"
+    return save_rois
 
 
 def _configure_recording_folder_picker(
@@ -315,10 +349,8 @@ def _configure_recording_folder_picker(
     Returns:
         None.
 
-    Magicgui normally uses the visible path field as the next dialog start
-    directory. For twopy that clutters the dock with long recording paths, so
-    the field stays at ``default`` and the remembered/current folder is supplied
-    only when the user clicks the chooser.
+    Magicgui normally shows full paths. Twopy displays a shortened tail path so
+    the useful recording date/folder stays visible in the compact dock.
     """
     widget.choose_btn.changed.disconnect(widget._on_choose_clicked)
 
@@ -335,23 +367,73 @@ def _configure_recording_folder_picker(
         with widget.changed.blocked():
             widget.line_edit.value = str(result)
         load_selected_path(result)
-        _set_recording_picker_display_default(widget)
 
     widget.choose_btn.changed.connect(choose_recording_folder)
-    _set_recording_picker_display_default(widget)
+    if state.recording is not None:
+        _set_recording_picker_display_path(widget, state, state.recording.path.parent)
+    else:
+        _set_recording_picker_display_default(widget, state)
 
 
-def _set_recording_picker_display_default(widget: FileEdit) -> None:
+def _set_recording_picker_display_default(
+    widget: FileEdit,
+    state: NapariControlState,
+) -> None:
     """Show ``default`` instead of a long recording path in the picker field.
 
     Args:
         widget: Recording-folder FileEdit widget.
+        state: Current napari control state.
 
     Returns:
         None.
     """
+    state.recording_picker_path = None
+    state.recording_picker_display_text = DEFAULT_PATH_TEXT
     with widget.changed.blocked():
         widget.line_edit.value = DEFAULT_PATH_TEXT
+
+
+def _set_recording_picker_display_path(
+    widget: FileEdit,
+    state: NapariControlState,
+    path: Path,
+) -> None:
+    """Show a shortened loaded-recording path in the picker field.
+
+    Args:
+        widget: Recording-folder FileEdit widget.
+        state: Current napari control state.
+        path: Loaded recording folder to display and remember.
+
+    Returns:
+        None.
+    """
+    state.recording_picker_path = path.expanduser()
+    state.recording_picker_display_text = _short_path_text(
+        state.recording_picker_path,
+        max_chars=72,
+    )
+    with widget.changed.blocked():
+        widget.line_edit.value = state.recording_picker_display_text
+
+
+def _short_path_text(path: Path, *, max_chars: int) -> str:
+    """Return a compact path string that keeps the folder tail visible.
+
+    Args:
+        path: Path to display.
+        max_chars: Maximum text length.
+
+    Returns:
+        Full path when it fits, otherwise ``...`` plus the path tail.
+    """
+    text = str(path)
+    if path.is_dir() and not text.endswith("/"):
+        text = f"{text}/"
+    if len(text) <= max_chars:
+        return text
+    return f"...{text[-(max_chars - 3) :]}"
 
 
 def _recording_picker_start_path(state: NapariControlState) -> str | None:
@@ -363,6 +445,8 @@ def _recording_picker_start_path(state: NapariControlState) -> str | None:
     Returns:
         Absolute path string, or ``None`` for the platform default.
     """
+    if state.recording_picker_path is not None:
+        return str(state.recording_picker_path.resolve())
     if state.recording is not None:
         return str(state.recording.path.expanduser().parent.resolve())
     remembered_folder = read_last_recording_folder()
@@ -385,8 +469,15 @@ def _resolve_recording_folder_value(
         Selected path, or the current recording when the field shows
         ``default``.
     """
+    if _is_displayed_recording_path(recording_folder, state):
+        if state.recording_picker_path is not None:
+            return state.recording_picker_path
+        if state.recording is not None:
+            return state.recording.path
     if not is_default_path(recording_folder):
         return Path(recording_folder).expanduser()
+    if state.recording_picker_path is not None:
+        return state.recording_picker_path
     if state.recording is not None:
         return state.recording.path
     return Path(recording_folder)
@@ -406,7 +497,30 @@ def _has_recording_to_load(
         ``True`` when a concrete path is selected or a recording is already
         loaded.
     """
-    return not is_default_path(recording_folder) or state.recording is not None
+    return (
+        not is_default_path(recording_folder)
+        or state.recording_picker_path is not None
+        or state.recording is not None
+    )
+
+
+def _is_displayed_recording_path(
+    recording_folder: PathInput,
+    state: NapariControlState,
+) -> bool:
+    """Return whether the picker value is twopy's shortened display text.
+
+    Args:
+        recording_folder: Visible recording picker value.
+        state: Current napari control state.
+
+    Returns:
+        ``True`` when the field text matches the remembered display value.
+    """
+    return (
+        state.recording_picker_path is not None
+        and str(recording_folder) == state.recording_picker_display_text
+    )
 
 
 def _resolve_optional_roi_path(path: PathInput) -> Path | None:

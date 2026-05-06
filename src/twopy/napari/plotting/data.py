@@ -101,9 +101,21 @@ def response_plot_data_from_grouped(
             roi_labels=grouped.roi_labels,
             data_rate_hz=grouped.data_rate_hz,
         )
-        for epoch_number, epoch_name in epoch_keys
+        for epoch_number, epoch_name in sorted(epoch_keys, key=_epoch_sort_key)
     )
     return ResponsePlotData(source_path=source_path, epochs=epochs)
+
+
+def _epoch_sort_key(key: tuple[int, str]) -> tuple[int, str]:
+    """Return the stable display order for epoch plots and controls.
+
+    Args:
+        key: ``(epoch_number, epoch_name)`` pair.
+
+    Returns:
+        Sort key using epoch number first, then name.
+    """
+    return key
 
 
 def default_analysis_output_path(recording: RecordingData) -> Path:

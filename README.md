@@ -158,11 +158,11 @@ twopy /path/to/recording_data.h5
 ```
 
 By default the launcher opens the mean image, the full movie, an editable
-`rois` Labels layer, a response-plot dock, and the `twopy` dock panel. Use
-`--no-movie` to skip the movie preview, or `--movie-start` and `--movie-end` to
-choose a different preview range. The dock panel saves ROIs to `rois.h5` beside
-the current recording by default. The response dock can reload existing
-`analysis_outputs.h5` or update plots from the current Labels layer. Response
+`rois` Labels layer, a response-plot dock, a `twopy` loading dock, and a left
+Save ROIs dock. Use `--no-movie` to skip the movie preview, or `--movie-start`
+and `--movie-end` to choose a different preview range. Save ROIs writes
+`rois.h5` beside the current recording by default. The response dock can reload
+existing `analysis_outputs.h5` or update plots from the current Labels layer. Response
 plots share one y-axis across epochs and show two seconds before stimulus onset
 and two seconds after stimulus offset by default, when gray interleave frames
 are available in the grouped responses. Each saved response trial includes its

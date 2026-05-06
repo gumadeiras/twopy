@@ -29,5 +29,7 @@ class NapariRecordingView:
     roi_labels_layer: object | None
     controls_widget: object | None
     controls_dock_widget: object | None
+    save_rois_widget: object | None
+    save_rois_dock_widget: object | None
     response_plot_widget: object | None
     response_plot_dock_widget: object | None

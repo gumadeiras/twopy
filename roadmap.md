@@ -137,9 +137,13 @@ decided.
   now use saved per-trial response time vectors, match ROI trace colors to the
   Labels layer, share axes, preserve two seconds before stimulus onset, extend
   two seconds after stimulus offset when gray interleave frames exist, hide gray
-  epochs by default, draw thicker dashed zero-reference lines, and expose
+  epochs by default, sort epochs by epoch number, draw thicker dashed
+  zero-reference lines, and expose
   ROI/epoch visibility plus manual axis controls in scrollable option panels;
   the ROI selection list shows each ROI's plot color beside its name.
+- Napari recording controls show the loaded path tail instead of `default`
+  after a selection, and the Save ROIs control lives in a left-side dock instead
+  of duplicating ROI save fields in the recording-load panel.
 - Napari response plotting code is scoped under `twopy.napari.plotting` with
   separate modules for plot data, option controls, drawing widgets, and tabs.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so

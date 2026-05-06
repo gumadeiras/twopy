@@ -99,6 +99,8 @@ def open_recording_in_napari(
         )
     controls_widget = None
     controls_dock = None
+    save_rois_widget = None
+    save_rois_dock = None
     response_plot_widget = None
     response_plot_dock = None
     if add_controls:
@@ -107,7 +109,7 @@ def open_recording_in_napari(
             recording=recording,
             roi_labels_layer=roi_layer,
         )
-        controls_widget, controls_dock = add_twopy_magicgui_controls(
+        control_docks = add_twopy_magicgui_controls(
             resolved_viewer,
             roi_labels_layer=roi_layer,
             roi_save_file=resolve_roi_save_file(
@@ -118,6 +120,10 @@ def open_recording_in_napari(
             recording=recording,
             response_plot_widget=response_plot_widget,
         )
+        controls_widget = control_docks.load_widget
+        controls_dock = control_docks.load_dock_widget
+        save_rois_widget = control_docks.save_rois_widget
+        save_rois_dock = control_docks.save_rois_dock_widget
 
     return NapariRecordingView(
         viewer=resolved_viewer,
@@ -127,6 +133,8 @@ def open_recording_in_napari(
         roi_labels_layer=roi_layer,
         controls_widget=controls_widget,
         controls_dock_widget=controls_dock,
+        save_rois_widget=save_rois_widget,
+        save_rois_dock_widget=save_rois_dock,
         response_plot_widget=response_plot_widget,
         response_plot_dock_widget=response_plot_dock,
     )

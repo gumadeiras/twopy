@@ -97,7 +97,7 @@ class EpochPlotWidget(QWidget):
         del a0
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        plot_rect = QRectF(self.rect().adjusted(60, 12, -18, -46))
+        plot_rect = QRectF(self.rect().adjusted(88, 12, -18, -46))
         painter.fillRect(self.rect(), QColor("#20252d"))
         _draw_axes(
             painter=painter,
@@ -394,14 +394,14 @@ def _draw_axes(
             value_max,
         )
         painter.drawLine(QPointF(point.x() - 4.0, point.y()), point)
-        painter.drawText(QPointF(point.x() - 48.0, point.y() + 4.0), f"{tick:.1f}")
+        painter.drawText(QPointF(point.x() - 56.0, point.y() + 4.0), f"{tick:.1f}")
 
     painter.drawText(
         QPointF(rect.center().x() - 26.0, rect.bottom() + 36.0),
         "Time (s)",
     )
     painter.save()
-    painter.translate(14.0, rect.center().y() + 18.0)
+    painter.translate(18.0, rect.center().y() + 18.0)
     painter.rotate(-90.0)
     painter.drawText(QPointF(0.0, 0.0), "dF/F")
     painter.restore()

@@ -232,14 +232,18 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNotNone(opened.roi_labels_layer)
             self.assertIsNotNone(opened.controls_widget)
             self.assertIsNotNone(opened.controls_dock_widget)
+            self.assertIsNotNone(opened.save_rois_widget)
+            self.assertIsNotNone(opened.save_rois_dock_widget)
             self.assertIsNotNone(opened.response_plot_widget)
             self.assertIsNotNone(opened.response_plot_dock_widget)
             self.assertEqual(len(viewer.labels), 1)
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
-            self.assertEqual(len(viewer.window.dock_widgets), 2)
+            self.assertEqual(len(viewer.window.dock_widgets), 3)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
+            self.assertEqual(viewer.window.dock_widgets[2].name, "twopy save ROIs")
+            self.assertEqual(viewer.window.dock_widgets[2].area, "left")
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
@@ -326,8 +330,7 @@ class NapariAdapterTest(unittest.TestCase):
             )
 
             viewer.labels[0].data = np.array([[0, 1], [2, 2]])
-            controls = cast(_ControlWidget, opened.controls_widget)
-            save_widget = cast(Any, controls[3])
+            save_widget = cast(Any, opened.save_rois_widget)
             result = save_widget(roi_save_file=roi_save_file)
 
             self.assertIn("Saved 2 ROI", str(result))
@@ -346,15 +349,14 @@ class NapariAdapterTest(unittest.TestCase):
             _write_converted_recording(root)
             viewer = _FakeViewer()
 
-            controls_widget, _dock = add_twopy_magicgui_controls(
+            control_docks = add_twopy_magicgui_controls(
                 viewer,
                 roi_labels_layer=None,
                 roi_save_file=roi_save_file,
             )
-            controls = cast(_ControlWidget, controls_widget)
+            controls = cast(_ControlWidget, control_docks.load_widget)
             load_widget = cast(Any, controls[1])
 
-            load_widget.roi_save_file.value = roi_save_file
             load_widget.recording_folder.value = root
 
             self.assertEqual(load_widget.movie_frame_range.value, (0, 2))
@@ -375,14 +377,14 @@ class NapariAdapterTest(unittest.TestCase):
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
-            controls_widget, _dock = add_twopy_magicgui_controls(
+            control_docks = add_twopy_magicgui_controls(
                 viewer,
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, controls_widget)
+            controls = cast(_ControlWidget, control_docks.load_widget)
             load_widget = cast(Any, controls[1])
-            save_widget = cast(Any, controls[3])
+            save_widget = cast(Any, control_docks.save_rois_widget)
 
             load_widget(recording_folder=recording_path)
             viewer.labels[0].data = np.array([[1, 0], [0, 0]])
@@ -403,12 +405,12 @@ class NapariAdapterTest(unittest.TestCase):
             write_last_recording_folder(root)
             viewer = _FakeViewer()
 
-            controls_widget, _dock = add_twopy_magicgui_controls(
+            control_docks = add_twopy_magicgui_controls(
                 viewer,
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, controls_widget)
+            controls = cast(_ControlWidget, control_docks.load_widget)
             load_widget = cast(Any, controls[1])
 
             self.assertEqual(load_widget.recording_folder.value, Path("default"))
@@ -428,22 +430,57 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_path,
             )
             viewer = _FakeViewer()
-            controls_widget, _dock = add_twopy_magicgui_controls(
+            control_docks = add_twopy_magicgui_controls(
                 viewer,
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, controls_widget)
+            controls = cast(_ControlWidget, control_docks.load_widget)
             load_widget = cast(Any, controls[1])
 
             result = load_widget(recording_folder=root)
 
             self.assertIn(str(recording_path), str(result))
             self.assertEqual(len(viewer.images), 2)
+            self.assertIn(root.name, str(load_widget.recording_folder.line_edit.value))
             np.testing.assert_array_equal(
                 np.unique(roi_label_image_from_layer(viewer.labels[0])),
                 np.array([0, 1]),
             )
+
+    def test_recording_folder_picker_shows_short_loaded_path(self) -> None:
+        """Confirm loaded recording paths show the useful folder tail.
+
+        Inputs: long converted output path selected through the load widget.
+        Outputs: picker text starts with ``...`` and ends with the recording
+            folder tail.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = (
+                Path(temp_dir)
+                / "very_long_project_name"
+                / "fly"
+                / "stimulus"
+                / "2025"
+                / "10_03"
+                / "twopy"
+            )
+            root.mkdir(parents=True)
+            _write_converted_recording(root)
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            controls = cast(_ControlWidget, control_docks.load_widget)
+            load_widget = cast(Any, controls[1])
+
+            load_widget(recording_folder=root)
+
+            display_text = str(load_widget.recording_folder.line_edit.value)
+            self.assertTrue(display_text.startswith("..."))
+            self.assertTrue(display_text.endswith("/2025/10_03/twopy/"))
 
     def test_recording_path_resolution_reports_available_files(self) -> None:
         """Confirm folder resolution finds optional movie and ROI paths.
@@ -703,6 +740,41 @@ class NapariAdapterTest(unittest.TestCase):
         np.testing.assert_allclose(
             plot_data.epochs[0].mean_values,
             np.array([[0.0, 1.0, 2.0, 3.0]]),
+        )
+
+    def test_response_plot_data_sorts_epochs_by_number(self) -> None:
+        """Confirm epoch plots and option lists use epoch-number order.
+
+        Inputs: grouped responses whose first trial is epoch 3 before epoch 1.
+        Outputs: plot data ordered as epoch 1, then epoch 3.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((4, 1), dtype=np.float64),
+            baseline=np.ones((4, 1), dtype=np.float64),
+            values=np.arange(4, dtype=np.float64).reshape(4, 1),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=4,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            interleave_frame_numbers=np.array([0.0]),
+            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "epoch_3"), 3, "Third"),
+                EpochFrameWindow(FrameWindow(1, 2, 4, "epoch_1"), 1, "First"),
+            ),
+            data_rate_hz=1.0,
+        )
+
+        plot_data = response_plot_data_from_grouped(grouped)
+
+        self.assertEqual(
+            tuple(epoch.epoch_number for epoch in plot_data.epochs),
+            (1, 3),
         )
 
     def test_response_plot_bounds_use_selected_epochs_and_rois(self) -> None:
