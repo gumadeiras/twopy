@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
+from twopy._segments import true_segments
 from twopy.conversion.types import (
     AcquisitionMetadata,
     AlignedMovieSource,
@@ -201,11 +202,10 @@ def _detect_high_res_photodiode_events(
         raise ValueError(msg)
     threshold = (float(np.min(values)) + float(np.max(values))) / 2.0
     active = values > threshold
-    padded = np.concatenate(([False], active, [False]))
-    changes = np.diff(padded.astype(np.int8))
-    starts = np.flatnonzero(changes == 1).astype(np.int64)
-    stops = np.flatnonzero(changes == -1).astype(np.int64)
-    return starts, (stops - starts).astype(np.int64)
+    segments = true_segments(active)
+    starts = np.asarray([start for start, _ in segments], dtype=np.int64)
+    durations = np.asarray([stop - start for start, stop in segments], dtype=np.int64)
+    return starts, durations
 
 
 def _high_res_lines_per_frame(
