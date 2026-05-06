@@ -167,8 +167,6 @@ decided.
 - Add protocol-specific photodiode classifiers for recordings with extra
   within-epoch alignment flashes.
 - Group response outputs directly from classified stimulus windows.
-- Use the read-only `savedAnalysis/` loader to compare twopy ROI-level dF/F
-  against prior saved outputs on a recording with matching saved ROI masks.
 - Load a recording in napari.
 - Interactively draw or select ROIs in the movie.
 - Save napari-drawn ROIs through the core ROI module.
