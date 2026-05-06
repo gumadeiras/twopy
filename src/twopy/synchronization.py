@@ -173,31 +173,21 @@ def detect_recording_photodiode_events(
     Pairing by order uses the photodiode evidence in both signals. It avoids
     assuming the two computers share a frame rate or clock.
     """
-    high_res_events, high_res_resolved_threshold = _detect_events(
-        signal=recording.high_res_pd,
+    high_res = detect_photodiode_events(
+        recording.high_res_pd,
+        signal_name="high_res_pd",
         threshold=high_res_threshold,
         polarity=polarity,
         minimum_width_samples=minimum_width_samples,
         merge_gap_samples=merge_gap_samples,
     )
-    imaging_res_events, imaging_res_resolved_threshold = _detect_events(
-        signal=recording.imaging_res_pd,
+    imaging_res = detect_photodiode_events(
+        recording.imaging_res_pd,
+        signal_name="imaging_res_pd",
         threshold=imaging_res_threshold,
         polarity=polarity,
         minimum_width_samples=minimum_width_samples,
         merge_gap_samples=merge_gap_samples,
-    )
-    high_res = PhotodiodeEventSet(
-        signal_name="high_res_pd",
-        events=high_res_events,
-        threshold=high_res_resolved_threshold,
-        polarity=polarity,
-    )
-    imaging_res = PhotodiodeEventSet(
-        signal_name="imaging_res_pd",
-        events=imaging_res_events,
-        threshold=imaging_res_resolved_threshold,
-        polarity=polarity,
     )
     return PhotodiodeAlignment(
         high_res=high_res,

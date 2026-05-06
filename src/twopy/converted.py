@@ -19,7 +19,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.conversion.types import FrameCountAudit
-from twopy.spatial import SpatialCrop
+from twopy.spatial import SpatialCrop, full_frame_crop
 
 __all__ = [
     "ConvertedMovie",
@@ -603,14 +603,7 @@ def _normalize_spatial_crop(
         ``SpatialCrop`` safe to use for HDF5 slicing.
     """
     if spatial_crop is None:
-        return SpatialCrop(
-            axis0_start=0,
-            axis0_stop=spatial_shape[0],
-            axis1_start=0,
-            axis1_stop=spatial_shape[1],
-            original_shape=spatial_shape,
-            source="full_frame",
-        )
+        return full_frame_crop(spatial_shape)
     if spatial_crop.original_shape != spatial_shape:
         msg = (
             f"Spatial crop source shape {spatial_crop.original_shape} does not "
