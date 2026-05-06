@@ -122,6 +122,7 @@ def compute_roi_delta_f_over_f(
     )
     baseline = _evaluate_baseline(
         frame_count=fluorescence.shape[0],
+        start_frame=traces.start_frame,
         amplitudes=amplitudes,
         tau=tau,
     )
@@ -255,9 +256,11 @@ def _interleave_samples(
         )
 
         duration = sample_stop - sample_start
-        # The fit uses one-based frame numbers centered on the averaged
-        # half-open sample range: sample_start + 1 + N / 2.
-        frame_numbers.append(float(sample_start + 1) + (duration / 2.0))
+        absolute_sample_start = trace_start_frame + sample_start
+        # The fit uses one-based movie frame numbers centered on the averaged
+        # half-open sample range. Local indices slice the trace array; absolute
+        # frame numbers preserve the recording-wide time coordinate.
+        frame_numbers.append(float(absolute_sample_start + 1) + (duration / 2.0))
         values.append(fluorescence[sample_start:sample_stop, :].mean(axis=0))
 
     return _InterleaveSamples(
@@ -498,6 +501,7 @@ def _compute_roi_amplitudes(
 def _evaluate_baseline(
     *,
     frame_count: int,
+    start_frame: int,
     amplitudes: npt.NDArray[np.float64],
     tau: float,
 ) -> npt.NDArray[np.float64]:
@@ -505,11 +509,16 @@ def _evaluate_baseline(
 
     Args:
         frame_count: Number of fluorescence frames.
+        start_frame: Absolute frame index for the first fluorescence frame.
         amplitudes: Per-ROI amplitudes.
         tau: Shared exponential decay constant.
 
     Returns:
         Baseline shaped ``(frames, rois)``.
     """
-    frame_numbers = np.arange(1, frame_count + 1, dtype=np.float64)
+    frame_numbers = np.arange(
+        start_frame + 1,
+        start_frame + frame_count + 1,
+        dtype=np.float64,
+    )
     return amplitudes[None, :] * np.exp(tau * frame_numbers[:, None])

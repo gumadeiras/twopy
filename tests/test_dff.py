@@ -185,11 +185,50 @@ class DeltaFOverFTest(unittest.TestCase):
                 data_rate_hz=2.0,
             )
 
-    def _traces(self, values: np.ndarray) -> BackgroundCorrectedRoiTraces:
+    def test_nonzero_start_frame_uses_absolute_frame_coordinates(self) -> None:
+        """Confirm cropped traces keep movie-frame coordinates for fitting.
+
+        Inputs: an exponential trace covering absolute frames ten through
+        thirteen.
+        Outputs: interleave frame numbers and baseline in absolute movie-frame
+        coordinates.
+        """
+        start_frame = 10
+        absolute_frame_numbers = np.arange(11, 15, dtype=np.float64)
+        fluorescence = 7.0 * np.exp(0.004 * absolute_frame_numbers)
+        traces = self._traces(fluorescence[:, None], start_frame=start_frame)
+
+        result = compute_roi_delta_f_over_f(
+            traces,
+            (
+                FrameWindow(0, 10, 11, "gray_start"),
+                FrameWindow(1, 13, 14, "gray_end"),
+            ),
+            data_rate_hz=1.0,
+            seconds_interleave_use=None,
+        )
+
+        np.testing.assert_allclose(
+            result.interleave_frame_numbers,
+            np.array([11.5, 14.5]),
+        )
+        expected_frame_numbers = np.arange(11, 15, dtype=np.float64)
+        expected_baseline = result.amplitudes[None, :] * np.exp(
+            result.tau * expected_frame_numbers[:, None],
+        )
+        np.testing.assert_allclose(result.baseline, expected_baseline)
+
+    def _traces(
+        self,
+        values: np.ndarray,
+        *,
+        start_frame: int = 0,
+    ) -> BackgroundCorrectedRoiTraces:
         """Create background-corrected traces from known fluorescence values.
 
         Args:
             values: Corrected ROI fluorescence shaped ``(frames, rois)``.
+            start_frame: Absolute frame index for ``values[0]``.
 
         Returns:
             ``BackgroundCorrectedRoiTraces`` suitable for dF/F tests.
@@ -199,8 +238,8 @@ class DeltaFOverFTest(unittest.TestCase):
             background_values=np.zeros_like(values),
             corrected_values=values,
             labels=tuple(f"roi_{index + 1}" for index in range(values.shape[1])),
-            start_frame=0,
-            stop_frame=values.shape[0],
+            start_frame=start_frame,
+            stop_frame=start_frame + values.shape[0],
             statistic="mean",
             method="none",
             metadata={"method": "none"},
