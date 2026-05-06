@@ -6,8 +6,17 @@ Two-photon imaging analysis tool with a napari interface.
 
 ```sh
 micromamba env create -f environment.yml
+micromamba activate twopy
 micromamba run -n twopy pre-commit install
 cp config.example.yml config.yml
+```
+
+The environment installs twopy as an editable package, so the `twopy` terminal
+command is available after activating the environment. If the environment
+already existed before the command was added, refresh the editable install:
+
+```sh
+micromamba run -n twopy python -m pip install -e .
 ```
 
 Edit `config.yml` after copying it. The example file describes every field in
@@ -132,13 +141,13 @@ From a converted output directory that contains `recording_data.h5`, or from a
 source recording directory that contains `twopy/recording_data.h5`:
 
 ```sh
-/Users/gumadeiras/git/twopy/scripts/launch_napari
+twopy
 ```
 
 Or pass the converted recording explicitly:
 
 ```sh
-/Users/gumadeiras/git/twopy/scripts/launch_napari /path/to/recording_data.h5
+twopy /path/to/recording_data.h5
 ```
 
 By default the launcher opens the mean image, the first 200 movie frames, an

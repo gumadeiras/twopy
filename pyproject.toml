@@ -24,6 +24,9 @@ dependencies = [
   "ty>=0.0.34,<0.1",
 ]
 
+[project.scripts]
+twopy = "twopy.napari:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
