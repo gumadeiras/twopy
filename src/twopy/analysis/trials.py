@@ -17,6 +17,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.converted import RecordingData
+from twopy.photodiode_classification import classify_recording_photodiode_events
 from twopy.roi import RoiTraces
 from twopy.synchronization import PhotodiodeAlignment
 
@@ -175,37 +176,22 @@ def map_stimulus_epochs_to_frame_windows(
         ValueError: If the stimulus epoch runs and photodiode windows do not
             have the same count.
 
-    The stimulus computer writes one row per stimulus frame while the imaging
-    computer writes one movie frame per microscope frame. The photodiode is the
-    shared timing evidence. This helper only pairs by order after requiring the
-    counts to match, which keeps the assumption visible and auditable.
+    This wraps the stricter photodiode classifier and returns the older
+    ``EpochFrameWindow`` shape used by response helpers.
     """
-    epoch_runs = _stimulus_epoch_runs(recording)
-    windows = frame_windows_from_photodiode_alignment(
-        alignment,
-        frame_count=recording.movie.shape[0],
-    )
-    if len(epoch_runs) != len(windows):
-        msg = (
-            "Cannot map stimulus epochs to frame windows by order because counts "
-            f"differ: stimulus_epoch_runs={len(epoch_runs)}, "
-            f"photodiode_windows={len(windows)}"
-        )
-        raise ValueError(msg)
-
-    epoch_names = _epoch_names_by_number(recording)
+    timing = classify_recording_photodiode_events(recording, alignment)
     return tuple(
         EpochFrameWindow(
             window=FrameWindow(
                 index=window.index,
                 start_frame=window.start_frame,
                 stop_frame=window.stop_frame,
-                label=_epoch_window_label(epoch_number, epoch_names[epoch_number]),
+                label=_epoch_window_label(window.epoch_number, window.epoch_name),
             ),
-            epoch_number=epoch_number,
-            epoch_name=epoch_names[epoch_number],
+            epoch_number=window.epoch_number,
+            epoch_name=window.epoch_name,
         )
-        for window, epoch_number in zip(windows, epoch_runs, strict=True)
+        for window in timing.windows
     )
 
 
@@ -279,47 +265,6 @@ def split_traces_by_frame_windows(
         )
 
     return tuple(responses)
-
-
-def _stimulus_epoch_runs(recording: RecordingData) -> tuple[int, ...]:
-    """Return nonzero contiguous epoch numbers from ``stimulus/data``.
-
-    Args:
-        recording: Loaded converted recording.
-
-    Returns:
-        Epoch number for each contiguous nonzero epoch run.
-    """
-    try:
-        epoch_column = recording.stimulus_data_column_names.index("epoch_number")
-    except ValueError as error:
-        msg = "stimulus/data is missing required column 'epoch_number'"
-        raise ValueError(msg) from error
-
-    epoch_numbers = recording.stimulus_data[:, epoch_column].astype(np.int64)
-    epoch_numbers = epoch_numbers[epoch_numbers > 0]
-    if epoch_numbers.size == 0:
-        msg = "stimulus/data does not contain any positive epoch numbers"
-        raise ValueError(msg)
-
-    run_start_indices = np.r_[0, np.flatnonzero(np.diff(epoch_numbers) != 0) + 1]
-    return tuple(int(epoch_numbers[index]) for index in run_start_indices)
-
-
-def _epoch_names_by_number(recording: RecordingData) -> dict[int, str]:
-    """Create a one-indexed epoch-number to epoch-name map.
-
-    Args:
-        recording: Loaded converted recording.
-
-    Returns:
-        Dictionary keyed by stimulus epoch number.
-    """
-    names: dict[int, str] = {}
-    for index, parameters in enumerate(recording.stimulus_parameters, start=1):
-        raw_name = parameters.get("epochName", f"epoch_{index}")
-        names[index] = str(raw_name)
-    return names
 
 
 def _epoch_window_label(epoch_number: int, epoch_name: str) -> str:

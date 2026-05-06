@@ -76,6 +76,11 @@ decided.
   `imaging_res_pd` signals.
 - Order-based pairing of high-resolution photodiode events to imaging-frame
   photodiode events, with mismatched event counts treated as an error.
+- Photodiode event classification into stimulus start, trial transition, and
+  stimulus end events.
+- Classified stimulus timing cross-checks paired photodiode events against
+  `stimulus/data` `photodiode_flash` segments and positive epoch runs before
+  producing frame windows.
 - Frame-window response objects for splitting ROI traces by explicit imaging
   frame boundaries.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
@@ -101,6 +106,8 @@ decided.
   trace smoke test produced shape `(5, 1)`, photodiode detection found 101
   high-resolution and 101 imaging-resolution events, and event pairing produced
   100 frame windows.
+- Real example photodiode classification found 1 stimulus start event, 99 trial
+  transition events, 1 stimulus end event, and 100 classified stimulus windows.
 - Real database query matched the example recording in both `experimentLog.db`
   and `experimentInitLog.db` with `stimulusPresentationId=20005` and
   `fly=10923`.
@@ -115,12 +122,9 @@ decided.
 
 ## Next
 
-- Classify photodiode flash patterns into stimulus start, trial transition, and
-  stimulus end events.
-- Align classified stimulus events to imaging frames using photodiode timing and
-  `imagingResPd`.
-- Connect stimulus metadata to frame windows so responses can be grouped by
-  epoch, trial, and other recording metadata.
+- Add protocol-specific photodiode classifiers for recordings with extra
+  within-epoch alignment flashes.
+- Group response outputs directly from classified stimulus windows.
 - Compare twopy ROI-level dF/F against MATLAB `savedAnalysis/` on a recording
   that already has matching saved ROI masks.
 - Load a recording in napari.

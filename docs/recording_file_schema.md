@@ -58,9 +58,12 @@ twopy now represents this in four GUI-independent layers:
   napari.
 - `detect_recording_photodiode_events(...)` segments photodiode flashes in
   `high_res_pd` and `imaging_res_pd`, then pairs matching events by order.
-- Frame windows are made from paired photodiode event frames and used to split
-  ROI traces. Stimulus-specific flash-pattern classification is still separate
-  future work.
+- `classify_recording_photodiode_events(...)` cross-checks the paired events
+  against `stimulus/data` `photodiode_flash` segments, classifies stimulus
+  start, trial-transition, and stimulus-end events, then returns classified
+  stimulus windows with epoch metadata.
+- Frame windows are made from classified photodiode event frames and used to
+  split ROI traces.
 
 ## Session Folder
 

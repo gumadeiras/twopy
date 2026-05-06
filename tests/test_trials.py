@@ -172,7 +172,7 @@ class ResponsesTest(unittest.TestCase):
             np.array([1, 1, 2, 2], dtype=np.float64),
         )
 
-        with self.assertRaisesRegex(ValueError, "counts differ"):
+        with self.assertRaisesRegex(ValueError, "epoch runs"):
             map_stimulus_epochs_to_frame_windows(recording, self._alignment((0, 5)))
 
     def _alignment(self, frames: tuple[int, ...]) -> PhotodiodeAlignment:
@@ -243,8 +243,10 @@ class ResponsesTest(unittest.TestCase):
             acquisition_metadata={},
             run_metadata={},
             synchronization_metadata={},
-            stimulus_data=epoch_numbers[:, None],
-            stimulus_data_column_names=("epoch_number",),
+            stimulus_data=np.column_stack(
+                (epoch_numbers, self._flash_values_for_epochs(epoch_numbers)),
+            ),
+            stimulus_data_column_names=("epoch_number", "photodiode_flash"),
             stimulus_parameters=(
                 {"epochName": "Gray Interleave"},
                 {"epochName": "LR20"},
@@ -262,6 +264,25 @@ class ResponsesTest(unittest.TestCase):
                 acquisition_minus_movie=0,
             ),
         )
+
+    def _flash_values_for_epochs(self, epoch_numbers: np.ndarray) -> np.ndarray:
+        """Create one synthetic flash row at each epoch-run start.
+
+        Args:
+            epoch_numbers: Stimulus epoch numbers.
+
+        Returns:
+            Flash values with the same length.
+        """
+        flash_values = np.zeros_like(epoch_numbers)
+        if epoch_numbers.size == 0:
+            return flash_values
+        run_starts = np.r_[
+            0,
+            np.flatnonzero(epoch_numbers[1:] != epoch_numbers[:-1]) + 1,
+        ]
+        flash_values[run_starts] = 1.0
+        return flash_values
 
 
 if __name__ == "__main__":

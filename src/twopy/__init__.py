@@ -23,6 +23,14 @@ from twopy.analysis import (
 from twopy.api import find_recordings
 from twopy.conversion import convert_recording_to_twopy, load_source_conversion_inputs
 from twopy.converted import load_converted_recording
+from twopy.photodiode_classification import (
+    ClassifiedPhotodiodeEvent,
+    ClassifiedStimulusTiming,
+    ClassifiedStimulusWindow,
+    PhotodiodeDurationClass,
+    PhotodiodeEventType,
+    classify_recording_photodiode_events,
+)
 from twopy.roi import (
     RoiSet,
     RoiTraces,
@@ -50,6 +58,10 @@ __all__ = [
     "AlignedPhotodiodeEvent",
     "BackgroundCorrectedRoiTraces",
     "BackgroundCorrectionMethod",
+    "ClassifiedPhotodiodeEvent",
+    "ClassifiedStimulusTiming",
+    "ClassifiedStimulusWindow",
+    "classify_recording_photodiode_events",
     "compute_roi_delta_f_over_f",
     "convert_recording_to_twopy",
     "detect_photodiode_events",
@@ -69,7 +81,9 @@ __all__ = [
     "map_stimulus_specific_column",
     "pair_photodiode_events_to_imaging_frames",
     "PhotodiodeAlignment",
+    "PhotodiodeDurationClass",
     "PhotodiodeEvent",
+    "PhotodiodeEventType",
     "PhotodiodeEventSet",
     "RoiDeltaFOverF",
     "RoiSet",

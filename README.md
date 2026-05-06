@@ -78,6 +78,7 @@ from pathlib import Path
 import numpy as np
 
 from twopy import (
+    classify_recording_photodiode_events,
     compute_roi_delta_f_over_f,
     detect_recording_photodiode_events,
     extract_background_corrected_roi_traces,
@@ -97,6 +98,7 @@ traces = extract_background_corrected_roi_traces(
     method="movie_global_percentile",
 )
 alignment = detect_recording_photodiode_events(recording)
+timing = classify_recording_photodiode_events(recording, alignment)
 epoch_windows = map_stimulus_epochs_to_frame_windows(recording, alignment)
 interleave_windows = select_epoch_frame_windows(
     epoch_windows,
@@ -111,6 +113,8 @@ dff = compute_roi_delta_f_over_f(
 
 Analysis starts from converted HDF5 files. ROI masks are GUI-independent, trace
 extraction streams movie chunks, background correction stays explicit, and
-stimulus epoch windows come from photodiode events instead of nominal
-frame-rate assumptions. ROI dF/F uses corrected ROI fluorescence plus gray
-interleave windows to fit one shared exponential tau and one amplitude per ROI.
+stimulus epoch windows come from classified photodiode events instead of
+nominal frame-rate assumptions. `timing.events` keeps the start, transition,
+and end classifications auditable. ROI dF/F uses corrected ROI fluorescence
+plus gray interleave windows to fit one shared exponential tau and one
+amplitude per ROI.
