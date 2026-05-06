@@ -157,6 +157,9 @@ decided.
 - ROI visibility controls hide existing label values without making future
   newly drawn label numbers transparent, so users can keep adding ROIs after
   filtering plots.
+- Napari movie-frame range changes reuse the resolved recording path even when
+  the visible path field is shortened, and response options are split into
+  Update, Plot, ROIs, and Epochs tabs.
 - Launch script for opening napari from a converted output directory, a source
   recording directory, or an explicit `recording_data.h5` path. When a source
   recording has no converted twopy files yet, napari runs conversion first and

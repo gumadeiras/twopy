@@ -264,7 +264,7 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     )
 
     def load_after_selection(_value: object) -> None:
-        """Load when the user changes a load-relevant widget.
+        """Load when the user changes the recording picker.
 
         Args:
             _value: Ignored widget signal value.
@@ -279,10 +279,35 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
             return
         load_recording()
 
+    def reload_after_option_change(_value: object) -> None:
+        """Reload the current recording after a non-path option changes.
+
+        Args:
+            _value: Ignored widget signal value.
+
+        Returns:
+            None.
+
+        Secondary controls such as the movie-frame slider should reuse the
+        resolved recording path stored in state. The visible picker text may be
+        shortened for display and is not always a real filesystem path.
+        """
+        if state.is_loading or not _has_recording_to_load(
+            load_recording.recording_folder.value,
+            state,
+        ):
+            return
+        load_recording(
+            recording_folder=_current_recording_path_for_reload(
+                load_recording.recording_folder.value,
+                state,
+            ),
+        )
+
     load_recording.recording_folder.changed.connect(load_after_selection)
-    load_recording.roi_file_to_load.changed.connect(load_after_selection)
-    load_recording.movie_frame_range.changed.connect(load_after_selection)
-    load_recording.load_movie.changed.connect(load_after_selection)
+    load_recording.roi_file_to_load.changed.connect(reload_after_option_change)
+    load_recording.movie_frame_range.changed.connect(reload_after_option_change)
+    load_recording.load_movie.changed.connect(reload_after_option_change)
 
     return Container(
         widgets=[
@@ -534,6 +559,26 @@ def _resolve_recording_folder_value(
     return Path(recording_folder)
 
 
+def _current_recording_path_for_reload(
+    recording_folder: PathInput,
+    state: NapariControlState,
+) -> Path:
+    """Return a concrete path for reloading the current recording.
+
+    Args:
+        recording_folder: Visible recording picker value.
+        state: Current napari control state.
+
+    Returns:
+        Stored real recording path when available, otherwise the picker value.
+    """
+    if state.recording_picker_path is not None:
+        return state.recording_picker_path
+    if state.recording is not None:
+        return state.recording.path
+    return _resolve_recording_folder_value(recording_folder, state)
+
+
 def _has_recording_to_load(
     recording_folder: PathInput,
     state: NapariControlState,
@@ -568,10 +613,21 @@ def _is_displayed_recording_path(
     Returns:
         ``True`` when the field text matches the remembered display value.
     """
-    return (
-        state.recording_picker_path is not None
-        and str(recording_folder) == state.recording_picker_display_text
-    )
+    return state.recording_picker_path is not None and _normalized_display_path_text(
+        str(recording_folder)
+    ) == _normalized_display_path_text(state.recording_picker_display_text)
+
+
+def _normalized_display_path_text(text: str) -> str:
+    """Return path-display text normalized for widget comparison.
+
+    Args:
+        text: Text from magicgui or twopy's shortened display state.
+
+    Returns:
+        Text without a trailing path separator.
+    """
+    return text.rstrip("/")
 
 
 def _resolve_optional_roi_path(path: PathInput) -> Path | None:

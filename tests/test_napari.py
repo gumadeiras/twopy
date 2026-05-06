@@ -17,7 +17,7 @@ import h5py
 import numpy as np
 from napari.layers import Labels
 from qtpy.QtGui import QColor
-from qtpy.QtWidgets import QApplication, QWidget
+from qtpy.QtWidgets import QApplication, QTabWidget, QWidget
 
 from twopy import (
     add_twopy_magicgui_controls,
@@ -262,6 +262,14 @@ class NapariAdapterTest(unittest.TestCase):
                 "twopy response options",
             )
             self.assertEqual(viewer.window.dock_widgets[3].area, "right")
+            options_widget = cast(QTabWidget, opened.response_options_widget)
+            self.assertEqual(
+                tuple(
+                    options_widget.tabText(index)
+                    for index in range(options_widget.count())
+                ),
+                ("Update", "Plot", "ROIs", "Epochs"),
+            )
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
@@ -499,6 +507,32 @@ class NapariAdapterTest(unittest.TestCase):
             display_text = str(load_widget.recording_folder.line_edit.value)
             self.assertTrue(display_text.startswith("..."))
             self.assertTrue(display_text.endswith("/2025/10_03/twopy/"))
+
+    def test_movie_frame_slider_reuses_resolved_recording_path(self) -> None:
+        """Confirm movie range changes work after the path field is shortened.
+
+        Inputs: long converted output path loaded through the control widget.
+        Outputs: changing the frame slider reloads without resolving the
+        shortened display text as a filesystem path.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / ("long_" * 20) / "twopy"
+            root.mkdir(parents=True)
+            _write_converted_recording(root)
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            controls = cast(_ControlWidget, control_docks.load_widget)
+            load_widget = cast(Any, controls[1])
+
+            load_widget(recording_folder=root)
+            load_widget.movie_frame_range.value = (0, 1)
+
+            self.assertEqual(load_widget.movie_frame_range.value, (0, 1))
+            self.assertGreaterEqual(len(viewer.images), 4)
 
     def test_recording_path_resolution_reports_available_files(self) -> None:
         """Confirm folder resolution finds optional movie and ROI paths.

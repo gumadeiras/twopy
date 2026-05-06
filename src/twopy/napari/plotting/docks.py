@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -219,9 +220,7 @@ class _ResponsePlotWidget(QWidget):
         layout.addWidget(plot_scroll)
         self.setLayout(layout)
 
-        options = QWidget()
-        options_layout = QVBoxLayout()
-        self._options_layout = options_layout
+        self._options_tabs = QTabWidget()
         self._show_sem_checkbox = QCheckBox("Show SEM")
         self._show_sem_checkbox.setChecked(True)
         self._show_sem_checkbox.stateChanged.connect(self._set_show_sem)
@@ -231,21 +230,35 @@ class _ResponsePlotWidget(QWidget):
         update_from_rois_button.clicked.connect(self.update_from_current_rois)
         self._analysis_path_label = QLabel("Analysis file: default")
         self._analysis_path_label.setWordWrap(True)
-        self._dynamic_options = QWidget()
-        self._dynamic_options_layout = QVBoxLayout()
-        self._dynamic_options.setLayout(self._dynamic_options_layout)
-        options_layout.addWidget(self._show_sem_checkbox)
-        options_layout.addWidget(refresh_button)
-        options_layout.addWidget(update_from_rois_button)
-        options_layout.addWidget(self._analysis_path_label)
-        options_layout.addWidget(self._dynamic_options)
-        options_layout.addStretch(1)
-        options.setLayout(options_layout)
-
-        options_scroll = QScrollArea()
-        options_scroll.setWidgetResizable(True)
-        options_scroll.setWidget(options)
-        self._options_scroll = options_scroll
+        self._plot_options_layout = QVBoxLayout()
+        self._plot_axis_layout = QVBoxLayout()
+        plot_axis_widget = QWidget()
+        plot_axis_widget.setLayout(self._plot_axis_layout)
+        self._plot_options_layout.addWidget(self._show_sem_checkbox)
+        self._plot_options_layout.addWidget(plot_axis_widget)
+        self._plot_options_layout.addStretch(1)
+        self._roi_options_layout = QVBoxLayout()
+        self._epoch_options_layout = QVBoxLayout()
+        self._options_tabs.addTab(
+            _response_update_tab(
+                refresh_button=refresh_button,
+                update_from_rois_button=update_from_rois_button,
+                analysis_path_label=self._analysis_path_label,
+            ),
+            "Update",
+        )
+        self._options_tabs.addTab(
+            _scrolling_tab(self._plot_options_layout),
+            "Plot",
+        )
+        self._options_tabs.addTab(
+            _scrolling_tab(self._roi_options_layout),
+            "ROIs",
+        )
+        self._options_tabs.addTab(
+            _scrolling_tab(self._epoch_options_layout),
+            "Epochs",
+        )
 
     def options_widget(self) -> object:
         """Return the separately docked response-options widget.
@@ -254,9 +267,9 @@ class _ResponsePlotWidget(QWidget):
             None.
 
         Returns:
-            Scrollable Qt widget with response plot controls.
+            Tabbed Qt widget with response plot controls.
         """
-        return self._options_scroll
+        return self._options_tabs
 
     def set_roi_labels_layer(self, roi_labels_layer: object | None) -> None:
         """Store the current editable ROI Labels layer.
@@ -284,7 +297,7 @@ class _ResponsePlotWidget(QWidget):
         self._plot_data = None
         self._reset_plot_state()
         self._analysis_path_label.setText("Analysis file: default")
-        clear_layout(self._dynamic_options_layout)
+        self._clear_dynamic_option_tabs()
         self._set_status("No recording loaded.")
 
     def load_recording(self, recording: RecordingData) -> None:
@@ -357,7 +370,7 @@ class _ResponsePlotWidget(QWidget):
         if isinstance(result, str):
             self._plot_data = None
             self._reset_plot_state()
-            clear_layout(self._dynamic_options_layout)
+            self._clear_dynamic_option_tabs()
             self._set_status(result)
             return
         self._plot_data = result
@@ -436,7 +449,7 @@ class _ResponsePlotWidget(QWidget):
 
     def _render_options(self) -> None:
         """Render axis, ROI, and epoch visibility controls."""
-        clear_layout(self._dynamic_options_layout)
+        self._clear_dynamic_option_tabs()
         if self._plot_data is None or len(self._plot_data.epochs) == 0:
             return
 
@@ -453,8 +466,8 @@ class _ResponsePlotWidget(QWidget):
             y_max=self._manual_y_max if self._manual_y_max is not None else auto_y_max,
             on_change=self._set_manual_axis_bounds,
         )
-        self._dynamic_options_layout.addWidget(axis_widget)
-        self._dynamic_options_layout.addWidget(
+        self._plot_axis_layout.addWidget(axis_widget)
+        self._roi_options_layout.addWidget(
             visibility_options_widget(
                 title="ROIs",
                 labels=self._roi_labels(),
@@ -463,7 +476,8 @@ class _ResponsePlotWidget(QWidget):
                 colors=self._roi_colors,
             ),
         )
-        self._dynamic_options_layout.addWidget(
+        self._roi_options_layout.addStretch(1)
+        self._epoch_options_layout.addWidget(
             visibility_options_widget(
                 title="Epochs",
                 labels=tuple(
@@ -480,6 +494,20 @@ class _ResponsePlotWidget(QWidget):
                 on_change=self._set_epoch_visibility_by_label,
             ),
         )
+        self._epoch_options_layout.addStretch(1)
+
+    def _clear_dynamic_option_tabs(self) -> None:
+        """Clear dynamic option widgets from plot, ROI, and epoch tabs.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+        """
+        clear_layout(self._plot_axis_layout)
+        clear_layout(self._roi_options_layout)
+        clear_layout(self._epoch_options_layout)
 
     def _set_manual_axis_bounds(
         self,
@@ -664,6 +692,50 @@ def _epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
     layout.addWidget(plot)
     panel.setLayout(layout)
     return panel
+
+
+def _response_update_tab(
+    *,
+    refresh_button: QPushButton,
+    update_from_rois_button: QPushButton,
+    analysis_path_label: QLabel,
+) -> QWidget:
+    """Create the tab that owns response recompute/reload actions.
+
+    Args:
+        refresh_button: Button that reloads persisted response outputs.
+        update_from_rois_button: Button that computes responses from current
+            Labels ROIs.
+        analysis_path_label: Label showing the analysis output path.
+
+    Returns:
+        Qt widget for the Update tab.
+    """
+    tab = QWidget()
+    layout = QVBoxLayout()
+    layout.addWidget(refresh_button)
+    layout.addWidget(update_from_rois_button)
+    layout.addWidget(analysis_path_label)
+    layout.addStretch(1)
+    tab.setLayout(layout)
+    return tab
+
+
+def _scrolling_tab(layout: QVBoxLayout) -> QScrollArea:
+    """Create a scrollable options tab around one layout.
+
+    Args:
+        layout: Layout that callers will populate with controls.
+
+    Returns:
+        Scroll area suitable for a tab body.
+    """
+    content = QWidget()
+    content.setLayout(layout)
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setWidget(content)
+    return scroll
 
 
 def _opaque_colors(colors: tuple[QColor, ...]) -> tuple[QColor, ...]:
