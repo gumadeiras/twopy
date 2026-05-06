@@ -154,6 +154,13 @@ twopy is a two-photon imaging analysis tool.
 
 - Keep `roadmap.md` updated as work lands.
 - Roadmap updates should be high signal and low noise: record completed progress, explicit next work, and decisions; avoid speculative feature lists.
+- Keep `CHANGELOG.md` updated for user-facing changes. If a commit adds a
+  feature, fix, behavior change, CLI change, GUI change, output-format change,
+  or other user-visible change, add or update an entry under the top
+  `Unreleased` section in the same commit.
+- Follow the changelog structure from `RELEASE.md`: use `Features`, `Fixes`,
+  and `Changes` sections when they apply, omit empty sections, and write
+  user-facing entries instead of repository chore notes.
 - Every file must start with a plain-language docstring explaining its purpose.
 - Every public function, class, and method must document:
   - inputs
