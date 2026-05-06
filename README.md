@@ -2,6 +2,8 @@
 
 Two-photon imaging analysis tool for the Clark Lab output format.
 
+![twopy napari interface](docs/assets/twopy-napari.png)
+
 ## Getting Started
 
 twopy lets you open two-photon recordings, draw ROIs, plot responses in real time,
