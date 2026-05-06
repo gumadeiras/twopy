@@ -20,6 +20,10 @@ import numpy.typing as npt
 
 from twopy.conversion.types import FrameCountAudit
 from twopy.spatial import SpatialCrop, full_frame_crop
+from twopy.typing_guards import (
+    require_string_key_mapping,
+    require_string_key_mapping_values,
+)
 
 __all__ = [
     "ConvertedMovie",
@@ -472,10 +476,12 @@ def _read_stimulus_parameters(
 
     parameters: list[dict[str, object]] = []
     for item in decoded:
-        if not isinstance(item, dict):
-            msg = "each stimulus parameter entry must be a dictionary"
-            raise ValueError(msg)
-        parameters.append(cast(dict[str, object], item))
+        parameters.append(
+            require_string_key_mapping(
+                item,
+                name="each stimulus parameter entry",
+            )
+        )
 
     return tuple(parameters)
 
@@ -511,7 +517,10 @@ def _read_stimulus_specific_columns(
     if not isinstance(decoded, dict):
         msg = "stimulus/stimulus_specific_columns_json must decode to a dictionary"
         raise ValueError(msg)
-    return cast(dict[str, dict[str, object]], decoded)
+    return require_string_key_mapping_values(
+        decoded,
+        name="stimulus/stimulus_specific_columns_json",
+    )
 
 
 def _read_json_dataset(h5_file: h5py.File, dataset_name: str) -> object:

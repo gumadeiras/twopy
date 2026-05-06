@@ -32,6 +32,7 @@ from twopy.analysis.responses import (
 )
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.roi import RoiSet, TraceStatistic, make_roi_set
+from twopy.typing_guards import require_string_choice
 
 __all__ = [
     "ANALYSIS_OUTPUT_FILE_FORMAT",
@@ -54,6 +55,12 @@ _SUMMARY_CSV_COLUMNS = (
     "mean_response",
     "peak_response",
     "min_response",
+)
+_TRACE_STATISTICS: tuple[TraceStatistic, ...] = ("mean",)
+_BACKGROUND_CORRECTION_METHODS: tuple[BackgroundCorrectionMethod, ...] = (
+    "none",
+    "movie_global_percentile",
+    "roi_local_percentile_y",
 )
 
 
@@ -281,10 +288,15 @@ def _read_background_traces(group: h5py.Group) -> BackgroundCorrectedRoiTraces:
         labels=_read_string_dataset(group, "labels"),
         start_frame=int(group.attrs["start_frame"]),
         stop_frame=int(group.attrs["stop_frame"]),
-        statistic=cast(TraceStatistic, _plain_attr_value(group.attrs["statistic"])),
-        method=cast(
-            BackgroundCorrectionMethod,
+        statistic=require_string_choice(
+            _plain_attr_value(group.attrs["statistic"]),
+            name="traces statistic",
+            allowed=_TRACE_STATISTICS,
+        ),
+        method=require_string_choice(
             _plain_attr_value(group.attrs["method"]),
+            name="traces background correction method",
+            allowed=_BACKGROUND_CORRECTION_METHODS,
         ),
         metadata=_read_metadata(group["metadata"]),
     )

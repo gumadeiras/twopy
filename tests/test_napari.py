@@ -1303,6 +1303,49 @@ class NapariAdapterTest(unittest.TestCase):
             ),
         )
 
+    def test_malformed_display_crop_metadata_is_ignored(self) -> None:
+        """Confirm bad crop metadata does not crash label extraction.
+
+        Inputs: display-coordinate labels with incomplete or invalid crop
+        metadata.
+        Outputs: labels treated as uncropped display data.
+        """
+        display_labels = np.array([[0, 1], [2, 0]], dtype=np.int64)
+        bad_metadata: tuple[dict[str, object], ...] = (
+            {
+                "twopy_display_spatial_crop": {
+                    "axis0_start": 0,
+                    "axis1_start": 0,
+                    "axis1_stop": 2,
+                    "original_shape": (2, 2),
+                    "source": "alignment_valid_crop",
+                }
+            },
+            {
+                "twopy_display_spatial_crop": {
+                    "axis0_start": True,
+                    "axis0_stop": 2,
+                    "axis1_start": 0,
+                    "axis1_stop": 2,
+                    "original_shape": (2, 2),
+                    "source": "alignment_valid_crop",
+                }
+            },
+        )
+
+        for metadata in bad_metadata:
+            with self.subTest(metadata=metadata):
+                layer = _FakeLayer(
+                    name="rois",
+                    data=display_labels,
+                    options={"metadata": metadata},
+                )
+
+                np.testing.assert_array_equal(
+                    movie_labels_from_display_layer(layer),
+                    display_labels,
+                )
+
     def test_movie_frame_range_accepts_last_default(self) -> None:
         """Confirm empty-launch widget defaults request the full movie.
 

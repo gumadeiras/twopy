@@ -119,6 +119,27 @@ class ConvertedRecordingTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "one sample per aligned movie"):
                 load_converted_recording(root / "recording_data.h5")
 
+    def test_rejects_malformed_stimulus_specific_column_metadata(self) -> None:
+        """Confirm nested stimulus metadata is validated when loading.
+
+        Inputs: converted recording whose stimulus-specific metadata has a
+        non-dictionary value for one ``stimtype``.
+        Outputs: clear validation error before stimulus helpers consume it.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._write_aligned_movie_file(root / "aligned_movie.h5")
+            self._write_recording_data_file(
+                root / "recording_data.h5",
+                stimulus_specific_columns_json='{"62002": []}',
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "stimulus/stimulus_specific_columns_json",
+            ):
+                load_converted_recording(root / "recording_data.h5")
+
     def _write_converted_recording(self, root: Path) -> None:
         """Write both converted HDF5 files for a small recording.
 
@@ -153,12 +174,14 @@ class ConvertedRecordingTest(unittest.TestCase):
         path: Path,
         *,
         imaging_res_pd: np.ndarray | None = None,
+        stimulus_specific_columns_json: str | None = None,
     ) -> None:
         """Write a tiny converted recording manifest file.
 
         Args:
             path: Destination ``recording_data.h5`` path.
             imaging_res_pd: Optional frame-resolution photodiode vector.
+            stimulus_specific_columns_json: Optional stimulus metadata JSON.
 
         Returns:
             None.
@@ -228,7 +251,8 @@ class ConvertedRecordingTest(unittest.TestCase):
             )
             stimulus_group.create_dataset(
                 "stimulus_specific_columns_json",
-                data=(
+                data=stimulus_specific_columns_json
+                or (
                     '{"62002": {"stimtype": "62002", "function": "LEDMovingBars", '
                     '"source_path": "stimfunctions/LEDMovingBars.m", "columns": ['
                     '{"mat_slot": 1, "column_name": "stimulus_specific_01", '

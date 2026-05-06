@@ -122,6 +122,39 @@ class PersistenceTest(unittest.TestCase):
                 )
             self.assertFalse(h5_path.exists())
 
+    def test_rejects_unknown_persisted_trace_statistic(self) -> None:
+        """Confirm trace metadata is validated when loading analysis output.
+
+        Inputs: HDF5 traces group with an unsupported statistic attribute.
+        Outputs: clear validation error before returning typed traces.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            h5_path = Path(temp_dir) / "analysis_outputs.h5"
+            save_analysis_outputs(h5_path, traces=self._traces())
+            with h5py.File(h5_path, "r+") as h5_file:
+                h5_file["traces"].attrs["statistic"] = "median"
+
+            with self.assertRaisesRegex(ValueError, "traces statistic"):
+                load_analysis_outputs(h5_path)
+
+    def test_rejects_unknown_persisted_background_method(self) -> None:
+        """Confirm background-correction metadata is validated on load.
+
+        Inputs: HDF5 traces group with an unsupported method attribute.
+        Outputs: clear validation error before returning typed traces.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            h5_path = Path(temp_dir) / "analysis_outputs.h5"
+            save_analysis_outputs(h5_path, traces=self._traces())
+            with h5py.File(h5_path, "r+") as h5_file:
+                h5_file["traces"].attrs["method"] = "median_filter"
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "traces background correction method",
+            ):
+                load_analysis_outputs(h5_path)
+
     def _traces(self) -> BackgroundCorrectedRoiTraces:
         """Create small background-corrected traces.
 

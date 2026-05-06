@@ -15,6 +15,11 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.spatial import SpatialCrop
+from twopy.typing_guards import (
+    int_or_none,
+    int_tuple_or_none,
+    string_key_mapping_or_none,
+)
 
 DISPLAY_CROP_METADATA_KEY = "twopy_display_spatial_crop"
 
@@ -143,24 +148,34 @@ def _spatial_crop_from_layer_metadata(layer: object) -> SpatialCrop | None:
     )
     if metadata is None and hasattr(layer, "options"):
         metadata = cast(_LayerWithOptions, layer).options.get("metadata")
-    if not isinstance(metadata, dict):
+    metadata_dict = string_key_mapping_or_none(metadata)
+    if metadata_dict is None:
         return None
-    metadata_dict = cast(dict[str, object], metadata)
     crop_data = metadata_dict.get(DISPLAY_CROP_METADATA_KEY)
-    if not isinstance(crop_data, dict):
+    crop_dict = string_key_mapping_or_none(crop_data)
+    if crop_dict is None:
         return None
-    crop_dict = cast(dict[str, object], crop_data)
-    shape_value = crop_dict.get("original_shape")
-    if not isinstance(shape_value, tuple | list):
+    raw_shape = int_tuple_or_none(crop_dict.get("original_shape"), length=2)
+    if raw_shape is None:
         return None
-    raw_shape = tuple(int(cast(Any, value)) for value in shape_value)
-    if len(raw_shape) != 2:
+    axis0_start = int_or_none(crop_dict.get("axis0_start"))
+    axis0_stop = int_or_none(crop_dict.get("axis0_stop"))
+    axis1_start = int_or_none(crop_dict.get("axis1_start"))
+    axis1_stop = int_or_none(crop_dict.get("axis1_stop"))
+    source = crop_dict.get("source")
+    if (
+        axis0_start is None
+        or axis0_stop is None
+        or axis1_start is None
+        or axis1_stop is None
+        or not isinstance(source, str)
+    ):
         return None
     return SpatialCrop(
-        axis0_start=int(cast(Any, crop_dict["axis0_start"])),
-        axis0_stop=int(cast(Any, crop_dict["axis0_stop"])),
-        axis1_start=int(cast(Any, crop_dict["axis1_start"])),
-        axis1_stop=int(cast(Any, crop_dict["axis1_stop"])),
+        axis0_start=axis0_start,
+        axis0_stop=axis0_stop,
+        axis1_start=axis1_start,
+        axis1_stop=axis1_stop,
         original_shape=(raw_shape[0], raw_shape[1]),
-        source=str(crop_dict["source"]),
+        source=source,
     )
