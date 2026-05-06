@@ -16,24 +16,23 @@ the converted files, so the original source files remain separate from twopy's o
 
 Examples use micromamba, but any conda-compatible environment manager should work.
 
-Run this once from the twopy folder to install everything you need:
+Preferred setup is a fresh Python 3.13 environment with the published PyPI
+package:
 
 ```sh
-micromamba env create -f environment.yml
-micromamba activate twopy
-micromamba run -n twopy pre-commit install
-cp config.example.yml config.yml
+micromamba create -n twopy -c conda-forge python=3.13 pip -y && micromamba run -n twopy python -m pip install twopy
 ```
 
-Then edit `config.yml` so the paths match your computer. The example file
-explains each setting in plain language. `config.yml` stays local to your
-machine and is not tracked by git.
-
-If the `twopy` command is missing after setup, refresh the editable install:
+Verify the install:
 
 ```sh
-micromamba run -n twopy python -m pip install -e .
+micromamba run -n twopy python -c 'import twopy; print(twopy.__name__)'
 ```
+
+If you are working from a source checkout, copy `config.example.yml` to
+`config.yml`, then edit `config.yml` so the paths match your computer. The
+example file explains each setting in plain language. `config.yml` stays local
+to your machine and is not tracked by git.
 
 ### Start The GUI
 
@@ -76,9 +75,18 @@ Basic GUI flow:
 
 ## Setup Details
 
-The environment installs twopy as an editable package, so the `twopy` terminal
-command is available after activating the environment. If the environment
-already existed before the command was added, refresh the editable install:
+For development, install from the repository so local code edits are used:
+
+```sh
+micromamba env create -f environment.yml
+micromamba activate twopy
+micromamba run -n twopy pre-commit install
+```
+
+The development environment installs twopy as an editable package, so the
+`twopy` terminal command is available after activating the environment. If the
+environment already existed before the command was added, refresh the editable
+install:
 
 ```sh
 micromamba run -n twopy python -m pip install -e .
