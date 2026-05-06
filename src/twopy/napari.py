@@ -27,6 +27,7 @@ from twopy.roi import (
 __all__ = [
     "NapariRecordingView",
     "open_recording_in_napari",
+    "roi_label_image_from_layer",
     "save_napari_label_rois",
 ]
 
@@ -65,6 +66,16 @@ class _NapariViewer(Protocol):
         ...
 
 
+class _NapariLayerWithData(Protocol):
+    """Small protocol for napari layers that expose array-like data.
+
+    Inputs: a napari layer object.
+    Outputs: access to its ``data`` attribute.
+    """
+
+    data: object
+
+
 @dataclass(frozen=True)
 class NapariRecordingView:
     """Objects created when a converted recording is opened in napari.
@@ -94,6 +105,7 @@ def open_recording_in_napari(
     mean_image_layer_name: str = "mean image",
     movie_layer_name: str = "aligned movie",
     roi_layer_name: str = "rois",
+    add_roi_labels_layer: bool = True,
 ) -> NapariRecordingView:
     """Open a converted recording in napari.
 
@@ -107,7 +119,10 @@ def open_recording_in_napari(
             the mean image.
         mean_image_layer_name: Napari layer name for the mean image.
         movie_layer_name: Napari layer name for the optional movie preview.
-        roi_layer_name: Napari layer name for optional ROI labels.
+        roi_layer_name: Napari layer name for ROI labels.
+        add_roi_labels_layer: Whether to add a napari Labels layer for ROI
+            drawing or editing. When ``roi_set`` is omitted, the layer starts as
+            an empty integer image with the movie spatial shape.
 
     Returns:
         ``NapariRecordingView`` with the loaded recording and created layers.
@@ -135,11 +150,9 @@ def open_recording_in_napari(
         )
 
     roi_layer = None
-    if roi_set is not None:
-        loaded_roi_set = _resolve_roi_set(roi_set)
-        _validate_roi_shape(loaded_roi_set, recording)
+    if add_roi_labels_layer:
         roi_layer = resolved_viewer.add_labels(
-            roi_set_to_label_image(loaded_roi_set),
+            _roi_label_image_for_display(roi_set, recording),
             name=roi_layer_name,
         )
 
@@ -150,6 +163,23 @@ def open_recording_in_napari(
         movie_layer=movie_layer,
         roi_labels_layer=roi_layer,
     )
+
+
+def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
+    """Read integer label data from a napari Labels layer.
+
+    Args:
+        layer: Napari Labels layer, or a test object with a ``data`` attribute.
+
+    Returns:
+        Two-dimensional integer label image.
+
+    This small helper keeps scripts from reaching into napari layer internals
+    in several different ways. The label image can be passed directly to
+    ``save_napari_label_rois``.
+    """
+    data = cast(_NapariLayerWithData, layer).data
+    return np.asarray(data, dtype=np.int64)
 
 
 def save_napari_label_rois(
@@ -182,6 +212,26 @@ def save_napari_label_rois(
     )
     save_roi_set(roi_set, path)
     return roi_set
+
+
+def _roi_label_image_for_display(
+    roi_set: RoiSet | Path | None,
+    recording: RecordingData,
+) -> npt.NDArray[np.int64]:
+    """Create the label image shown in napari for ROI drawing/editing.
+
+    Args:
+        roi_set: Optional existing ROI set or saved ROI HDF5 path.
+        recording: Loaded converted recording.
+
+    Returns:
+        Integer label image with the movie spatial shape.
+    """
+    if roi_set is None:
+        return np.zeros(recording.movie.shape[1:], dtype=np.int64)
+    loaded_roi_set = _resolve_roi_set(roi_set)
+    _validate_roi_shape(loaded_roi_set, recording)
+    return roi_set_to_label_image(loaded_roi_set)
 
 
 def _create_viewer() -> _NapariViewer:

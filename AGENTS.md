@@ -46,7 +46,9 @@ twopy is a two-photon imaging analysis tool.
   future napari plugin can wrap it. Put reusable GUI workflow code in typed
   `twopy.napari` helpers; a future plugin should be menus/widgets only.
 - Do not hide analysis decisions inside napari callbacks. Put scientific logic in typed, tested modules.
-- Use napari image/shape/label layers for movie and ROI interaction where possible.
+- Use napari image layers for recordings and Labels layers for ROI drawing or
+  editing. ROI analysis operates on pixel masks, so Labels are the primary ROI
+  UI contract.
 
 ## Data Layout
 

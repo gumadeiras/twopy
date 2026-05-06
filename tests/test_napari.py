@@ -16,6 +16,7 @@ from twopy import (
     load_roi_set,
     make_roi_set,
     open_recording_in_napari,
+    roi_label_image_from_layer,
     save_napari_label_rois,
     save_roi_set,
 )
@@ -78,6 +79,26 @@ class _FakeViewer:
 
 class NapariAdapterTest(unittest.TestCase):
     """Tests napari loading and label saving without starting a GUI."""
+
+    def test_opens_empty_roi_labels_layer_by_default(self) -> None:
+        """Confirm new recordings open with an editable empty ROI layer.
+
+        Inputs: tiny converted recording and fake viewer.
+        Outputs: one zero-valued labels layer matching the movie frame shape.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+
+            self.assertIsNotNone(opened.roi_labels_layer)
+            self.assertEqual(len(viewer.labels), 1)
+            np.testing.assert_array_equal(
+                roi_label_image_from_layer(viewer.labels[0]),
+                np.zeros((2, 2), dtype=np.int64),
+            )
 
     def test_opens_converted_recording_with_roi_labels(self) -> None:
         """Confirm the adapter sends mean image, movie preview, and ROIs.

@@ -119,8 +119,8 @@ decided.
 - Core ROI helpers convert between integer label images and ROI masks, so
   napari label edits and scripts use the same ROI HDF5 format.
 - Thin napari adapter loads a converted recording mean image, optional bounded
-  movie preview, optional ROI labels, and saves edited label images through the
-  core ROI module.
+  movie preview, editable ROI Labels layer, and saves edited label images
+  through the core ROI module.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
   snake_case twopy field names such as `rig_name`.
 - Conversion stores one code-derived label per stimulus data column using the
@@ -195,6 +195,8 @@ decided.
 - GUI: napari.
 - Napari implementation stays inside this repo for now, structured as reusable
   `twopy.napari` helpers that a future plugin can wrap with menus/widgets.
+- Primary ROI interaction in napari uses Labels layers because they directly
+  represent the pixel masks used by analysis.
 - Python: 3.13.
 - Environment: micromamba env named `twopy`.
 - Core modules stay GUI-independent; napari code calls core modules.

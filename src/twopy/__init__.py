@@ -41,6 +41,7 @@ from twopy.converted import load_converted_recording
 from twopy.napari import (
     NapariRecordingView,
     open_recording_in_napari,
+    roi_label_image_from_layer,
     save_napari_label_rois,
 )
 from twopy.photodiode_classification import (
@@ -127,6 +128,7 @@ __all__ = [
     "RoiResponseTrial",
     "RoiSet",
     "RoiTraces",
+    "roi_label_image_from_layer",
     "roi_set_to_label_image",
     "save_analysis_outputs",
     "save_napari_label_rois",

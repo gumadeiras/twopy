@@ -131,19 +131,24 @@ behavior for audit comparisons.
 ```python
 from pathlib import Path
 
-from twopy import open_recording_in_napari, save_napari_label_rois
+from twopy import (
+    open_recording_in_napari,
+    roi_label_image_from_layer,
+    save_napari_label_rois,
+)
 
 view = open_recording_in_napari(
     Path("/path/to/recording_data.h5"),
-    roi_set=Path("/path/to/rois.h5"),
     movie_frame_range=(0, 200),
 )
 
-# After editing a napari labels layer:
-roi_set = save_napari_label_rois(view.roi_labels_layer.data, Path("/path/to/rois.h5"))
+# After drawing or editing the rois Labels layer:
+label_image = roi_label_image_from_layer(view.roi_labels_layer)
+roi_set = save_napari_label_rois(label_image, Path("/path/to/rois.h5"))
 ```
 
 Napari code is a thin adapter. It loads converted twopy files, displays the
-mean image, optionally displays a bounded movie preview, and saves label-layer
-edits through the core ROI HDF5 helpers. It does not read source MATLAB/TIFF
-files or own analysis decisions.
+mean image, optionally displays a bounded movie preview, creates an editable
+ROI Labels layer, and saves label-layer edits through the core ROI HDF5
+helpers. Pass `roi_set=Path("/path/to/rois.h5")` when reopening existing ROIs.
+It does not read source MATLAB/TIFF files or own analysis decisions.
