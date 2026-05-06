@@ -12,7 +12,11 @@ from typing import Any, Protocol, cast
 
 from qtpy.QtGui import QColor
 
-__all__ = ["apply_roi_visibility_to_labels_layer", "roi_label_value_from_label"]
+__all__ = [
+    "apply_roi_visibility_to_labels_layer",
+    "roi_label_value_from_label",
+    "roi_label_values_from_labels",
+]
 
 _LABEL_COLOR_LOOKAHEAD = 4096
 _BASE_LABEL_COLORMAP_METADATA_KEY = "twopy_base_label_colormap"
@@ -103,6 +107,21 @@ def roi_label_value_from_label(label: str, *, fallback: int) -> int:
     if suffix.isdecimal():
         return int(suffix)
     return fallback
+
+
+def roi_label_values_from_labels(roi_labels: tuple[str, ...]) -> tuple[int, ...]:
+    """Return napari integer Labels values for plot ROI labels.
+
+    Args:
+        roi_labels: ROI labels in plot order.
+
+    Returns:
+        Integer Labels-layer values in the same order.
+    """
+    return tuple(
+        roi_label_value_from_label(roi_label, fallback=index + 1)
+        for index, roi_label in enumerate(roi_labels)
+    )
 
 
 def _qcolor_rgba(color: QColor, *, visible: bool) -> tuple[float, float, float, float]:

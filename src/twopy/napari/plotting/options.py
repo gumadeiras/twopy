@@ -135,7 +135,7 @@ def visibility_options_widget(
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
     scroll.setWidget(list_widget)
-    scroll.setMaximumHeight(_visibility_list_height(checkboxes, visible_rows=5))
+    scroll.setMaximumHeight(_visibility_list_height(checkboxes, visible_rows=8))
     layout.addWidget(scroll)
 
     def set_all(checked: bool) -> None:

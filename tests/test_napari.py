@@ -41,7 +41,8 @@ from twopy.napari.display import (
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
-from twopy.napari.plotting.data import response_plot_data_from_grouped
+from twopy.napari.plotting.data import ResponsePlotData, response_plot_data_from_grouped
+from twopy.napari.plotting.export import export_epoch_plots
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.options import visibility_options_widget
 from twopy.napari.plotting.widgets import (
@@ -268,7 +269,7 @@ class NapariAdapterTest(unittest.TestCase):
                     options_widget.tabText(index)
                     for index in range(options_widget.count())
                 ),
-                ("Update", "Plot", "ROIs", "Epochs"),
+                ("Update", "Plot", "ROIs", "Epochs", "Export"),
             )
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
@@ -984,25 +985,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: equal preferred width and height.
         """
         _ = QApplication.instance() or QApplication([])
-        dff = RoiDeltaFOverF(
-            fluorescence=np.ones((2, 1), dtype=np.float64),
-            baseline=np.ones((2, 1), dtype=np.float64),
-            values=np.array([[0.0], [1.0]], dtype=np.float64),
-            labels=("roi_1",),
-            start_frame=0,
-            stop_frame=2,
-            tau=0.0,
-            amplitudes=np.ones(1, dtype=np.float64),
-            interleave_frame_numbers=np.array([0.0]),
-            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
-            metadata={"method": "test"},
-        )
-        grouped = group_delta_f_over_f_by_epoch(
-            dff,
-            (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),),
-            data_rate_hz=1.0,
-        )
-        plot_data = response_plot_data_from_grouped(grouped)
+        plot_data = _tiny_response_plot_data()
 
         widget = EpochPlotWidget(
             plot_data.epochs[0],
@@ -1013,9 +996,35 @@ class NapariAdapterTest(unittest.TestCase):
             time_max=1.0,
             value_min=0.0,
             value_max=1.0,
+            plot_size=480,
         )
 
         self.assertEqual(widget.sizeHint().width(), widget.sizeHint().height())
+        self.assertEqual(widget.sizeHint().width(), 480)
+
+    def test_response_plot_export_writes_editable_figure_bundle(self) -> None:
+        """Confirm response plots export in the expected file formats.
+
+        Inputs: one tiny plot-ready epoch and a temporary output folder.
+        Outputs: PDF, SVG, and PNG files for the epoch plot.
+        """
+        plot_data = _tiny_response_plot_data()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            written = export_epoch_plots(
+                plot_data=plot_data,
+                output_dir=Path(temp_dir),
+                epoch_keys=((1, "Odor"),),
+                roi_indices=(0,),
+                roi_colors=("#ff0000",),
+                show_sem=True,
+                time_bounds=(0.0, 1.0),
+                value_bounds=(0.0, 1.0),
+            )
+
+            self.assertEqual(
+                {path.suffix for path in written}, {".pdf", ".svg", ".png"}
+            )
+            self.assertTrue(all(path.is_file() for path in written))
 
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
         """Confirm no-path app launch can start empty instead of failing.
@@ -1151,6 +1160,36 @@ def _write_converted_recording(root: Path) -> Path:
         frame_counts.attrs["imaging_res_pd_minus_movie"] = 0
         frame_counts.attrs["acquisition_minus_movie"] = 0
     return recording_path
+
+
+def _tiny_response_plot_data() -> ResponsePlotData:
+    """Build one tiny response plot data object for napari plot tests.
+
+    Args:
+        None.
+
+    Returns:
+        Plot-ready response data with one ROI and one epoch.
+    """
+    dff = RoiDeltaFOverF(
+        fluorescence=np.ones((2, 1), dtype=np.float64),
+        baseline=np.ones((2, 1), dtype=np.float64),
+        values=np.array([[0.0], [1.0]], dtype=np.float64),
+        labels=("roi_1",),
+        start_frame=0,
+        stop_frame=2,
+        tau=0.0,
+        amplitudes=np.ones(1, dtype=np.float64),
+        interleave_frame_numbers=np.array([0.0]),
+        interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+        metadata={"method": "test"},
+    )
+    grouped = group_delta_f_over_f_by_epoch(
+        dff,
+        (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),),
+        data_rate_hz=1.0,
+    )
+    return response_plot_data_from_grouped(grouped)
 
 
 def _write_source_recording_shape(root: Path) -> None:

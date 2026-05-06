@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -33,13 +34,23 @@ from twopy.napari.plotting.data import (
     load_response_plot_data,
     response_plot_data_from_grouped,
 )
+from twopy.napari.plotting.export_controls import (
+    ResponseExportState,
+    create_response_export_tab,
+)
 from twopy.napari.plotting.label_visibility import (
     apply_roi_visibility_to_labels_layer,
-    roi_label_value_from_label,
+    roi_label_values_from_labels,
 )
 from twopy.napari.plotting.options import (
     axis_options_widget,
     visibility_options_widget,
+)
+from twopy.napari.plotting.panels import (
+    epoch_plot_panel,
+    plot_size_widget,
+    response_update_tab,
+    scrolling_tab,
 )
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
@@ -47,7 +58,9 @@ from twopy.napari.plotting.widgets import (
     epoch_key_label,
     global_time_bounds,
     global_value_bounds,
-    ordered_bounds,
+    opaque_colors,
+    resolved_time_bounds,
+    resolved_value_bounds,
     roi_colors_from_label_values,
 )
 from twopy.napari.protocols import NapariViewer
@@ -59,6 +72,8 @@ __all__ = [
     "add_twopy_response_plot_widget",
     "refresh_response_plot_widget",
 ]
+
+_QT_APPLICATION: object | None = None
 
 
 def add_twopy_response_plot_widget(
@@ -84,6 +99,7 @@ def add_twopy_response_plot_widget(
     """
     widget = create_response_plot_widget(
         recording,
+        viewer=viewer,
         roi_labels_layer=roi_labels_layer,
     )
     dock_widget = viewer.window.add_dock_widget(
@@ -127,12 +143,14 @@ def add_twopy_response_options_widget(
 def create_response_plot_widget(
     recording: RecordingData | None,
     *,
+    viewer: object | None = None,
     roi_labels_layer: object | None = None,
 ) -> object:
     """Create a response plotting widget.
 
     Args:
         recording: Optional loaded converted recording.
+        viewer: Optional napari viewer used for figure export.
         roi_labels_layer: Optional napari Labels layer used when the user asks
             to compute responses from the current ROIs.
 
@@ -140,7 +158,7 @@ def create_response_plot_widget(
         Qt widget as a plain object for napari docking.
     """
     _ensure_qapplication()
-    widget = _ResponsePlotWidget()
+    widget = _ResponsePlotWidget(viewer=viewer)
     refresh_response_plot_widget(
         widget,
         recording=recording,
@@ -185,21 +203,29 @@ def _ensure_qapplication() -> None:
     """
     from qtpy.QtWidgets import QApplication
 
+    global _QT_APPLICATION
     if QApplication.instance() is None:
-        QApplication([])
+        _QT_APPLICATION = QApplication([])
 
 
 class _ResponsePlotWidget(QWidget):
     """Qt widget for response plots plus a separately docked options panel."""
 
-    def __init__(self) -> None:
-        """Create empty response plots and an options panel."""
+    def __init__(self, *, viewer: object | None = None) -> None:
+        """Create empty response plots and an options panel.
+
+        Args:
+            viewer: Optional napari viewer used by export buttons to read the
+                currently displayed movie frame.
+        """
         super().__init__()
+        self._viewer = viewer
         self._recording: RecordingData | None = None
         self._roi_labels_layer: object | None = None
         self._analysis_path: Path | None = None
         self._plot_data: ResponsePlotData | None = None
         self._show_sem = True
+        self._plot_size = 360
         self._roi_visibility: dict[str, bool] = {}
         self._roi_colors: tuple[QColor, ...] = ()
         self._epoch_visibility: dict[tuple[int, str], bool] = {}
@@ -234,13 +260,20 @@ class _ResponsePlotWidget(QWidget):
         self._plot_axis_layout = QVBoxLayout()
         plot_axis_widget = QWidget()
         plot_axis_widget.setLayout(self._plot_axis_layout)
+        self._plot_size_spin = QSpinBox()
+        self._plot_size_spin.setRange(240, 900)
+        self._plot_size_spin.setSingleStep(20)
+        self._plot_size_spin.setSuffix(" px")
+        self._plot_size_spin.setValue(self._plot_size)
+        self._plot_size_spin.valueChanged.connect(self._set_plot_size)
         self._plot_options_layout.addWidget(self._show_sem_checkbox)
+        self._plot_options_layout.addWidget(plot_size_widget(self._plot_size_spin))
         self._plot_options_layout.addWidget(plot_axis_widget)
         self._plot_options_layout.addStretch(1)
         self._roi_options_layout = QVBoxLayout()
         self._epoch_options_layout = QVBoxLayout()
         self._options_tabs.addTab(
-            _response_update_tab(
+            response_update_tab(
                 refresh_button=refresh_button,
                 update_from_rois_button=update_from_rois_button,
                 analysis_path_label=self._analysis_path_label,
@@ -248,16 +281,20 @@ class _ResponsePlotWidget(QWidget):
             "Update",
         )
         self._options_tabs.addTab(
-            _scrolling_tab(self._plot_options_layout),
+            scrolling_tab(self._plot_options_layout),
             "Plot",
         )
         self._options_tabs.addTab(
-            _scrolling_tab(self._roi_options_layout),
+            scrolling_tab(self._roi_options_layout),
             "ROIs",
         )
         self._options_tabs.addTab(
-            _scrolling_tab(self._epoch_options_layout),
+            scrolling_tab(self._epoch_options_layout),
             "Epochs",
+        )
+        self._options_tabs.addTab(
+            create_response_export_tab(self._export_state),
+            "Export",
         )
 
     def options_widget(self) -> object:
@@ -378,16 +415,14 @@ class _ResponsePlotWidget(QWidget):
         self._render_plots()
 
     def _set_show_sem(self, state: int) -> None:
-        """Update whether SEM bands are drawn.
-
-        Args:
-            state: Qt checkbox state.
-
-        Returns:
-            None.
-        """
+        """Update whether SEM bands are drawn."""
         del state
         self._show_sem = self._show_sem_checkbox.isChecked()
+        self._render_plots()
+
+    def _set_plot_size(self, value: int) -> None:
+        """Update the square pixel size used for live response plots."""
+        self._plot_size = int(value)
         self._render_plots()
 
     def _sync_plot_state(self, *, reset_axes: bool) -> None:
@@ -409,10 +444,10 @@ class _ResponsePlotWidget(QWidget):
             roi_label: self._roi_visibility.get(roi_label, True)
             for roi_label in roi_labels
         }
-        self._roi_colors = _opaque_colors(
+        self._roi_colors = opaque_colors(
             roi_colors_from_label_values(
                 self._roi_labels_layer,
-                _label_values_from_roi_labels(roi_labels),
+                roi_label_values_from_labels(roi_labels),
                 fallback_count=len(roi_labels),
             )
         )
@@ -431,14 +466,7 @@ class _ResponsePlotWidget(QWidget):
         self._render_options()
 
     def _reset_plot_state(self) -> None:
-        """Clear plot-specific option state.
-
-        Args:
-            None.
-
-        Returns:
-            None.
-        """
+        """Clear plot-specific option state."""
         self._roi_visibility = {}
         self._roi_colors = ()
         self._epoch_visibility = {}
@@ -497,14 +525,7 @@ class _ResponsePlotWidget(QWidget):
         self._epoch_options_layout.addStretch(1)
 
     def _clear_dynamic_option_tabs(self) -> None:
-        """Clear dynamic option widgets from plot, ROI, and epoch tabs.
-
-        Args:
-            None.
-
-        Returns:
-            None.
-        """
+        """Clear dynamic option widgets from plot, ROI, and epoch tabs."""
         clear_layout(self._plot_axis_layout)
         clear_layout(self._roi_options_layout)
         clear_layout(self._epoch_options_layout)
@@ -534,29 +555,59 @@ class _ResponsePlotWidget(QWidget):
         self._manual_y_max = y_max
         self._render_plots()
 
+    def _export_state(self) -> ResponseExportState:
+        """Return the current state needed by export buttons."""
+        return ResponseExportState(
+            viewer=self._viewer,
+            recording=self._recording,
+            roi_labels_layer=self._roi_labels_layer,
+            plot_data=self._plot_data,
+            output_dir=self._export_output_dir(),
+            roi_label_values=self._roi_label_values(),
+            roi_colors=self._roi_color_hex(),
+            epoch_keys=self._visible_epoch_keys(),
+            roi_indices=self._visible_roi_indices(),
+            show_sem=self._show_sem,
+            time_bounds=resolved_time_bounds(
+                self._plot_data,
+                self._visible_epoch_keys(),
+                manual_min=self._manual_x_min,
+                manual_max=self._manual_x_max,
+            )
+            if self._plot_data is not None
+            else (-1.0, 1.0),
+            value_bounds=resolved_value_bounds(
+                self._plot_data,
+                self._visible_roi_indices(),
+                self._visible_epoch_keys(),
+                manual_min=self._manual_y_min,
+                manual_max=self._manual_y_max,
+            )
+            if self._plot_data is not None
+            else (-1.0, 1.0),
+        )
+
+    def _export_output_dir(self) -> Path:
+        """Return the default export folder beside the current recording."""
+        if self._recording is None:
+            return Path("exports")
+        return self._recording.path.parent / "exports"
+
+    def _roi_color_hex(self) -> tuple[str, ...]:
+        """Return ROI colors as hex strings in plot ROI order."""
+        return tuple(color.name() for color in self._roi_colors)
+
+    def _roi_label_values(self) -> tuple[int, ...]:
+        """Return integer Labels values in plot ROI order."""
+        return roi_label_values_from_labels(self._roi_labels())
+
     def _set_roi_visibility(self, label: str, visible: bool) -> None:
-        """Update one ROI visibility flag.
-
-        Args:
-            label: ROI label.
-            visible: Whether the ROI should be plotted.
-
-        Returns:
-            None.
-        """
+        """Update one ROI visibility flag."""
         self._roi_visibility[label] = visible
         self._render_plots()
 
     def _set_epoch_visibility_by_label(self, label: str, visible: bool) -> None:
-        """Update one epoch visibility flag from an options label.
-
-        Args:
-            label: Display label for the epoch checkbox.
-            visible: Whether the epoch should be plotted.
-
-        Returns:
-            None.
-        """
+        """Update one epoch visibility flag from an options label."""
         for key in self._epoch_visibility:
             if epoch_key_label(key[0], key[1]) == label:
                 self._epoch_visibility[key] = visible
@@ -629,18 +680,19 @@ class _ResponsePlotWidget(QWidget):
         if len(roi_indices) == 0 or len(epoch_keys) == 0:
             self._set_status("No responses selected.")
             return
-        auto_x_min, auto_x_max = global_time_bounds(self._plot_data, epoch_keys)
-        auto_y_min, auto_y_max = global_value_bounds(
+        time_min, time_max = resolved_time_bounds(
+            self._plot_data,
+            epoch_keys,
+            manual_min=self._manual_x_min,
+            manual_max=self._manual_x_max,
+        )
+        value_min, value_max = resolved_value_bounds(
             self._plot_data,
             roi_indices,
             epoch_keys,
+            manual_min=self._manual_y_min,
+            manual_max=self._manual_y_max,
         )
-        time_min = self._manual_x_min if self._manual_x_min is not None else auto_x_min
-        time_max = self._manual_x_max if self._manual_x_max is not None else auto_x_max
-        value_min = self._manual_y_min if self._manual_y_min is not None else auto_y_min
-        value_max = self._manual_y_max if self._manual_y_max is not None else auto_y_max
-        time_min, time_max = ordered_bounds(time_min, time_max)
-        value_min, value_max = ordered_bounds(value_min, value_max)
         colors = self._roi_colors
         for epoch in self._plot_data.epochs:
             if not self._epoch_visibility.get(
@@ -650,7 +702,7 @@ class _ResponsePlotWidget(QWidget):
                 continue
             title = f"Epoch {epoch.epoch_number}: {epoch.epoch_name}"
             self._plot_layout.addWidget(
-                _epoch_plot_panel(
+                epoch_plot_panel(
                     title=title,
                     plot=EpochPlotWidget(
                         epoch,
@@ -661,6 +713,7 @@ class _ResponsePlotWidget(QWidget):
                         time_max=time_max,
                         value_min=value_min,
                         value_max=value_max,
+                        plot_size=self._plot_size,
                     ),
                 )
             )
@@ -674,97 +727,3 @@ class _ResponsePlotWidget(QWidget):
             visibility=self._roi_visibility,
             colors=self._roi_colors,
         )
-
-
-def _epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
-    """Create one titled plot panel for the horizontal response strip.
-
-    Args:
-        title: Plot title.
-        plot: Epoch response plot widget.
-
-    Returns:
-        Qt widget containing the title and plot.
-    """
-    panel = QWidget()
-    layout = QVBoxLayout()
-    layout.addWidget(QLabel(title))
-    layout.addWidget(plot)
-    panel.setLayout(layout)
-    return panel
-
-
-def _response_update_tab(
-    *,
-    refresh_button: QPushButton,
-    update_from_rois_button: QPushButton,
-    analysis_path_label: QLabel,
-) -> QWidget:
-    """Create the tab that owns response recompute/reload actions.
-
-    Args:
-        refresh_button: Button that reloads persisted response outputs.
-        update_from_rois_button: Button that computes responses from current
-            Labels ROIs.
-        analysis_path_label: Label showing the analysis output path.
-
-    Returns:
-        Qt widget for the Update tab.
-    """
-    tab = QWidget()
-    layout = QVBoxLayout()
-    layout.addWidget(refresh_button)
-    layout.addWidget(update_from_rois_button)
-    layout.addWidget(analysis_path_label)
-    layout.addStretch(1)
-    tab.setLayout(layout)
-    return tab
-
-
-def _scrolling_tab(layout: QVBoxLayout) -> QScrollArea:
-    """Create a scrollable options tab around one layout.
-
-    Args:
-        layout: Layout that callers will populate with controls.
-
-    Returns:
-        Scroll area suitable for a tab body.
-    """
-    content = QWidget()
-    content.setLayout(layout)
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setWidget(content)
-    return scroll
-
-
-def _opaque_colors(colors: tuple[QColor, ...]) -> tuple[QColor, ...]:
-    """Return ROI colors with full alpha for plotting and visibility restore.
-
-    Args:
-        colors: Colors read from the Labels layer.
-
-    Returns:
-        Same RGB colors with alpha set to fully opaque.
-    """
-    opaque: list[QColor] = []
-    for color in colors:
-        updated = QColor(color)
-        updated.setAlpha(255)
-        opaque.append(updated)
-    return tuple(opaque)
-
-
-def _label_values_from_roi_labels(roi_labels: tuple[str, ...]) -> tuple[int, ...]:
-    """Return napari label values for plot ROI labels.
-
-    Args:
-        roi_labels: ROI labels in plot order.
-
-    Returns:
-        Integer Labels-layer values in the same order.
-    """
-    return tuple(
-        roi_label_value_from_label(roi_label, fallback=index + 1)
-        for index, roi_label in enumerate(roi_labels)
-    )

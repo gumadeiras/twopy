@@ -152,6 +152,11 @@ def open_recording_in_napari(
                 response_plot_widget,
             )
         )
+        _place_response_options_after_load_dock(
+            resolved_viewer,
+            controls_dock,
+            response_options_dock,
+        )
 
     return NapariRecordingView(
         viewer=resolved_viewer,
@@ -182,3 +187,48 @@ def create_viewer() -> NapariViewer:
     import napari
 
     return cast(NapariViewer, napari.Viewer())
+
+
+def _place_response_options_after_load_dock(
+    viewer: NapariViewer,
+    controls_dock_widget: object | None,
+    response_options_dock_widget: object | None,
+) -> None:
+    """Stack response options immediately under the Load Recording dock.
+
+    Args:
+        viewer: Napari viewer that owns the dock widgets.
+        controls_dock_widget: Dock widget returned for the load controls.
+        response_options_dock_widget: Dock widget returned for response options.
+
+    Returns:
+        None.
+
+    This is only a visual napari layout tweak. The controls and options widgets
+    remain separate so a future plugin wrapper can place them however it wants.
+    """
+    if controls_dock_widget is None or response_options_dock_widget is None:
+        return
+    try:
+        from qtpy.QtCore import Qt
+    except ImportError:
+        return
+
+    qt_window = getattr(viewer.window, "_qt_window", None)
+    if qt_window is None:
+        return
+    if not hasattr(qt_window, "splitDockWidget") or not hasattr(
+        qt_window,
+        "resizeDocks",
+    ):
+        return
+    qt_window.splitDockWidget(
+        controls_dock_widget,
+        response_options_dock_widget,
+        Qt.Orientation.Vertical,
+    )
+    qt_window.resizeDocks(
+        [controls_dock_widget, response_options_dock_widget],
+        [260, 10000],
+        Qt.Orientation.Vertical,
+    )

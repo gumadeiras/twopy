@@ -148,6 +148,10 @@ decided.
   between napari's layer controls and layer list.
 - Napari response plotting code is scoped under `twopy.napari.plotting` with
   separate modules for plot data, option controls, drawing widgets, and docks.
+- Napari response options now include a Plot-size control and an Export tab
+  that saves recording views, ROI views, recording/ROI overlays, per-epoch
+  response plots, and two-column ROI-overlay/response figures as PDF, SVG, and
+  PNG with Illustrator-editable text and vector ROI/trace paths where possible.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
 - Napari displays the alignment-valid crop with explicit movie-axis to

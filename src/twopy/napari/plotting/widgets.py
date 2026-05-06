@@ -25,6 +25,9 @@ __all__ = [
     "global_time_bounds",
     "global_value_bounds",
     "ordered_bounds",
+    "opaque_colors",
+    "resolved_time_bounds",
+    "resolved_value_bounds",
     "roi_colors_from_label_values",
     "roi_colors_from_layer",
 ]
@@ -59,6 +62,7 @@ class EpochPlotWidget(QWidget):
         time_max: float,
         value_min: float,
         value_max: float,
+        plot_size: int = 360,
     ) -> None:
         """Create a plot widget.
 
@@ -71,6 +75,7 @@ class EpochPlotWidget(QWidget):
             time_max: Shared x-axis maximum.
             value_min: Shared y-axis minimum.
             value_max: Shared y-axis maximum.
+            plot_size: Square widget size in screen pixels.
         """
         super().__init__()
         self._data = data
@@ -81,7 +86,8 @@ class EpochPlotWidget(QWidget):
         self._time_max = time_max
         self._value_min = value_min
         self._value_max = value_max
-        self.setMinimumSize(360, 360)
+        self._plot_size = int(plot_size)
+        self.setMinimumSize(self._plot_size, self._plot_size)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
     def sizeHint(self) -> QSize:
@@ -93,7 +99,7 @@ class EpochPlotWidget(QWidget):
         Returns:
             Qt size with equal width and height.
         """
-        return QSize(360, 360)
+        return QSize(self._plot_size, self._plot_size)
 
     def paintEvent(self, a0: QPaintEvent | None) -> None:
         """Draw response traces.
@@ -330,6 +336,73 @@ def ordered_bounds(min_value: float, max_value: float) -> tuple[float, float]:
     if min_value > max_value:
         return max_value, min_value
     return min_value - 0.5, max_value + 0.5
+
+
+def resolved_time_bounds(
+    data: ResponsePlotData,
+    epoch_keys: tuple[tuple[int, str], ...],
+    *,
+    manual_min: float | None,
+    manual_max: float | None,
+) -> tuple[float, float]:
+    """Return plot x-axis bounds after applying optional manual overrides.
+
+    Args:
+        data: Full response plot data.
+        epoch_keys: Visible epoch keys.
+        manual_min: Optional user-entered minimum.
+        manual_max: Optional user-entered maximum.
+
+    Returns:
+        Ordered nonzero x-axis bounds.
+    """
+    auto_min, auto_max = global_time_bounds(data, epoch_keys)
+    time_min = manual_min if manual_min is not None else auto_min
+    time_max = manual_max if manual_max is not None else auto_max
+    return ordered_bounds(time_min, time_max)
+
+
+def resolved_value_bounds(
+    data: ResponsePlotData,
+    roi_indices: tuple[int, ...],
+    epoch_keys: tuple[tuple[int, str], ...],
+    *,
+    manual_min: float | None,
+    manual_max: float | None,
+) -> tuple[float, float]:
+    """Return plot y-axis bounds after applying optional manual overrides.
+
+    Args:
+        data: Full response plot data.
+        roi_indices: Visible ROI indices.
+        epoch_keys: Visible epoch keys.
+        manual_min: Optional user-entered minimum.
+        manual_max: Optional user-entered maximum.
+
+    Returns:
+        Ordered nonzero y-axis bounds.
+    """
+    auto_min, auto_max = global_value_bounds(data, roi_indices, epoch_keys)
+    value_min = manual_min if manual_min is not None else auto_min
+    value_max = manual_max if manual_max is not None else auto_max
+    return ordered_bounds(value_min, value_max)
+
+
+def opaque_colors(colors: tuple[QColor, ...]) -> tuple[QColor, ...]:
+    """Return ROI colors with full alpha for plotting and visibility restore.
+
+    Args:
+        colors: Colors read from the Labels layer.
+
+    Returns:
+        Same RGB colors with alpha set to fully opaque.
+    """
+    opaque: list[QColor] = []
+    for color in colors:
+        updated = QColor(color)
+        updated.setAlpha(255)
+        opaque.append(updated)
+    return tuple(opaque)
 
 
 def _selected_epochs(
