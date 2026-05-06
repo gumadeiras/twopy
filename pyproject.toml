@@ -14,7 +14,6 @@ authors = [
 ]
 dependencies = [
   "h5py>=3.16,<4",
-  "mypy>=1.20",
   "napari[all]>=0.7,<0.8",
   "numpy>=2.3,<3",
   "pre-commit>=4.6,<5",
@@ -22,6 +21,7 @@ dependencies = [
   "ruff>=0.15",
   "scipy>=1.17,<2",
   "tifffile>=2026.3,<2027",
+  "ty>=0.0.34,<0.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -52,20 +52,11 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.mypy]
-files = ["src", "tests"]
-mypy_path = "src"
-python_version = "3.13"
-strict = true
-warn_unreachable = true
+[tool.ty.environment]
+python-version = "3.13"
 
-[[tool.mypy.overrides]]
-module = [
-  "h5py",
-  "napari",
-  "yaml",
-  "scipy",
-  "scipy.io",
-  "tifffile",
-]
-ignore_missing_imports = true
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.ty.terminal]
+error-on-warning = true

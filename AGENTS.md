@@ -142,7 +142,7 @@ twopy is a two-photon imaging analysis tool.
 - Type checking is part of the gate:
 
 ```sh
-micromamba run -n twopy python -m mypy
+micromamba run -n twopy python -m ty check
 ```
 
 ## Linting And Formatting

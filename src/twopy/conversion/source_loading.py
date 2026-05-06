@@ -230,7 +230,7 @@ def _load_stimulus_parameters(path: Path) -> StimulusParameters:
         path=path,
         epochs=tuple(
             matlab_struct_to_dict(param)
-            for param in params_array.ravel()
+            for param in np.ravel(params_array)
             if hasattr(param, "_fieldnames")
         ),
     )

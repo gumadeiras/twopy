@@ -20,7 +20,7 @@ git.
 micromamba run -n twopy pre-commit run --all-files
 ```
 
-The installed pre-commit hook runs ruff, mypy, and the unit tests before each
+The installed pre-commit hook runs ruff, ty, and the unit tests before each
 commit.
 
 ## Find Recordings

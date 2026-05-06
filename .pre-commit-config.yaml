@@ -5,7 +5,7 @@
 #   micromamba run -n twopy pre-commit install
 #
 # Each hook calls the twopy micromamba environment so commits use the same
-# Python, ruff, mypy, and test setup documented for the project.
+# Python, ruff, ty, and test setup documented for the project.
 repos:
   - repo: local
     hooks:
@@ -21,9 +21,9 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: mypy
-        name: mypy
-        entry: micromamba run -n twopy python -m mypy
+      - id: ty
+        name: ty
+        entry: micromamba run -n twopy python -m ty check
         language: system
         pass_filenames: false
 

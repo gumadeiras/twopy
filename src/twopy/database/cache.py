@@ -60,7 +60,7 @@ def ensure_local_database_copy(source_path: Path, cache_dir: Path) -> Path:
     cache_path = cache_dir / source_path.name
     manifest_path = cache_path.with_suffix(cache_path.suffix + ".manifest.json")
     source_stat = source_path.stat()
-    source_metadata = {
+    source_metadata: dict[str, object] = {
         "source_path": str(source_path),
         "source_size": source_stat.st_size,
         "source_mtime_ns": source_stat.st_mtime_ns,

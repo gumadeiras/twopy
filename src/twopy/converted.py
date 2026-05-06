@@ -173,13 +173,14 @@ def load_converted_recording(
         if len(movie_shape) != 3:
             msg = f"aligned movie shape must have 3 dimensions: {movie_shape}"
             raise ValueError(msg)
+        movie_shape_3d = cast(tuple[int, int, int], movie_shape)
 
         recording = RecordingData(
             path=data_path,
             movie=ConvertedMovie(
                 path=resolved_movie_path,
                 dataset_name=movie_dataset,
-                shape=movie_shape,
+                shape=movie_shape_3d,
                 dtype=movie_dtype,
             ),
             source_session_dir=Path(
@@ -399,7 +400,7 @@ def _plain_attr_value(value: object) -> object:
     if isinstance(value, np.generic):
         return value.item()
     if isinstance(value, np.ndarray):
-        return value.tolist()
+        return np.asarray(value, dtype=object).tolist()
     return value
 
 

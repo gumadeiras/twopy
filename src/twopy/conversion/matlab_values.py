@@ -90,9 +90,9 @@ def matlab_value_to_python(value: object) -> object:
         if value.size == 0:
             return ()
         if value.dtype == object:
-            return tuple(matlab_value_to_python(item) for item in value.ravel())
+            return tuple(matlab_value_to_python(item) for item in np.ravel(value))
         if value.size == 1:
-            return matlab_value_to_python(value.item())
+            return matlab_value_to_python(np.ravel(value)[0])
         return value
 
     if isinstance(value, np.generic):
@@ -115,7 +115,7 @@ def json_ready(value: object) -> object:
     if isinstance(value, tuple | list):
         return [json_ready(item) for item in value]
     if isinstance(value, np.ndarray):
-        return value.tolist()
+        return np.asarray(value, dtype=object).tolist()
     if isinstance(value, np.generic):
         return value.item()
     if isinstance(value, Path):

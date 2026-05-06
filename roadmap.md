@@ -10,8 +10,8 @@ decided.
 - Python 3.13 micromamba environment named `twopy`.
 - Package metadata with one required install path for core, GUI, linting, and
   typing tools.
-- Strict ruff and mypy configuration.
-- Pre-commit hooks for ruff, mypy, and unit tests.
+- Strict ruff and ty configuration.
+- Pre-commit hooks for ruff, ty, and unit tests.
 - Repository rules in `AGENTS.md`.
 - Session path discovery for required microscope output files.
 - Mini input data spec in `docs/input_data_spec.md`.

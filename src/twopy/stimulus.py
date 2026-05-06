@@ -10,6 +10,7 @@ per-``stimtype`` mapping explicit for scripts and analysis code.
 """
 
 from dataclasses import dataclass
+from typing import cast
 
 from twopy.converted import RecordingData
 
@@ -131,11 +132,13 @@ def _mappings_from_metadata(
         if not isinstance(column, dict):
             msg = f"stimulus metadata for stimtype {stimtype!r} is malformed"
             raise ValueError(msg)
-        if column.get("column_name") != stable_column_name:
+        column_metadata = cast(dict[str, object], column)
+        if column_metadata.get("column_name") != stable_column_name:
             continue
 
-        source_comment = _optional_text(column.get("source_comment"))
-        source_expression = str(column["source_expression"])
+        source_comment = _optional_text(column_metadata.get("source_comment"))
+        source_expression = str(column_metadata["source_expression"])
+        source_line = _required_int(column_metadata["source_line"])
         mappings.append(
             StimulusSpecificColumnMapping(
                 stable_column_name=stable_column_name,
@@ -143,7 +146,7 @@ def _mappings_from_metadata(
                 specific_name=source_comment or source_expression,
                 source_expression=source_expression,
                 source_comment=source_comment,
-                source_line=int(column["source_line"]),
+                source_line=source_line,
                 source_path=str(metadata["source_path"]),
                 stimulus_function=str(metadata["function"]),
             ),
@@ -163,3 +166,21 @@ def _optional_text(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _required_int(value: object) -> int:
+    """Return a required JSON metadata integer.
+
+    Args:
+        value: Raw decoded JSON value.
+
+    Returns:
+        Integer value.
+
+    Raises:
+        ValueError: If the value cannot honestly be read as an integer.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | str):
+        msg = f"Expected integer metadata value; got {value!r}"
+        raise ValueError(msg)
+    return int(value)
