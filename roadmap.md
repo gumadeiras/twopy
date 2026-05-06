@@ -118,8 +118,9 @@ decided.
 - Public stimulus helper maps stable `stimulus_specific_*` column names to
   per-`stimtype` source expressions and readable names.
 - `movie/mean_image` is stored uncompressed because it is a single small image.
-- Read-only `savedAnalysis/*.mat` loader for selected `lastRoi` fields needed
-  by parity checks: ROI masks, epoch lists, epoch windows, and saved ROI traces.
+- Read-only `twopy.parity` loader for selected `savedAnalysis/*.mat`
+  `lastRoi` fields needed by parity checks: ROI masks, epoch lists, epoch
+  windows, and saved ROI traces.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
 - Real example recording converted successfully to `twopy/recording_data.h5`
@@ -179,6 +180,10 @@ decided.
   dominates file size.
 - Source MATLAB and raw TIFF files are conversion inputs only. Analysis and
   processing operate on converted twopy HDF5 files.
+- Source-output ownership is explicit: `twopy.conversion` may read microscope
+  MAT/TIFF/text/ZIP files, `twopy.analysis` uses converted twopy data only, and
+  `twopy.parity` is isolated read-only comparison code for prior
+  `savedAnalysis/` outputs.
 - Imaging and stimulus presentation run on separate clocks. Response analysis
   must align stimulus events to imaging frames through photodiode decoding, not
   nominal frame rates alone.

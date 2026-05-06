@@ -1,4 +1,4 @@
-"""Tests for reading prior saved-analysis outputs.
+"""Tests for read-only parity helpers.
 
 Inputs: tiny HDF5-backed MATLAB-style ``lastRoi`` files.
 Outputs: arrays used by parity checks against twopy analysis.
@@ -11,7 +11,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-from twopy import load_saved_analysis_last_roi
+from twopy.parity import load_saved_analysis_last_roi
 
 
 class SavedAnalysisTest(unittest.TestCase):

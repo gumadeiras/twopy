@@ -43,7 +43,6 @@ from twopy.roi import (
     make_roi_set,
     save_roi_set,
 )
-from twopy.saved_analysis import SavedAnalysisLastRoi, load_saved_analysis_last_roi
 from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
 from twopy.stimulus import (
     StimulusSpecificColumnMapping,
@@ -100,14 +99,12 @@ __all__ = [
     "RoiSet",
     "RoiTraces",
     "save_roi_set",
-    "SavedAnalysisLastRoi",
     "select_epoch_frame_windows",
     "split_traces_by_frame_windows",
     "SpatialCrop",
     "SpatialDomain",
     "StimulusSpecificColumnMapping",
     "WindowedRoiResponse",
-    "load_saved_analysis_last_roi",
 ]
 
 __version__ = "0.1.0"

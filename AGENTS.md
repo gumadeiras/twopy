@@ -94,6 +94,18 @@ twopy is a two-photon imaging analysis tool.
   code can see the timing contract.
 - Keep HDF5 groups and datasets named in plain language so files remain inspectable outside twopy.
 
+## Code Ownership Boundaries
+
+- `twopy.conversion` owns reading source microscope outputs such as MAT files,
+  raw TIFF files, stimulus backups, and text metadata.
+- `twopy.analysis` owns scientific calculations over converted twopy objects
+  and HDF5 files. Analysis code must not read source MAT/TIFF files directly.
+- `twopy.parity` owns read-only comparison helpers for prior `savedAnalysis/`
+  outputs. Normal conversion, analysis, and napari code should not import
+  parity helpers.
+- If a feature needs source data, add it to conversion and persist the needed
+  plain twopy object first; then analyze the converted object.
+
 ## Environment
 
 - Keep the environment reproducible.
