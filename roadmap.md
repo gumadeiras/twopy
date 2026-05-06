@@ -104,6 +104,11 @@ decided.
   producing frame windows.
 - Frame-window response objects for splitting ROI traces by explicit imaging
   frame boundaries.
+- ROI dF/F responses can be grouped by epoch and trial, with one response
+  matrix per trial and compact per-ROI summary rows.
+- Analysis outputs can be persisted to one inspectable HDF5 file containing ROI
+  masks, fluorescence/background traces, dF/F arrays, epoch windows, and grouped
+  responses, with optional CSV response summaries.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
   snake_case twopy field names such as `rig_name`.
 - Conversion stores one code-derived label per stimulus data column using the
