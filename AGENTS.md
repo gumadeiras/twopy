@@ -73,6 +73,11 @@ twopy is a two-photon imaging analysis tool.
   photodiode signal. Do not assign trials from nominal frame rates alone.
 - Prefer `highResPd.mat` for precise photodiode event detection and
   `imagingResPd.mat` for frame-resolution mapping.
+- Keep photodiode thresholding and stimulus-bounds rules in one shared timing
+  helper. The default event threshold is the lab convention
+  `min + 0.3 * (max - min)`, with explicit thresholds only for audits.
+- Ambiguous stimulus end flashes must fail loudly. Do not silently choose one
+  when more than two long photodiode flashes are present.
 
 ## Converted Data
 

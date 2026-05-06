@@ -41,6 +41,8 @@ decided.
 - Conversion computes and stores `movie/alignment_valid_crop` from
   stimulus-bounded alignment offsets while preserving the aligned movie as
   full-frame data.
+- Conversion stores per-frame alignment shift magnitudes and a motion artifact
+  mask so high-motion frames can be marked after dF/F.
 - Conversion uses configured `analysis_output` by default unless a caller passes
   an explicit output directory.
 - Conversion code split into focused modules for public workflow, source
@@ -54,6 +56,9 @@ decided.
   one less.
 - Converted HDF5 synchronization metadata documenting that imaging and stimulus
   clocks are aligned through photodiode events.
+- Shared photodiode timing helpers for event segmentation, lab-style
+  range-fraction thresholding, stimulus frame bounds, and ambiguous end-flash
+  errors.
 - Recording file inspector for MATLAB, TIFF, text, CSV, ZIP, and other files.
 - TIFF metadata extraction for Python access plus optional CSV output with
   selected TIFF tags and ScanImage recording fields.
@@ -78,11 +83,16 @@ decided.
 - Trial/frame-window response helpers live in `twopy.analysis.trials`.
 - Stimulus epoch runs from `stimulus/data` can be mapped onto photodiode-aligned
   imaging-frame windows when their counts agree.
+- Stimulus epoch values can also be interpolated onto stimulus-bounded imaging
+  frames from converted `stimulus/data`, without requiring equal high-res and
+  imaging-res photodiode event counts.
 - ROI-level dF/F computation uses corrected ROI fluorescence, gray interleave
   windows, last-second baseline samples, one shared exponential tau, and one
   amplitude per ROI.
 - ROI-level dF/F supports a default robust exponential fit mode plus
   `source_bounds` mode for original source-bound audit comparisons.
+- Post-dF/F motion artifact masking marks converted high-motion frames as NaN
+  while keeping the fitted fluorescence and baseline auditable.
 - Photodiode event segmentation for converted `high_res_pd` and
   `imaging_res_pd` signals.
 - Order-based pairing of high-resolution photodiode events to imaging-frame
@@ -108,6 +118,8 @@ decided.
 - Public stimulus helper maps stable `stimulus_specific_*` column names to
   per-`stimtype` source expressions and readable names.
 - `movie/mean_image` is stored uncompressed because it is a single small image.
+- Read-only `savedAnalysis/*.mat` loader for selected `lastRoi` fields needed
+  by parity checks: ROI masks, epoch lists, epoch windows, and saved ROI traces.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw
   TIFF shape `(8334, 127, 256)`.
 - Real example recording converted successfully to `twopy/recording_data.h5`
@@ -119,6 +131,13 @@ decided.
   trace smoke test produced shape `(5, 1)`, photodiode detection found 101
   high-resolution and 101 imaging-resolution events, and event pairing produced
   100 frame windows.
+- Real example shared photodiode timing used threshold `6.54609375`, found 101
+  high-resolution events, and interpolated stimulus epochs onto frames
+  `[54, 3963)` with 100 epoch windows.
+- Real example converted motion artifact mask contains 0 high-motion frames
+  under the current threshold.
+- Real example `savedAnalysis/` loader read saved ROI mask shape `(244, 109)`
+  and saved trace shape `(3909, 1221)` from a prior analysis file.
 - Real example photodiode classification found 1 stimulus start event, 99 trial
   transition events, 1 stimulus end event, and 100 classified stimulus windows.
 - Real database query matched the example recording in both `experimentLog.db`
@@ -138,8 +157,8 @@ decided.
 - Add protocol-specific photodiode classifiers for recordings with extra
   within-epoch alignment flashes.
 - Group response outputs directly from classified stimulus windows.
-- Compare twopy ROI-level dF/F against MATLAB `savedAnalysis/` on a recording
-  that already has matching saved ROI masks.
+- Use the read-only `savedAnalysis/` loader to compare twopy ROI-level dF/F
+  against prior saved outputs on a recording with matching saved ROI masks.
 - Load a recording in napari.
 - Interactively draw or select ROIs in the movie.
 - Save napari-drawn ROIs through the core ROI module.
@@ -163,6 +182,10 @@ decided.
 - Imaging and stimulus presentation run on separate clocks. Response analysis
   must align stimulus events to imaging frames through photodiode decoding, not
   nominal frame rates alone.
+- Default photodiode event thresholding uses the lab convention
+  `min + 0.3 * (max - min)`. Explicit thresholds remain available for audits.
+- More than two long photodiode flashes is ambiguous and should fail loudly
+  rather than silently choosing one.
 - Initial conversion generates a mean image. The default is the full aligned
   movie, with optional frame-range selection.
 - The converted aligned movie and ROI masks stay full-frame. Crop-domain
