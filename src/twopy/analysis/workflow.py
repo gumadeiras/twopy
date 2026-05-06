@@ -29,7 +29,10 @@ from twopy.analysis.epoch_mapping import (
 )
 from twopy.analysis.motion import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.persistence import save_analysis_outputs
-from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_by_epoch
+from twopy.analysis.responses import (
+    GroupedRoiResponses,
+    group_delta_f_over_f_by_epoch,
+)
 from twopy.analysis.trials import (
     EpochFrameWindow,
     FrameWindow,
@@ -41,11 +44,13 @@ from twopy.spatial import SpatialDomain
 
 __all__ = [
     "AnalysisResponseRun",
+    "DEFAULT_RESPONSE_POST_WINDOW_SECONDS",
     "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
     "analyze_recording_responses",
 ]
 
 DEFAULT_RESPONSE_PRE_WINDOW_SECONDS = 2.0
+DEFAULT_RESPONSE_POST_WINDOW_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -89,6 +94,7 @@ def analyze_recording_responses(
     chunk_frames: int = 128,
     spatial_domain: SpatialDomain = "alignment_valid_crop",
     response_pre_window_seconds: float = DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+    response_post_window_seconds: float = 0.0,
 ) -> AnalysisResponseRun:
     """Run the standard ROI response analysis workflow.
 
@@ -117,6 +123,10 @@ def analyze_recording_responses(
         response_pre_window_seconds: Seconds before each stimulus window to
             include in grouped responses. The default shows the transition from
             gray interleave baseline into the stimulus.
+        response_post_window_seconds: Seconds after each stimulus window to
+            include in grouped responses. The default is zero so persisted
+            summaries keep their epoch-window meaning; plotting code can add
+            visual context separately from saved dF/F and epoch windows.
 
     Returns:
         ``AnalysisResponseRun`` with computed objects and output paths.
@@ -135,7 +145,13 @@ def analyze_recording_responses(
         else float(data_rate_hz)
     )
     mapping, resolved_epoch_windows = _resolve_epoch_windows(recording, epoch_windows)
-    trace_start, trace_stop = _frame_range_for_epoch_windows(resolved_epoch_windows)
+    trace_start, trace_stop = _frame_range_for_epoch_windows(
+        resolved_epoch_windows,
+        frame_count=recording.movie.shape[0],
+        data_rate_hz=frame_rate_hz,
+        pre_window_seconds=response_pre_window_seconds,
+        post_window_seconds=response_post_window_seconds,
+    )
     interleave_windows = select_epoch_frame_windows(
         resolved_epoch_windows,
         epoch_name=interleave_epoch_name,
@@ -169,6 +185,7 @@ def analyze_recording_responses(
         resolved_epoch_windows,
         data_rate_hz=frame_rate_hz,
         pre_window_seconds=response_pre_window_seconds,
+        post_window_seconds=response_post_window_seconds,
     )
     resolved_output_path = _resolve_output_path(recording.path, output_path)
     resolved_summary_path = _resolve_summary_csv_path(
@@ -236,11 +253,20 @@ def _resolve_epoch_windows(
 
 def _frame_range_for_epoch_windows(
     epoch_windows: Sequence[EpochFrameWindow],
+    *,
+    frame_count: int,
+    data_rate_hz: float,
+    pre_window_seconds: float,
+    post_window_seconds: float,
 ) -> tuple[int, int]:
     """Return the smallest frame range covering all epoch windows.
 
     Args:
         epoch_windows: Windows used for response analysis.
+        frame_count: Total aligned-movie frame count.
+        data_rate_hz: Imaging frame rate in hertz.
+        pre_window_seconds: Seconds before each epoch to include.
+        post_window_seconds: Seconds after each epoch to include.
 
     Returns:
         ``(start, stop)`` absolute movie-frame range.
@@ -248,8 +274,16 @@ def _frame_range_for_epoch_windows(
     if len(epoch_windows) == 0:
         msg = "At least one epoch window is required for response analysis"
         raise ValueError(msg)
-    starts = [epoch_window.window.start_frame for epoch_window in epoch_windows]
-    stops = [epoch_window.window.stop_frame for epoch_window in epoch_windows]
+    pre_frames = int(round(pre_window_seconds * data_rate_hz))
+    post_frames = int(round(post_window_seconds * data_rate_hz))
+    starts = [
+        max(epoch_window.window.start_frame - pre_frames, 0)
+        for epoch_window in epoch_windows
+    ]
+    stops = [
+        min(epoch_window.window.stop_frame + post_frames, frame_count)
+        for epoch_window in epoch_windows
+    ]
     return min(starts), max(stops)
 
 

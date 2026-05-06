@@ -88,6 +88,27 @@ class ResponseGroupingTest(unittest.TestCase):
         np.testing.assert_allclose(trial.time_seconds, [-1.0, -0.5, 0.0, 0.5])
         np.testing.assert_array_equal(trial.values, self._dff().values)
 
+    def test_groups_with_poststimulus_frames(self) -> None:
+        """Confirm grouping can include frames after each window.
+
+        Inputs: dF/F trace and one window with one second of post-window
+            context.
+        Outputs: response time axis extends past the epoch offset.
+        """
+        grouped = group_delta_f_over_f_by_epoch(
+            self._dff(),
+            (EpochFrameWindow(FrameWindow(0, 10, 12, "odor"), 2, "Odor"),),
+            data_rate_hz=2.0,
+            post_window_seconds=1.0,
+        )
+
+        trial = grouped.trials[0]
+        self.assertEqual(trial.start_frame, 10)
+        self.assertEqual(trial.stop_frame, 14)
+        np.testing.assert_array_equal(trial.frame_numbers, [10, 11, 12, 13])
+        np.testing.assert_allclose(trial.time_seconds, [0.0, 0.5, 1.0, 1.5])
+        np.testing.assert_array_equal(trial.values, self._dff().values)
+
     def test_rejects_window_outside_dff_range(self) -> None:
         """Confirm grouping does not silently slice missing frames.
 
@@ -114,6 +135,20 @@ class ResponseGroupingTest(unittest.TestCase):
                 (EpochFrameWindow(FrameWindow(0, 10, 12, "gray"), 1, "Gray"),),
                 data_rate_hz=2.0,
                 pre_window_seconds=-1.0,
+            )
+
+    def test_rejects_negative_poststimulus_duration(self) -> None:
+        """Confirm post-window duration cannot be negative.
+
+        Inputs: negative post-window duration.
+        Outputs: clear validation error.
+        """
+        with self.assertRaisesRegex(ValueError, "post_window_seconds"):
+            group_delta_f_over_f_by_epoch(
+                self._dff(),
+                (EpochFrameWindow(FrameWindow(0, 10, 12, "gray"), 1, "Gray"),),
+                data_rate_hz=2.0,
+                post_window_seconds=-1.0,
             )
 
     def _dff(self) -> RoiDeltaFOverF:

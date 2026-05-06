@@ -35,6 +35,7 @@ from twopy.analysis.responses import (
     RoiResponseSummary,
     RoiResponseTrial,
     group_delta_f_over_f_by_epoch,
+    is_gray_epoch_name,
     summarize_grouped_responses,
 )
 from twopy.analysis.trials import (
@@ -48,6 +49,7 @@ from twopy.analysis.trials import (
     split_traces_by_frame_windows,
 )
 from twopy.analysis.workflow import (
+    DEFAULT_RESPONSE_POST_WINDOW_SECONDS,
     DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
     AnalysisResponseRun,
     analyze_recording_responses,
@@ -56,6 +58,7 @@ from twopy.analysis.workflow import (
 __all__ = [
     "analyze_recording_responses",
     "AnalysisResponseRun",
+    "DEFAULT_RESPONSE_POST_WINDOW_SECONDS",
     "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
     "apply_motion_artifact_mask_to_delta_f_over_f",
     "ANALYSIS_OUTPUT_FILE_FORMAT",
@@ -71,6 +74,7 @@ __all__ = [
     "GroupedRoiResponses",
     "InterpolatedEpochMapping",
     "interpolate_stimulus_epochs_to_frame_windows",
+    "is_gray_epoch_name",
     "load_analysis_outputs",
     "LoadedAnalysisOutputs",
     "make_frame_windows",

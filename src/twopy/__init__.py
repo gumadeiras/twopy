@@ -6,6 +6,7 @@ Outputs: package constants and helper functions imported by users and scripts.
 """
 
 from twopy.analysis import (
+    DEFAULT_RESPONSE_POST_WINDOW_SECONDS,
     DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
     AnalysisResponseRun,
     BackgroundCorrectedRoiTraces,
@@ -27,6 +28,7 @@ from twopy.analysis import (
     frame_windows_from_photodiode_alignment,
     group_delta_f_over_f_by_epoch,
     interpolate_stimulus_epochs_to_frame_windows,
+    is_gray_epoch_name,
     load_analysis_outputs,
     make_frame_windows,
     map_stimulus_epochs_to_frame_windows,
@@ -95,6 +97,7 @@ __all__ = [
     "classify_recording_photodiode_events",
     "compute_roi_delta_f_over_f",
     "convert_recording_to_twopy",
+    "DEFAULT_RESPONSE_POST_WINDOW_SECONDS",
     "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
     "detect_photodiode_events",
     "detect_recording_photodiode_events",
@@ -110,6 +113,7 @@ __all__ = [
     "GroupedRoiResponses",
     "InterpolatedEpochMapping",
     "interpolate_stimulus_epochs_to_frame_windows",
+    "is_gray_epoch_name",
     "launch_napari",
     "load_analysis_outputs",
     "load_converted_recording",

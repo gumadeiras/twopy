@@ -22,6 +22,7 @@ __all__ = [
     "RoiResponseSummary",
     "RoiResponseTrial",
     "group_delta_f_over_f_by_epoch",
+    "is_gray_epoch_name",
     "summarize_grouped_responses",
 ]
 
@@ -95,6 +96,7 @@ def group_delta_f_over_f_by_epoch(
     *,
     data_rate_hz: float,
     pre_window_seconds: float = 0.0,
+    post_window_seconds: float = 0.0,
 ) -> GroupedRoiResponses:
     """Group dF/F values by stimulus epoch windows.
 
@@ -105,6 +107,9 @@ def group_delta_f_over_f_by_epoch(
         pre_window_seconds: Seconds before each epoch window to include. This
             is useful for plots that show the gray interleave baseline before
             stimulus onset.
+        post_window_seconds: Seconds after each epoch window to include. This
+            is useful for plots that show the response returning into the next
+            gray interleave.
 
     Returns:
         ``GroupedRoiResponses`` with one response object per input window.
@@ -115,11 +120,18 @@ def group_delta_f_over_f_by_epoch(
     The function only groups existing dF/F values. It does not decide which
     windows are trials and does not recompute fluorescence.
     """
-    _validate_grouping_inputs(dff, epoch_windows, data_rate_hz, pre_window_seconds)
+    _validate_grouping_inputs(
+        dff,
+        epoch_windows,
+        data_rate_hz,
+        pre_window_seconds,
+        post_window_seconds,
+    )
 
     trials: list[RoiResponseTrial] = []
     epoch_counts: dict[tuple[int, str], int] = {}
     pre_window_frames = int(round(pre_window_seconds * data_rate_hz))
+    post_window_frames = int(round(post_window_seconds * data_rate_hz))
     for epoch_window in epoch_windows:
         key = (epoch_window.epoch_number, epoch_window.epoch_name)
         epoch_counts[key] = epoch_counts.get(key, 0) + 1
@@ -127,10 +139,14 @@ def group_delta_f_over_f_by_epoch(
         response_start_frame = max(
             window.start_frame - pre_window_frames, dff.start_frame
         )
+        response_stop_frame = min(
+            window.stop_frame + post_window_frames,
+            dff.stop_frame,
+        )
         local_start = response_start_frame - dff.start_frame
-        local_stop = window.stop_frame - dff.start_frame
+        local_stop = response_stop_frame - dff.start_frame
         frame_numbers = np.arange(
-            response_start_frame, window.stop_frame, dtype=np.int64
+            response_start_frame, response_stop_frame, dtype=np.int64
         )
         time_seconds = (frame_numbers - window.start_frame) / data_rate_hz
         trials.append(
@@ -140,7 +156,7 @@ def group_delta_f_over_f_by_epoch(
                 trial_index=epoch_counts[key],
                 window_index=window.index,
                 start_frame=response_start_frame,
-                stop_frame=window.stop_frame,
+                stop_frame=response_stop_frame,
                 frame_numbers=frame_numbers,
                 time_seconds=time_seconds.astype(np.float64, copy=False),
                 values=dff.values[local_start:local_stop, :],
@@ -196,11 +212,25 @@ def summarize_grouped_responses(
     return tuple(summaries)
 
 
+def is_gray_epoch_name(epoch_name: str) -> bool:
+    """Return whether an epoch name looks like a gray interleave.
+
+    Args:
+        epoch_name: Stimulus epoch name.
+
+    Returns:
+        ``True`` for ``gray`` or ``grey`` spelling.
+    """
+    lowered = epoch_name.lower()
+    return "gray" in lowered or "grey" in lowered
+
+
 def _validate_grouping_inputs(
     dff: RoiDeltaFOverF,
     epoch_windows: Sequence[EpochFrameWindow],
     data_rate_hz: float,
     pre_window_seconds: float,
+    post_window_seconds: float,
 ) -> None:
     """Validate response grouping inputs.
 
@@ -209,6 +239,7 @@ def _validate_grouping_inputs(
         epoch_windows: Candidate windows.
         data_rate_hz: Candidate frame rate.
         pre_window_seconds: Candidate prestimulus duration.
+        post_window_seconds: Candidate poststimulus duration.
 
     Returns:
         None.
@@ -227,6 +258,9 @@ def _validate_grouping_inputs(
         raise ValueError(msg)
     if pre_window_seconds < 0:
         msg = f"pre_window_seconds must be nonnegative; got {pre_window_seconds}"
+        raise ValueError(msg)
+    if post_window_seconds < 0:
+        msg = f"post_window_seconds must be nonnegative; got {post_window_seconds}"
         raise ValueError(msg)
     for epoch_window in epoch_windows:
         window = epoch_window.window
