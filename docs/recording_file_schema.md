@@ -481,6 +481,8 @@ The converted `recording_data.h5` file contains:
   function names used by this recording.
 - `stimulus/stimulus_specific_columns_json`: per-`stimtype` assignments from
   `stimData.mat(N)` slots to the source MATLAB expression and line number.
+  Use `map_stimulus_specific_column(...)` to map a stable column name such as
+  `stimulus_specific_04` to the per-`stimtype` meaning for scripts.
 - `photodiode`: synchronization metadata explaining the two-computer timing
   model.
 - `photodiode/imaging_res_pd`: frame-resolution photodiode vector, one sample

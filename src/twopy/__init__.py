@@ -23,6 +23,10 @@ from twopy.roi import (
     make_roi_set,
     save_roi_set,
 )
+from twopy.stimulus import (
+    StimulusSpecificColumnMapping,
+    map_stimulus_specific_column,
+)
 from twopy.synchronization import (
     AlignedPhotodiodeEvent,
     PhotodiodeAlignment,
@@ -48,6 +52,7 @@ __all__ = [
     "load_source_conversion_inputs",
     "make_frame_windows",
     "make_roi_set",
+    "map_stimulus_specific_column",
     "pair_photodiode_events_to_imaging_frames",
     "PhotodiodeAlignment",
     "PhotodiodeEvent",
@@ -56,6 +61,7 @@ __all__ = [
     "RoiTraces",
     "save_roi_set",
     "split_traces_by_frame_windows",
+    "StimulusSpecificColumnMapping",
     "WindowedRoiResponse",
 ]
 
