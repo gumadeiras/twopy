@@ -33,8 +33,8 @@ def launch_napari(
     Args:
         recording_data_path: Optional path to ``recording_data.h5``. When
             omitted, twopy opens the current directory or ``./twopy`` recording
-            if one exists; otherwise it opens an empty viewer with a Load
-            Recording button.
+            if one exists; otherwise it opens an empty viewer with folder-based
+            recording selection.
         roi_file_to_load: Optional saved ROI HDF5 path to reopen.
         roi_save_file: Optional ROI output path for the Save ROIs button.
         movie_start_frame: First movie preview frame.
@@ -54,6 +54,12 @@ def launch_napari(
     movie_range = (int(movie_start_frame), movie_end_frame) if load_movie else None
     viewer = create_viewer()
     if resolved_recording_path is None:
+        from twopy.napari.plotting import add_twopy_response_plot_widget
+
+        response_plot_widget, _response_plot_dock = add_twopy_response_plot_widget(
+            viewer,
+            recording=None,
+        )
         add_twopy_magicgui_controls(
             viewer,
             roi_labels_layer=None,
@@ -62,6 +68,7 @@ def launch_napari(
                 if roi_save_file is not None
                 else Path.cwd() / "rois.h5"
             ),
+            response_plot_widget=response_plot_widget,
         )
         view = None
     else:

@@ -129,8 +129,11 @@ decided.
 - Napari Load Recording control accepts a converted output folder or source
   recording folder, auto-detects `recording_data.h5`, `aligned_movie.h5`, and
   `rois.h5`, and loads the full movie by default.
-- Napari controls use intuitive ROI file labels, numeric movie start/end frames,
-  and a collapsible general recording metadata panel.
+- Napari controls use intuitive ROI file labels and a compact movie frame range
+  slider.
+- Napari has an initial response plotting dock with tabs for epoch response
+  plots and plot options; it can reload persisted analysis outputs or update
+  plots from the current Labels ROIs through the core analysis workflow.
 - Launch script for opening napari from a converted output directory, a source
   recording directory with `twopy/recording_data.h5`, or an explicit
   `recording_data.h5` path.

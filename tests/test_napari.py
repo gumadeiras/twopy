@@ -24,8 +24,12 @@ from twopy import (
     save_napari_label_rois,
     save_roi_set,
 )
+from twopy.analysis.dff import RoiDeltaFOverF
+from twopy.analysis.responses import group_delta_f_over_f_by_epoch
+from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
+from twopy.napari.plotting import response_plot_data_from_grouped
 from twopy.napari.state import write_last_recording_folder
 
 
@@ -199,9 +203,12 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNotNone(opened.roi_labels_layer)
             self.assertIsNotNone(opened.controls_widget)
             self.assertIsNotNone(opened.controls_dock_widget)
+            self.assertIsNotNone(opened.response_plot_widget)
+            self.assertIsNotNone(opened.response_plot_dock_widget)
             self.assertEqual(len(viewer.labels), 1)
-            self.assertEqual(len(viewer.window.dock_widgets), 1)
-            self.assertEqual(viewer.window.dock_widgets[0].name, "twopy")
+            self.assertEqual(len(viewer.window.dock_widgets), 2)
+            self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
+            self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
@@ -289,7 +296,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             viewer.labels[0].data = np.array([[0, 1], [2, 2]])
             controls = cast(_ControlWidget, opened.controls_widget)
-            save_widget = cast(Any, controls[5])
+            save_widget = cast(Any, controls[3])
             result = save_widget(roi_save_file=roi_save_file)
 
             self.assertIn("Saved 2 ROI", str(result))
@@ -319,7 +326,7 @@ class NapariAdapterTest(unittest.TestCase):
             load_widget.roi_save_file.value = roi_save_file
             load_widget.recording_folder.value = root
 
-            self.assertEqual(load_widget.movie_end_frame.value, 2)
+            self.assertEqual(load_widget.movie_frame_range.value, (0, 2))
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(len(viewer.labels), 1)
             np.testing.assert_array_equal(
@@ -327,7 +334,7 @@ class NapariAdapterTest(unittest.TestCase):
                 np.zeros((2, 2), dtype=np.int64),
             )
 
-    def test_load_button_updates_default_roi_save_path(self) -> None:
+    def test_loaded_recording_updates_default_roi_save_path(self) -> None:
         """Confirm loading a recording makes Save ROIs write beside it.
 
         Inputs: empty viewer, loaded recording, and edited labels.
@@ -344,7 +351,7 @@ class NapariAdapterTest(unittest.TestCase):
             )
             controls = cast(_ControlWidget, controls_widget)
             load_widget = cast(Any, controls[1])
-            save_widget = cast(Any, controls[5])
+            save_widget = cast(Any, controls[3])
 
             load_widget(recording_folder=recording_path)
             viewer.labels[0].data = np.array([[1, 0], [0, 0]])
@@ -374,7 +381,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertEqual(load_widget.recording_folder.value, root.resolve())
 
-    def test_load_button_resolves_recording_folder_defaults(self) -> None:
+    def test_recording_folder_resolves_recording_defaults(self) -> None:
         """Confirm folder loading finds recording, movie, and ROI files.
 
         Inputs: converted output folder containing recording/movie/ROI files.
@@ -405,27 +412,6 @@ class NapariAdapterTest(unittest.TestCase):
                 np.unique(roi_label_image_from_layer(viewer.labels[0])),
                 np.array([0, 1]),
             )
-
-    def test_controls_show_loaded_recording_metadata(self) -> None:
-        """Confirm metadata panel text is populated from converted data.
-
-        Inputs: tiny converted recording with acquisition and run metadata.
-        Outputs: metadata widget text with general recording fields.
-        """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            recording_path = _write_converted_recording(root)
-            viewer = _FakeViewer()
-
-            opened = open_recording_in_napari(recording_path, viewer=viewer)
-            controls = cast(_ControlWidget, opened.controls_widget)
-            load_widget = cast(Any, controls[1])
-            metadata_text = cast(Any, controls[3])
-
-            self.assertEqual(load_widget.movie_end_frame.value, 2)
-            self.assertIn("Movie shape: 3 frames x 2 x 2 pixels", metadata_text.value)
-            self.assertIn("rig_name: TestRig", metadata_text.value)
-            self.assertIn("acq.frameRate: 10.0", metadata_text.value)
 
     def test_recording_path_resolution_reports_available_files(self) -> None:
         """Confirm folder resolution finds optional movie and ROI paths.
@@ -465,6 +451,57 @@ class NapariAdapterTest(unittest.TestCase):
                 zero_end_means_last=True,
             ),
             (0, 2),
+        )
+
+    def test_response_plot_data_summarizes_epoch_roi_mean_and_sem(self) -> None:
+        """Confirm plotting data has one mean and SEM trace per ROI.
+
+        Inputs: two repeated trials for one epoch and two ROIs.
+        Outputs: plot-ready arrays shaped as ``(roi, frame)``.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((4, 2), dtype=np.float64),
+            baseline=np.ones((4, 2), dtype=np.float64),
+            values=np.array(
+                [
+                    [1.0, 2.0],
+                    [3.0, 4.0],
+                    [5.0, 8.0],
+                    [7.0, 10.0],
+                ],
+                dtype=np.float64,
+            ),
+            labels=("roi_1", "roi_2"),
+            start_frame=0,
+            stop_frame=4,
+            tau=0.0,
+            amplitudes=np.ones(2, dtype=np.float64),
+            interleave_frame_numbers=np.array([0.0]),
+            interleave_fluorescence=np.ones((1, 2), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "odor_1"), 2, "Odor"),
+                EpochFrameWindow(FrameWindow(1, 2, 4, "odor_2"), 2, "Odor"),
+            ),
+            data_rate_hz=2.0,
+        )
+
+        plot_data = response_plot_data_from_grouped(grouped)
+
+        self.assertEqual(len(plot_data.epochs), 1)
+        epoch = plot_data.epochs[0]
+        self.assertEqual(epoch.epoch_name, "Odor")
+        np.testing.assert_allclose(epoch.time_seconds, np.array([0.0, 0.5]))
+        np.testing.assert_allclose(
+            epoch.mean_values,
+            np.array([[3.0, 5.0], [5.0, 7.0]]),
+        )
+        np.testing.assert_allclose(
+            epoch.sem_values,
+            np.array([[2.0, 2.0], [3.0, 3.0]]),
         )
 
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
