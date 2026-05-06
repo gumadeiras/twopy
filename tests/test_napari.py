@@ -1593,6 +1593,24 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(layer.get_color(1)[3], 1.0)
         self.assertAlmostEqual(layer.get_color(2)[3], 0.2)
 
+    def test_roi_visibility_ignores_malformed_colormap_metadata(self) -> None:
+        """Confirm malformed persisted label-colormap metadata is rebuilt.
+
+        Inputs: Labels layer with incomplete twopy colormap metadata.
+        Outputs: visibility still applies instead of raising from metadata access.
+        """
+        layer = Labels(np.array([[1]], dtype=np.int64))
+        layer.metadata["twopy_base_label_colormap"] = {"num_colors": "invalid"}
+
+        apply_roi_visibility_to_labels_layer(
+            layer,
+            roi_labels=("roi_1",),
+            visibility={"roi_1": False},
+            colors=(QColor("#ff0000"),),
+        )
+
+        self.assertAlmostEqual(layer.get_color(1)[3], 0.2)
+
     def test_display_helpers_transpose_movie_axes_for_napari(self) -> None:
         """Confirm movie axes are transposed only at the napari boundary.
 

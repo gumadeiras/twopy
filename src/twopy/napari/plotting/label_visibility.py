@@ -9,9 +9,11 @@ image, so hiding an ROI in the plot options cannot delete ROI data.
 """
 
 from collections.abc import Mapping
-from typing import Any, Protocol, cast
+from typing import Protocol, cast
 
 from qtpy.QtGui import QColor
+
+from twopy.typing_guards import int_or_none, string_key_mapping_or_none
 
 __all__ = [
     "apply_roi_visibility_to_labels_layer",
@@ -241,13 +243,11 @@ def _base_label_colormap_params(
     color cycle while users toggle ROI visibility.
     """
     stored = layer.metadata.get(_BASE_LABEL_COLORMAP_METADATA_KEY)
-    if isinstance(stored, dict):
-        stored_params = cast(dict[str, object], stored)
-        return {
-            "num_colors": int(cast(Any, stored_params["num_colors"])),
-            "seed": float(cast(Any, stored_params["seed"])),
-            "background_value": int(cast(Any, stored_params["background_value"])),
-        }
+    stored_params = string_key_mapping_or_none(stored)
+    if stored_params is not None:
+        params = _parsed_label_colormap_params(stored_params)
+        if params is not None:
+            return params
 
     colormap = cast(_LabelColormapLike, layer.colormap)
     colors = getattr(colormap, "colors", ())
@@ -258,3 +258,29 @@ def _base_label_colormap_params(
     }
     layer.metadata[_BASE_LABEL_COLORMAP_METADATA_KEY] = params
     return params
+
+
+def _parsed_label_colormap_params(
+    params: dict[str, object],
+) -> dict[str, int | float] | None:
+    """Return persisted label-colormap parameters when all fields parse."""
+    num_colors = int_or_none(params.get("num_colors"))
+    seed = _float_or_none(params.get("seed"))
+    background_value = int_or_none(params.get("background_value"))
+    if num_colors is None or seed is None or background_value is None:
+        return None
+    return {
+        "num_colors": num_colors,
+        "seed": seed,
+        "background_value": background_value,
+    }
+
+
+def _float_or_none(value: object) -> float | None:
+    """Return a float for simple numeric metadata values."""
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
