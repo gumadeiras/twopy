@@ -113,6 +113,14 @@ decided.
   trace extraction, dF/F, response grouping, and persistence in one call.
 - Persisted analysis HDF5 files can be reloaded into typed twopy analysis
   objects.
+- Small committed real-data regression fixture derived from the example
+  converted recording, with loader and response-workflow tests over real pixel
+  values.
+- Core ROI helpers convert between integer label images and ROI masks, so
+  napari label edits and scripts use the same ROI HDF5 format.
+- Thin napari adapter loads a converted recording mean image, optional bounded
+  movie preview, optional ROI labels, and saves edited label images through the
+  core ROI module.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with
   snake_case twopy field names such as `rig_name`.
 - Conversion stores one code-derived label per stimulus data column using the
@@ -176,10 +184,9 @@ decided.
 - Add protocol-specific photodiode classifiers for recordings with extra
   within-epoch alignment flashes.
 - Group response outputs directly from classified stimulus windows.
-- Load a recording in napari.
 - Interactively draw or select ROIs in the movie.
-- Save napari-drawn ROIs through the core ROI module.
 - Inspect ROI responses.
+- Load persisted analysis outputs in napari.
 - Divide responses by trials.
 - Divide responses by other metadata associated with the recording.
 
