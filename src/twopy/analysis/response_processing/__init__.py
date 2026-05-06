@@ -18,6 +18,7 @@ from twopy.analysis.response_processing.apply import (
 from twopy.analysis.response_processing.options import (
     CorrelationFilterOptions,
     CorrelationFilterReference,
+    CorrelationWindowSeconds,
     LowPassFilterMethod,
     LowPassFilterOptions,
     ResponseProcessingOptions,
@@ -38,6 +39,7 @@ __all__ = [
     "butterworth_low_pass",
     "CorrelationFilterOptions",
     "CorrelationFilterReference",
+    "CorrelationWindowSeconds",
     "LowPassFilterMethod",
     "LowPassFilterOptions",
     "nan_aware_moving_average",

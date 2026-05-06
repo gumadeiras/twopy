@@ -123,10 +123,12 @@ def process_grouped_roi_responses(
     _validate_grouped_for_processing(grouped)
     processed = _copy_grouped_with_processed_values(grouped, options=options)
     correlation_scores = None
-    if options.correlation_filter.reference == "epoch_mean":
+    if options.correlation_filter.reference in {"epoch_mean", "epoch_peak"}:
         correlation_scores = score_roi_correlations(
             processed,
             minimum_correlation=options.correlation_filter.minimum_correlation,
+            reference=options.correlation_filter.reference,
+            window_seconds=options.correlation_filter.window_seconds,
         )
         processed = _mask_excluded_rois(
             processed,
@@ -282,5 +284,15 @@ def _processing_metadata(
         ),
         "response_processing_minimum_correlation": (
             options.correlation_filter.minimum_correlation
+        ),
+        "response_processing_correlation_window_start_seconds": (
+            "none"
+            if options.correlation_filter.window_seconds[0] is None
+            else float(options.correlation_filter.window_seconds[0])
+        ),
+        "response_processing_correlation_window_stop_seconds": (
+            "none"
+            if options.correlation_filter.window_seconds[1] is None
+            else float(options.correlation_filter.window_seconds[1])
         ),
     }

@@ -13,6 +13,10 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
+from twopy.analysis.response_processing.options import (
+    CorrelationFilterReference,
+    CorrelationWindowSeconds,
+)
 from twopy.analysis.responses import GroupedRoiResponses, RoiResponseTrial
 
 __all__ = [
@@ -25,7 +29,7 @@ __all__ = [
 class RoiCorrelationScores:
     """ROI-level trial-consistency scores.
 
-    Inputs: grouped responses and a minimum accepted correlation.
+    Inputs: grouped responses, a reference strategy, and a time window.
     Outputs: one score per ROI plus a Boolean inclusion mask.
 
     Scores are averaged across repeated epoch trials. ROIs with no estimable
@@ -36,49 +40,51 @@ class RoiCorrelationScores:
     scores: npt.NDArray[np.float64]
     included_mask: npt.NDArray[np.bool_]
     minimum_correlation: float
-    reference: str
+    reference: CorrelationFilterReference
+    window_seconds: CorrelationWindowSeconds
 
 
 def score_roi_correlations(
     grouped: GroupedRoiResponses,
     *,
     minimum_correlation: float,
+    reference: CorrelationFilterReference = "epoch_mean",
+    window_seconds: CorrelationWindowSeconds = (0.0, None),
 ) -> RoiCorrelationScores:
     """Score each ROI by correlation to repeated epoch responses.
 
     Args:
         grouped: Trial responses grouped by stimulus epoch.
         minimum_correlation: Minimum score required for inclusion.
+        reference: Reference strategy. ``"epoch_mean"`` compares each trial to
+            the other trials' mean. ``"epoch_peak"`` compares each non-peak
+            trial to the highest-peak trial for the same epoch and ROI.
+        window_seconds: Half-open epoch-relative time window used for each
+            correlation. ``None`` leaves that side unbounded.
 
     Returns:
         ROI correlation scores and inclusion mask.
 
     Raises:
-        ValueError: If grouped response shapes or the threshold are invalid.
+        ValueError: If grouped response shapes, threshold, or reference are
+            invalid.
 
-    Each trial is compared with the mean response for the same epoch and ROI.
-    A leave-one-out mean is used when an epoch has more than one trial, which
+    Correlations are computed only over samples inside ``window_seconds``. Mean
+    references are leave-one-out when an epoch has more than one trial, which
     avoids scoring a trial against itself.
     """
-    _validate_correlation_inputs(grouped, minimum_correlation)
+    _validate_correlation_inputs(grouped, minimum_correlation, reference)
     correlations: list[list[float]] = [[] for _ in grouped.roi_labels]
     for trials in _trials_by_epoch(grouped).values():
-        cube = _aligned_epoch_cube(trials, grouped)
-        finite_trial_counts = np.sum(np.isfinite(cube), axis=0)
-        for trial_index in range(cube.shape[0]):
-            trial_values = cube[trial_index, :, :]
-            reference_values = _reference_values_for_trial(
-                cube,
-                finite_trial_counts,
-                trial_index=trial_index,
-            )
-            for roi_index in range(cube.shape[2]):
-                score = _correlation(
-                    trial_values[:, roi_index],
-                    reference_values[:, roi_index],
-                )
-                if not np.isnan(score):
-                    correlations[roi_index].append(score)
+        cube, time_seconds = _aligned_epoch_cube(trials, grouped)
+        window_mask = _correlation_window_mask(time_seconds, window_seconds)
+        windowed_cube = cube[:, window_mask, :]
+        if windowed_cube.shape[1] == 0:
+            continue
+        if reference == "epoch_mean":
+            _append_epoch_mean_correlations(correlations, windowed_cube)
+        elif reference == "epoch_peak":
+            _append_epoch_peak_correlations(correlations, windowed_cube)
 
     scores = np.full(len(grouped.roi_labels), np.nan, dtype=np.float64)
     for roi_index, roi_scores in enumerate(correlations):
@@ -90,17 +96,89 @@ def score_roi_correlations(
         scores=scores,
         included_mask=included,
         minimum_correlation=float(minimum_correlation),
-        reference="epoch_mean",
+        reference=reference,
+        window_seconds=window_seconds,
     )
+
+
+def _append_epoch_mean_correlations(
+    correlations: list[list[float]],
+    cube: npt.NDArray[np.float64],
+) -> None:
+    """Append correlations against leave-one-out epoch means."""
+    finite_trial_counts = np.sum(np.isfinite(cube), axis=0)
+    for trial_index in range(cube.shape[0]):
+        trial_values = cube[trial_index, :, :]
+        reference_values = _reference_values_for_trial(
+            cube,
+            finite_trial_counts,
+            trial_index=trial_index,
+        )
+        for roi_index in range(cube.shape[2]):
+            score = _correlation(
+                trial_values[:, roi_index],
+                reference_values[:, roi_index],
+            )
+            if not np.isnan(score):
+                correlations[roi_index].append(score)
+
+
+def _append_epoch_peak_correlations(
+    correlations: list[list[float]],
+    cube: npt.NDArray[np.float64],
+) -> None:
+    """Append correlations against the highest-peak trial per ROI."""
+    for roi_index in range(cube.shape[2]):
+        peak_trial_index = _peak_trial_index(cube[:, :, roi_index])
+        if peak_trial_index is None:
+            continue
+        reference_values = cube[peak_trial_index, :, roi_index]
+        for trial_index in range(cube.shape[0]):
+            if trial_index == peak_trial_index:
+                continue
+            score = _correlation(cube[trial_index, :, roi_index], reference_values)
+            if not np.isnan(score):
+                correlations[roi_index].append(score)
+
+
+def _peak_trial_index(
+    values: npt.NDArray[np.float64],
+) -> int | None:
+    """Return the trial index with the largest finite peak response."""
+    peaks = np.full(values.shape[0], np.nan, dtype=np.float64)
+    for trial_index in range(values.shape[0]):
+        if np.any(np.isfinite(values[trial_index, :])):
+            peaks[trial_index] = float(np.nanmax(values[trial_index, :]))
+    if not np.any(np.isfinite(peaks)):
+        return None
+    return int(np.nanargmax(peaks))
+
+
+def _correlation_window_mask(
+    time_seconds: npt.NDArray[np.float64],
+    window_seconds: CorrelationWindowSeconds,
+) -> npt.NDArray[np.bool_]:
+    """Return a Boolean mask for a half-open relative-time window."""
+    start_seconds, stop_seconds = window_seconds
+    mask = np.ones(time_seconds.shape, dtype=np.bool_)
+    if start_seconds is not None:
+        mask &= time_seconds >= start_seconds
+    if stop_seconds is not None:
+        mask &= time_seconds < stop_seconds
+    return mask
 
 
 def _validate_correlation_inputs(
     grouped: GroupedRoiResponses,
     minimum_correlation: float,
+    reference: CorrelationFilterReference,
 ) -> None:
     """Validate grouped-response correlation inputs."""
     if not -1.0 <= minimum_correlation <= 1.0:
         msg = f"minimum_correlation must be between -1 and 1; got {minimum_correlation}"
+        raise ValueError(msg)
+    if reference not in {"epoch_mean", "epoch_peak"}:
+        msg = f"Unknown correlation reference {reference!r}"
         raise ValueError(msg)
     if grouped.data_rate_hz <= 0:
         msg = f"data_rate_hz must be positive; got {grouped.data_rate_hz}"
@@ -132,7 +210,7 @@ def _trials_by_epoch(
 def _aligned_epoch_cube(
     trials: list[RoiResponseTrial],
     grouped: GroupedRoiResponses,
-) -> npt.NDArray[np.float64]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Return trials aligned onto one relative-time frame axis."""
     first_time = min(float(trial.time_seconds[0]) for trial in trials)
     last_time = max(float(trial.time_seconds[-1]) for trial in trials)
@@ -147,7 +225,10 @@ def _aligned_epoch_cube(
             (trial.time_seconds - first_time) * grouped.data_rate_hz
         ).astype(np.int64, copy=False)
         cube[trial_index, offsets, :] = trial.values
-    return cube
+    time_seconds = first_time + (
+        np.arange(frame_count, dtype=np.float64) / grouped.data_rate_hz
+    )
+    return cube, time_seconds
 
 
 def _reference_values_for_trial(

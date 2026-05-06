@@ -11,9 +11,12 @@ Qt or HDF5 concerns into the analysis layer.
 from dataclasses import dataclass, field
 from typing import Literal
 
+import numpy as np
+
 __all__ = [
     "CorrelationFilterOptions",
     "CorrelationFilterReference",
+    "CorrelationWindowSeconds",
     "LowPassFilterMethod",
     "LowPassFilterOptions",
     "ResponseProcessingOptions",
@@ -24,7 +27,8 @@ __all__ = [
 
 SmoothingMethod = Literal["none", "moving_average"]
 LowPassFilterMethod = Literal["none", "butterworth"]
-CorrelationFilterReference = Literal["none", "epoch_mean"]
+CorrelationFilterReference = Literal["none", "epoch_mean", "epoch_peak"]
+CorrelationWindowSeconds = tuple[float | None, float | None]
 
 
 @dataclass(frozen=True)
@@ -62,16 +66,21 @@ class LowPassFilterOptions:
 class CorrelationFilterOptions:
     """Correlation-based response quality-control settings.
 
-    Inputs: reference strategy and minimum accepted correlation.
+    Inputs: reference strategy, accepted correlation, and relative time window.
     Outputs: ROI-level scores and inclusion masks when enabled.
 
     Correlation filtering should produce auditable scores and masks. Downstream
     callers can hide, mark, or exclude responses, but raw data should remain
     available elsewhere in the analysis record.
+
+    ``window_seconds`` is a half-open ``(start, stop)`` interval on each trial's
+    epoch-relative time axis. ``None`` on the stop side leaves it unbounded, so
+    the default starts at epoch onset and uses the full stored epoch response.
     """
 
     reference: CorrelationFilterReference = "none"
     minimum_correlation: float = 0.0
+    window_seconds: CorrelationWindowSeconds = (0.0, None)
 
 
 @dataclass(frozen=True)
@@ -155,12 +164,29 @@ def _validate_low_pass_options(
 
 def _validate_correlation_options(options: CorrelationFilterOptions) -> None:
     """Validate correlation-filter options."""
-    if options.reference not in {"none", "epoch_mean"}:
+    if options.reference not in {"none", "epoch_mean", "epoch_peak"}:
         msg = f"Unknown correlation reference {options.reference!r}"
         raise ValueError(msg)
     if not -1.0 <= options.minimum_correlation <= 1.0:
         msg = (
             "minimum_correlation must be between -1 and 1; "
             f"got {options.minimum_correlation}"
+        )
+        raise ValueError(msg)
+    start_seconds, stop_seconds = options.window_seconds
+    if start_seconds is not None and not np.isfinite(start_seconds):
+        msg = f"correlation window start must be finite or None; got {start_seconds}"
+        raise ValueError(msg)
+    if stop_seconds is not None and not np.isfinite(stop_seconds):
+        msg = f"correlation window stop must be finite or None; got {stop_seconds}"
+        raise ValueError(msg)
+    if (
+        start_seconds is not None
+        and stop_seconds is not None
+        and start_seconds >= stop_seconds
+    ):
+        msg = (
+            "correlation window start must be before stop; "
+            f"got ({start_seconds}, {stop_seconds})"
         )
         raise ValueError(msg)

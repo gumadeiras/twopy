@@ -137,6 +137,74 @@ class ResponseProcessingTest(unittest.TestCase):
             self.assertTrue(np.all(np.isnan(trial.values[:, 1])))
             self.assertTrue(np.all(np.isfinite(trial.values[:, 0])))
 
+    def test_correlation_filter_can_use_epoch_peak_reference(self) -> None:
+        """Confirm peak-reference QC scores trials against the peak trial.
+
+        Inputs: two repeated trials where one ROI has a reversed response shape.
+        Outputs: peak-reference scores that exclude only the inconsistent ROI.
+        """
+        grouped = _grouped_responses(
+            trial_values=(
+                np.array([[0.0, 0.0], [2.0, 4.0], [4.0, 8.0]], dtype=np.float64),
+                np.array([[0.0, 8.0], [1.0, 4.0], [2.0, 0.0]], dtype=np.float64),
+            ),
+        )
+        options = ResponseProcessingOptions(
+            correlation_filter=CorrelationFilterOptions(
+                reference="epoch_peak",
+                minimum_correlation=0.5,
+            ),
+        )
+
+        result = process_grouped_roi_responses(grouped, options=options)
+
+        self.assertIsNotNone(result.correlation_scores)
+        if result.correlation_scores is None:
+            raise AssertionError("correlation scores should be present")
+        self.assertEqual(result.correlation_scores.reference, "epoch_peak")
+        np.testing.assert_array_equal(
+            result.correlation_scores.included_mask,
+            np.array([True, False]),
+        )
+
+    def test_correlation_filter_uses_epoch_relative_window(self) -> None:
+        """Confirm correlation QC restricts scoring to selected seconds.
+
+        Inputs: repeated trials with mismatched early samples and matched late
+        samples.
+        Outputs: passing scores when the correlation window selects late samples.
+        """
+        grouped = _grouped_responses(
+            trial_values=(
+                np.array(
+                    [[100.0, 100.0], [100.0, 100.0], [0.0, 0.0], [1.0, 1.0]],
+                    dtype=np.float64,
+                ),
+                np.array(
+                    [[-100.0, -100.0], [-100.0, -100.0], [0.0, 0.0], [1.0, 1.0]],
+                    dtype=np.float64,
+                ),
+            ),
+        )
+        options = ResponseProcessingOptions(
+            correlation_filter=CorrelationFilterOptions(
+                reference="epoch_mean",
+                minimum_correlation=0.5,
+                window_seconds=(2.0, None),
+            ),
+        )
+
+        result = process_grouped_roi_responses(grouped, options=options)
+
+        self.assertIsNotNone(result.correlation_scores)
+        if result.correlation_scores is None:
+            raise AssertionError("correlation scores should be present")
+        self.assertEqual(result.correlation_scores.window_seconds, (2.0, None))
+        np.testing.assert_array_equal(
+            result.correlation_scores.included_mask,
+            np.array([True, True]),
+        )
+
 
 def _dff(values: np.ndarray) -> RoiDeltaFOverF:
     """Return a minimal dF/F object for response-processing tests."""
