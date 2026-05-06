@@ -15,6 +15,7 @@ import numpy.typing as npt
 from twopy import extract_background_corrected_roi_traces, make_roi_set
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
+from twopy.spatial import SpatialCrop, full_frame_crop
 
 
 class BackgroundSubtractionTest(unittest.TestCase):
@@ -130,6 +131,110 @@ class BackgroundSubtractionTest(unittest.TestCase):
                 np.array([[3.0], [11.0]]),
             )
 
+    def test_movie_global_percentile_defaults_to_alignment_valid_crop(self) -> None:
+        """Confirm global background uses the saved crop by default.
+
+        Inputs: a movie with a very dim invalid-border pixel outside the crop and
+        a dim valid pixel inside the crop.
+        Outputs: background values from the crop, not the full frame.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            movie = np.array(
+                [
+                    [
+                        [0.0, 100.0, 100.0],
+                        [20.0, 20.0, 20.0],
+                        [30.0, 30.0, 30.0],
+                        [5.0, 50.0, 50.0],
+                    ],
+                    [
+                        [0.0, 100.0, 100.0],
+                        [22.0, 22.0, 22.0],
+                        [32.0, 32.0, 32.0],
+                        [7.0, 50.0, 50.0],
+                    ],
+                ],
+            )
+            crop = SpatialCrop(
+                axis0_start=1,
+                axis0_stop=4,
+                axis1_start=0,
+                axis1_stop=3,
+                original_shape=(4, 3),
+                source="alignment_valid_crop",
+            )
+            recording = self._write_recording(Path(temp_dir), movie=movie, crop=crop)
+            roi_set = make_roi_set(
+                np.array(
+                    [
+                        [
+                            [False, False, False],
+                            [True, False, False],
+                            [False, False, False],
+                            [False, False, False],
+                        ],
+                    ],
+                ),
+                labels=("inside_crop",),
+            )
+
+            traces = extract_background_corrected_roi_traces(
+                recording,
+                roi_set,
+                method="movie_global_percentile",
+                global_percentile=20.0,
+            )
+
+            self.assertEqual(traces.metadata["spatial_domain"], "alignment_valid_crop")
+            self.assertEqual(traces.metadata["spatial_axis0_start"], 1)
+            np.testing.assert_array_equal(
+                traces.background_values,
+                np.array([[5.0], [7.0]]),
+            )
+            np.testing.assert_array_equal(
+                traces.corrected_values,
+                np.array([[15.0], [15.0]]),
+            )
+
+    def test_crop_domain_rejects_roi_pixels_outside_crop(self) -> None:
+        """Confirm crop-domain analysis never drops ROI pixels silently.
+
+        Inputs: an ROI in the invalid border outside the alignment-valid crop.
+        Outputs: a validation error naming the spatial domain.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            movie = np.ones((2, 3, 3), dtype=np.float64)
+            crop = SpatialCrop(
+                axis0_start=1,
+                axis0_stop=3,
+                axis1_start=0,
+                axis1_stop=3,
+                original_shape=(3, 3),
+                source="alignment_valid_crop",
+            )
+            recording = self._write_recording(Path(temp_dir), movie=movie, crop=crop)
+            roi_set = make_roi_set(
+                np.array(
+                    [
+                        [
+                            [True, False, False],
+                            [False, False, False],
+                            [False, False, False],
+                        ],
+                    ],
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "outside the selected spatial domain",
+            ):
+                extract_background_corrected_roi_traces(
+                    recording,
+                    roi_set,
+                    method="movie_global_percentile",
+                )
+
     def test_extracts_roi_local_y_corrected_traces(self) -> None:
         """Confirm local-y correction subtracts one background trace per ROI.
 
@@ -200,18 +305,24 @@ class BackgroundSubtractionTest(unittest.TestCase):
         root: Path,
         *,
         movie: npt.NDArray[np.float64] | None = None,
+        crop: SpatialCrop | None = None,
     ) -> RecordingData:
         """Create a minimal loaded recording object backed by HDF5 movie data.
 
         Args:
             root: Temporary directory that receives the movie file.
             movie: Optional movie values shaped ``(frames, x, y)``.
+            crop: Optional alignment-valid crop. When omitted, the crop is full
+                frame.
 
         Returns:
             ``RecordingData`` object that can be passed to background correction.
         """
         movie_values = (
             np.arange(12, dtype=np.float64).reshape(3, 2, 2) if movie is None else movie
+        )
+        alignment_crop = (
+            full_frame_crop(movie_values.shape[1:]) if crop is None else crop
         )
         movie_path = root / "aligned_movie.h5"
         with h5py.File(movie_path, "w") as h5_file:
@@ -238,6 +349,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
             imaging_res_pd=np.zeros(movie_values.shape[0], dtype=np.float64),
             high_res_pd=np.zeros(0, dtype=np.float64),
             mean_image=movie_values.mean(axis=0),
+            alignment_valid_crop=alignment_crop,
             frame_counts=FrameCountAudit(
                 aligned_movie_frames=movie_values.shape[0],
                 imaging_res_pd_samples=movie_values.shape[0],

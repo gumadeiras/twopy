@@ -14,6 +14,7 @@ import numpy.typing as npt
 
 from twopy.conversion.frame_ranges import normalize_frame_range
 from twopy.session import TwoPhotonSessionFiles
+from twopy.spatial import SpatialCrop
 
 
 @dataclass(frozen=True)
@@ -228,6 +229,28 @@ class FrameCountAudit:
 
 
 @dataclass(frozen=True)
+class AlignmentCropAudit:
+    """Alignment-derived spatial crop saved during conversion.
+
+    Inputs: microscope alignment offsets, acquisition metadata, and photodiode
+    stimulus bounds.
+    Outputs: the spatial crop plus audit values that explain how it was chosen.
+
+    The crop describes the frame region that stayed valid after motion alignment.
+    Keeping it separate from the full aligned movie lets twopy preserve source
+    pixels while reproducing cropped analysis paths when needed.
+    """
+
+    crop: SpatialCrop
+    alignment_frame_start: int
+    alignment_frame_stop: int
+    x_cutoff_pixels: int
+    y_cutoff_pixels: int
+    over_moved_frame_count: int
+    motion_threshold_pixels: float
+
+
+@dataclass(frozen=True)
 class SourceConversionInputs:
     """All source inputs needed to create a twopy converted recording.
 
@@ -247,6 +270,7 @@ class SourceConversionInputs:
     stimulus_data: StimulusData
     photodiode: PhotodiodeSignals
     frame_counts: FrameCountAudit
+    alignment_crop: AlignmentCropAudit
 
 
 @dataclass(frozen=True)

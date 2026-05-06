@@ -19,6 +19,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.conversion.types import FrameCountAudit
+from twopy.spatial import SpatialCrop
 
 __all__ = [
     "ConvertedMovie",
@@ -48,23 +49,34 @@ class ConvertedMovie:
         self,
         start: int | None = None,
         stop: int | None = None,
+        *,
+        spatial_crop: SpatialCrop | None = None,
     ) -> npt.NDArray[np.float64]:
         """Read a frame range from the converted aligned movie.
 
         Args:
             start: First frame index. ``None`` starts at frame zero.
             stop: Exclusive stop frame. ``None`` reads through the final frame.
+            spatial_crop: Optional crop to read from each frame.
 
         Returns:
-            Movie block with shape ``(frames, x, y)``.
+            Movie block with shape ``(frames, axis0, axis1)``.
 
         This is the direct escape hatch for previews, tests, and small frame
         ranges. Trace extraction should prefer ``iter_frame_batches``.
         """
         frame_slice = slice(start, stop)
+        crop = _normalize_spatial_crop(self.shape[1:], spatial_crop)
         with h5py.File(self.path, "r") as h5_file:
             dataset = h5_file[self.dataset_name]
-            return cast(npt.NDArray[np.float64], dataset[frame_slice, :, :])
+            return cast(
+                npt.NDArray[np.float64],
+                dataset[
+                    frame_slice,
+                    crop.axis0_start : crop.axis0_stop,
+                    crop.axis1_start : crop.axis1_stop,
+                ],
+            )
 
     def iter_frame_batches(
         self,
@@ -72,6 +84,7 @@ class ConvertedMovie:
         chunk_frames: int = 128,
         start: int | None = None,
         stop: int | None = None,
+        spatial_crop: SpatialCrop | None = None,
     ) -> Iterator[tuple[int, int, npt.NDArray[np.float64]]]:
         """Read movie frames in bounded chunks.
 
@@ -79,6 +92,7 @@ class ConvertedMovie:
             chunk_frames: Maximum number of frames per returned block.
             start: First frame index. ``None`` starts at frame zero.
             stop: Exclusive stop frame. ``None`` reads through the final frame.
+            spatial_crop: Optional crop to read from each frame.
 
         Yields:
             ``(start, stop, frames)`` blocks.
@@ -94,6 +108,7 @@ class ConvertedMovie:
         if chunk_frames < 1:
             msg = f"chunk_frames must be at least 1; got {chunk_frames}"
             raise ValueError(msg)
+        crop = _normalize_spatial_crop(self.shape[1:], spatial_crop)
 
         with h5py.File(self.path, "r") as h5_file:
             dataset = h5_file[self.dataset_name]
@@ -101,7 +116,11 @@ class ConvertedMovie:
                 chunk_stop = min(chunk_start + chunk_frames, stop_frame)
                 frames = cast(
                     npt.NDArray[np.float64],
-                    dataset[chunk_start:chunk_stop, :, :],
+                    dataset[
+                        chunk_start:chunk_stop,
+                        crop.axis0_start : crop.axis0_stop,
+                        crop.axis1_start : crop.axis1_stop,
+                    ],
                 )
                 yield chunk_start, chunk_stop, frames
 
@@ -133,6 +152,7 @@ class RecordingData:
     imaging_res_pd: npt.NDArray[np.float64]
     high_res_pd: npt.NDArray[np.float64]
     mean_image: npt.NDArray[np.float64]
+    alignment_valid_crop: SpatialCrop
     frame_counts: FrameCountAudit
 
 
@@ -212,6 +232,7 @@ def load_converted_recording(
                 npt.NDArray[np.float64],
                 h5_file["movie/mean_image"][()],
             ),
+            alignment_valid_crop=_read_alignment_valid_crop(h5_file),
             frame_counts=_read_frame_counts(h5_file),
         )
 
@@ -289,6 +310,13 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
             "stimulus data column names must match data width; "
             f"got {len(recording.stimulus_data_column_names)} names for "
             f"{recording.stimulus_data.shape[1]} columns"
+        )
+        raise ValueError(msg)
+    if recording.alignment_valid_crop.original_shape != recording.movie.shape[1:]:
+        msg = (
+            "alignment_valid_crop original shape must match movie spatial shape; "
+            f"got {recording.alignment_valid_crop.original_shape} and "
+            f"{recording.movie.shape[1:]}"
         )
         raise ValueError(msg)
 
@@ -533,6 +561,63 @@ def _read_frame_counts(h5_file: h5py.File) -> FrameCountAudit:
         ),
         acquisition_minus_movie=_read_int_attr(group, "acquisition_minus_movie"),
     )
+
+
+def _read_alignment_valid_crop(h5_file: h5py.File) -> SpatialCrop:
+    """Read the alignment-valid crop from converted HDF5.
+
+    Args:
+        h5_file: Open ``recording_data.h5`` file.
+
+    Returns:
+        ``SpatialCrop`` describing the saved alignment-valid frame area.
+    """
+    if "movie/alignment_valid_crop" not in h5_file:
+        msg = "Missing required HDF5 group 'movie/alignment_valid_crop'"
+        raise ValueError(msg)
+    group = h5_file["movie/alignment_valid_crop"]
+    return SpatialCrop(
+        axis0_start=_read_int_attr(group, "axis0_start"),
+        axis0_stop=_read_int_attr(group, "axis0_stop"),
+        axis1_start=_read_int_attr(group, "axis1_start"),
+        axis1_stop=_read_int_attr(group, "axis1_stop"),
+        original_shape=cast(
+            tuple[int, int],
+            _read_int_tuple_attr(group, "original_shape"),
+        ),
+        source=_read_str_attr(group, "source"),
+    )
+
+
+def _normalize_spatial_crop(
+    spatial_shape: tuple[int, int],
+    spatial_crop: SpatialCrop | None,
+) -> SpatialCrop:
+    """Return a validated crop for movie reads.
+
+    Args:
+        spatial_shape: Full movie spatial shape.
+        spatial_crop: Optional crop requested by caller.
+
+    Returns:
+        ``SpatialCrop`` safe to use for HDF5 slicing.
+    """
+    if spatial_crop is None:
+        return SpatialCrop(
+            axis0_start=0,
+            axis0_stop=spatial_shape[0],
+            axis1_start=0,
+            axis1_stop=spatial_shape[1],
+            original_shape=spatial_shape,
+            source="full_frame",
+        )
+    if spatial_crop.original_shape != spatial_shape:
+        msg = (
+            f"Spatial crop source shape {spatial_crop.original_shape} does not "
+            f"match movie spatial shape {spatial_shape}"
+        )
+        raise ValueError(msg)
+    return spatial_crop
 
 
 def _normalize_movie_frame_range(

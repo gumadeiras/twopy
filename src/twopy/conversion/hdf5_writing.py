@@ -17,6 +17,7 @@ import numpy.typing as npt
 from twopy.conversion.matlab_values import json_ready
 from twopy.conversion.types import (
     AlignedMovieSource,
+    AlignmentCropAudit,
     PhotodiodeSignals,
     SourceConversionInputs,
     StimulusCodeMetadata,
@@ -83,6 +84,7 @@ def write_recording_data_file(
         _write_movie_reference_group(
             h5_file=h5_file,
             movie=inputs.aligned_movie,
+            alignment_crop=inputs.alignment_crop,
             mean_image=mean_image,
             mean_start_frame=mean_start_frame,
             mean_stop_frame=mean_stop_frame,
@@ -125,6 +127,7 @@ def _write_movie_reference_group(
     *,
     h5_file: h5py.File,
     movie: AlignedMovieSource,
+    alignment_crop: AlignmentCropAudit,
     mean_image: npt.NDArray[np.float64],
     mean_start_frame: int,
     mean_stop_frame: int,
@@ -134,6 +137,7 @@ def _write_movie_reference_group(
     Args:
         h5_file: Open ``recording_data.h5`` file.
         movie: Source aligned movie metadata.
+        alignment_crop: Alignment-derived crop audit metadata.
         mean_image: Precomputed quick-look image.
         mean_start_frame: First frame included in the mean image.
         mean_stop_frame: Exclusive stop frame for the mean image.
@@ -153,6 +157,37 @@ def _write_movie_reference_group(
     )
     mean_dataset.attrs["start_frame"] = mean_start_frame
     mean_dataset.attrs["stop_frame"] = mean_stop_frame
+    _write_alignment_crop_group(movie_group, alignment_crop)
+
+
+def _write_alignment_crop_group(
+    movie_group: h5py.Group,
+    alignment_crop: AlignmentCropAudit,
+) -> None:
+    """Write alignment-valid crop metadata under the ``movie`` group.
+
+    Args:
+        movie_group: Open HDF5 ``movie`` group.
+        alignment_crop: ``AlignmentCropAudit`` object from source loading.
+
+    Returns:
+        None. The function writes crop bounds and audit attributes.
+    """
+    crop_audit = alignment_crop
+    crop = crop_audit.crop
+    crop_group = movie_group.create_group("alignment_valid_crop")
+    crop_group.attrs["source"] = crop.source
+    crop_group.attrs["axis0_start"] = crop.axis0_start
+    crop_group.attrs["axis0_stop"] = crop.axis0_stop
+    crop_group.attrs["axis1_start"] = crop.axis1_start
+    crop_group.attrs["axis1_stop"] = crop.axis1_stop
+    crop_group.attrs["original_shape"] = crop.original_shape
+    crop_group.attrs["alignment_frame_start"] = crop_audit.alignment_frame_start
+    crop_group.attrs["alignment_frame_stop"] = crop_audit.alignment_frame_stop
+    crop_group.attrs["x_cutoff_pixels"] = crop_audit.x_cutoff_pixels
+    crop_group.attrs["y_cutoff_pixels"] = crop_audit.y_cutoff_pixels
+    crop_group.attrs["over_moved_frame_count"] = crop_audit.over_moved_frame_count
+    crop_group.attrs["motion_threshold_pixels"] = crop_audit.motion_threshold_pixels
 
 
 def _write_stimulus_group(

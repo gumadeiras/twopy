@@ -17,6 +17,7 @@ import numpy.typing as npt
 
 from twopy.converted import RecordingData
 from twopy.roi import RoiSet, TraceStatistic
+from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
 
 __all__ = [
     "BackgroundCorrectedRoiTraces",
@@ -69,6 +70,7 @@ def extract_background_corrected_roi_traces(
     global_percentile: float = 10.0,
     local_y_radius: int | None = None,
     local_percentile: float = 20.0,
+    spatial_domain: SpatialDomain = "alignment_valid_crop",
 ) -> BackgroundCorrectedRoiTraces:
     """Extract ROI traces plus an explicit background correction.
 
@@ -91,6 +93,10 @@ def extract_background_corrected_roi_traces(
             omitted, twopy uses roughly five percent of the image height.
         local_percentile: Percentile inside each local row window used to keep
             dim background pixels and reject bright non-ROI structures.
+        spatial_domain: Spatial region used for background correction. The
+            default uses the alignment-valid crop saved during conversion,
+            matching the crop-domain analysis contract while keeping ROI masks
+            stored in full-frame coordinates.
 
     Returns:
         ``BackgroundCorrectedRoiTraces`` with raw, background, and corrected
@@ -111,20 +117,23 @@ def extract_background_corrected_roi_traces(
         start_frame=start_frame,
         stop_frame=stop_frame,
     )
-    roi_pixel_indices = _roi_pixel_indices(roi_set)
 
     if method == "none":
+        roi_pixel_indices = _roi_pixel_indices(roi_set)
         raw_values = _extract_mean_traces_from_indices(
             recording=recording,
             pixel_indices_by_trace=roi_pixel_indices,
             frame_start=frame_start,
             frame_stop=frame_stop,
             chunk_frames=chunk_frames,
+            spatial_crop=full_frame_crop(recording.movie.shape[1:]),
         )
         background_values = np.zeros_like(raw_values)
         corrected_values = raw_values.copy()
         metadata: dict[str, BackgroundMetadataValue] = {"method": method}
     elif method == "movie_global_percentile":
+        crop = _resolve_spatial_domain(recording, spatial_domain)
+        roi_pixel_indices = _crop_roi_pixel_indices(roi_set, crop)
         raw_values, background_values, corrected_values, metadata = (
             _extract_movie_global_percentile_corrected_traces(
                 recording=recording,
@@ -133,19 +142,26 @@ def extract_background_corrected_roi_traces(
                 frame_stop=frame_stop,
                 chunk_frames=chunk_frames,
                 percentile=global_percentile,
+                spatial_crop=crop,
+                spatial_domain=spatial_domain,
             )
         )
     elif method == "roi_local_percentile_y":
+        crop = _resolve_spatial_domain(recording, spatial_domain)
+        cropped_masks = _crop_roi_masks_for_domain(roi_set, crop)
+        roi_pixel_indices = _roi_pixel_indices_from_masks(cropped_masks)
         raw_values, background_values, corrected_values, metadata = (
             _extract_roi_local_y_corrected_traces(
                 recording=recording,
-                roi_set=roi_set,
+                roi_masks=cropped_masks,
                 roi_pixel_indices=roi_pixel_indices,
                 frame_start=frame_start,
                 frame_stop=frame_stop,
                 chunk_frames=chunk_frames,
                 local_y_radius=local_y_radius,
                 local_percentile=local_percentile,
+                spatial_crop=crop,
+                spatial_domain=spatial_domain,
             )
         )
 
@@ -169,6 +185,7 @@ def _extract_mean_traces_from_indices(
     frame_start: int,
     frame_stop: int,
     chunk_frames: int,
+    spatial_crop: SpatialCrop,
 ) -> npt.NDArray[np.float64]:
     """Extract mean traces for arbitrary flattened pixel-index groups.
 
@@ -179,6 +196,7 @@ def _extract_mean_traces_from_indices(
         frame_start: First frame to read.
         frame_stop: Exclusive stop frame.
         chunk_frames: Maximum number of frames per HDF5 read.
+        spatial_crop: Spatial domain read from each movie frame.
 
     Returns:
         Array shaped ``(frames, traces)``.
@@ -192,6 +210,7 @@ def _extract_mean_traces_from_indices(
         chunk_frames=chunk_frames,
         start=frame_start,
         stop=frame_stop,
+        spatial_crop=spatial_crop,
     ):
         chunk_offset = chunk_start - frame_start
         chunk_slice = slice(chunk_offset, chunk_offset + (chunk_stop - chunk_start))
@@ -212,6 +231,8 @@ def _extract_movie_global_percentile_corrected_traces(
     frame_stop: int,
     chunk_frames: int,
     percentile: float,
+    spatial_crop: SpatialCrop,
+    spatial_domain: SpatialDomain,
 ) -> tuple[
     npt.NDArray[np.float64],
     npt.NDArray[np.float64],
@@ -227,6 +248,8 @@ def _extract_movie_global_percentile_corrected_traces(
         frame_stop: Exclusive stop frame.
         chunk_frames: Maximum number of frames per HDF5 read.
         percentile: Mean-image percentile used to define background pixels.
+        spatial_crop: Spatial domain used for background and ROI pixels.
+        spatial_domain: User-facing name of ``spatial_crop``.
 
     Returns:
         Raw ROI traces, repeated background traces, corrected ROI traces, and
@@ -236,8 +259,9 @@ def _extract_movie_global_percentile_corrected_traces(
     negatives to zero, and then averages corrected pixels inside each ROI.
     """
     _validate_percentile(percentile)
+    mean_image = spatial_crop.crop_image(recording.mean_image)
     background_indices, threshold = _global_background_pixel_indices(
-        recording.mean_image,
+        mean_image,
         percentile=percentile,
     )
     frame_count = frame_stop - frame_start
@@ -250,6 +274,7 @@ def _extract_movie_global_percentile_corrected_traces(
         chunk_frames=chunk_frames,
         start=frame_start,
         stop=frame_stop,
+        spatial_crop=spatial_crop,
     ):
         chunk_offset = chunk_start - frame_start
         chunk_slice = slice(chunk_offset, chunk_offset + (chunk_stop - chunk_start))
@@ -270,6 +295,7 @@ def _extract_movie_global_percentile_corrected_traces(
         "background_threshold": threshold,
         "background_pixel_count": int(background_indices.size),
         "negative_values_clamped": True,
+        **_spatial_crop_metadata(spatial_domain, spatial_crop),
     }
     return raw_values, background_values, corrected_values, metadata
 
@@ -277,13 +303,15 @@ def _extract_movie_global_percentile_corrected_traces(
 def _extract_roi_local_y_corrected_traces(
     *,
     recording: RecordingData,
-    roi_set: RoiSet,
+    roi_masks: npt.NDArray[np.bool_],
     roi_pixel_indices: tuple[npt.NDArray[np.int64], ...],
     frame_start: int,
     frame_stop: int,
     chunk_frames: int,
     local_y_radius: int | None,
     local_percentile: float,
+    spatial_crop: SpatialCrop,
+    spatial_domain: SpatialDomain,
 ) -> tuple[
     npt.NDArray[np.float64],
     npt.NDArray[np.float64],
@@ -294,13 +322,15 @@ def _extract_roi_local_y_corrected_traces(
 
     Args:
         recording: Converted recording with lazy movie batches.
-        roi_set: ROI masks used to define excluded foreground pixels.
+        roi_masks: ROI masks in the selected spatial domain.
         roi_pixel_indices: Flattened pixel indices for each ROI.
         frame_start: First frame to read.
         frame_stop: Exclusive stop frame.
         chunk_frames: Maximum number of frames per HDF5 read.
         local_y_radius: Optional row half-width for local background pixels.
         local_percentile: Percentile used to keep dim local background pixels.
+        spatial_crop: Spatial domain used for background and ROI pixels.
+        spatial_domain: User-facing name of ``spatial_crop``.
 
     Returns:
         Raw ROI traces, local background traces, corrected traces, and metadata.
@@ -311,13 +341,13 @@ def _extract_roi_local_y_corrected_traces(
     requiring relaxation labeling or connected-component heuristics.
     """
     radius = _resolve_local_y_radius(
-        row_count=roi_set.masks.shape[1],
+        row_count=roi_masks.shape[1],
         local_y_radius=local_y_radius,
     )
     _validate_percentile(local_percentile)
     background_indices_by_roi = _local_y_background_pixel_indices(
-        roi_set=roi_set,
-        mean_image=recording.mean_image,
+        roi_masks=roi_masks,
+        mean_image=spatial_crop.crop_image(recording.mean_image),
         local_y_radius=radius,
         local_percentile=local_percentile,
     )
@@ -327,6 +357,7 @@ def _extract_roi_local_y_corrected_traces(
         frame_start=frame_start,
         frame_stop=frame_stop,
         chunk_frames=chunk_frames,
+        spatial_crop=spatial_crop,
     )
     background_values = _extract_mean_traces_from_indices(
         recording=recording,
@@ -334,6 +365,7 @@ def _extract_roi_local_y_corrected_traces(
         frame_start=frame_start,
         frame_stop=frame_stop,
         chunk_frames=chunk_frames,
+        spatial_crop=spatial_crop,
     )
     corrected_values = raw_values - background_values
     background_counts = tuple(
@@ -346,6 +378,7 @@ def _extract_roi_local_y_corrected_traces(
         "background_pixel_count_min": min(background_counts),
         "background_pixel_count_max": max(background_counts),
         "negative_values_clamped": False,
+        **_spatial_crop_metadata(spatial_domain, spatial_crop),
     }
     return raw_values, background_values, corrected_values, metadata
 
@@ -362,8 +395,69 @@ def _roi_pixel_indices(roi_set: RoiSet) -> tuple[npt.NDArray[np.int64], ...]:
     Precomputing indices keeps each movie chunk extraction simple and avoids
     copying whole masks repeatedly.
     """
-    flat_masks = roi_set.masks.reshape(roi_set.masks.shape[0], -1)
+    return _roi_pixel_indices_from_masks(roi_set.masks)
+
+
+def _roi_pixel_indices_from_masks(
+    masks: npt.NDArray[np.bool_],
+) -> tuple[npt.NDArray[np.int64], ...]:
+    """Flatten ROI masks from one spatial domain into pixel-index arrays.
+
+    Args:
+        masks: Boolean ROI masks shaped ``(rois, axis0, axis1)``.
+
+    Returns:
+        Tuple with one integer index array per ROI.
+    """
+    flat_masks = masks.reshape(masks.shape[0], -1)
     return tuple(np.flatnonzero(mask).astype(np.int64) for mask in flat_masks)
+
+
+def _crop_roi_pixel_indices(
+    roi_set: RoiSet,
+    spatial_crop: SpatialCrop,
+) -> tuple[npt.NDArray[np.int64], ...]:
+    """Return ROI pixel indices relative to a selected spatial crop.
+
+    Args:
+        roi_set: Full-frame ROI masks.
+        spatial_crop: Spatial crop used for analysis.
+
+    Returns:
+        ROI pixel indices relative to ``spatial_crop``.
+    """
+    return _roi_pixel_indices_from_masks(
+        _crop_roi_masks_for_domain(roi_set, spatial_crop),
+    )
+
+
+def _crop_roi_masks_for_domain(
+    roi_set: RoiSet,
+    spatial_crop: SpatialCrop,
+) -> npt.NDArray[np.bool_]:
+    """Crop ROI masks and require every ROI pixel to remain inside the domain.
+
+    Args:
+        roi_set: Full-frame ROI masks.
+        spatial_crop: Spatial domain selected for analysis.
+
+    Returns:
+        ROI masks restricted to ``spatial_crop``.
+
+    The check prevents a quiet coordinate error: if an ROI crosses the invalid
+    alignment border, crop-domain analysis would otherwise drop pixels silently.
+    """
+    cropped_masks = spatial_crop.crop_masks(roi_set.masks)
+    full_counts = roi_set.masks.reshape(roi_set.masks.shape[0], -1).sum(axis=1)
+    cropped_counts = cropped_masks.reshape(cropped_masks.shape[0], -1).sum(axis=1)
+    outside = np.flatnonzero(full_counts != cropped_counts)
+    if outside.size:
+        msg = (
+            "ROI pixels fall outside the selected spatial domain "
+            f"{spatial_crop.source}; affected ROI indices: {outside.tolist()}"
+        )
+        raise ValueError(msg)
+    return cropped_masks
 
 
 def _validate_roi_movie_shape(roi_set: RoiSet, recording: RecordingData) -> None:
@@ -453,7 +547,7 @@ def _resolve_local_y_radius(
 
 def _local_y_background_pixel_indices(
     *,
-    roi_set: RoiSet,
+    roi_masks: npt.NDArray[np.bool_],
     mean_image: npt.NDArray[np.float64],
     local_y_radius: int,
     local_percentile: float,
@@ -461,7 +555,7 @@ def _local_y_background_pixel_indices(
     """Find local y-neighborhood background pixels for each ROI.
 
     Args:
-        roi_set: ROI masks used to exclude foreground pixels.
+        roi_masks: ROI masks used to exclude foreground pixels.
         mean_image: Recording mean image used to choose dim local pixels.
         local_y_radius: Row half-width around each ROI center.
         local_percentile: Percentile used inside the local candidate pixels.
@@ -477,12 +571,12 @@ def _local_y_background_pixel_indices(
     pixels inside that window so bright unlabeled structures do not dominate the
     background trace.
     """
-    occupied_mask = np.any(roi_set.masks, axis=0)
+    occupied_mask = np.any(roi_masks, axis=0)
     background_mask = ~occupied_mask
     row_grid = np.arange(background_mask.shape[0])[:, None]
     background_indices: list[npt.NDArray[np.int64]] = []
 
-    for roi_index, roi_mask in enumerate(roi_set.masks):
+    for roi_index, roi_mask in enumerate(roi_masks):
         roi_rows = np.flatnonzero(np.any(roi_mask, axis=1))
         center_row = int(round(float(np.mean(roi_rows))))
         local_rows = np.abs(row_grid - center_row) <= local_y_radius
@@ -508,6 +602,51 @@ def _local_y_background_pixel_indices(
         background_indices.append(local_indices)
 
     return tuple(background_indices)
+
+
+def _resolve_spatial_domain(
+    recording: RecordingData,
+    spatial_domain: SpatialDomain,
+) -> SpatialCrop:
+    """Resolve a user-facing spatial domain name into crop bounds.
+
+    Args:
+        recording: Loaded converted recording.
+        spatial_domain: Requested spatial domain.
+
+    Returns:
+        ``SpatialCrop`` used for image and movie reads.
+    """
+    if spatial_domain == "alignment_valid_crop":
+        return recording.alignment_valid_crop
+    if spatial_domain == "full_frame":
+        return full_frame_crop(recording.movie.shape[1:])
+    msg = f"Unknown spatial_domain {spatial_domain!r}"
+    raise ValueError(msg)
+
+
+def _spatial_crop_metadata(
+    spatial_domain: SpatialDomain,
+    spatial_crop: SpatialCrop,
+) -> dict[str, BackgroundMetadataValue]:
+    """Return scalar metadata that records the spatial analysis contract.
+
+    Args:
+        spatial_domain: User-facing domain name.
+        spatial_crop: Crop bounds used by analysis.
+
+    Returns:
+        Metadata dictionary safe to store in trace outputs.
+    """
+    return {
+        "spatial_domain": spatial_domain,
+        "spatial_axis0_start": spatial_crop.axis0_start,
+        "spatial_axis0_stop": spatial_crop.axis0_stop,
+        "spatial_axis1_start": spatial_crop.axis1_start,
+        "spatial_axis1_stop": spatial_crop.axis1_stop,
+        "spatial_original_axis0": spatial_crop.original_shape[0],
+        "spatial_original_axis1": spatial_crop.original_shape[1],
+    }
 
 
 def _normalize_trace_frame_range(

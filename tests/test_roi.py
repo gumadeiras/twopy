@@ -19,6 +19,7 @@ from twopy import (
 )
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
+from twopy.spatial import full_frame_crop
 
 
 class RoiTest(unittest.TestCase):
@@ -144,6 +145,7 @@ class RoiTest(unittest.TestCase):
             imaging_res_pd=np.zeros(movie_values.shape[0], dtype=np.float64),
             high_res_pd=np.zeros(0, dtype=np.float64),
             mean_image=movie_values.mean(axis=0),
+            alignment_valid_crop=full_frame_crop(movie_values.shape[1:]),
             frame_counts=FrameCountAudit(
                 aligned_movie_frames=movie_values.shape[0],
                 imaging_res_pd_samples=movie_values.shape[0],

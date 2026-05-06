@@ -11,6 +11,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+from twopy.conversion.alignment_crop import load_alignment_valid_crop
 from twopy.conversion.matlab_values import (
     load_scipy_variable,
     matlab_struct_to_dict,
@@ -121,6 +122,12 @@ def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
         acquisition=acquisition,
         photodiode=photodiode,
     )
+    alignment_crop = load_alignment_valid_crop(
+        alignment_path=files.alignment_text,
+        aligned_movie=aligned_movie,
+        acquisition=acquisition,
+        photodiode=photodiode,
+    )
     stimulus_parameters = _load_stimulus_parameters(
         files.stimulus_data_dir / "stimParams.mat",
     )
@@ -139,6 +146,7 @@ def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
         ),
         photodiode=photodiode,
         frame_counts=frame_counts,
+        alignment_crop=alignment_crop,
     )
 
 

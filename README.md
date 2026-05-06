@@ -116,8 +116,10 @@ Analysis starts from converted HDF5 files. ROI masks are GUI-independent, trace
 extraction streams movie chunks, background correction stays explicit, and
 stimulus epoch windows come from classified photodiode events instead of
 nominal frame-rate assumptions. `timing.events` keeps the start, transition,
-and end classifications auditable. ROI dF/F uses corrected ROI fluorescence
-plus gray interleave windows to fit one shared exponential tau and one
-amplitude per ROI. The default dF/F fit mode is `robust`; pass
-`fit_mode="source_bounds"` when you need original source-bound behavior for
-audit comparisons.
+and end classifications auditable. Global percentile background correction uses
+the saved alignment-valid spatial crop by default while keeping ROI masks in
+full-frame coordinates; pass `spatial_domain="full_frame"` only when that is
+the intended audit path. ROI dF/F uses corrected ROI fluorescence plus gray
+interleave windows to fit one shared exponential tau and one amplitude per ROI.
+The default dF/F fit mode is `robust`; pass `fit_mode="source_bounds"` when you
+need original source-bound behavior for audit comparisons.

@@ -12,6 +12,7 @@ import numpy as np
 
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
+from twopy.spatial import full_frame_crop
 from twopy.stimulus import map_stimulus_specific_column
 
 
@@ -146,6 +147,7 @@ class StimulusMetadataTest(unittest.TestCase):
             imaging_res_pd=np.zeros(3, dtype=np.float64),
             high_res_pd=np.zeros(0, dtype=np.float64),
             mean_image=np.zeros((2, 2), dtype=np.float64),
+            alignment_valid_crop=full_frame_crop((2, 2)),
             frame_counts=FrameCountAudit(
                 aligned_movie_frames=3,
                 imaging_res_pd_samples=3,

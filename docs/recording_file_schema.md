@@ -462,6 +462,7 @@ Minimum source-file load set for conversion:
 - `stimulusData/stimdata.mat`
 - `stimulusData/filebackup.zip`
 - `imagingResPd.mat`
+- one `*_alignment.txt` file
 
 twopy reads this set with `load_source_conversion_inputs(recording_dir)` and
 writes converted HDF5 files with `convert_recording_to_twopy(...)`. The source
@@ -473,6 +474,10 @@ The converted `recording_data.h5` file contains:
 - `movie`: attributes pointing to the separate aligned movie file and dataset.
 - `movie/mean_image`: uncompressed mean image generated during conversion. This
   is one image, so compression is unnecessary complexity.
+- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from
+  stimulus-bounded alignment offsets. The converted aligned movie stays
+  full-frame; analysis code uses this crop when it needs the same valid spatial
+  contract as crop-domain background correction.
 - `metadata`: selected acquisition fields as HDF5 attributes.
 - `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case
   twopy field names such as `rig_name`, `run_number`, `fly_id`, and
@@ -506,6 +511,11 @@ The twopy ROI HDF5 file contains:
 ROI trace extraction reads `movie/aligned` in chunks and writes frame-by-ROI
 arrays in memory for the requested frame range. Frame-window response splitting
 uses explicit imaging-frame boundaries, usually from paired photodiode events.
+Global percentile background correction reads only the selected spatial domain
+from the aligned movie. The default domain is `alignment_valid_crop`, so the
+background pixels come from the alignment-valid crop rather than invalid motion
+border pixels. ROI masks remain full-frame; crop-domain analysis validates that
+all ROI pixels lie inside the selected crop before extracting traces.
 
 By default, the mean image uses the entire aligned movie. Callers can pass
 `mean_start_frame` and `mean_stop_frame` to compute it over a frame range.

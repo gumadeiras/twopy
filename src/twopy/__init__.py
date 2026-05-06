@@ -40,6 +40,7 @@ from twopy.roi import (
     make_roi_set,
     save_roi_set,
 )
+from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
 from twopy.stimulus import (
     StimulusSpecificColumnMapping,
     map_stimulus_specific_column,
@@ -74,6 +75,7 @@ __all__ = [
     "find_recordings",
     "frame_windows_from_photodiode_alignment",
     "FrameWindow",
+    "full_frame_crop",
     "load_converted_recording",
     "load_roi_set",
     "load_source_conversion_inputs",
@@ -93,6 +95,8 @@ __all__ = [
     "save_roi_set",
     "select_epoch_frame_windows",
     "split_traces_by_frame_windows",
+    "SpatialCrop",
+    "SpatialDomain",
     "StimulusSpecificColumnMapping",
     "WindowedRoiResponse",
 ]

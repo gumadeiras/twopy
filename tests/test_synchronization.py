@@ -17,6 +17,7 @@ from twopy import (
 )
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
+from twopy.spatial import full_frame_crop
 from twopy.synchronization import PhotodiodeEvent
 
 
@@ -144,6 +145,7 @@ class SynchronizationTest(unittest.TestCase):
             imaging_res_pd=imaging_res_pd,
             high_res_pd=high_res_pd,
             mean_image=np.zeros((2, 2), dtype=np.float64),
+            alignment_valid_crop=full_frame_crop((2, 2)),
             frame_counts=FrameCountAudit(
                 aligned_movie_frames=len(imaging_res_pd),
                 imaging_res_pd_samples=len(imaging_res_pd),

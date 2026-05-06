@@ -38,6 +38,9 @@ decided.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus
   parameters, stimulus data, photodiode signals, mean image, and a separate
   aligned movie file.
+- Conversion computes and stores `movie/alignment_valid_crop` from
+  stimulus-bounded alignment offsets while preserving the aligned movie as
+  full-frame data.
 - Conversion uses configured `analysis_output` by default unless a caller passes
   an explicit output directory.
 - Conversion code split into focused modules for public workflow, source
@@ -66,6 +69,9 @@ decided.
   arrays kept side by side for audit.
 - Implemented three ROI background modes: no correction, global movie
   percentile subtraction, and local y-neighborhood percentile subtraction.
+- Global movie percentile background correction defaults to the saved
+  alignment-valid crop, validates full-frame ROI masks against that crop, and
+  streams only the selected crop from HDF5 for lower I/O.
 - Trial/frame-window response helpers live in `twopy.analysis.trials`.
 - Stimulus epoch runs from `stimulus/data` can be mapped onto photodiode-aligned
   imaging-frame windows when their counts agree.
@@ -104,6 +110,8 @@ decided.
 - Real example recording converted successfully to `twopy/recording_data.h5`
   and `twopy/aligned_movie.h5`; aligned movie shape `(4168, 256, 127)`, mean
   image shape `(256, 127)`, stimulus data shape `(18021, 35)`.
+- Real example conversion produced alignment-valid crop
+  `axis0=[6, 250)`, `axis1=[9, 118)`, shape `(244, 109)`.
 - Real example converted recording loaded successfully with current schema; ROI
   trace smoke test produced shape `(5, 1)`, photodiode detection found 101
   high-resolution and 101 imaging-resolution events, and event pairing produced
@@ -154,9 +162,14 @@ decided.
   nominal frame rates alone.
 - Initial conversion generates a mean image. The default is the full aligned
   movie, with optional frame-range selection.
+- The converted aligned movie and ROI masks stay full-frame. Crop-domain
+  analysis uses saved crop metadata instead of duplicating cropped movie or mean
+  image datasets.
 - Background correction must be explicit and auditable. Store raw traces,
   background estimates, corrected traces, and method metadata rather than only
   the final corrected values.
+- MATLAB-parity background subtraction requires the same spatial crop/mask
+  contract as the source analysis path, not only the same percentile rule.
 - dF/F defaults to the robust exponential fit mode. It keeps the shared tau
   bound but does not use the source log-amplitude upper bound because that
   bound depends on the first baseline sample and can become invalid or overly

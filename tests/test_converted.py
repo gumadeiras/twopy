@@ -54,9 +54,19 @@ class ConvertedRecordingTest(unittest.TestCase):
                 ("time_seconds", "stimulus_frame_number", "epoch_number"),
             )
             self.assertEqual(recording.frame_counts.acquisition_minus_movie, -1)
+            self.assertEqual(recording.alignment_valid_crop.shape, (1, 2))
+            self.assertEqual(recording.alignment_valid_crop.axis0_start, 1)
             np.testing.assert_array_equal(
                 recording.mean_image,
                 np.array([[4.0, 5.0], [6.0, 7.0]]),
+            )
+            np.testing.assert_array_equal(
+                recording.movie.read_frames(
+                    0,
+                    1,
+                    spatial_crop=recording.alignment_valid_crop,
+                ),
+                np.array([[[2.0, 3.0]]]),
             )
             np.testing.assert_array_equal(
                 recording.movie.read_frames(1, 3),
@@ -158,6 +168,13 @@ class ConvertedRecordingTest(unittest.TestCase):
                 "mean_image",
                 data=np.array([[4.0, 5.0], [6.0, 7.0]]),
             )
+            crop_group = movie_group.create_group("alignment_valid_crop")
+            crop_group.attrs["source"] = "alignment_valid_crop"
+            crop_group.attrs["axis0_start"] = 1
+            crop_group.attrs["axis0_stop"] = 2
+            crop_group.attrs["axis1_start"] = 0
+            crop_group.attrs["axis1_stop"] = 2
+            crop_group.attrs["original_shape"] = (2, 2)
 
             metadata_group = h5_file.create_group("metadata")
             metadata_group.attrs["acq.frameRate"] = 10.0

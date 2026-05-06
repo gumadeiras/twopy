@@ -13,6 +13,7 @@ import numpy as np
 from twopy import classify_recording_photodiode_events
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
+from twopy.spatial import full_frame_crop
 from twopy.synchronization import (
     AlignedPhotodiodeEvent,
     PhotodiodeAlignment,
@@ -205,6 +206,7 @@ class PhotodiodeClassificationTest(unittest.TestCase):
             imaging_res_pd=np.zeros(frame_count, dtype=np.float64),
             high_res_pd=np.zeros(frame_count, dtype=np.float64),
             mean_image=np.zeros((2, 2), dtype=np.float64),
+            alignment_valid_crop=full_frame_crop((2, 2)),
             frame_counts=FrameCountAudit(
                 aligned_movie_frames=frame_count,
                 imaging_res_pd_samples=frame_count,

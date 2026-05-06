@@ -48,8 +48,11 @@ class ConversionTest(unittest.TestCase):
                 loaded.aligned_movie.mean_image(start_frame=1, stop_frame=3),
                 np.array([[6.0, 7.0], [8.0, 9.0]]),
             )
-            self.assertEqual(loaded.acquisition.fields["acq.frameRate"], 10.0)
+            self.assertEqual(loaded.acquisition.fields["acq.frameRate"], 2.0)
             self.assertEqual(loaded.acquisition.fields["acq.zoomFactor"], 2.0)
+            self.assertEqual(loaded.alignment_crop.crop.shape, (2, 2))
+            self.assertEqual(loaded.alignment_crop.alignment_frame_start, 0)
+            self.assertEqual(loaded.alignment_crop.alignment_frame_stop, 2)
             self.assertEqual(loaded.run.fields["rig_name"], "OdorRig")
             self.assertEqual(loaded.run.fields["run_number"], 1)
             self.assertEqual(loaded.frame_counts.aligned_movie_frames, 3)
@@ -151,6 +154,36 @@ class ConversionTest(unittest.TestCase):
                 ),
             )
 
+    def test_computes_alignment_valid_crop_from_stimulus_bounded_offsets(self) -> None:
+        """Confirm conversion saves the alignment-valid spatial crop.
+
+        Inputs: a temporary recording with known alignment offsets during the
+        stimulus-bounded frame range.
+        Outputs: crop bounds that remove only the invalid aligned border.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_session(
+                session_dir,
+                movie_values=np.zeros((3, 4, 4), dtype=np.float64),
+                alignment_data=np.array(
+                    [
+                        [2.0, 1.0, 0.0, 0.0, 2.0, 1.0],
+                        [-2.0, -1.0, 0.0, 0.0, -2.0, -1.0],
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    ],
+                ),
+            )
+
+            loaded = load_source_conversion_inputs(session_dir)
+
+            self.assertEqual(loaded.alignment_crop.crop.axis0_start, 1)
+            self.assertEqual(loaded.alignment_crop.crop.axis0_stop, 3)
+            self.assertEqual(loaded.alignment_crop.crop.axis1_start, 0)
+            self.assertEqual(loaded.alignment_crop.crop.axis1_stop, 4)
+            self.assertEqual(loaded.alignment_crop.x_cutoff_pixels, 2)
+            self.assertEqual(loaded.alignment_crop.y_cutoff_pixels, 1)
+
     def test_converts_recording_to_twopy_hdf5(self) -> None:
         """Confirm conversion writes twopy-owned datasets and mean image.
 
@@ -191,7 +224,23 @@ class ConversionTest(unittest.TestCase):
                 self.assertIsNone(h5_file["movie/mean_image"].compression)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["start_frame"], 0)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["stop_frame"], 3)
-                self.assertEqual(h5_file["metadata"].attrs["acq.frameRate"], 10.0)
+                self.assertEqual(
+                    h5_file["movie/alignment_valid_crop"].attrs["source"],
+                    "alignment_valid_crop",
+                )
+                self.assertEqual(
+                    h5_file["movie/alignment_valid_crop"].attrs["axis0_start"],
+                    0,
+                )
+                self.assertEqual(
+                    h5_file["movie/alignment_valid_crop"].attrs["axis0_stop"],
+                    2,
+                )
+                self.assertEqual(
+                    h5_file["movie/alignment_valid_crop"].attrs["alignment_frame_stop"],
+                    2,
+                )
+                self.assertEqual(h5_file["metadata"].attrs["acq.frameRate"], 2.0)
                 self.assertEqual(h5_file["run"].attrs["rig_name"], "OdorRig")
                 self.assertEqual(h5_file["run"].attrs["genotype"], "test_genotype")
                 self.assertEqual(h5_file["run"].attrs["run_number"], 1)
@@ -389,6 +438,8 @@ class ConversionTest(unittest.TestCase):
         acquisition_frame_count: int = 3,
         imaging_res_pd: np.ndarray | None = None,
         stimulus_data_column_count: int = 3,
+        movie_values: np.ndarray | None = None,
+        alignment_data: np.ndarray | None = None,
     ) -> None:
         """Create a minimal valid source recording fixture.
 
@@ -397,18 +448,25 @@ class ConversionTest(unittest.TestCase):
             acquisition_frame_count: ``acq.numberOfFrames`` metadata value.
             imaging_res_pd: Optional imaging-resolution photodiode vector.
             stimulus_data_column_count: Number of ``stimData`` columns to write.
+            movie_values: Optional aligned movie values.
+            alignment_data: Optional alignment text table.
 
         Returns:
             None. The function writes all required source files to disk.
         """
         stimulus_dir = session_dir / "stimulusData"
         stimulus_dir.mkdir(parents=True)
+        aligned_movie = (
+            np.arange(12, dtype=np.float64).reshape(3, 2, 2)
+            if movie_values is None
+            else movie_values
+        )
 
         with h5py.File(session_dir / "alignedMovie.mat", "w") as mat_file:
             mat_file.create_dataset(
                 "imgFrames_ch1",
-                data=np.arange(12, dtype=np.float64).reshape(3, 2, 2),
-                chunks=(1, 2, 2),
+                data=aligned_movie,
+                chunks=(1, aligned_movie.shape[1], aligned_movie.shape[2]),
                 compression="gzip",
             )
 
@@ -419,11 +477,11 @@ class ConversionTest(unittest.TestCase):
                     "configName": "test_config",
                     "software": {"version": 3.8},
                     "acq": {
-                        "linesPerFrame": 2,
-                        "pixelsPerLine": 2,
+                        "linesPerFrame": aligned_movie.shape[2],
+                        "pixelsPerLine": aligned_movie.shape[1],
                         "numberOfFrames": acquisition_frame_count,
                         "numberOfChannelsSave": 2,
-                        "frameRate": 10.0,
+                        "frameRate": 2.0,
                         "zoomFactor": 2.0,
                         "pixelTime": 0.1,
                         "msPerLine": 1.0,
@@ -484,7 +542,7 @@ class ConversionTest(unittest.TestCase):
             session_dir / "imagingResPd.mat",
             {
                 "imagingResPd": (
-                    np.array([0.0, 1.0, 0.0])
+                    self._default_imaging_res_pd(aligned_movie.shape[0])
                     if imaging_res_pd is None
                     else imaging_res_pd
                 ),
@@ -492,13 +550,19 @@ class ConversionTest(unittest.TestCase):
         )
         scipy.io.savemat(
             session_dir / "highResPd.mat",
-            {"highResPd": np.array([0.0, 0.2, 1.0, 0.2, 0.0])},
+            {"highResPd": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 1.0])},
         )
 
         (session_dir / "stimulus_name_changes_001.tif").touch()
-        (
-            session_dir / "stimulus_name_changes_001_ch1_disinterleaved_alignment.txt"
-        ).touch()
+        np.savetxt(
+            session_dir / "stimulus_name_changes_001_ch1_disinterleaved_alignment.txt",
+            (
+                np.zeros((aligned_movie.shape[0], 6), dtype=np.float64)
+                if alignment_data is None
+                else alignment_data
+            ),
+            delimiter="\t",
+        )
         (session_dir / "defaultAlignChannel.txt").write_text("1\n", encoding="utf-8")
 
     def _write_filebackup_zip(self, path: Path) -> None:
@@ -525,6 +589,20 @@ class ConversionTest(unittest.TestCase):
                     ),
                 ),
             )
+
+    def _default_imaging_res_pd(self, frame_count: int) -> np.ndarray:
+        """Return a small default frame-resolution photodiode vector.
+
+        Args:
+            frame_count: Number of aligned movie frames.
+
+        Returns:
+            One photodiode sample per frame.
+        """
+        values = np.zeros(frame_count, dtype=np.float64)
+        if frame_count > 1:
+            values[1] = 1.0
+        return values
 
     def _stimulus_data_table(self, column_count: int) -> np.ndarray:
         """Build a small ``stimData`` table with a requested column count.

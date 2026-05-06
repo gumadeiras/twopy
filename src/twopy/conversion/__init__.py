@@ -12,6 +12,7 @@ from twopy.conversion.source_loading import load_source_conversion_inputs
 from twopy.conversion.types import (
     AcquisitionMetadata,
     AlignedMovieSource,
+    AlignmentCropAudit,
     ConvertedRecording,
     FrameCountAudit,
     PhotodiodeSignals,
@@ -24,6 +25,7 @@ from twopy.conversion.types import (
 
 __all__ = [
     "AcquisitionMetadata",
+    "AlignmentCropAudit",
     "AlignedMovieSource",
     "ConvertedRecording",
     "FrameCountAudit",
