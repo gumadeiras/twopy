@@ -21,6 +21,8 @@ import numpy.typing as npt
 from twopy.conversion.types import FrameCountAudit
 from twopy.spatial import SpatialCrop, full_frame_crop
 from twopy.typing_guards import (
+    require_bool_array,
+    require_float64_array,
     require_string_key_mapping,
     require_string_key_mapping_values,
 )
@@ -73,13 +75,14 @@ class ConvertedMovie:
         crop = _normalize_spatial_crop(self.shape[1:], spatial_crop)
         with h5py.File(self.path, "r") as h5_file:
             dataset = h5_file[self.dataset_name]
-            return cast(
-                npt.NDArray[np.float64],
+            return require_float64_array(
                 dataset[
                     frame_slice,
                     crop.axis0_start : crop.axis0_stop,
                     crop.axis1_start : crop.axis1_stop,
                 ],
+                name=f"{self.dataset_name} frame slice",
+                ndim=3,
             )
 
     def iter_frame_batches(
@@ -118,13 +121,14 @@ class ConvertedMovie:
             dataset = h5_file[self.dataset_name]
             for chunk_start in range(start_frame, stop_frame, chunk_frames):
                 chunk_stop = min(chunk_start + chunk_frames, stop_frame)
-                frames = cast(
-                    npt.NDArray[np.float64],
+                frames = require_float64_array(
                     dataset[
                         chunk_start:chunk_stop,
                         crop.axis0_start : crop.axis0_stop,
                         crop.axis1_start : crop.axis1_stop,
                     ],
+                    name=f"{self.dataset_name} frame batch",
+                    ndim=3,
                 )
                 yield chunk_start, chunk_stop, frames
 
@@ -215,9 +219,10 @@ def load_converted_recording(
             acquisition_metadata=_read_attrs(h5_file["metadata"]),
             run_metadata=_read_attrs(h5_file["run"]),
             synchronization_metadata=_read_str_attrs(h5_file["photodiode"]),
-            stimulus_data=cast(
-                npt.NDArray[np.float64],
+            stimulus_data=require_float64_array(
                 h5_file["stimulus/data"][()],
+                name="stimulus/data",
+                ndim=2,
             ),
             stimulus_data_column_names=_read_string_dataset(
                 h5_file,
@@ -226,26 +231,31 @@ def load_converted_recording(
             stimulus_parameters=_read_stimulus_parameters(h5_file),
             stimulus_function_lookup=_read_stimulus_function_lookup(h5_file),
             stimulus_specific_columns=_read_stimulus_specific_columns(h5_file),
-            imaging_res_pd=cast(
-                npt.NDArray[np.float64],
+            imaging_res_pd=require_float64_array(
                 h5_file["photodiode/imaging_res_pd"][()],
+                name="photodiode/imaging_res_pd",
+                ndim=1,
             ),
-            high_res_pd=cast(
-                npt.NDArray[np.float64],
+            high_res_pd=require_float64_array(
                 h5_file["photodiode/high_res_pd"][()],
+                name="photodiode/high_res_pd",
+                ndim=1,
             ),
-            mean_image=cast(
-                npt.NDArray[np.float64],
+            mean_image=require_float64_array(
                 h5_file["movie/mean_image"][()],
+                name="movie/mean_image",
+                ndim=2,
             ),
             alignment_valid_crop=_read_alignment_valid_crop(h5_file),
-            alignment_shift_pixels=cast(
-                npt.NDArray[np.float64],
+            alignment_shift_pixels=require_float64_array(
                 h5_file["movie/alignment_valid_crop/alignment_shift_pixels"][()],
+                name="movie/alignment_valid_crop/alignment_shift_pixels",
+                ndim=1,
             ),
-            motion_artifact_mask=cast(
-                npt.NDArray[np.bool_],
+            motion_artifact_mask=require_bool_array(
                 h5_file["movie/alignment_valid_crop/motion_artifact_mask"][()],
+                name="movie/alignment_valid_crop/motion_artifact_mask",
+                ndim=1,
             ),
             frame_counts=_read_frame_counts(h5_file),
         )

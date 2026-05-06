@@ -140,6 +140,46 @@ class ConvertedRecordingTest(unittest.TestCase):
             ):
                 load_converted_recording(root / "recording_data.h5")
 
+    def test_rejects_converted_array_with_wrong_dtype(self) -> None:
+        """Confirm converted arrays keep their documented dtype.
+
+        Inputs: Converted recording where ``stimulus/data`` is integer-typed.
+        Outputs: clear validation error before recording data is returned.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._write_aligned_movie_file(root / "aligned_movie.h5")
+            self._write_recording_data_file(root / "recording_data.h5")
+            with h5py.File(root / "recording_data.h5", "r+") as h5_file:
+                del h5_file["stimulus/data"]
+                h5_file["stimulus"].create_dataset(
+                    "data",
+                    data=np.zeros((3, 3), dtype=np.int64),
+                )
+
+            with self.assertRaisesRegex(ValueError, "stimulus/data must have dtype"):
+                load_converted_recording(root / "recording_data.h5")
+
+    def test_rejects_converted_array_with_wrong_rank(self) -> None:
+        """Confirm converted arrays keep their documented rank.
+
+        Inputs: Converted recording where ``mean_image`` is one-dimensional.
+        Outputs: clear validation error before recording data is returned.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._write_aligned_movie_file(root / "aligned_movie.h5")
+            self._write_recording_data_file(root / "recording_data.h5")
+            with h5py.File(root / "recording_data.h5", "r+") as h5_file:
+                del h5_file["movie/mean_image"]
+                h5_file["movie"].create_dataset(
+                    "mean_image",
+                    data=np.zeros(4, dtype=np.float64),
+                )
+
+            with self.assertRaisesRegex(ValueError, "movie/mean_image must have 2"):
+                load_converted_recording(root / "recording_data.h5")
+
     def _write_converted_recording(self, root: Path) -> None:
         """Write both converted HDF5 files for a small recording.
 

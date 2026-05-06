@@ -13,11 +13,9 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 import h5py
 import numpy as np
-import numpy.typing as npt
 
 from twopy.analysis.background_subtraction import (
     BackgroundCorrectedRoiTraces,
@@ -32,7 +30,12 @@ from twopy.analysis.responses import (
 )
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.roi import RoiSet, TraceStatistic, make_roi_set
-from twopy.typing_guards import require_string_choice
+from twopy.typing_guards import (
+    require_bool_array,
+    require_float64_array,
+    require_int64_array,
+    require_string_choice,
+)
 
 __all__ = [
     "ANALYSIS_OUTPUT_FILE_FORMAT",
@@ -229,7 +232,7 @@ def _read_roi_set(group: h5py.Group) -> RoiSet:
         ``RoiSet`` with validated masks and labels.
     """
     return make_roi_set(
-        cast(npt.NDArray[np.bool_], group["masks"][()]),
+        require_bool_array(group["masks"][()], name="roi_set/masks", ndim=3),
         labels=_read_string_dataset(group, "labels"),
     )
 
@@ -276,14 +279,20 @@ def _read_background_traces(group: h5py.Group) -> BackgroundCorrectedRoiTraces:
         ``BackgroundCorrectedRoiTraces`` reconstructed from arrays and attrs.
     """
     return BackgroundCorrectedRoiTraces(
-        raw_values=cast(npt.NDArray[np.float64], group["raw_values"][()]),
-        background_values=cast(
-            npt.NDArray[np.float64],
-            group["background_values"][()],
+        raw_values=require_float64_array(
+            group["raw_values"][()],
+            name="traces/raw_values",
+            ndim=2,
         ),
-        corrected_values=cast(
-            npt.NDArray[np.float64],
+        background_values=require_float64_array(
+            group["background_values"][()],
+            name="traces/background_values",
+            ndim=2,
+        ),
+        corrected_values=require_float64_array(
             group["corrected_values"][()],
+            name="traces/corrected_values",
+            ndim=2,
         ),
         labels=_read_string_dataset(group, "labels"),
         start_frame=int(group.attrs["start_frame"]),
@@ -339,21 +348,35 @@ def _read_dff(group: h5py.Group) -> RoiDeltaFOverF:
         ``RoiDeltaFOverF`` reconstructed from saved datasets.
     """
     return RoiDeltaFOverF(
-        fluorescence=cast(npt.NDArray[np.float64], group["fluorescence"][()]),
-        baseline=cast(npt.NDArray[np.float64], group["baseline"][()]),
-        values=cast(npt.NDArray[np.float64], group["values"][()]),
+        fluorescence=require_float64_array(
+            group["fluorescence"][()],
+            name="dff/fluorescence",
+            ndim=2,
+        ),
+        baseline=require_float64_array(
+            group["baseline"][()],
+            name="dff/baseline",
+            ndim=2,
+        ),
+        values=require_float64_array(group["values"][()], name="dff/values", ndim=2),
         labels=_read_string_dataset(group, "labels"),
         start_frame=int(group.attrs["start_frame"]),
         stop_frame=int(group.attrs["stop_frame"]),
         tau=float(group.attrs["tau"]),
-        amplitudes=cast(npt.NDArray[np.float64], group["amplitudes"][()]),
-        interleave_frame_numbers=cast(
-            npt.NDArray[np.float64],
-            group["interleave_frame_numbers"][()],
+        amplitudes=require_float64_array(
+            group["amplitudes"][()],
+            name="dff/amplitudes",
+            ndim=1,
         ),
-        interleave_fluorescence=cast(
-            npt.NDArray[np.float64],
+        interleave_frame_numbers=require_float64_array(
+            group["interleave_frame_numbers"][()],
+            name="dff/interleave_frame_numbers",
+            ndim=1,
+        ),
+        interleave_fluorescence=require_float64_array(
             group["interleave_fluorescence"][()],
+            name="dff/interleave_fluorescence",
+            ndim=2,
         ),
         metadata=_read_metadata(group["metadata"]),
     )
@@ -415,10 +438,26 @@ def _read_epoch_windows(group: h5py.Group) -> tuple[EpochFrameWindow, ...]:
     Returns:
         Tuple of stimulus-labeled frame windows.
     """
-    window_indices = cast(npt.NDArray[np.int64], group["window_index"][()])
-    start_frames = cast(npt.NDArray[np.int64], group["start_frame"][()])
-    stop_frames = cast(npt.NDArray[np.int64], group["stop_frame"][()])
-    epoch_numbers = cast(npt.NDArray[np.int64], group["epoch_number"][()])
+    window_indices = require_int64_array(
+        group["window_index"][()],
+        name="epoch_windows/window_index",
+        ndim=1,
+    )
+    start_frames = require_int64_array(
+        group["start_frame"][()],
+        name="epoch_windows/start_frame",
+        ndim=1,
+    )
+    stop_frames = require_int64_array(
+        group["stop_frame"][()],
+        name="epoch_windows/stop_frame",
+        ndim=1,
+    )
+    epoch_numbers = require_int64_array(
+        group["epoch_number"][()],
+        name="epoch_windows/epoch_number",
+        ndim=1,
+    )
     epoch_names = _read_string_dataset(group, "epoch_name")
     labels = _read_string_dataset(group, "label")
     return tuple(
@@ -519,9 +558,21 @@ def _read_response_trial(group: h5py.Group) -> RoiResponseTrial:
         window_index=int(group.attrs["window_index"]),
         start_frame=int(group.attrs["start_frame"]),
         stop_frame=int(group.attrs["stop_frame"]),
-        frame_numbers=cast(npt.NDArray[np.int64], group["frame_numbers"][()]),
-        time_seconds=cast(npt.NDArray[np.float64], group["time_seconds"][()]),
-        values=cast(npt.NDArray[np.float64], group["values"][()]),
+        frame_numbers=require_int64_array(
+            group["frame_numbers"][()],
+            name="responses/trial/frame_numbers",
+            ndim=1,
+        ),
+        time_seconds=require_float64_array(
+            group["time_seconds"][()],
+            name="responses/trial/time_seconds",
+            ndim=1,
+        ),
+        values=require_float64_array(
+            group["values"][()],
+            name="responses/trial/values",
+            ndim=2,
+        ),
     )
 
 

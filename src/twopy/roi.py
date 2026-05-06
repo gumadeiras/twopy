@@ -9,13 +9,14 @@ code should use these typed objects and functions.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 import h5py
 import numpy as np
 import numpy.typing as npt
 
 from twopy.converted import RecordingData
+from twopy.typing_guards import require_bool_array
 
 __all__ = [
     "ROI_FILE_FORMAT",
@@ -221,7 +222,7 @@ def load_roi_set(path: Path) -> RoiSet:
         if actual_format != ROI_FILE_FORMAT:
             msg = f"Expected {ROI_FILE_FORMAT!r} file at {input_path}"
             raise ValueError(msg)
-        masks = cast(npt.NDArray[np.bool_], h5_file["masks"][()])
+        masks = require_bool_array(h5_file["masks"][()], name="masks", ndim=3)
         raw_labels = h5_file["labels"][()]
 
     labels = tuple(_decode_label(label) for label in raw_labels)

@@ -155,6 +155,44 @@ class PersistenceTest(unittest.TestCase):
             ):
                 load_analysis_outputs(h5_path)
 
+    def test_rejects_persisted_array_with_wrong_dtype(self) -> None:
+        """Confirm persisted arrays keep their declared numeric dtype.
+
+        Inputs: Analysis HDF5 where ``dff/values`` was rewritten as integers.
+        Outputs: clear validation error before returning a dF/F object.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            h5_path = Path(temp_dir) / "analysis_outputs.h5"
+            save_analysis_outputs(h5_path, dff=self._dff())
+            with h5py.File(h5_path, "r+") as h5_file:
+                del h5_file["dff/values"]
+                h5_file["dff"].create_dataset(
+                    "values",
+                    data=np.arange(6, dtype=np.int64).reshape(3, 2),
+                )
+
+            with self.assertRaisesRegex(ValueError, "dff/values must have dtype"):
+                load_analysis_outputs(h5_path)
+
+    def test_rejects_persisted_array_with_wrong_rank(self) -> None:
+        """Confirm persisted arrays keep their expected rank.
+
+        Inputs: Analysis HDF5 where ``traces/raw_values`` is one-dimensional.
+        Outputs: clear validation error before returning trace objects.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            h5_path = Path(temp_dir) / "analysis_outputs.h5"
+            save_analysis_outputs(h5_path, traces=self._traces())
+            with h5py.File(h5_path, "r+") as h5_file:
+                del h5_file["traces/raw_values"]
+                h5_file["traces"].create_dataset(
+                    "raw_values",
+                    data=np.arange(3, dtype=np.float64),
+                )
+
+            with self.assertRaisesRegex(ValueError, "traces/raw_values must have 2"):
+                load_analysis_outputs(h5_path)
+
     def _traces(self) -> BackgroundCorrectedRoiTraces:
         """Create small background-corrected traces.
 

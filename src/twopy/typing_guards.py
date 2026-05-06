@@ -12,9 +12,15 @@ validation proves a value's contract.
 from collections.abc import Collection
 from typing import SupportsInt, cast
 
+import numpy as np
+import numpy.typing as npt
+
 __all__ = [
     "int_or_none",
     "int_tuple_or_none",
+    "require_bool_array",
+    "require_float64_array",
+    "require_int64_array",
     "string_key_mapping_or_none",
     "require_string_choice",
     "require_string_key_mapping",
@@ -159,3 +165,91 @@ def require_string_choice[TextChoice: str](
     allowed_text = ", ".join(repr(item) for item in sorted(allowed))
     msg = f"{name} must be one of {allowed_text}; got {text!r}"
     raise ValueError(msg)
+
+
+def require_float64_array(
+    value: object,
+    *,
+    name: str,
+    ndim: int | None = None,
+) -> npt.NDArray[np.float64]:
+    """Return a NumPy array after validating float64 dtype and rank.
+
+    Args:
+        value: Candidate array value from an external boundary.
+        name: Human-readable dataset name for error messages.
+        ndim: Optional required number of dimensions.
+
+    Returns:
+        ``float64`` NumPy array.
+
+    Raises:
+        ValueError: If dtype or rank does not match.
+    """
+    array = np.asarray(value)
+    _require_array_contract(array, name=name, dtype=np.dtype(np.float64), ndim=ndim)
+    return cast(npt.NDArray[np.float64], array)
+
+
+def require_int64_array(
+    value: object,
+    *,
+    name: str,
+    ndim: int | None = None,
+) -> npt.NDArray[np.int64]:
+    """Return a NumPy array after validating int64 dtype and rank.
+
+    Args:
+        value: Candidate array value from an external boundary.
+        name: Human-readable dataset name for error messages.
+        ndim: Optional required number of dimensions.
+
+    Returns:
+        ``int64`` NumPy array.
+
+    Raises:
+        ValueError: If dtype or rank does not match.
+    """
+    array = np.asarray(value)
+    _require_array_contract(array, name=name, dtype=np.dtype(np.int64), ndim=ndim)
+    return cast(npt.NDArray[np.int64], array)
+
+
+def require_bool_array(
+    value: object,
+    *,
+    name: str,
+    ndim: int | None = None,
+) -> npt.NDArray[np.bool_]:
+    """Return a NumPy array after validating bool dtype and rank.
+
+    Args:
+        value: Candidate array value from an external boundary.
+        name: Human-readable dataset name for error messages.
+        ndim: Optional required number of dimensions.
+
+    Returns:
+        Boolean NumPy array.
+
+    Raises:
+        ValueError: If dtype or rank does not match.
+    """
+    array = np.asarray(value)
+    _require_array_contract(array, name=name, dtype=np.dtype(np.bool_), ndim=ndim)
+    return cast(npt.NDArray[np.bool_], array)
+
+
+def _require_array_contract(
+    array: npt.NDArray[np.generic],
+    *,
+    name: str,
+    dtype: np.dtype[np.generic],
+    ndim: int | None,
+) -> None:
+    """Validate the dtype and rank expected for a persisted array."""
+    if array.dtype != dtype:
+        msg = f"{name} must have dtype {dtype.name}; got {array.dtype}"
+        raise ValueError(msg)
+    if ndim is not None and array.ndim != ndim:
+        msg = f"{name} must have {ndim} dimension(s); got shape {array.shape}"
+        raise ValueError(msg)

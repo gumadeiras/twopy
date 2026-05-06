@@ -51,6 +51,26 @@ class RoiTest(unittest.TestCase):
             self.assertEqual(loaded.labels, ("top", "corner"))
             np.testing.assert_array_equal(loaded.masks, masks)
 
+    def test_rejects_saved_roi_masks_with_wrong_dtype(self) -> None:
+        """Confirm ROI files store masks as boolean arrays.
+
+        Inputs: ROI HDF5 file whose ``masks`` dataset was rewritten as integers.
+        Outputs: clear validation error before returning a ``RoiSet``.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            roi_path = Path(temp_dir) / "rois.h5"
+            roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
+            save_roi_set(roi_set, roi_path)
+            with h5py.File(roi_path, "r+") as h5_file:
+                del h5_file["masks"]
+                h5_file.create_dataset(
+                    "masks",
+                    data=np.ones((1, 2, 2), dtype=np.int64),
+                )
+
+            with self.assertRaisesRegex(ValueError, "masks must have dtype"):
+                load_roi_set(roi_path)
+
     def test_extracts_mean_roi_traces_from_movie_chunks(self) -> None:
         """Confirm trace extraction streams chunks and averages ROI pixels.
 
