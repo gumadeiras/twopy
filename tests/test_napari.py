@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from collections.abc import Callable
 from dataclasses import dataclass
-from os import chdir
+from os import chdir, environ
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -26,6 +26,7 @@ from twopy import (
 )
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
+from twopy.napari.state import write_last_recording_folder
 
 
 class _ControlWidget(Protocol):
@@ -158,6 +159,30 @@ class _FakeViewer:
 class NapariAdapterTest(unittest.TestCase):
     """Tests napari loading and label saving without starting a GUI."""
 
+    def setUp(self) -> None:
+        """Route napari UI state to a temporary file during tests.
+
+        Inputs: none.
+        Outputs: isolated state path in the test environment.
+        """
+        self._state_temp_dir = tempfile.TemporaryDirectory()
+        self._previous_state_file = environ.get("TWOPY_NAPARI_STATE_FILE")
+        environ["TWOPY_NAPARI_STATE_FILE"] = str(
+            Path(self._state_temp_dir.name) / "napari_state.json",
+        )
+
+    def tearDown(self) -> None:
+        """Restore the caller's napari state-file environment.
+
+        Inputs: none.
+        Outputs: original environment value restored.
+        """
+        if self._previous_state_file is None:
+            environ.pop("TWOPY_NAPARI_STATE_FILE", None)
+        else:
+            environ["TWOPY_NAPARI_STATE_FILE"] = self._previous_state_file
+        self._state_temp_dir.cleanup()
+
     def test_opens_empty_roi_labels_layer_by_default(self) -> None:
         """Confirm new recordings open with an editable empty ROI layer.
 
@@ -271,16 +296,16 @@ class NapariAdapterTest(unittest.TestCase):
             loaded = load_roi_set(roi_save_file)
             self.assertEqual(loaded.labels, ("roi_0001", "roi_0002"))
 
-    def test_magicgui_load_button_adds_recording_layers(self) -> None:
-        """Confirm the Load Recording button can populate an empty viewer.
+    def test_recording_folder_selection_loads_recording_layers(self) -> None:
+        """Confirm selecting a recording folder populates an empty viewer.
 
-        Inputs: fake viewer, control dock, and tiny converted recording path.
+        Inputs: fake viewer, control dock, and tiny converted recording folder.
         Outputs: mean image, movie preview, and ROI Labels layer.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            recording_path = _write_converted_recording(root)
             roi_save_file = root / "drawn_rois.h5"
+            _write_converted_recording(root)
             viewer = _FakeViewer()
 
             controls_widget, _dock = add_twopy_magicgui_controls(
@@ -291,13 +316,9 @@ class NapariAdapterTest(unittest.TestCase):
             controls = cast(_ControlWidget, controls_widget)
             load_widget = cast(Any, controls[1])
 
-            result = load_widget(
-                recording_folder=recording_path,
-                roi_save_file=roi_save_file,
-                load_movie=True,
-            )
+            load_widget.roi_save_file.value = roi_save_file
+            load_widget.recording_folder.value = root
 
-            self.assertIn("Loaded", str(result))
             self.assertEqual(load_widget.movie_end_frame.value, 2)
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(len(viewer.labels), 1)
@@ -331,6 +352,27 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertIn("Saved 1 ROI", str(result))
             self.assertTrue((root / "rois.h5").exists())
+
+    def test_controls_remember_last_recording_folder(self) -> None:
+        """Confirm the Load Recording control starts from the last folder.
+
+        Inputs: one folder stored in the napari state file.
+        Outputs: recording-folder widget prefilled with that folder.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_last_recording_folder(root)
+            viewer = _FakeViewer()
+
+            controls_widget, _dock = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            controls = cast(_ControlWidget, controls_widget)
+            load_widget = cast(Any, controls[1])
+
+            self.assertEqual(load_widget.recording_folder.value, root.resolve())
 
     def test_load_button_resolves_recording_folder_defaults(self) -> None:
         """Confirm folder loading finds recording, movie, and ROI files.

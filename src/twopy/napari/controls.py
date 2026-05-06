@@ -10,6 +10,7 @@ still go through the same typed helpers used by scripts.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 import numpy as np
 
@@ -24,8 +25,45 @@ from twopy.napari.paths import (
 )
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import roi_label_image_from_layer, save_napari_label_rois
+from twopy.napari.state import (
+    read_last_recording_folder,
+    recording_folder_for_state,
+    write_last_recording_folder,
+)
 
 __all__ = ["add_twopy_magicgui_controls"]
+
+
+class _PathValueWidget(Protocol):
+    """Small protocol for magicgui path widgets used by callbacks."""
+
+    value: Path
+
+
+class _LoadRecordingWidget(Protocol):
+    """Small protocol for the load-recording magicgui function widget."""
+
+    recording_folder: _PathValueWidget
+
+    def __call__(self) -> object:
+        """Run the load-recording function widget.
+
+        Returns:
+            Function widget result.
+        """
+        ...
+
+
+class _TextButton(Protocol):
+    """Small protocol for a text button widget."""
+
+    text: str
+
+
+class _MetadataTextWidget(Protocol):
+    """Small protocol for the metadata text widget."""
+
+    visible: bool
 
 
 @dataclass
@@ -100,13 +138,14 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         magicgui container with Load Recording and Save ROIs buttons.
     """
     from magicgui import magicgui
-    from magicgui.widgets import Container, Label, TextEdit, ToggleButton
+    from magicgui.widgets import Container, Label, PushButton, TextEdit
 
     default_movie_end_frame = _default_movie_end_frame(state.recording)
+    default_recording_folder = _default_recording_folder(state.recording)
 
-    @magicgui(call_button="Load Recording", layout="vertical")
+    @magicgui(call_button=False, layout="vertical")
     def load_recording(
-        recording_folder: Path = Path(DEFAULT_PATH_TEXT),
+        recording_folder: Path = default_recording_folder,
         roi_file_to_load: Path = Path(DEFAULT_PATH_TEXT),
         roi_save_file: Path = Path(DEFAULT_PATH_TEXT),
         movie_start_frame: int = 0,
@@ -170,9 +209,12 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         state.roi_labels_layer = view.roi_labels_layer
         state.roi_save_file = resolved_roi_save_file
         state.recording = view.recording
+        write_last_recording_folder(
+            recording_folder_for_state(recording_folder, paths.recording_data_path),
+        )
         load_recording.movie_end_frame.value = _default_movie_end_frame(view.recording)
         metadata_text.value = format_recording_metadata(view.recording)
-        metadata_toggle.value = True
+        metadata_button.text = "Recording Metadata v"
         metadata_text.visible = True
         return f"Loaded {paths.recording_data_path}"
 
@@ -201,13 +243,13 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
         state.roi_save_file = resolved_output_path
         return f"Saved {len(roi_set.labels)} ROI(s) to {resolved_output_path}"
 
-    metadata_toggle = ToggleButton(text="Recording Metadata", value=False)
+    metadata_button = PushButton(text="Recording Metadata >")
     metadata_text = TextEdit(value=format_recording_metadata(state.recording))
     metadata_text.read_only = True
     metadata_text.min_height = 220
     metadata_text.visible = False
-    metadata_toggle.changed.connect(
-        lambda visible: setattr(metadata_text, "visible", bool(visible)),
+    metadata_button.clicked.connect(
+        lambda _value: _toggle_metadata_panel(metadata_button, metadata_text),
     )
 
     load_recording.recording_folder.mode = "d"
@@ -222,12 +264,15 @@ def _make_twopy_control_widget(state: NapariControlState) -> object:
     load_recording.movie_end_frame.label = "movie end frame"
     load_recording.load_movie.label = "load movie"
     save_rois.roi_save_file.label = "ROI save file"
+    load_recording.recording_folder.changed.connect(
+        lambda _value: _load_after_recording_selection(load_recording),
+    )
 
     return Container(
         widgets=[
             Label(value="Load Recording"),
             load_recording,
-            metadata_toggle,
+            metadata_button,
             metadata_text,
             Label(value="Save ROIs"),
             save_rois,
@@ -267,6 +312,59 @@ def _default_movie_end_frame(recording: RecordingData | None) -> int:
     if recording is None:
         return 0
     return max(recording.movie.shape[0] - 1, 0)
+
+
+def _default_recording_folder(recording: RecordingData | None) -> Path:
+    """Return the default recording folder shown in the load control.
+
+    Args:
+        recording: Optional loaded recording.
+
+    Returns:
+        Loaded recording folder, last selected folder, or ``default``.
+    """
+    if recording is not None:
+        return recording.path.expanduser().parent
+    remembered_folder = read_last_recording_folder()
+    if remembered_folder is not None:
+        return remembered_folder
+    return Path(DEFAULT_PATH_TEXT)
+
+
+def _load_after_recording_selection(
+    load_recording_widget: _LoadRecordingWidget,
+) -> None:
+    """Load a recording after the folder picker changes.
+
+    Args:
+        load_recording_widget: magicgui function widget with load controls.
+
+    Returns:
+        None.
+    """
+    result = load_recording_widget.recording_folder.value
+    if is_default_path(result):
+        return
+    load_recording_widget()
+
+
+def _toggle_metadata_panel(
+    button: _TextButton,
+    metadata_text: _MetadataTextWidget,
+) -> None:
+    """Show or hide the metadata text panel.
+
+    Args:
+        button: Button widget used as the disclosure control.
+        metadata_text: Text widget containing metadata.
+
+    Returns:
+        None.
+    """
+    metadata_text.visible = not bool(metadata_text.visible)
+    button.text = (
+        "Recording Metadata v" if metadata_text.visible else "Recording Metadata >"
+    )
 
 
 def _load_recording_for_defaults(
