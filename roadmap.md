@@ -140,6 +140,8 @@ decided.
   epochs by default, draw thicker dashed zero-reference lines, and expose
   ROI/epoch visibility plus manual axis controls in scrollable option panels;
   the ROI selection list shows each ROI's plot color beside its name.
+- Napari response plotting code is scoped under `twopy.napari.plotting` with
+  separate modules for plot data, option controls, drawing widgets, and tabs.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
 - Launch script for opening napari from a converted output directory, a source

@@ -34,9 +34,9 @@ from twopy.conversion.types import ConvertedRecording
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
-from twopy.napari.plot_data import response_plot_data_from_grouped
-from twopy.napari.plot_options import visibility_options_widget
-from twopy.napari.plot_widgets import (
+from twopy.napari.plotting.data import response_plot_data_from_grouped
+from twopy.napari.plotting.options import visibility_options_widget
+from twopy.napari.plotting.widgets import (
     global_time_bounds,
     global_value_bounds,
     roi_colors_from_layer,

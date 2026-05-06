@@ -25,14 +25,17 @@ from qtpy.QtWidgets import (
 from twopy.analysis.responses import is_gray_epoch_name
 from twopy.analysis.workflow import analyze_recording_responses
 from twopy.converted import RecordingData
-from twopy.napari.plot_data import (
+from twopy.napari.plotting.data import (
     ResponsePlotData,
     default_analysis_output_path,
     load_response_plot_data,
     response_plot_data_from_grouped,
 )
-from twopy.napari.plot_options import axis_options_widget, visibility_options_widget
-from twopy.napari.plot_widgets import (
+from twopy.napari.plotting.options import (
+    axis_options_widget,
+    visibility_options_widget,
+)
+from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     clear_layout,
     epoch_key_label,

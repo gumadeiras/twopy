@@ -19,7 +19,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from twopy.napari.plot_data import EpochResponsePlotData, ResponsePlotData
+from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
 __all__ = [
     "EpochPlotWidget",
