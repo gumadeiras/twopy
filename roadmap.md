@@ -131,14 +131,14 @@ decided.
   `rois.h5`, and loads the full movie by default.
 - Napari controls use intuitive ROI file labels and a compact movie frame range
   slider.
-- Napari has an initial response plotting dock with tabs for epoch response
+- Napari has an initial top response plotting dock with tabs for epoch response
   plots and plot options; it can reload persisted analysis outputs or update
   plots from the current Labels ROIs through the core analysis workflow. Plots
-  now use saved per-trial response time vectors, match ROI trace colors to the
-  Labels layer, share axes, preserve two seconds before stimulus onset, extend
-  two seconds after stimulus offset when gray interleave frames exist, hide gray
-  epochs by default, sort epochs by epoch number, draw thicker dashed
-  zero-reference lines, and expose
+  now lay out horizontally, use saved per-trial response time vectors, match ROI
+  trace colors to the Labels layer, share axes, preserve two seconds before
+  stimulus onset, extend two seconds after stimulus offset when gray interleave
+  frames exist, hide gray epochs by default, sort epochs by epoch number, draw
+  thicker dashed zero-reference lines, and expose
   ROI/epoch visibility plus manual axis controls in scrollable option panels;
   the ROI selection list shows each ROI's plot color beside its name.
 - Napari recording controls show the loaded path tail instead of `default`

@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 from qtpy.QtWidgets import (
     QCheckBox,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
@@ -60,7 +61,7 @@ def add_twopy_response_plot_widget(
     recording: RecordingData | None,
     roi_labels_layer: object | None = None,
     dock_name: str = "twopy responses",
-    dock_area: str = "right",
+    dock_area: str = "top",
 ) -> tuple[object, object]:
     """Add the response plotting dock widget to a napari viewer.
 
@@ -170,7 +171,7 @@ class _ResponsePlotTabs(QTabWidget):
         self._manual_y_min: float | None = None
         self._manual_y_max: float | None = None
         self._status_label = QLabel("No recording loaded.")
-        self._plot_layout = QVBoxLayout()
+        self._plot_layout = QHBoxLayout()
         self._plot_layout.addWidget(self._status_label)
         plot_content = QWidget()
         plot_content.setLayout(self._plot_layout)
@@ -566,17 +567,37 @@ class _ResponsePlotTabs(QTabWidget):
             ):
                 continue
             title = f"Epoch {epoch.epoch_number}: {epoch.epoch_name}"
-            self._plot_layout.addWidget(QLabel(title))
             self._plot_layout.addWidget(
-                EpochPlotWidget(
-                    epoch,
-                    show_sem=self._show_sem,
-                    roi_indices=roi_indices,
-                    roi_colors=colors,
-                    time_min=time_min,
-                    time_max=time_max,
-                    value_min=value_min,
-                    value_max=value_max,
-                ),
+                _epoch_plot_panel(
+                    title=title,
+                    plot=EpochPlotWidget(
+                        epoch,
+                        show_sem=self._show_sem,
+                        roi_indices=roi_indices,
+                        roi_colors=colors,
+                        time_min=time_min,
+                        time_max=time_max,
+                        value_min=value_min,
+                        value_max=value_max,
+                    ),
+                )
             )
         self._plot_layout.addStretch(1)
+
+
+def _epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
+    """Create one titled plot panel for the horizontal response strip.
+
+    Args:
+        title: Plot title.
+        plot: Epoch response plot widget.
+
+    Returns:
+        Qt widget containing the title and plot.
+    """
+    panel = QWidget()
+    layout = QVBoxLayout()
+    layout.addWidget(QLabel(title))
+    layout.addWidget(plot)
+    panel.setLayout(layout)
+    return panel

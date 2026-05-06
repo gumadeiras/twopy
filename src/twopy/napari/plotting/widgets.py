@@ -14,10 +14,7 @@ import numpy as np
 import numpy.typing as npt
 from qtpy.QtCore import QPointF, QRectF
 from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
-from qtpy.QtWidgets import (
-    QVBoxLayout,
-    QWidget,
-)
+from qtpy.QtWidgets import QLayout, QWidget
 
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
@@ -84,6 +81,7 @@ class EpochPlotWidget(QWidget):
         self._value_min = value_min
         self._value_max = value_max
         self.setMinimumHeight(220)
+        self.setMinimumWidth(640)
 
     def paintEvent(self, a0: QPaintEvent | None) -> None:
         """Draw response traces.
@@ -136,7 +134,7 @@ class EpochPlotWidget(QWidget):
         painter.end()
 
 
-def clear_layout(layout: QVBoxLayout) -> None:
+def clear_layout(layout: QLayout) -> None:
     """Remove all widgets from a Qt layout.
 
     Args:

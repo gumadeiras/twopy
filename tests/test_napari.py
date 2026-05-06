@@ -241,6 +241,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
             self.assertEqual(len(viewer.window.dock_widgets), 3)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
+            self.assertEqual(viewer.window.dock_widgets[0].area, "top")
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
             self.assertEqual(viewer.window.dock_widgets[2].name, "twopy save ROIs")
             self.assertEqual(viewer.window.dock_widgets[2].area, "left")
