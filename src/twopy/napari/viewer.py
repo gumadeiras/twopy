@@ -40,6 +40,12 @@ class _LabelsLayerWithBrushSize(Protocol):
     brush_size: int
 
 
+class _ImageLayerWithContrastRange(Protocol):
+    """Small layer shape needed to configure contrast slider bounds."""
+
+    contrast_limits_range: tuple[float, float]
+
+
 def open_recording_in_napari(
     recording_data_path: Path,
     *,
@@ -93,6 +99,8 @@ def open_recording_in_napari(
         display_image_from_movie_image(mean_image),
         name=mean_image_layer_name,
         colormap="gray",
+        opacity=0.65,
+        gamma=1.3,
         contrast_limits=contrast_limits_from_data_range(
             mean_image,
             minimum_fraction=0.10,
@@ -100,6 +108,7 @@ def open_recording_in_napari(
         ),
         metadata=layer_metadata,
     )
+    set_image_contrast_limits_range(mean_layer, data=mean_image)
 
     movie_layer = None
     if movie_frame_range is not None:
@@ -125,6 +134,7 @@ def open_recording_in_napari(
             ),
             metadata=layer_metadata,
         )
+        set_image_contrast_limits_range(movie_layer, data=movie)
 
     roi_layer = None
     if add_roi_labels_layer:
@@ -239,6 +249,28 @@ def set_labels_brush_size(layer: object, *, brush_size: int) -> None:
     """
     labels_layer = cast(_LabelsLayerWithBrushSize, layer)
     labels_layer.brush_size = brush_size
+
+
+def set_image_contrast_limits_range(layer: object, *, data: npt.ArrayLike) -> None:
+    """Allow napari contrast sliders to cover the full loaded data range.
+
+    Args:
+        layer: Image layer returned by ``viewer.add_image``.
+        data: Image or movie values shown in that layer.
+
+    Returns:
+        None.
+
+    ``contrast_limits`` sets the initial slider handles. Napari initializes the
+    slider's allowed range from those handles, so we reset
+    ``contrast_limits_range`` afterward to keep the full data range available.
+    """
+    image_layer = cast(_ImageLayerWithContrastRange, layer)
+    image_layer.contrast_limits_range = contrast_limits_from_data_range(
+        data,
+        minimum_fraction=0.0,
+        maximum_fraction=1.0,
+    )
 
 
 def contrast_limits_from_data_range(

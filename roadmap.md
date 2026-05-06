@@ -163,6 +163,9 @@ decided.
   when an older full-frame Labels layer is still present in napari.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
+- Napari image layers set initial display contrast without narrowing the full
+  contrast slider range. Mean images open at 65 percent opacity with gamma 1.3,
+  and movie previews open with additive blending.
 - Napari displays the alignment-valid crop with explicit movie-axis to
   display-axis transposition, then converts drawn Labels ROIs back to full-frame
   movie coordinates before saving or analysis. This keeps the viewer orientation

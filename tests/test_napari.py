@@ -103,6 +103,7 @@ class _FakeLayer:
     options: dict[str, object]
     visible: bool = True
     brush_size: int | None = None
+    contrast_limits_range: tuple[float, float] | None = None
     events: object | None = None
 
 
@@ -342,7 +343,10 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
             self.assertEqual(viewer.labels[0].brush_size, 6)
+            self.assertEqual(viewer.images[0].options["opacity"], 0.65)
+            self.assertEqual(viewer.images[0].options["gamma"], 1.3)
             self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
+            self.assertEqual(viewer.images[0].contrast_limits_range, (4.0, 7.0))
             self.assertEqual(len(viewer.window.dock_widgets), 5)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
@@ -413,6 +417,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(viewer.images[0].name, "mean image")
             self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
+            self.assertEqual(viewer.images[0].contrast_limits_range, (4.0, 7.0))
             self.assertEqual(np.asarray(viewer.images[0].data).shape, (2, 2))
             self.assertEqual(viewer.images[1].name, "aligned movie")
             self.assertEqual(viewer.images[1].options["blending"], "additive")
@@ -420,6 +425,7 @@ class NapariAdapterTest(unittest.TestCase):
                 viewer.images[1].options["contrast_limits"],
                 (0.0, 5.25),
             )
+            self.assertEqual(viewer.images[1].contrast_limits_range, (0.0, 7.0))
             self.assertEqual(np.asarray(viewer.images[1].data).shape, (2, 2, 2))
             self.assertEqual(len(viewer.labels), 1)
             np.testing.assert_array_equal(
