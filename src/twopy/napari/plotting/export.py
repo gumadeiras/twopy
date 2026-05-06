@@ -2,8 +2,8 @@
 
 Inputs: the current napari viewer state, loaded recording metadata, ROI Labels
 data, and plot-ready response traces.
-Outputs: PDF, SVG, and PNG files for recording views, ROI overlays, and
-response plots.
+Outputs: PDF and PNG files for recording views, ROI overlays, and response
+plots.
 
 This module owns figure export only. The live napari widgets decide when to
 call it, while this file keeps publication-output choices explicit and easy to
@@ -33,7 +33,7 @@ __all__ = [
 ]
 
 MM_TO_INCH = 1.0 / 25.4
-DEFAULT_FORMATS = ("pdf", "svg", "png")
+DEFAULT_FORMATS = ("pdf", "png")
 
 
 class _LayerWithData(Protocol):
@@ -101,7 +101,11 @@ def export_recording_view(
     image = current_recording_image(viewer=viewer, recording=recording)
     fig, ax = image_figure(image.shape)
     draw_recording_image(ax, image)
-    return save_figure_bundle(fig, output_dir / "recording_view", formats=formats)
+    return save_figure_bundle(
+        fig,
+        output_dir / "recording_view" / "recording_view",
+        formats=formats,
+    )
 
 
 def export_roi_view(
@@ -138,7 +142,9 @@ def export_roi_view(
         roi_indices=tuple(range(len(roi_label_values))),
         roi_colors=roi_colors,
     )
-    return save_figure_bundle(fig, output_dir / "roi_view", formats=formats)
+    return save_figure_bundle(
+        fig, output_dir / "roi_view" / "roi_view", formats=formats
+    )
 
 
 def export_recording_roi_overlay(
@@ -181,7 +187,7 @@ def export_recording_roi_overlay(
     )
     return save_figure_bundle(
         fig,
-        output_dir / "recording_roi_overlay",
+        output_dir / "recording_roi_overlay" / "recording_roi_overlay",
         formats=formats,
     )
 
@@ -230,7 +236,7 @@ def export_epoch_plots(
         written.extend(
             save_figure_bundle(
                 fig,
-                output_dir / safe_stem(_epoch_title(epoch)),
+                output_dir / "plots" / safe_stem(_epoch_title(epoch)),
                 formats=formats,
             )
         )
@@ -483,7 +489,6 @@ def draw_roi_contours(
             levels=(0.5,),
             colors=(roi_colors[roi_index],),
             linewidths=0.75,
-            origin="upper",
         )
     ax.set_xlim(-0.5, labels.shape[1] - 0.5)
     ax.set_ylim(labels.shape[0] - 0.5, -0.5)
@@ -550,7 +555,7 @@ def save_figure_bundle(
     *,
     formats: tuple[str, ...] = DEFAULT_FORMATS,
 ) -> tuple[Path, ...]:
-    """Save a figure as PDF, SVG, and PNG with editable vector-friendly text.
+    """Save a figure as PDF and PNG with editable vector-friendly PDF text.
 
     Args:
         fig: Matplotlib figure to save.

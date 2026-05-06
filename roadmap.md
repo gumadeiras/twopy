@@ -150,8 +150,9 @@ decided.
   separate modules for plot data, option controls, drawing widgets, and docks.
 - Napari response options now include a Plot-size control and an Export tab
   that saves recording views, ROI views, recording/ROI overlays, per-epoch
-  response plots, and two-column ROI-overlay/response figures as PDF, SVG, and
-  PNG with Illustrator-editable text and vector ROI/trace paths where possible.
+  response plots, and two-column ROI-overlay/response figures as PDF and PNG
+  with Illustrator-editable PDF text and vector ROI/trace paths where possible.
+  Each export action writes into its own subfolder under `exports/`.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
 - Napari displays the alignment-valid crop with explicit movie-axis to

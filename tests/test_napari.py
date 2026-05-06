@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import h5py
 import numpy as np
+from matplotlib.figure import Figure
 from napari.layers import Labels
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QApplication, QTabWidget, QWidget
@@ -42,7 +43,7 @@ from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 from twopy.napari.plotting.data import ResponsePlotData, response_plot_data_from_grouped
-from twopy.napari.plotting.export import export_epoch_plots
+from twopy.napari.plotting.export import draw_roi_contours, export_epoch_plots
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.options import visibility_options_widget
 from twopy.napari.plotting.widgets import (
@@ -772,6 +773,7 @@ class NapariAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(display_labels.shape, (3, 2))
+        np.testing.assert_array_equal(roi_label_image_from_layer(layer), movie_labels)
         np.testing.assert_array_equal(
             movie_labels_from_display_layer(layer),
             np.array(
@@ -1006,7 +1008,7 @@ class NapariAdapterTest(unittest.TestCase):
         """Confirm response plots export in the expected file formats.
 
         Inputs: one tiny plot-ready epoch and a temporary output folder.
-        Outputs: PDF, SVG, and PNG files for the epoch plot.
+        Outputs: PDF and PNG files under a plot-specific export folder.
         """
         plot_data = _tiny_response_plot_data()
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1021,10 +1023,34 @@ class NapariAdapterTest(unittest.TestCase):
                 value_bounds=(0.0, 1.0),
             )
 
-            self.assertEqual(
-                {path.suffix for path in written}, {".pdf", ".svg", ".png"}
-            )
+            self.assertEqual({path.suffix for path in written}, {".pdf", ".png"})
+            self.assertEqual({path.parent.name for path in written}, {"plots"})
             self.assertTrue(all(path.is_file() for path in written))
+
+    def test_export_roi_contours_keep_display_orientation(self) -> None:
+        """Confirm exported ROI contours keep the same top-origin view as napari.
+
+        Inputs: one ROI in the top rows of a display-coordinate label image.
+        Outputs: contour vertices stay near the top rows, not vertically flipped.
+        """
+        labels = np.zeros((6, 6), dtype=np.int64)
+        labels[0:2, 1:3] = 1
+        fig = Figure()
+        ax = fig.add_subplot(111)
+
+        draw_roi_contours(
+            ax,
+            labels=labels,
+            roi_label_values=(1,),
+            roi_indices=(0,),
+            roi_colors=("#ff0000",),
+        )
+        vertices = np.asarray(
+            ax.collections[0].get_paths()[0].vertices,
+            dtype=np.float64,
+        )
+
+        self.assertLess(float(np.max(vertices[:, 1])), 2.0)
 
     def test_launch_recording_path_returns_none_when_no_default_exists(self) -> None:
         """Confirm no-path app launch can start empty instead of failing.
