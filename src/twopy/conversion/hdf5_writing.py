@@ -173,8 +173,7 @@ def _write_alignment_crop_group(
     Returns:
         None. The function writes crop bounds and audit attributes.
     """
-    crop_audit = alignment_crop
-    crop = crop_audit.crop
+    crop = alignment_crop.crop
     crop_group = movie_group.create_group("alignment_valid_crop")
     crop_group.attrs["source"] = crop.source
     crop_group.attrs["axis0_start"] = crop.axis0_start
@@ -182,12 +181,12 @@ def _write_alignment_crop_group(
     crop_group.attrs["axis1_start"] = crop.axis1_start
     crop_group.attrs["axis1_stop"] = crop.axis1_stop
     crop_group.attrs["original_shape"] = crop.original_shape
-    crop_group.attrs["alignment_frame_start"] = crop_audit.alignment_frame_start
-    crop_group.attrs["alignment_frame_stop"] = crop_audit.alignment_frame_stop
-    crop_group.attrs["x_cutoff_pixels"] = crop_audit.x_cutoff_pixels
-    crop_group.attrs["y_cutoff_pixels"] = crop_audit.y_cutoff_pixels
-    crop_group.attrs["over_moved_frame_count"] = crop_audit.over_moved_frame_count
-    crop_group.attrs["motion_threshold_pixels"] = crop_audit.motion_threshold_pixels
+    crop_group.attrs["alignment_frame_start"] = alignment_crop.alignment_frame_start
+    crop_group.attrs["alignment_frame_stop"] = alignment_crop.alignment_frame_stop
+    crop_group.attrs["x_cutoff_pixels"] = alignment_crop.x_cutoff_pixels
+    crop_group.attrs["y_cutoff_pixels"] = alignment_crop.y_cutoff_pixels
+    crop_group.attrs["over_moved_frame_count"] = alignment_crop.over_moved_frame_count
+    crop_group.attrs["motion_threshold_pixels"] = alignment_crop.motion_threshold_pixels
 
 
 def _write_stimulus_group(
