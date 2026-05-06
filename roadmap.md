@@ -61,6 +61,11 @@ decided.
 - GUI-independent ROI mask storage in HDF5 with labels.
 - ROI fluorescence trace extraction from converted aligned movies using chunked
   reads.
+- ROI background-corrected trace extraction with raw, background, and corrected
+  arrays kept side by side for audit.
+- Implemented three ROI background modes: no correction, MATLAB-compatible
+  global movie percentile subtraction, and local y-neighborhood percentile
+  subtraction.
 - Photodiode event segmentation for converted `high_res_pd` and
   `imaging_res_pd` signals.
 - Order-based pairing of high-resolution photodiode events to imaging-frame
@@ -135,6 +140,9 @@ decided.
   nominal frame rates alone.
 - Initial conversion generates a mean image. The default is the full aligned
   movie, with optional frame-range selection.
+- Background correction must be explicit and auditable. Store raw traces,
+  background estimates, corrected traces, and method metadata rather than only
+  the final corrected values.
 - Code style: simple, typed, documented, and tested.
 - `savedAnalysis/`: optional; only present after prior MATLAB analysis.
 - Roadmap maintenance: update with completed progress and explicit decisions;

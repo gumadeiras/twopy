@@ -16,8 +16,11 @@ from twopy.responses import (
     split_traces_by_frame_windows,
 )
 from twopy.roi import (
+    BackgroundCorrectedRoiTraces,
+    BackgroundCorrectionMethod,
     RoiSet,
     RoiTraces,
+    extract_background_corrected_roi_traces,
     extract_roi_traces,
     load_roi_set,
     make_roi_set,
@@ -40,9 +43,12 @@ from twopy.synchronization import (
 __all__ = [
     "__version__",
     "AlignedPhotodiodeEvent",
+    "BackgroundCorrectedRoiTraces",
+    "BackgroundCorrectionMethod",
     "convert_recording_to_twopy",
     "detect_photodiode_events",
     "detect_recording_photodiode_events",
+    "extract_background_corrected_roi_traces",
     "extract_roi_traces",
     "find_recordings",
     "frame_windows_from_photodiode_alignment",
