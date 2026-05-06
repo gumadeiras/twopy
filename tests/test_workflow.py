@@ -14,7 +14,9 @@ import numpy as np
 
 from twopy import (
     analyze_recording_responses,
+    compute_recording_responses,
     load_analysis_outputs,
+    load_converted_recording,
     make_roi_set,
     save_roi_set,
 )
@@ -89,6 +91,41 @@ class WorkflowTest(unittest.TestCase):
             ) as csv_file:
                 rows = list(csv.DictReader(csv_file))
             self.assertEqual(len(rows), 4)
+
+    def test_compute_recording_responses_does_not_write_outputs(self) -> None:
+        """Confirm in-memory response computation has no persistence side effect.
+
+        Inputs: a converted recording object, ROI set, and explicit epoch
+        windows.
+        Outputs: response objects in memory and no analysis files on disk.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = self._write_converted_recording(root)
+            recording = load_converted_recording(recording_path)
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            windows = (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "gray"), 1, "Gray"),
+                EpochFrameWindow(FrameWindow(1, 2, 4, "odor"), 2, "Odor"),
+            )
+
+            result = compute_recording_responses(
+                recording,
+                roi_set,
+                epoch_windows=windows,
+                background_method="none",
+                seconds_interleave_use=None,
+                apply_motion_mask=False,
+                fit_mode="robust",
+                chunk_frames=2,
+            )
+
+            self.assertEqual(len(result.grouped_responses.trials), 2)
+            self.assertFalse((root / "analysis_outputs.h5").exists())
+            self.assertFalse((root / "response_summary.csv").exists())
 
     def _write_converted_recording(self, root: Path) -> Path:
         """Write a minimal converted recording and movie pair.

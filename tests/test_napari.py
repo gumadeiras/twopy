@@ -41,12 +41,14 @@ from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
+from twopy.converted import load_converted_recording
 from twopy.napari.display import (
     display_image_from_movie_image,
     display_labels_from_movie_labels,
     display_metadata_for_spatial_crop,
     movie_labels_from_display_layer,
 )
+from twopy.napari.interactive import LiveResponseController
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
@@ -99,6 +101,7 @@ class _FakeLayer:
     data: object
     options: dict[str, object]
     visible: bool = True
+    events: object | None = None
 
 
 @dataclass(frozen=True)
@@ -212,6 +215,74 @@ class _FakeColorLayer:
         if label == 1:
             return (1.0, 0.0, 0.0, 1.0)
         return (0.0, 0.0, 1.0, 1.0)
+
+
+class _FakeEmitter:
+    """Small event emitter used to test live ROI update wiring."""
+
+    def __init__(self) -> None:
+        """Create an emitter with no connected callbacks."""
+        self._callbacks: list[Callable[..., None]] = []
+
+    def connect(self, callback: Callable[..., None]) -> None:
+        """Register one callback.
+
+        Args:
+            callback: Function called when ``emit`` runs.
+
+        Returns:
+            None.
+        """
+        self._callbacks.append(callback)
+
+    def disconnect(self, callback: Callable[..., None]) -> None:
+        """Remove one callback.
+
+        Args:
+            callback: Previously connected callback.
+
+        Returns:
+            None.
+        """
+        self._callbacks.remove(callback)
+
+    def emit(self) -> None:
+        """Call all connected callbacks."""
+        for callback in tuple(self._callbacks):
+            callback()
+
+
+class _FakeLabelEvents:
+    """Event group with the Labels event names watched by twopy."""
+
+    def __init__(self) -> None:
+        """Create data-change emitters."""
+        self.data = _FakeEmitter()
+        self.labels_update = _FakeEmitter()
+        self.set_data = _FakeEmitter()
+
+
+class _FakePlotReceiver:
+    """Response plot receiver used by live-controller tests."""
+
+    def __init__(self) -> None:
+        """Create an empty receiver."""
+        self.plot_data: ResponsePlotData | None = None
+        self.status: str | None = None
+
+    def set_response_plot_data(
+        self,
+        plot_data: ResponsePlotData,
+        *,
+        reset_axes: bool,
+    ) -> None:
+        """Store plot data received from the controller."""
+        del reset_axes
+        self.plot_data = plot_data
+
+    def show_response_status(self, text: str) -> None:
+        """Store status text received from the controller."""
+        self.status = text
 
 
 class NapariAdapterTest(unittest.TestCase):
@@ -493,6 +564,65 @@ class NapariAdapterTest(unittest.TestCase):
                 "ROI Labels layer must use the cropped recording view",
                 status_text,
             )
+
+    def test_response_update_from_rois_does_not_write_analysis_file(self) -> None:
+        """Confirm napari plot previews compute in memory only.
+
+        Inputs: edited Labels layer and a patched response calculation.
+        Outputs: plot data shown in the widget without creating analysis HDF5.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            with patch(
+                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+                return_value=_tiny_response_plot_data(),
+            ):
+                response_widget.update_from_current_rois()
+
+            self.assertFalse((root / "analysis_outputs.h5").exists())
+            self.assertFalse((root / "response_summary.csv").exists())
+            self.assertIsNotNone(response_widget._plot_data)
+
+    def test_live_response_controller_updates_after_label_event(self) -> None:
+        """Confirm Labels edits trigger a response plot refresh.
+
+        Inputs: selected recording, fake Labels event emitters, and patched
+        response calculation.
+        Outputs: the plot receiver gets new plot data after an event.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            events = _FakeLabelEvents()
+            layer = _FakeLayer(
+                name="rois",
+                data=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                options={},
+                events=events,
+            )
+            receiver = _FakePlotReceiver()
+            controller = LiveResponseController(
+                receiver,
+                debounce_ms=0,
+                run_async=False,
+            )
+            controller.set_context(recording, layer)
+
+            with patch(
+                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+                return_value=_tiny_response_plot_data(),
+            ):
+                events.data.emit()
+
+            self.assertIsNotNone(receiver.plot_data)
+            self.assertIsNone(receiver.status)
 
     def test_recording_folder_selection_loads_recording_layers(self) -> None:
         """Confirm selecting a recording folder populates an empty viewer.

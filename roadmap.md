@@ -233,6 +233,12 @@ decided.
 - Real filtered API query matched the example recording with date `2023-10-17`,
   genotype `gh146`, stimulus `combo_stim_singles=3s_blank=3s_intensity=20`,
   sensor `g6f`, cell type `ALPN`, hemisphere `right`, and person `Harsh`.
+- Response analysis now has an in-memory computation API separate from the
+  script-facing persistence API, so GUI previews do not write HDF5 files.
+- Napari Labels ROI edits can trigger debounced live response updates. The live
+  path copies ROI labels from the active cropped viewer layer, streams movie
+  frames through the normal analysis helper, and discards stale worker results
+  after newer ROI edits.
 - Tests for config loading, MATLAB inspection/loading, recording inspection,
   database filtering/copy-cache behavior, conversion, converted-recording
   loading, ROI storage/extraction, photodiode synchronization, response windows,
@@ -244,8 +250,6 @@ decided.
 - Add protocol-specific photodiode classifiers for recordings with extra
   within-epoch alignment flashes.
 - Group response outputs directly from classified stimulus windows.
-- Interactively draw or select ROIs in the movie.
-- Inspect ROI responses.
 - Load persisted analysis outputs in napari.
 - Query the database from napari, choose a recording, load converted twopy
   data, draw or edit Labels ROIs, run analysis, and inspect responses.

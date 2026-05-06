@@ -11,7 +11,6 @@ responses from the current Labels layer, this module converts labels to a
 
 from pathlib import Path
 
-import numpy as np
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -26,13 +25,12 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.analysis.responses import is_gray_epoch_name
-from twopy.analysis.workflow import analyze_recording_responses
 from twopy.converted import RecordingData
+from twopy.napari.interactive import LiveResponseController
 from twopy.napari.plotting.data import (
     ResponsePlotData,
     default_analysis_output_path,
     load_response_plot_data,
-    response_plot_data_from_grouped,
 )
 from twopy.napari.plotting.export_controls import (
     ResponseExportState,
@@ -64,8 +62,6 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_label_values,
 )
 from twopy.napari.protocols import NapariViewer
-from twopy.napari.roi import roi_label_image_from_layer_for_recording
-from twopy.roi import make_roi_set_from_label_image
 
 __all__ = [
     "add_twopy_response_options_widget",
@@ -233,6 +229,7 @@ class _ResponsePlotWidget(QWidget):
         self._manual_x_max: float | None = None
         self._manual_y_min: float | None = None
         self._manual_y_max: float | None = None
+        self._live_controller = LiveResponseController(self)
         self._status_label = QLabel("No recording loaded.")
         self._plot_layout = QHBoxLayout()
         self._plot_layout.addWidget(self._status_label)
@@ -318,6 +315,7 @@ class _ResponsePlotWidget(QWidget):
             None.
         """
         self._roi_labels_layer = roi_labels_layer
+        self._live_controller.set_context(self._recording, self._roi_labels_layer)
         self._render_plots()
 
     def clear_recording(self) -> None:
@@ -332,6 +330,7 @@ class _ResponsePlotWidget(QWidget):
         self._recording = None
         self._analysis_path = None
         self._plot_data = None
+        self._live_controller.set_context(None, None)
         self._reset_plot_state()
         self._analysis_path_label.setText("Analysis file: default")
         self._clear_dynamic_option_tabs()
@@ -350,6 +349,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path = default_analysis_output_path(recording)
         self._analysis_path_label.setText(f"Analysis file: {self._analysis_path}")
         self.reload()
+        self._live_controller.set_context(self._recording, self._roi_labels_layer)
 
     def update_from_current_rois(self) -> None:
         """Compute and plot responses from the current ROI Labels layer.
@@ -360,50 +360,42 @@ class _ResponsePlotWidget(QWidget):
         Returns:
             None.
 
-        The analysis workflow streams the converted movie in chunks, so this
-        action avoids loading a large full movie only to update plots.
+        The live controller computes in memory and does not write analysis
+        files. Explicit analysis saves remain separate from plot previews.
         """
-        if self._recording is None:
-            self._set_status("No recording loaded.")
-            return
-        if self._roi_labels_layer is None:
-            self._set_status("No ROI Labels layer is available.")
-            return
-        try:
-            label_image = roi_label_image_from_layer_for_recording(
-                self._roi_labels_layer,
-                self._recording,
-            )
-        except ValueError as error:
-            self._set_status(str(error))
-            return
-        if not np.any(label_image > 0):
-            self._set_status("No ROI labels to analyze.")
-            return
+        self._live_controller.update_now()
 
-        try:
-            roi_set = make_roi_set_from_label_image(label_image)
-            run = analyze_recording_responses(
-                self._recording.path,
-                roi_set,
-                output_path=self._analysis_path,
-                write_summary_csv=False,
-            )
-        except ValueError as error:
-            self._plot_data = None
-            self._set_status(str(error))
-            return
+    def set_response_plot_data(
+        self,
+        plot_data: ResponsePlotData,
+        *,
+        reset_axes: bool,
+    ) -> None:
+        """Show plot data computed from live or saved analysis outputs.
 
-        plot_data = load_response_plot_data(run.output_path)
-        if isinstance(plot_data, str):
-            self._plot_data = response_plot_data_from_grouped(
-                run.grouped_responses,
-                source_path=run.output_path,
-            )
-        else:
-            self._plot_data = plot_data
-        self._sync_plot_state(reset_axes=True)
+        Args:
+            plot_data: Plot-ready response data.
+            reset_axes: Whether manual axis bounds should return to automatic
+                data-derived values.
+
+        Returns:
+            None.
+        """
+        self._plot_data = plot_data
+        self._sync_plot_state(reset_axes=reset_axes)
         self._render_plots()
+
+    def show_response_status(self, text: str) -> None:
+        """Show a user-facing response-analysis status message.
+
+        Args:
+            text: Status text.
+
+        Returns:
+            None.
+        """
+        self._plot_data = None
+        self._set_status(text)
 
     def reload(self) -> None:
         """Reload response plots from the current analysis output file."""
@@ -417,9 +409,7 @@ class _ResponsePlotWidget(QWidget):
             self._clear_dynamic_option_tabs()
             self._set_status(result)
             return
-        self._plot_data = result
-        self._sync_plot_state(reset_axes=True)
-        self._render_plots()
+        self.set_response_plot_data(result, reset_axes=True)
 
     def _set_show_sem(self, state: int) -> None:
         """Update whether SEM bands are drawn."""

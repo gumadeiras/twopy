@@ -51,12 +51,15 @@ from twopy.analysis.trials import (
 from twopy.analysis.workflow import (
     DEFAULT_RESPONSE_POST_WINDOW_SECONDS,
     DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+    AnalysisResponseComputation,
     AnalysisResponseRun,
     analyze_recording_responses,
+    compute_recording_responses,
 )
 
 __all__ = [
     "analyze_recording_responses",
+    "AnalysisResponseComputation",
     "AnalysisResponseRun",
     "DEFAULT_RESPONSE_POST_WINDOW_SECONDS",
     "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
@@ -65,6 +68,7 @@ __all__ = [
     "BackgroundCorrectedRoiTraces",
     "BackgroundCorrectionMethod",
     "compute_roi_delta_f_over_f",
+    "compute_recording_responses",
     "DeltaFOverFFitMode",
     "EpochFrameWindow",
     "extract_background_corrected_roi_traces",

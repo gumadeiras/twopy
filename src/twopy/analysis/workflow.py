@@ -43,10 +43,12 @@ from twopy.roi import RoiSet, load_roi_set
 from twopy.spatial import SpatialDomain
 
 __all__ = [
+    "AnalysisResponseComputation",
     "AnalysisResponseRun",
     "DEFAULT_RESPONSE_POST_WINDOW_SECONDS",
     "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
     "analyze_recording_responses",
+    "compute_recording_responses",
 ]
 
 DEFAULT_RESPONSE_PRE_WINDOW_SECONDS = 2.0
@@ -54,14 +56,14 @@ DEFAULT_RESPONSE_POST_WINDOW_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
-class AnalysisResponseRun:
-    """Outputs from one script-facing response-analysis run.
+class AnalysisResponseComputation:
+    """In-memory outputs from one response-analysis calculation.
 
     Inputs: one converted recording and one ROI set.
-    Outputs: all computed analysis objects plus file paths written by the run.
+    Outputs: computed traces, dF/F, stimulus windows, and grouped responses.
 
-    Returning the objects lets scripts inspect results immediately while the
-    HDF5/CSV files keep the same run auditable and reloadable later.
+    This object lets interactive tools update plots without writing analysis
+    HDF5 files on every ROI edit. Persistence is a separate explicit step.
     """
 
     recording: RecordingData
@@ -72,6 +74,19 @@ class AnalysisResponseRun:
     epoch_windows: tuple[EpochFrameWindow, ...]
     interleave_windows: tuple[FrameWindow, ...]
     grouped_responses: GroupedRoiResponses
+
+
+@dataclass(frozen=True)
+class AnalysisResponseRun(AnalysisResponseComputation):
+    """Outputs from one script-facing response-analysis run.
+
+    Inputs: one converted recording and one ROI set.
+    Outputs: computed analysis objects plus file paths written by the run.
+
+    Returning the objects lets scripts inspect results immediately while the
+    HDF5/CSV files keep the same run auditable and reloadable later.
+    """
+
     output_path: Path
     response_summary_csv_path: Path | None
 
@@ -139,6 +154,102 @@ def analyze_recording_responses(
     """
     recording = load_converted_recording(recording_data_path)
     loaded_roi_set = _resolve_roi_set(roi_set)
+    computation = compute_recording_responses(
+        recording,
+        loaded_roi_set,
+        epoch_windows=epoch_windows,
+        interleave_epoch_number=interleave_epoch_number,
+        interleave_epoch_name=interleave_epoch_name,
+        background_method=background_method,
+        seconds_interleave_use=seconds_interleave_use,
+        fit_mode=fit_mode,
+        apply_motion_mask=apply_motion_mask,
+        data_rate_hz=data_rate_hz,
+        chunk_frames=chunk_frames,
+        spatial_domain=spatial_domain,
+        response_pre_window_seconds=response_pre_window_seconds,
+        response_post_window_seconds=response_post_window_seconds,
+    )
+    resolved_output_path = _resolve_output_path(recording.path, output_path)
+    resolved_summary_path = _resolve_summary_csv_path(
+        output_path=resolved_output_path,
+        response_summary_csv_path=response_summary_csv_path,
+        write_summary_csv=write_summary_csv,
+    )
+    save_analysis_outputs(
+        resolved_output_path,
+        roi_set=computation.roi_set,
+        traces=computation.traces,
+        dff=computation.dff,
+        epoch_windows=computation.epoch_windows,
+        grouped_responses=computation.grouped_responses,
+        response_summary_csv=resolved_summary_path,
+    )
+
+    return AnalysisResponseRun(
+        recording=computation.recording,
+        roi_set=computation.roi_set,
+        traces=computation.traces,
+        dff=computation.dff,
+        epoch_mapping=computation.epoch_mapping,
+        epoch_windows=computation.epoch_windows,
+        interleave_windows=computation.interleave_windows,
+        grouped_responses=computation.grouped_responses,
+        output_path=resolved_output_path,
+        response_summary_csv_path=resolved_summary_path,
+    )
+
+
+def compute_recording_responses(
+    recording: RecordingData,
+    roi_set: RoiSet,
+    *,
+    epoch_windows: Sequence[EpochFrameWindow] | None = None,
+    interleave_epoch_number: int | None = 1,
+    interleave_epoch_name: str | None = None,
+    background_method: BackgroundCorrectionMethod = "movie_global_percentile",
+    seconds_interleave_use: float | None = 1.0,
+    fit_mode: DeltaFOverFFitMode = "robust",
+    apply_motion_mask: bool = True,
+    data_rate_hz: float | None = None,
+    chunk_frames: int = 128,
+    spatial_domain: SpatialDomain = "alignment_valid_crop",
+    response_pre_window_seconds: float = DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+    response_post_window_seconds: float = 0.0,
+) -> AnalysisResponseComputation:
+    """Compute ROI responses from converted data without writing files.
+
+    Args:
+        recording: Loaded converted recording.
+        roi_set: ROI masks to extract from the recording.
+        epoch_windows: Optional explicit epoch windows. When omitted, twopy
+            interpolates epochs from converted stimulus data.
+        interleave_epoch_number: Optional baseline epoch number selector.
+        interleave_epoch_name: Optional baseline epoch name selector.
+        background_method: Background correction method before dF/F.
+        seconds_interleave_use: Seconds from the end of each interleave window.
+        fit_mode: dF/F exponential fit mode.
+        apply_motion_mask: Whether to mark converted high-motion frames as NaN
+            after dF/F.
+        data_rate_hz: Optional frame rate. When omitted, twopy reads
+            ``acq.frameRate`` from converted metadata.
+        chunk_frames: Number of movie frames to read per HDF5 chunk.
+        spatial_domain: Spatial domain used for trace extraction.
+        response_pre_window_seconds: Seconds before each stimulus window to
+            include in grouped responses.
+        response_post_window_seconds: Seconds after each stimulus window to
+            include in grouped responses.
+
+    Returns:
+        In-memory response-analysis objects.
+
+    Raises:
+        ValueError: If no interleave windows match the selector.
+
+    This is the shared calculation used by scripts, tests, and the napari live
+    plotter. It streams movie frames in chunks and leaves file writing to a
+    separate explicit call.
+    """
     frame_rate_hz = (
         _recording_frame_rate_hz(recording)
         if data_rate_hz is None
@@ -163,7 +274,7 @@ def analyze_recording_responses(
 
     traces = extract_background_corrected_roi_traces(
         recording,
-        loaded_roi_set,
+        roi_set,
         method=background_method,
         start_frame=trace_start,
         stop_frame=trace_stop,
@@ -187,33 +298,16 @@ def analyze_recording_responses(
         pre_window_seconds=response_pre_window_seconds,
         post_window_seconds=response_post_window_seconds,
     )
-    resolved_output_path = _resolve_output_path(recording.path, output_path)
-    resolved_summary_path = _resolve_summary_csv_path(
-        output_path=resolved_output_path,
-        response_summary_csv_path=response_summary_csv_path,
-        write_summary_csv=write_summary_csv,
-    )
-    save_analysis_outputs(
-        resolved_output_path,
-        roi_set=loaded_roi_set,
-        traces=traces,
-        dff=dff,
-        epoch_windows=resolved_epoch_windows,
-        grouped_responses=grouped_responses,
-        response_summary_csv=resolved_summary_path,
-    )
 
-    return AnalysisResponseRun(
+    return AnalysisResponseComputation(
         recording=recording,
-        roi_set=loaded_roi_set,
+        roi_set=roi_set,
         traces=traces,
         dff=dff,
         epoch_mapping=mapping,
         epoch_windows=resolved_epoch_windows,
         interleave_windows=interleave_windows,
         grouped_responses=grouped_responses,
-        output_path=resolved_output_path,
-        response_summary_csv_path=resolved_summary_path,
     )
 
 
