@@ -517,12 +517,12 @@ class _ResponsePlotWidget(QWidget):
         """Update whether SEM bands are drawn."""
         del state
         self._show_sem = self._show_sem_checkbox.isChecked()
-        self._render_plots(apply_roi_layer_visibility=False)
+        self._update_visible_plot_widgets(apply_roi_layer_visibility=False)
 
     def _set_plot_size(self, value: int) -> None:
         """Update the square pixel size used for live response plots."""
         self._plot_size = int(value)
-        self._render_plots(apply_roi_layer_visibility=False)
+        self._update_visible_plot_widgets(apply_roi_layer_visibility=False)
 
     def _sync_plot_state(self, *, reset_axes: bool) -> None:
         """Synchronize option state with currently loaded plot data.
@@ -650,7 +650,7 @@ class _ResponsePlotWidget(QWidget):
         self._manual_x_max = x_max
         self._manual_y_min = y_min
         self._manual_y_max = y_max
-        self._render_plots(apply_roi_layer_visibility=False)
+        self._update_visible_plot_widgets(apply_roi_layer_visibility=False)
 
     def _export_state(self) -> ResponseExportState:
         """Return the current state needed by export buttons."""
@@ -719,7 +719,7 @@ class _ResponsePlotWidget(QWidget):
         row_index = _row_index_or_none(index, len(self._roi_labels()))
         if row_index is not None:
             self._roi_visibility[row_index] = visible
-        self._render_plots()
+        self._update_visible_plot_widgets()
 
     def _set_roi_visibility_batch(self, visibility: dict[object, bool]) -> None:
         """Update several ROI visibility flags with one plot refresh."""
@@ -727,7 +727,7 @@ class _ResponsePlotWidget(QWidget):
             row_index = _row_index_or_none(index, len(self._roi_labels()))
             if row_index is not None:
                 self._roi_visibility[row_index] = visible
-        self._render_plots()
+        self._update_visible_plot_widgets()
 
     def _set_epoch_visibility(self, index: object, visible: bool) -> None:
         """Update one epoch visibility flag from its displayed row index."""
@@ -840,6 +840,95 @@ class _ResponsePlotWidget(QWidget):
         for epoch_index, _epoch in enumerate(self._plot_data.epochs):
             if not self._epoch_visibility.get(epoch_index, True):
                 continue
+            self._plot_layout.addWidget(self._epoch_plot_panels[epoch_index])
+            self._epoch_plot_panels[epoch_index].show()
+        self._plot_layout.addStretch(1)
+        self._update_epoch_plot_widgets(
+            roi_indices=roi_indices,
+            epoch_indices=epoch_indices,
+            time_min=time_min,
+            time_max=time_max,
+            value_min=value_min,
+            value_max=value_max,
+            colors=colors,
+        )
+
+    def _update_visible_plot_widgets(
+        self,
+        *,
+        apply_roi_layer_visibility: bool = True,
+    ) -> None:
+        """Repaint currently shown plot widgets without rebuilding the layout.
+
+        Args:
+            apply_roi_layer_visibility: Whether ROI visibility should also dim
+                matching Labels-layer values in the napari viewer.
+
+        Returns:
+            None.
+        """
+        if self._plot_data is None or len(self._plot_data.epochs) == 0:
+            self._render_plots(apply_roi_layer_visibility=apply_roi_layer_visibility)
+            return
+        roi_indices = self._visible_roi_indices()
+        epoch_indices = self._visible_epoch_indices()
+        if len(roi_indices) == 0 or len(epoch_indices) == 0:
+            self._render_plots(apply_roi_layer_visibility=apply_roi_layer_visibility)
+            return
+        if any(index not in self._epoch_plot_widgets for index in epoch_indices):
+            self._render_plots(apply_roi_layer_visibility=apply_roi_layer_visibility)
+            return
+        if apply_roi_layer_visibility:
+            self._apply_roi_layer_visibility()
+        time_min, time_max = resolved_time_bounds(
+            self._plot_data,
+            epoch_indices,
+            manual_min=self._manual_x_min,
+            manual_max=self._manual_x_max,
+        )
+        value_min, value_max = resolved_value_bounds(
+            self._plot_data,
+            roi_indices,
+            epoch_indices,
+            manual_min=self._manual_y_min,
+            manual_max=self._manual_y_max,
+        )
+        self._update_epoch_plot_widgets(
+            roi_indices=roi_indices,
+            epoch_indices=epoch_indices,
+            time_min=time_min,
+            time_max=time_max,
+            value_min=value_min,
+            value_max=value_max,
+            colors=self._roi_colors,
+        )
+
+    def _update_epoch_plot_widgets(
+        self,
+        *,
+        roi_indices: tuple[int, ...],
+        epoch_indices: tuple[int, ...],
+        time_min: float,
+        time_max: float,
+        value_min: float,
+        value_max: float,
+        colors: tuple[QColor, ...],
+    ) -> None:
+        """Update cached epoch widgets from already-computed plot data.
+
+        Args:
+            roi_indices: ROI rows to draw.
+            epoch_indices: Epoch plot rows to update.
+            time_min: Shared x-axis minimum.
+            time_max: Shared x-axis maximum.
+            value_min: Shared y-axis minimum.
+            value_max: Shared y-axis maximum.
+            colors: ROI plot colors.
+
+        Returns:
+            None.
+        """
+        for epoch_index in epoch_indices:
             plot = self._epoch_plot_widgets[epoch_index]
             plot.update_display(
                 show_sem=self._show_sem,
@@ -851,9 +940,6 @@ class _ResponsePlotWidget(QWidget):
                 value_max=value_max,
                 plot_size=self._plot_size,
             )
-            self._plot_layout.addWidget(self._epoch_plot_panels[epoch_index])
-            self._epoch_plot_panels[epoch_index].show()
-        self._plot_layout.addStretch(1)
 
     def _ensure_epoch_plot_cache(self) -> None:
         """Create one persistent plot widget per loaded epoch."""

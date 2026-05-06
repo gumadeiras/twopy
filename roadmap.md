@@ -175,9 +175,10 @@ decided.
   require the active Labels layer to match the displayed alignment-valid crop,
   then persist or analyze full-frame ROI masks with zeros outside that crop.
 - Napari ROI and epoch visibility controls operate on already-computed response
-  data. Checkbox changes update cached plot widgets directly, hidden cached
-  epoch panels are explicitly hidden, and bulk select-all/select-none actions
-  redraw once instead of once per checkbox.
+  data. ROI checkbox changes repaint already visible plot widgets without
+  rebuilding the plot layout, epoch checkbox changes explicitly hide/show
+  cached epoch panels, and bulk select-all/select-none actions redraw once
+  instead of once per checkbox.
 - Napari epoch visibility controls use displayed row indices instead of display
   text, so selecting and deselecting epochs is idempotent even if labels repeat
   or gray interleave epochs start hidden by default.

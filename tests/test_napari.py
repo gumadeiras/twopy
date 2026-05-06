@@ -1669,6 +1669,39 @@ class NapariAdapterTest(unittest.TestCase):
         response_widget._set_roi_visibility(1, True)
         self.assertEqual(response_widget._visible_roi_indices(), (0, 1))
 
+    def test_roi_visibility_repaints_without_rebuilding_epoch_layout(self) -> None:
+        """Confirm ROI toggles do not hide and reshow every epoch panel.
+
+        Inputs: two ROI traces and one visible epoch plot.
+        Outputs: hiding one ROI updates plot state without clearing the layout.
+        """
+        _ = QApplication.instance() or QApplication([])
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Odor",
+                    epoch_number=1,
+                    roi_labels=("roi_1", "roi_2"),
+                    time_seconds=np.array([0.0, 1.0], dtype=np.float64),
+                    mean_values=np.array([[0.0, 1.0], [2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((2, 2), dtype=np.float64),
+                ),
+            ),
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+        clear_calls: list[str] = []
+        response_widget._clear_plot_layout_preserving_epoch_cache = lambda: (
+            clear_calls.append("clear")
+        )
+
+        response_widget._set_roi_visibility(1, False)
+
+        self.assertEqual(clear_calls, [])
+        self.assertEqual(response_widget._visible_roi_indices(), (0,))
+        self.assertFalse(response_widget._epoch_plot_panels[0].isHidden())
+
     def test_response_plot_bounds_use_selected_epochs_and_rois(self) -> None:
         """Confirm plot bounds follow selected ROI and epoch visibility.
 
