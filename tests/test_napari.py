@@ -68,6 +68,7 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_layer,
 )
 from twopy.napari.state import write_last_recording_folder
+from twopy.napari.viewer import interior_random_frame_indices
 from twopy.spatial import SpatialCrop
 
 
@@ -343,7 +344,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
             self.assertEqual(viewer.labels[0].brush_size, 6)
-            self.assertEqual(viewer.images[0].options["opacity"], 0.65)
+            self.assertEqual(viewer.images[0].options["opacity"], 0.5)
             self.assertEqual(viewer.images[0].options["gamma"], 1.3)
             self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
             self.assertEqual(viewer.images[0].contrast_limits_range, (4.0, 7.0))
@@ -423,7 +424,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(viewer.images[1].options["blending"], "additive")
             self.assertEqual(
                 viewer.images[1].options["contrast_limits"],
-                (0.0, 5.25),
+                (4.0, 7.0),
             )
             self.assertEqual(viewer.images[1].contrast_limits_range, (0.0, 7.0))
             self.assertEqual(np.asarray(viewer.images[1].data).shape, (2, 2, 2))
@@ -1255,6 +1256,24 @@ class NapariAdapterTest(unittest.TestCase):
                 zero_end_means_last=True,
             ),
             (0, 2),
+        )
+
+    def test_movie_contrast_sampling_skips_recording_edges(self) -> None:
+        """Confirm movie display sampling avoids the first and last 10 percent.
+
+        Inputs: 100-frame recording contract and deterministic random seed.
+        Outputs: 10 sampled frames, none from the first or last 10 frames.
+        """
+        frame_indices = interior_random_frame_indices(
+            frame_count=100,
+            sample_count=10,
+            edge_fraction=0.10,
+            random_seed=0,
+        )
+
+        np.testing.assert_array_equal(
+            frame_indices,
+            np.array([11, 13, 15, 23, 29, 33, 47, 55, 70, 75]),
         )
 
     def test_response_plot_data_summarizes_epoch_roi_mean_and_sem(self) -> None:

@@ -164,7 +164,7 @@ decided.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so
   ROI masks remain visible over the mean image and movie.
 - Napari image layers set initial display contrast without narrowing the full
-  contrast slider range. Mean images open at 65 percent opacity with gamma 1.3,
+  contrast slider range. Mean images open at 50 percent opacity with gamma 1.3,
   and movie previews open with additive blending.
 - Napari displays the alignment-valid crop with explicit movie-axis to
   display-axis transposition, then converts drawn Labels ROIs back to full-frame
@@ -246,10 +246,11 @@ decided.
   frames through the normal analysis helper, and discards stale worker results
   after newer ROI edits.
 - Napari display defaults now favor inspection: mean image contrast starts 10%
-  above the data minimum, movie preview contrast stops at 75% of the data range
-  with additive blending, ROI Labels use additive blending with brush size 6,
-  and live response updates are triggered by committed paint/data edits rather
-  than display-refresh events during mouse movement.
+  above the data minimum, movie preview contrast is estimated from 10
+  deterministic random frames sampled outside the first and last 10% of the
+  recording, ROI Labels use additive blending with brush size 6, and live
+  response updates are triggered by committed paint/data edits rather than
+  display-refresh events during mouse movement.
 - Napari response update controls now separate preview, reload, and persistence:
   "Recompute preview now" refreshes live plots in memory, "Reload saved
   analysis" reads existing analysis output from disk, and "Save analysis +

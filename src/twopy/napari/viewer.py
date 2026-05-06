@@ -14,7 +14,7 @@ from typing import Protocol, cast
 import numpy as np
 import numpy.typing as npt
 
-from twopy.converted import load_converted_recording
+from twopy.converted import ConvertedMovie, load_converted_recording
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.display import (
     display_image_from_movie_image,
@@ -30,6 +30,7 @@ from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import resolve_roi_save_file, roi_label_image_for_display
 from twopy.napari.types import NapariRecordingView
 from twopy.roi import RoiSet
+from twopy.spatial import SpatialCrop
 
 __all__ = ["open_recording_in_napari"]
 
@@ -99,7 +100,7 @@ def open_recording_in_napari(
         display_image_from_movie_image(mean_image),
         name=mean_image_layer_name,
         colormap="gray",
-        opacity=0.65,
+        opacity=0.5,
         gamma=1.3,
         contrast_limits=contrast_limits_from_data_range(
             mean_image,
@@ -127,10 +128,9 @@ def open_recording_in_napari(
             name=movie_layer_name,
             colormap="gray",
             blending="additive",
-            contrast_limits=contrast_limits_from_data_range(
-                movie,
-                minimum_fraction=0.0,
-                maximum_fraction=0.75,
+            contrast_limits=sampled_movie_auto_contrast_limits(
+                recording.movie,
+                spatial_crop=display_crop,
             ),
             metadata=layer_metadata,
         )
@@ -271,6 +271,101 @@ def set_image_contrast_limits_range(layer: object, *, data: npt.ArrayLike) -> No
         minimum_fraction=0.0,
         maximum_fraction=1.0,
     )
+
+
+def sampled_movie_auto_contrast_limits(
+    movie: ConvertedMovie,
+    *,
+    spatial_crop: SpatialCrop,
+    sample_count: int = 10,
+    edge_fraction: float = 0.10,
+    random_seed: int = 0,
+) -> tuple[float, float]:
+    """Estimate movie display contrast from random interior frames.
+
+    Args:
+        movie: Lazy converted aligned-movie reader.
+        spatial_crop: Spatial crop shown in napari.
+        sample_count: Maximum number of frames to sample.
+        edge_fraction: Fraction of recording edges excluded before sampling.
+        random_seed: Seed used for deterministic frame sampling.
+
+    Returns:
+        ``(minimum, maximum)`` contrast limits for the movie layer.
+
+    The napari movie layer can be a short preview range, but display contrast
+    should reflect the recording rather than the first frames a user happened
+    to load. We sample a few frames away from recording edges, compute simple
+    per-frame auto contrast limits, then average those limits. The fixed seed
+    keeps the same recording visually stable across launches.
+    """
+    frame_indices = interior_random_frame_indices(
+        frame_count=movie.shape[0],
+        sample_count=sample_count,
+        edge_fraction=edge_fraction,
+        random_seed=random_seed,
+    )
+    limits = [
+        contrast_limits_from_data_range(
+            movie.read_frames(
+                int(frame_index),
+                int(frame_index) + 1,
+                spatial_crop=spatial_crop,
+            )[0],
+            minimum_fraction=0.0,
+            maximum_fraction=1.0,
+        )
+        for frame_index in frame_indices
+    ]
+    if len(limits) == 0:
+        return (0.0, 1.0)
+    lower = float(np.mean([limit[0] for limit in limits]))
+    upper = float(np.mean([limit[1] for limit in limits]))
+    if upper <= lower:
+        return contrast_limits_from_data_range(
+            movie.read_frames(0, 1, spatial_crop=spatial_crop)[0],
+            minimum_fraction=0.0,
+            maximum_fraction=1.0,
+        )
+    return (lower, upper)
+
+
+def interior_random_frame_indices(
+    *,
+    frame_count: int,
+    sample_count: int,
+    edge_fraction: float,
+    random_seed: int,
+) -> npt.NDArray[np.int64]:
+    """Return deterministic random frame indices away from recording edges.
+
+    Args:
+        frame_count: Number of frames in the aligned movie.
+        sample_count: Maximum number of frames to return.
+        edge_fraction: Fraction excluded from both start and end.
+        random_seed: Seed used by NumPy's random generator.
+
+    Returns:
+        Sorted frame indices.
+
+    Very short recordings may not have enough frames to remove both edge
+    regions. In that case this falls back to all frames, because a stable
+    display estimate is better than failing the viewer load.
+    """
+    if frame_count <= 0 or sample_count <= 0:
+        return np.asarray((), dtype=np.int64)
+    edge_count = int(np.floor(frame_count * edge_fraction))
+    start = edge_count
+    stop = frame_count - edge_count
+    if start >= stop:
+        start = 0
+        stop = frame_count
+    candidates = np.arange(start, stop, dtype=np.int64)
+    if candidates.size <= sample_count:
+        return candidates
+    rng = np.random.default_rng(random_seed)
+    sampled = rng.choice(candidates, size=sample_count, replace=False)
+    return np.sort(sampled)
 
 
 def contrast_limits_from_data_range(
