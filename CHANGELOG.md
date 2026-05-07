@@ -9,6 +9,7 @@
   napari can auto-convert recordings on mounted volumes.
 - Reported source-recording validation errors during napari loading instead of
   replacing them with a missing converted-file message.
+- Renamed the napari window title to `twopy`.
 
 ## 0.1.2 - 2026-05-06
 

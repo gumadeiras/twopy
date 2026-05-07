@@ -32,7 +32,9 @@ from twopy.napari.types import NapariRecordingView
 from twopy.roi import RoiSet
 from twopy.spatial import SpatialCrop
 
-__all__ = ["open_recording_in_napari"]
+APPLICATION_TITLE = "twopy"
+
+__all__ = ["APPLICATION_TITLE", "create_viewer", "open_recording_in_napari"]
 
 
 class _LabelsLayerWithBrushSize(Protocol):
@@ -229,7 +231,7 @@ def create_viewer() -> NapariViewer:
     """
     import napari
 
-    return cast(NapariViewer, napari.Viewer())
+    return cast(NapariViewer, napari.Viewer(title=APPLICATION_TITLE))
 
 
 def set_labels_brush_size(layer: object, *, brush_size: int) -> None:

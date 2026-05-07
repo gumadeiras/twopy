@@ -90,7 +90,11 @@ from twopy.napari.plotting.widgets import (
 )
 from twopy.napari.state import write_last_recording_folder
 from twopy.napari.text import counted_noun
-from twopy.napari.viewer import interior_random_frame_indices
+from twopy.napari.viewer import (
+    APPLICATION_TITLE,
+    create_viewer,
+    interior_random_frame_indices,
+)
 from twopy.spatial import SpatialCrop
 
 
@@ -399,6 +403,20 @@ class NapariAdapterTest(unittest.TestCase):
         else:
             environ["TWOPY_NAPARI_STATE_FILE"] = self._previous_state_file
         self._state_temp_dir.cleanup()
+
+    def test_create_viewer_uses_twopy_window_title(self) -> None:
+        """Confirm the launcher brands the top-level napari window.
+
+        Inputs: patched napari Viewer constructor.
+        Outputs: viewer construction receives the twopy application title.
+        """
+        viewer = _FakeViewer()
+
+        with patch("napari.Viewer", return_value=viewer) as viewer_constructor:
+            created = create_viewer()
+
+        self.assertIs(created, viewer)
+        viewer_constructor.assert_called_once_with(title=APPLICATION_TITLE)
 
     def test_opens_empty_roi_labels_layer_by_default(self) -> None:
         """Confirm new recordings open with an editable empty ROI layer.
