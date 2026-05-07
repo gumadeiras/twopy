@@ -27,6 +27,7 @@ from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
+    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QLabel,
@@ -53,6 +54,7 @@ from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     SmoothingOptions,
 )
+from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
@@ -92,12 +94,14 @@ from twopy.napari.plotting.options import (
 )
 from twopy.napari.plotting.panels import epoch_plot_panel
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
+from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     global_time_bounds,
     global_value_bounds,
     roi_colors_from_layer,
 )
+from twopy.napari.responses import compute_response_plot_data_from_roi_set
 from twopy.napari.state import write_last_recording_folder
 from twopy.napari.text import counted_noun
 from twopy.napari.viewer import (
@@ -732,6 +736,133 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse((root / "exports" / "csvs").exists())
             self.assertIsNotNone(response_widget._plot_data)
 
+    def test_live_response_plot_data_preserves_gray_post_window(self) -> None:
+        """Confirm live Plot-tab recompute keeps post-stimulus plot context.
+
+        Inputs: converted recording with a gray epoch and patched analysis
+        computation.
+        Outputs: the live plot path requests the same two-second post window
+        used when saved analysis outputs are loaded for plotting.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(
+                _write_converted_recording(
+                    root,
+                    stimulus_parameters_json=(
+                        '[{"epochName": "Gray"}, {"epochName": "Odor A"}]'
+                    ),
+                ),
+            )
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                response_processing_options=ResponseProcessingOptions(),
+            )
+
+            with patch(
+                "twopy.napari.responses.compute_recording_responses",
+                return_value=computation,
+            ) as compute:
+                plot_data = compute_response_plot_data_from_roi_set(recording, roi_set)
+
+            self.assertIsNotNone(plot_data)
+            self.assertEqual(
+                compute.call_args.kwargs["response_pre_window_seconds"],
+                2.0,
+            )
+            self.assertEqual(
+                compute.call_args.kwargs["response_post_window_seconds"],
+                2.0,
+            )
+
+    def test_live_response_plot_data_omits_post_window_without_gray(self) -> None:
+        """Confirm non-interleave recordings keep epoch-bounded live plots.
+
+        Inputs: converted recording without gray/grey/interleave epoch names.
+        Outputs: the live plot path requests no post-epoch plotting context.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(
+                _write_converted_recording(
+                    root,
+                    stimulus_parameters_json=(
+                        '[{"epochName": "Odor A"}, {"epochName": "Odor B"}]'
+                    ),
+                ),
+            )
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                response_processing_options=ResponseProcessingOptions(),
+            )
+
+            with patch(
+                "twopy.napari.responses.compute_recording_responses",
+                return_value=computation,
+            ) as compute:
+                plot_data = compute_response_plot_data_from_roi_set(recording, roi_set)
+
+            self.assertIsNotNone(plot_data)
+            self.assertEqual(
+                compute.call_args.kwargs["response_pre_window_seconds"],
+                2.0,
+            )
+            self.assertEqual(
+                compute.call_args.kwargs["response_post_window_seconds"],
+                0.0,
+            )
+
+    def test_live_response_plot_data_uses_manual_response_window(self) -> None:
+        """Confirm manual Plot-tab response windows reach live analysis.
+
+        Inputs: converted recording, manual response-window options, and
+        patched analysis computation.
+        Outputs: live analysis receives the requested pre/post seconds.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                response_processing_options=ResponseProcessingOptions(),
+            )
+
+            with patch(
+                "twopy.napari.responses.compute_recording_responses",
+                return_value=computation,
+            ) as compute:
+                plot_data = compute_response_plot_data_from_roi_set(
+                    recording,
+                    roi_set,
+                    response_window_options=ResponseWindowOptions(
+                        auto=False,
+                        pre_window_seconds=0.5,
+                        post_window_seconds=1.5,
+                    ),
+                )
+
+            self.assertIsNotNone(plot_data)
+            self.assertEqual(
+                compute.call_args.kwargs["response_pre_window_seconds"],
+                0.5,
+            )
+            self.assertEqual(
+                compute.call_args.kwargs["response_post_window_seconds"],
+                1.5,
+            )
+
     def test_save_analysis_button_writes_roi_and_analysis_outputs(self) -> None:
         """Confirm the Update tab can persist current ROI analysis.
 
@@ -749,6 +880,13 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget = cast(Any, opened.response_plot_widget)
             preview_plot_data = _tiny_response_plot_data()
             response_widget._plot_data = preview_plot_data
+            response_widget._set_response_window_options(
+                ResponseWindowOptions(
+                    auto=False,
+                    pre_window_seconds=0.5,
+                    post_window_seconds=1.5,
+                ),
+            )
 
             with patch(
                 "twopy.napari.plotting.docks.analyze_recording_responses",
@@ -776,6 +914,14 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNone(analyze.call_args.kwargs["interleave_epoch_name"])
             self.assertEqual(analyze.call_args.kwargs["fit_mode"], "robust")
             self.assertTrue(analyze.call_args.kwargs["apply_motion_mask"])
+            self.assertEqual(
+                analyze.call_args.kwargs["response_pre_window_seconds"],
+                0.5,
+            )
+            self.assertEqual(
+                analyze.call_args.kwargs["response_post_window_seconds"],
+                1.5,
+            )
             self.assertIsInstance(
                 analyze.call_args.kwargs["response_processing_options"],
                 ResponseProcessingOptions,
@@ -848,18 +994,31 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertEqual(requests, ["requested"])
 
-    def test_plot_tab_shows_delta_f_over_f_before_smoothing(self) -> None:
-        """Confirm the Plot tab presents dF/F controls before smoothing.
+    def test_plot_tab_shows_response_window_before_delta_f_over_f(self) -> None:
+        """Confirm the Plot tab presents response window before dF/F.
 
         Inputs: a newly created response widget.
-        Outputs: the Plot tab has a dF/F group before processing controls.
+        Outputs: the Plot tab orders Plot, Response window, dF/F, then
+        processing controls.
         """
         _ = QApplication.instance() or QApplication([])
         response_widget = cast(Any, create_response_plot_widget(None))
 
         self.assertIsInstance(
+            response_widget._response_window_options_widget,
+            ResponseWindowOptionsWidget,
+        )
+        self.assertIsInstance(
             response_widget._delta_f_over_f_options_widget,
             DeltaFOverFOptionsWidget,
+        )
+        self.assertLess(
+            response_widget._plot_options_layout.indexOf(
+                response_widget._response_window_options_widget,
+            ),
+            response_widget._plot_options_layout.indexOf(
+                response_widget._delta_f_over_f_options_widget,
+            ),
         )
         self.assertLess(
             response_widget._plot_options_layout.indexOf(
@@ -869,6 +1028,33 @@ class NapariAdapterTest(unittest.TestCase):
                 response_widget._processing_options_widget,
             ),
         )
+
+    def test_response_window_options_auto_default_and_manual_bounds(self) -> None:
+        """Confirm response-window controls default to auto and cap manual values.
+
+        Inputs: response-window widget with a two-second interleave limit.
+        Outputs: auto starts checked, manual fields are disabled, and manual
+        spin boxes cap at the supplied limit when auto is unchecked.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = cast(
+            Any,
+            ResponseWindowOptionsWidget(
+                ResponseWindowOptions(),
+                max_window_seconds=2.0,
+            ),
+        )
+
+        self.assertTrue(widget._auto.isChecked())
+        self.assertFalse(widget._pre_seconds.isEnabled())
+        self.assertFalse(widget._post_seconds.isEnabled())
+        self.assertEqual(widget._pre_seconds.maximum(), 2.0)
+        self.assertEqual(widget._post_seconds.maximum(), 2.0)
+
+        widget._auto.setChecked(False)
+
+        self.assertTrue(widget._pre_seconds.isEnabled())
+        self.assertTrue(widget._post_seconds.isEnabled())
 
     def test_delta_f_over_f_controls_use_readable_menu_labels(self) -> None:
         """Confirm Plot-tab menus show readable labels, not stored values.
@@ -921,13 +1107,14 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertNotIn("epoch_mean", correlation_labels)
 
     def test_plot_display_size_label_is_lowercase(self) -> None:
-        """Confirm the Plot subsection labels size in lowercase.
+        """Confirm the Plot subsection puts show SEM before size.
 
         Inputs: plot display options group with default numeric bounds.
-        Outputs: first form row label is the requested lowercase text.
+        Outputs: first field row is the SEM toggle, then lowercase size text.
         """
         _ = QApplication.instance() or QApplication([])
         group = plot_display_options_group(
+            show_sem_checkbox=QCheckBox("show SEM"),
             plot_size_spin=QSpinBox(),
             x_min=0.0,
             x_max=1.0,
@@ -936,7 +1123,15 @@ class NapariAdapterTest(unittest.TestCase):
             on_change=lambda **_kwargs: None,
         )
         layout = cast(QFormLayout, group.layout())
-        label_item = layout.itemAt(0, QFormLayout.ItemRole.LabelRole)
+        sem_item = layout.itemAt(0, QFormLayout.ItemRole.FieldRole)
+        if sem_item is None:
+            self.fail("Plot display show SEM checkbox is missing")
+        sem_widget = sem_item.widget()
+        if not isinstance(sem_widget, QCheckBox):
+            self.fail("Plot display show SEM row is not a QCheckBox")
+        self.assertEqual(sem_widget.text(), "show SEM")
+
+        label_item = layout.itemAt(1, QFormLayout.ItemRole.LabelRole)
         if label_item is None:
             self.fail("Plot display size label is missing")
         label_widget = label_item.widget()
@@ -944,6 +1139,76 @@ class NapariAdapterTest(unittest.TestCase):
             self.fail("Plot display size label is not a QLabel")
 
         self.assertEqual(label_widget.text(), "size")
+        self.assertTrue(layout.formAlignment() & Qt.AlignmentFlag.AlignHCenter)
+
+    def test_plot_display_numeric_controls_share_width_and_rounding(self) -> None:
+        """Confirm Plot numeric controls use one width and two-decimal bounds.
+
+        Inputs: plot display options group with fractional axis bounds.
+        Outputs: size and axis limit controls share width, and limits round to
+        two decimal places.
+        """
+        _ = QApplication.instance() or QApplication([])
+        group = plot_display_options_group(
+            show_sem_checkbox=QCheckBox("show SEM"),
+            plot_size_spin=QSpinBox(),
+            x_min=1.123,
+            x_max=1.456,
+            y_min=-1.123,
+            y_max=-1.456,
+            on_change=lambda **_kwargs: None,
+        )
+        layout = cast(QFormLayout, group.layout())
+        size_item = layout.itemAt(1, QFormLayout.ItemRole.FieldRole)
+        if size_item is None:
+            self.fail("Plot display size control is missing")
+        size_spin = size_item.widget()
+        if not isinstance(size_spin, QSpinBox):
+            self.fail("Plot display size control is not a QSpinBox")
+
+        axis_spins: list[QDoubleSpinBox] = []
+        for row in range(2, 6):
+            axis_item = layout.itemAt(row, QFormLayout.ItemRole.FieldRole)
+            if axis_item is None:
+                self.fail("Plot display axis control is missing")
+            axis_spin = axis_item.widget()
+            if not isinstance(axis_spin, QDoubleSpinBox):
+                self.fail("Plot display axis control is not a QDoubleSpinBox")
+            axis_spins.append(axis_spin)
+
+        widths = {
+            size_spin.minimumWidth(),
+            *(spin.minimumWidth() for spin in axis_spins),
+        }
+        max_widths = {
+            size_spin.maximumWidth(),
+            *(spin.maximumWidth() for spin in axis_spins),
+        }
+        self.assertEqual(len(widths), 1)
+        self.assertEqual(len(max_widths), 1)
+        self.assertEqual([spin.decimals() for spin in axis_spins], [2, 2, 2, 2])
+        self.assertEqual(
+            [spin.value() for spin in axis_spins],
+            [1.12, 1.46, -1.12, -1.46],
+        )
+
+    def test_plot_tab_decimal_controls_show_two_places(self) -> None:
+        """Confirm Plot-tab dF/F and processing decimals show two places.
+
+        Inputs: dF/F and processing option widgets.
+        Outputs: every decimal spin box in those subsections has two decimals.
+        """
+        _ = QApplication.instance() or QApplication([])
+        dff_widget = DeltaFOverFOptionsWidget(DeltaFOverFOptions())
+        processing_widget = ResponseProcessingOptionsWidget(
+            ResponseProcessingOptions(),
+        )
+
+        self.assertEqual(dff_widget._interleave_seconds.decimals(), 2)
+        self.assertEqual(processing_widget._low_pass_cutoff_hz.decimals(), 2)
+        self.assertEqual(processing_widget._minimum_correlation.decimals(), 2)
+        self.assertEqual(processing_widget._correlation_window_start.decimals(), 2)
+        self.assertEqual(processing_widget._correlation_window_stop.decimals(), 2)
 
     def test_interleave_epoch_dropdown_uses_recording_epoch_names(self) -> None:
         """Confirm interleave selection shows actual recording epoch names.

@@ -5,6 +5,7 @@
 ### Features
 
 - Added napari Plot-tab dF/F controls for background subtraction, gray interleave baseline sampling, fit mode, and motion masking.
+- Added napari Plot-tab response-window controls with automatic gray-interleave context by default and manual pre/post seconds that feed both previews and Save Analysis.
 - Added shared and ROI y-stripe percentile background subtraction for broad row-dependent background in dense process recordings.
 - Renamed Plot-tab labels and dropdown entries to concise readable names and populated the dF/F interleave selector from recording epoch names, defaulting to names that look like gray, grey, or interleave baselines.
 - Added shared helpers for default interleave epoch selection and converted recording frame-rate parsing.
@@ -14,6 +15,7 @@
 - Centered live napari response plot titles above their plots.
 - Trimmed unused vertical space below live napari response plots.
 - Kept live napari Plot-tab recomputes on the same post-stimulus x-axis window used when loading saved response plots.
+- Moved the show SEM toggle into the napari Plot subsection and aligned two-decimal Plot-tab numeric controls.
 - Added the package version to the napari window title.
 
 ## 0.1.3 - 2026-05-07

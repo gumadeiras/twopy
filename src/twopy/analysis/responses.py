@@ -57,8 +57,8 @@ class GroupedRoiResponses:
     """ROI responses grouped by epoch and trial.
 
     Inputs: one dF/F result plus epoch windows.
-    Outputs: trial response objects, ROI labels, and the frame rate used for
-    relative trial time.
+    Outputs: trial response objects, ROI labels, frame rate, and optional
+    response-window settings used to create the trials.
 
     The values stay as one matrix per trial instead of being padded into a
     larger cube. This avoids fake samples when trial lengths differ.
@@ -67,6 +67,8 @@ class GroupedRoiResponses:
     roi_labels: tuple[str, ...]
     data_rate_hz: float
     trials: tuple[RoiResponseTrial, ...]
+    pre_window_seconds: float | None = None
+    post_window_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -189,6 +191,8 @@ def group_delta_f_over_f_by_epoch(
         roi_labels=dff.labels,
         data_rate_hz=float(data_rate_hz),
         trials=tuple(trials),
+        pre_window_seconds=float(pre_window_seconds),
+        post_window_seconds=float(post_window_seconds),
     )
 
 

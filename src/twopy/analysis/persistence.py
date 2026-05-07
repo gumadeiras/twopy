@@ -597,6 +597,10 @@ def _write_grouped_responses(
     padded cube with artificial fill values.
     """
     group.attrs["data_rate_hz"] = grouped.data_rate_hz
+    if grouped.pre_window_seconds is not None:
+        group.attrs["pre_window_seconds"] = grouped.pre_window_seconds
+    if grouped.post_window_seconds is not None:
+        group.attrs["post_window_seconds"] = grouped.post_window_seconds
     _write_string_dataset(group, "roi_labels", grouped.roi_labels)
     trials_group = group.create_group("trials")
     for trial_position, trial in enumerate(grouped.trials):
@@ -629,6 +633,8 @@ def _read_grouped_responses(group: h5py.Group) -> GroupedRoiResponses:
             _read_response_trial(trials_group[name])
             for name in sorted(trials_group.keys())
         ),
+        pre_window_seconds=_optional_float_attr(group, "pre_window_seconds"),
+        post_window_seconds=_optional_float_attr(group, "post_window_seconds"),
     )
 
 
@@ -664,6 +670,21 @@ def _read_response_trial(group: h5py.Group) -> RoiResponseTrial:
             ndim=2,
         ),
     )
+
+
+def _optional_float_attr(group: h5py.Group, name: str) -> float | None:
+    """Read one optional float HDF5 attribute.
+
+    Args:
+        group: HDF5 group carrying attrs.
+        name: Attribute name to read.
+
+    Returns:
+        Float value, or ``None`` when the attribute is absent.
+    """
+    if name not in group.attrs:
+        return None
+    return float(group.attrs[name])
 
 
 def _write_metadata(

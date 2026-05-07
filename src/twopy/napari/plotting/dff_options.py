@@ -369,7 +369,7 @@ def _double_spin_box(
     """Create one floating-point spin box."""
     spin_box = QDoubleSpinBox()
     spin_box.setRange(minimum, maximum)
-    spin_box.setDecimals(3)
+    spin_box.setDecimals(2)
     spin_box.setSingleStep(single_step)
     spin_box.setValue(value)
     if suffix:

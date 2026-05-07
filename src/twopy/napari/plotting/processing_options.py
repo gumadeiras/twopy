@@ -37,12 +37,12 @@ __all__ = ["ResponseProcessingOptionsWidget"]
 _SMOOTHING_METHOD_LABELS: tuple[tuple[str, SmoothingMethod], ...] = (
     ("none", "none"),
     ("moving average", "moving_average"),
-    ("Savitzky-Golay", "savgol"),
+    ("savitzky-golay", "savgol"),
 )
 _SMOOTHING_METHODS = tuple(value for _label, value in _SMOOTHING_METHOD_LABELS)
 _LOW_PASS_METHOD_LABELS: tuple[tuple[str, LowPassFilterMethod], ...] = (
     ("none", "none"),
-    ("Butterworth", "butterworth"),
+    ("butterworth", "butterworth"),
 )
 _LOW_PASS_METHODS = tuple(value for _label, value in _LOW_PASS_METHOD_LABELS)
 _CORRELATION_REFERENCE_LABELS: tuple[
@@ -395,7 +395,7 @@ def _double_spin_box(
     """Create one floating-point spin box."""
     spin_box = QDoubleSpinBox()
     spin_box.setRange(minimum, maximum)
-    spin_box.setDecimals(3)
+    spin_box.setDecimals(2)
     spin_box.setSingleStep(single_step)
     spin_box.setValue(value)
     if suffix:

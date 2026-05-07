@@ -11,7 +11,7 @@ load analysis files, or compute responses.
 from collections.abc import Callable, Hashable, Mapping
 from typing import cast
 
-from qtpy.QtCore import QSignalBlocker
+from qtpy.QtCore import QSignalBlocker, Qt
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -37,10 +37,12 @@ type CallableVisibility = Callable[[Hashable, bool], None]
 type CallableVisibilityBatch = Callable[[dict[Hashable, bool]], None]
 type VisibilityKey = int | str
 type VisibilityState = Mapping[int, bool] | Mapping[str, bool]
+_PLOT_CONTROL_WIDTH = 140
 
 
 def plot_display_options_group(
     *,
+    show_sem_checkbox: QCheckBox,
     plot_size_spin: QSpinBox,
     x_min: float,
     x_max: float,
@@ -51,6 +53,7 @@ def plot_display_options_group(
     """Create the plot option group using the same form layout as other groups.
 
     Args:
+        show_sem_checkbox: Toggle for drawing SEM bands.
         plot_size_spin: Numeric plot-size input.
         x_min: Initial x-axis minimum.
         x_max: Initial x-axis maximum.
@@ -64,10 +67,13 @@ def plot_display_options_group(
     callback = cast(CallableAxisBounds, on_change)
     group = QGroupBox("Plot")
     layout = QFormLayout()
+    layout.setFormAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
     x_min_spin = _axis_spin_box(x_min)
     x_max_spin = _axis_spin_box(x_max)
     y_min_spin = _axis_spin_box(y_min)
     y_max_spin = _axis_spin_box(y_max)
+    _set_plot_control_width(plot_size_spin)
+    layout.addRow("", show_sem_checkbox)
     layout.addRow("size", plot_size_spin)
     layout.addRow("x min", x_min_spin)
     layout.addRow("x max", x_max_spin)
@@ -189,10 +195,20 @@ def _axis_spin_box(value: float) -> QDoubleSpinBox:
     """
     spin_box = QDoubleSpinBox()
     spin_box.setRange(-1_000_000.0, 1_000_000.0)
-    spin_box.setDecimals(3)
+    spin_box.setDecimals(2)
     spin_box.setSingleStep(0.1)
     spin_box.setValue(value)
+    _set_plot_control_width(spin_box)
     return spin_box
+
+
+def _set_plot_control_width(control: QSpinBox | QDoubleSpinBox) -> None:
+    """Give Plot numeric controls a stable shared width.
+
+    Args:
+        control: Numeric spin box in the Plot subsection.
+    """
+    control.setFixedWidth(_PLOT_CONTROL_WIDTH)
 
 
 def _visibility_row(checkbox: QCheckBox, color: QColor | None) -> QWidget:

@@ -20,6 +20,7 @@ from qtpy.QtCore import QTimer
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
+from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.converted import RecordingData
 from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.responses import compute_response_plot_data_from_roi_set
@@ -112,6 +113,7 @@ class LiveResponseController:
         self._recording: RecordingData | None = None
         self._roi_labels_layer: object | None = None
         self._delta_f_over_f_options = DeltaFOverFOptions()
+        self._response_window_options = ResponseWindowOptions()
         self._response_processing_options = ResponseProcessingOptions()
         self._connections: list[_ConnectedEmitter] = []
         self._is_shutdown = False
@@ -189,6 +191,22 @@ class LiveResponseController:
         if options == self._delta_f_over_f_options:
             return
         self._delta_f_over_f_options = options
+        self._version += 1
+
+    def set_response_window_options(self, options: ResponseWindowOptions) -> None:
+        """Store response-window options used by the next live update.
+
+        Args:
+            options: GUI-selected automatic/manual response-window settings.
+
+        Returns:
+            None.
+        """
+        if self._is_shutdown:
+            return
+        if options == self._response_window_options:
+            return
+        self._response_window_options = options
         self._version += 1
 
     def request_update(self, *_event_args: object) -> None:
@@ -296,6 +314,7 @@ class LiveResponseController:
             roi_set,
             source_path=None,
             delta_f_over_f_options=self._delta_f_over_f_options,
+            response_window_options=self._response_window_options,
             response_processing_options=self._response_processing_options,
         )
         self._poll_timer.start()
@@ -336,6 +355,7 @@ class LiveResponseController:
             make_roi_set_from_label_image(label_image),
             source_path=None,
             delta_f_over_f_options=self._delta_f_over_f_options,
+            response_window_options=self._response_window_options,
             response_processing_options=self._response_processing_options,
         )
 

@@ -248,6 +248,8 @@ def _copy_grouped_with_processed_values(
         roi_labels=grouped.roi_labels,
         data_rate_hz=grouped.data_rate_hz,
         trials=trials,
+        pre_window_seconds=grouped.pre_window_seconds,
+        post_window_seconds=grouped.post_window_seconds,
     )
 
 
@@ -272,6 +274,8 @@ def _mask_excluded_rois(
         roi_labels=grouped.roi_labels,
         data_rate_hz=grouped.data_rate_hz,
         trials=tuple(trials),
+        pre_window_seconds=grouped.pre_window_seconds,
+        post_window_seconds=grouped.post_window_seconds,
     )
 
 

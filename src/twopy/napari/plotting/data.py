@@ -7,7 +7,7 @@ This module has no Qt imports. It keeps response-data preparation testable and
 separate from the napari widgets that draw and control the plots.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,10 +17,17 @@ import numpy.typing as npt
 from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import DeltaFOverFFitMode, RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
 from twopy.analysis.persistence import load_analysis_outputs
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     mask_grouped_roi_responses_by_included_rois,
+)
+from twopy.analysis.response_window_options import (
+    DEFAULT_RESPONSE_POST_WINDOW_SECONDS,
+    DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+    ResponseWindowOptions,
+    resolve_response_window_seconds,
 )
 from twopy.analysis.responses import (
     GroupedRoiResponses,
@@ -28,12 +35,8 @@ from twopy.analysis.responses import (
     group_delta_f_over_f_by_epoch,
 )
 from twopy.analysis.trials import EpochFrameWindow
-from twopy.analysis.workflow import (
-    DEFAULT_RESPONSE_POST_WINDOW_SECONDS,
-    DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
-)
-from twopy.converted import RecordingData
-from twopy.stimulus import is_interleave_epoch_name
+from twopy.converted import RecordingData, recording_frame_rate_hz
+from twopy.stimulus import is_interleave_epoch_name, stimulus_epoch_names_by_number
 from twopy.typing_guards import require_string_choice
 
 __all__ = [
@@ -41,6 +44,10 @@ __all__ = [
     "ResponsePlotData",
     "default_analysis_output_path",
     "load_response_plot_data",
+    "response_plot_interleave_window_limit_for_recording",
+    "response_plot_post_window_seconds_for_recording",
+    "response_plot_post_window_seconds",
+    "response_plot_window_seconds_for_recording",
     "response_plot_data_from_grouped",
 ]
 
@@ -76,6 +83,7 @@ class ResponsePlotData:
     source_path: Path | None
     epochs: tuple[EpochResponsePlotData, ...]
     delta_f_over_f_options: DeltaFOverFOptions | None = None
+    response_window_options: ResponseWindowOptions | None = None
     response_processing_options: ResponseProcessingOptions | None = None
 
 
@@ -84,6 +92,7 @@ def response_plot_data_from_grouped(
     *,
     source_path: Path | None = None,
     delta_f_over_f_options: DeltaFOverFOptions | None = None,
+    response_window_options: ResponseWindowOptions | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
 ) -> ResponsePlotData:
     """Summarize grouped responses into mean and SEM traces for plotting.
@@ -93,6 +102,8 @@ def response_plot_data_from_grouped(
         source_path: Optional analysis output path used for display.
         delta_f_over_f_options: Optional dF/F settings used to produce the
             grouped responses.
+        response_window_options: Optional response-window settings used to
+            produce the grouped responses.
         response_processing_options: Optional processing settings used to
             produce the grouped responses.
 
@@ -122,6 +133,11 @@ def response_plot_data_from_grouped(
         source_path=source_path,
         epochs=epochs,
         delta_f_over_f_options=delta_f_over_f_options,
+        response_window_options=(
+            response_window_options
+            if response_window_options is not None
+            else _response_window_options_from_grouped(grouped)
+        ),
         response_processing_options=response_processing_options,
     )
 
@@ -138,6 +154,111 @@ def default_analysis_output_path(recording: RecordingData) -> Path:
     return recording.path.expanduser().parent / "analysis_outputs.h5"
 
 
+def response_plot_post_window_seconds(epoch_names: Iterable[str]) -> float:
+    """Return post-epoch context for response plots from epoch names.
+
+    Args:
+        epoch_names: Stimulus epoch names available for one recording or saved
+            analysis output.
+
+    Returns:
+        Two seconds when an interleave/gray epoch exists, otherwise zero.
+
+    Response plots show the return into gray interleave when the recording has
+    such a baseline epoch. Keeping this rule shared prevents saved-output plots
+    and live recompute previews from showing different x-axis ranges.
+    """
+    for epoch_name in epoch_names:
+        if is_interleave_epoch_name(epoch_name):
+            return DEFAULT_RESPONSE_POST_WINDOW_SECONDS
+    return 0.0
+
+
+def response_plot_post_window_seconds_for_recording(recording: RecordingData) -> float:
+    """Return post-epoch plot context for one loaded recording.
+
+    Args:
+        recording: Loaded converted recording with stimulus epoch metadata.
+
+    Returns:
+        Two seconds when an interleave/gray epoch exists, otherwise zero.
+    """
+    return response_plot_post_window_seconds(
+        stimulus_epoch_names_by_number(recording).values(),
+    )
+
+
+def _response_plot_interleave_window_seconds_for_recording(
+    recording: RecordingData,
+) -> float | None:
+    """Return the shortest named interleave epoch duration for one recording.
+
+    Args:
+        recording: Loaded converted recording with stimulus epoch metadata.
+
+    Returns:
+        Duration in seconds for the shortest gray/grey/interleave epoch window,
+        or ``None`` when no such named window is available.
+
+    Manual Plot-tab response windows are capped by this value so pre/post
+    context cannot exceed the available interleave epoch duration.
+    """
+    mapping = interpolate_stimulus_epochs_to_frame_windows(recording)
+    frame_rate_hz = recording_frame_rate_hz(recording)
+    durations = tuple(
+        (epoch_window.window.stop_frame - epoch_window.window.start_frame)
+        / frame_rate_hz
+        for epoch_window in mapping.windows
+        if is_interleave_epoch_name(epoch_window.epoch_name)
+    )
+    if len(durations) == 0:
+        return None
+    return max(0.0, min(durations))
+
+
+def response_plot_interleave_window_limit_for_recording(
+    recording: RecordingData,
+) -> float | None:
+    """Return the manual response-window cap for one recording.
+
+    Args:
+        recording: Loaded converted recording with stimulus timing metadata.
+
+    Returns:
+        Shortest named gray/interleave epoch duration in seconds, or ``None``
+        when no reliable cap is available.
+    """
+    try:
+        return _response_plot_interleave_window_seconds_for_recording(recording)
+    except ValueError:
+        return None
+
+
+def response_plot_window_seconds_for_recording(
+    recording: RecordingData,
+    options: ResponseWindowOptions,
+) -> tuple[float, float]:
+    """Resolve Plot-tab response-window options for one recording.
+
+    Args:
+        recording: Loaded converted recording.
+        options: User-selected automatic/manual response-window options.
+
+    Returns:
+        ``(pre_window_seconds, post_window_seconds)`` for response grouping.
+    """
+    return resolve_response_window_seconds(
+        options,
+        automatic_pre_window_seconds=DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+        automatic_post_window_seconds=response_plot_post_window_seconds_for_recording(
+            recording,
+        ),
+        max_window_seconds=response_plot_interleave_window_limit_for_recording(
+            recording,
+        ),
+    )
+
+
 def load_response_plot_data(path: Path) -> ResponsePlotData | str:
     """Load response plot data from an analysis output file.
 
@@ -150,6 +271,23 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
     if not path.is_file():
         return f"No analysis output found: {path}"
     outputs = load_analysis_outputs(path)
+    if outputs.grouped_responses is not None:
+        saved_window_options = _response_window_options_from_grouped(
+            outputs.grouped_responses,
+        )
+    else:
+        saved_window_options = None
+    if outputs.grouped_responses is not None and saved_window_options is not None:
+        return response_plot_data_from_grouped(
+            outputs.grouped_responses,
+            source_path=outputs.path,
+            delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
+                traces=outputs.traces,
+                dff=outputs.dff,
+            ),
+            response_window_options=saved_window_options,
+            response_processing_options=outputs.response_processing_options,
+        )
     if outputs.dff is not None and len(outputs.epoch_windows) > 0:
         data_rate_hz = _analysis_output_data_rate_hz(
             grouped=outputs.grouped_responses,
@@ -176,6 +314,7 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
                     traces=outputs.traces,
                     dff=outputs.dff,
                 ),
+                response_window_options=_response_window_options_from_grouped(grouped),
                 response_processing_options=outputs.response_processing_options,
             )
     if outputs.grouped_responses is None:
@@ -187,7 +326,25 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
             traces=outputs.traces,
             dff=outputs.dff,
         ),
+        response_window_options=_response_window_options_from_grouped(
+            outputs.grouped_responses,
+        ),
         response_processing_options=outputs.response_processing_options,
+    )
+
+
+def _response_window_options_from_grouped(
+    grouped: GroupedRoiResponses,
+) -> ResponseWindowOptions | None:
+    """Return saved response-window options from grouped metadata."""
+    pre_window_seconds = grouped.pre_window_seconds
+    post_window_seconds = grouped.post_window_seconds
+    if pre_window_seconds is None or post_window_seconds is None:
+        return None
+    return ResponseWindowOptions(
+        auto=False,
+        pre_window_seconds=float(pre_window_seconds),
+        post_window_seconds=float(post_window_seconds),
     )
 
 
@@ -369,7 +526,6 @@ def _response_post_window_seconds(
     Returns:
         Two seconds when a gray interleave epoch exists, otherwise zero.
     """
-    for epoch_window in epoch_windows:
-        if is_interleave_epoch_name(epoch_window.epoch_name):
-            return DEFAULT_RESPONSE_POST_WINDOW_SECONDS
-    return 0.0
+    return response_plot_post_window_seconds(
+        epoch_window.epoch_name for epoch_window in epoch_windows
+    )

@@ -29,6 +29,7 @@ from qtpy.QtWidgets import (
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
+from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.workflow import analyze_recording_responses
 from twopy.converted import RecordingData
 from twopy.napari.display_paths import (
@@ -41,6 +42,8 @@ from twopy.napari.plotting.data import (
     ResponsePlotData,
     default_analysis_output_path,
     load_response_plot_data,
+    response_plot_interleave_window_limit_for_recording,
+    response_plot_window_seconds_for_recording,
 )
 from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
 from twopy.napari.plotting.export_controls import (
@@ -61,6 +64,7 @@ from twopy.napari.plotting.panels import (
     scrolling_tab,
 )
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
+from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     clear_layout,
@@ -260,11 +264,15 @@ class _ResponsePlotWidget(QWidget):
         self._manual_y_min: float | None = None
         self._manual_y_max: float | None = None
         self._delta_f_over_f_options = DeltaFOverFOptions()
+        self._response_window_options = ResponseWindowOptions()
         self._response_processing_options = ResponseProcessingOptions()
         self._is_shutdown = False
         self._live_controller = LiveResponseController(self)
         self._live_controller.set_delta_f_over_f_options(
             self._delta_f_over_f_options,
+        )
+        self._live_controller.set_response_window_options(
+            self._response_window_options,
         )
         self._live_controller.set_response_processing_options(
             self._response_processing_options,
@@ -286,9 +294,6 @@ class _ResponsePlotWidget(QWidget):
         self.setLayout(layout)
 
         self._options_tabs = QTabWidget()
-        self._show_sem_checkbox = QCheckBox("Show SEM")
-        self._show_sem_checkbox.setChecked(True)
-        self._show_sem_checkbox.stateChanged.connect(self._set_show_sem)
         reload_saved_button = QPushButton("Reload saved analysis")
         reload_saved_button.clicked.connect(self.reload)
         recompute_preview_button = QPushButton("Recompute preview now")
@@ -317,12 +322,16 @@ class _ResponsePlotWidget(QWidget):
             self._response_processing_options,
             on_change=self._set_response_processing_options,
         )
+        self._response_window_options_widget = ResponseWindowOptionsWidget(
+            self._response_window_options,
+            on_change=self._set_response_window_options,
+        )
         self._delta_f_over_f_options_widget = DeltaFOverFOptionsWidget(
             self._delta_f_over_f_options,
             on_change=self._set_delta_f_over_f_options,
         )
-        self._plot_options_layout.addWidget(self._show_sem_checkbox)
         self._plot_options_layout.addWidget(plot_display_options_widget)
+        self._plot_options_layout.addWidget(self._response_window_options_widget)
         self._plot_options_layout.addWidget(self._delta_f_over_f_options_widget)
         self._plot_options_layout.addWidget(self._processing_options_widget)
         self._plot_options_layout.addStretch(1)
@@ -452,6 +461,7 @@ class _ResponsePlotWidget(QWidget):
             {},
             selected_epoch_number=self._delta_f_over_f_options.interleave_epoch_number,
         )
+        self._response_window_options_widget.set_max_window_seconds(None)
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
         self._analysis_path_label.setText("Analysis output: default")
@@ -476,9 +486,16 @@ class _ResponsePlotWidget(QWidget):
             epoch_names,
             selected_epoch_number=default_interleave_epoch_number(epoch_names),
         )
+        self._response_window_options_widget.set_max_window_seconds(
+            response_plot_interleave_window_limit_for_recording(recording),
+        )
         self._delta_f_over_f_options = self._delta_f_over_f_options_widget.options()
         self._live_controller.set_delta_f_over_f_options(
             self._delta_f_over_f_options,
+        )
+        self._response_window_options = self._response_window_options_widget.options()
+        self._live_controller.set_response_window_options(
+            self._response_window_options,
         )
         self._refresh_update_path_labels()
         self.reload()
@@ -534,6 +551,9 @@ class _ResponsePlotWidget(QWidget):
         analysis_output_path = self._resolved_analysis_path()
         try:
             roi_set = save_napari_label_rois(label_image, roi_output_path)
+            pre_window_seconds, post_window_seconds = (
+                self._resolved_response_window_seconds()
+            )
             run = analyze_recording_responses(
                 self._recording.path,
                 roi_set,
@@ -548,6 +568,8 @@ class _ResponsePlotWidget(QWidget):
                 ),
                 fit_mode=self._delta_f_over_f_options.fit_mode,
                 apply_motion_mask=self._delta_f_over_f_options.apply_motion_mask,
+                response_pre_window_seconds=pre_window_seconds,
+                response_post_window_seconds=post_window_seconds,
                 response_processing_options=self._response_processing_options,
             )
         except ValueError as error:
@@ -587,6 +609,8 @@ class _ResponsePlotWidget(QWidget):
             )
         if plot_data.delta_f_over_f_options is not None:
             self._load_delta_f_over_f_options(plot_data.delta_f_over_f_options)
+        if plot_data.response_window_options is not None:
+            self._load_response_window_options(plot_data.response_window_options)
         self._sync_plot_state(reset_axes=reset_axes)
         self._render_plots()
 
@@ -618,8 +642,7 @@ class _ResponsePlotWidget(QWidget):
 
     def _set_show_sem(self, state: int) -> None:
         """Update whether SEM bands are drawn."""
-        del state
-        self._show_sem = self._show_sem_checkbox.isChecked()
+        self._show_sem = state != 0
         self._update_visible_plot_widgets(apply_roi_layer_visibility=False)
 
     def _set_plot_size(self, value: int) -> None:
@@ -650,6 +673,16 @@ class _ResponsePlotWidget(QWidget):
             return
         self._update_status_label.setText("dF/F settings updated for next run.")
 
+    def _set_response_window_options(self, options: ResponseWindowOptions) -> None:
+        """Store Plot-tab response-window settings for preview and save."""
+        self._response_window_options = options
+        self._live_controller.set_response_window_options(options)
+        if self._recording is not None and self._roi_labels_layer is not None:
+            self._live_controller.request_update()
+            self._update_status_label.setText("Response window updated.")
+            return
+        self._update_status_label.setText("Response window updated for next run.")
+
     def _load_response_processing_options(
         self,
         options: ResponseProcessingOptions,
@@ -678,6 +711,19 @@ class _ResponsePlotWidget(QWidget):
         self._delta_f_over_f_options = options
         self._delta_f_over_f_options_widget.set_options(options)
         self._live_controller.set_delta_f_over_f_options(options)
+
+    def _load_response_window_options(self, options: ResponseWindowOptions) -> None:
+        """Load saved response-window settings into Plot-tab controls.
+
+        Args:
+            options: Response-window settings read from analysis persistence.
+
+        Returns:
+            None.
+        """
+        self._response_window_options_widget.set_options(options)
+        self._response_window_options = self._response_window_options_widget.options()
+        self._live_controller.set_response_window_options(self._response_window_options)
 
     def _sync_plot_state(self, *, reset_axes: bool) -> None:
         """Synchronize option state with currently loaded plot data.
@@ -783,6 +829,9 @@ class _ResponsePlotWidget(QWidget):
         y_max: float,
     ) -> None:
         """Add the Plot group with the same form layout as processing groups."""
+        show_sem_checkbox = QCheckBox("show SEM")
+        show_sem_checkbox.setChecked(self._show_sem)
+        show_sem_checkbox.stateChanged.connect(self._set_show_sem)
         plot_size_spin = QSpinBox()
         plot_size_spin.setRange(240, 900)
         plot_size_spin.setSingleStep(20)
@@ -791,6 +840,7 @@ class _ResponsePlotWidget(QWidget):
         plot_size_spin.valueChanged.connect(self._set_plot_size)
         self._plot_display_options_layout.addWidget(
             plot_display_options_group(
+                show_sem_checkbox=show_sem_checkbox,
                 plot_size_spin=plot_size_spin,
                 x_min=x_min,
                 x_max=x_max,
@@ -876,6 +926,16 @@ class _ResponsePlotWidget(QWidget):
         if self._recording is not None:
             return default_analysis_output_path(self._recording)
         return Path("analysis_outputs.h5")
+
+    def _resolved_response_window_seconds(self) -> tuple[float, float]:
+        """Return concrete pre/post seconds for the selected recording."""
+        if self._recording is None:
+            msg = "No recording loaded."
+            raise ValueError(msg)
+        return response_plot_window_seconds_for_recording(
+            self._recording,
+            self._response_window_options,
+        )
 
     def _resolved_roi_save_file(self) -> Path:
         """Return the ROI HDF5 path for the selected recording."""

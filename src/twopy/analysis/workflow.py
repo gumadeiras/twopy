@@ -34,6 +34,10 @@ from twopy.analysis.response_processing import (
     process_roi_delta_f_over_f,
     validate_response_processing_options,
 )
+from twopy.analysis.response_window_options import (
+    DEFAULT_RESPONSE_POST_WINDOW_SECONDS,
+    DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
+)
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     group_delta_f_over_f_by_epoch,
@@ -59,9 +63,6 @@ __all__ = [
     "analyze_recording_responses",
     "compute_recording_responses",
 ]
-
-DEFAULT_RESPONSE_PRE_WINDOW_SECONDS = 2.0
-DEFAULT_RESPONSE_POST_WINDOW_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
