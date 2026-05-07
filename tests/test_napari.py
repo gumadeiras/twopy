@@ -889,7 +889,10 @@ class NapariAdapterTest(unittest.TestCase):
             )
 
             with patch(
-                "twopy.napari.plotting.docks.analyze_recording_responses",
+                (
+                    "twopy.napari.plotting.docks.save_actions."
+                    "analyze_recording_responses"
+                ),
                 return_value=SimpleNamespace(
                     output_path=analysis_path,
                     grouped_responses=_tiny_grouped_responses(),
@@ -2564,7 +2567,7 @@ class NapariAdapterTest(unittest.TestCase):
         response_widget._set_epoch_visibility(1, False)
 
         self.assertEqual(response_widget._visible_epoch_indices(), (0,))
-        self.assertEqual(tuple(response_widget._epoch_plot_widgets), (0, 1))
+        self.assertEqual(tuple(response_widget._plot_area.epoch_plot_widgets), (0, 1))
 
     def test_hidden_epoch_plot_panel_is_hidden_after_layout_refresh(self) -> None:
         """Confirm hidden epoch plots do not remain visible as stale Qt panels.
@@ -2609,9 +2612,9 @@ class NapariAdapterTest(unittest.TestCase):
         response_widget._set_epoch_visibility(2, False)
 
         self.assertEqual(response_widget._visible_epoch_indices(), (1,))
-        self.assertTrue(response_widget._epoch_plot_panels[0].isHidden())
-        self.assertFalse(response_widget._epoch_plot_panels[1].isHidden())
-        self.assertTrue(response_widget._epoch_plot_panels[2].isHidden())
+        self.assertTrue(response_widget._plot_area.epoch_plot_panels[0].isHidden())
+        self.assertFalse(response_widget._plot_area.epoch_plot_panels[1].isHidden())
+        self.assertTrue(response_widget._plot_area.epoch_plot_panels[2].isHidden())
 
     def test_roi_visibility_toggle_is_idempotent_by_row_index(self) -> None:
         """Confirm ROI visibility does not depend on unique display labels.
@@ -2672,7 +2675,7 @@ class NapariAdapterTest(unittest.TestCase):
         response_widget = cast(Any, create_response_plot_widget(None))
         response_widget.set_response_plot_data(plot_data, reset_axes=True)
         clear_calls: list[str] = []
-        response_widget._clear_plot_layout_preserving_epoch_cache = lambda: (
+        response_widget._plot_area.clear_layout_preserving_epoch_cache = lambda: (
             clear_calls.append("clear")
         )
 
@@ -2680,7 +2683,7 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(clear_calls, [])
         self.assertEqual(response_widget._visible_roi_indices(), (0,))
-        self.assertFalse(response_widget._epoch_plot_panels[0].isHidden())
+        self.assertFalse(response_widget._plot_area.epoch_plot_panels[0].isHidden())
 
     def test_response_plot_bounds_use_selected_epochs_and_rois(self) -> None:
         """Confirm plot bounds follow selected ROI and epoch visibility.

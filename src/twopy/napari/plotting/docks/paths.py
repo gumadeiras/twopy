@@ -1,0 +1,100 @@
+"""Path resolution and labels for response plotting docks.
+
+Inputs: optional recording state, user-selected analysis output, and ROI output
+paths.
+Outputs: concrete paths plus compact Update-tab label text.
+
+These helpers keep path fallback policy in one place for preview, save, and
+status display code.
+"""
+
+from pathlib import Path
+
+from qtpy.QtWidgets import QLabel
+
+from twopy.converted import RecordingData
+from twopy.napari.display_paths import (
+    format_twopy_h5_output,
+    recording_display_summary,
+)
+from twopy.napari.plotting.data import default_analysis_output_path
+
+
+def resolved_analysis_path(
+    analysis_path: Path | None,
+    recording: RecordingData | None,
+) -> Path:
+    """Return the analysis HDF5 path for the selected recording.
+
+    Args:
+        analysis_path: Explicit analysis HDF5 path, if one is loaded.
+        recording: Optional loaded converted recording.
+
+    Returns:
+        Concrete analysis output path used by reload, save, and labels.
+    """
+    if analysis_path is not None:
+        return analysis_path
+    if recording is not None:
+        return default_analysis_output_path(recording)
+    return Path("analysis_outputs.h5")
+
+
+def resolved_roi_save_file(
+    roi_save_file: Path | None,
+    recording: RecordingData | None,
+) -> Path:
+    """Return the ROI HDF5 path for the selected recording.
+
+    Args:
+        roi_save_file: Explicit ROI output path, if one is loaded.
+        recording: Optional loaded converted recording.
+
+    Returns:
+        Concrete ROI HDF5 path used by Save Analysis.
+    """
+    if roi_save_file is not None:
+        return roi_save_file
+    if recording is not None:
+        return recording.path.parent / "rois.h5"
+    return Path("rois.h5")
+
+
+def refresh_update_path_labels(
+    *,
+    recording: RecordingData | None,
+    analysis_path: Path | None,
+    roi_save_file: Path | None,
+    recording_summary_label: QLabel,
+    analysis_path_label: QLabel,
+    roi_save_path_label: QLabel,
+) -> None:
+    """Refresh compact recording and output labels in the Update tab.
+
+    Args:
+        recording: Optional loaded converted recording.
+        analysis_path: Explicit analysis output path, if one is loaded.
+        roi_save_file: Explicit ROI output path, if one is loaded.
+        recording_summary_label: Label showing the selected recording summary.
+        analysis_path_label: Label showing the analysis output path.
+        roi_save_path_label: Label showing the ROI output path.
+
+    Returns:
+        None.
+    """
+    if recording is None:
+        recording_summary_label.setText("No recording loaded.")
+        analysis_path_label.setText("Analysis output: default")
+        roi_save_path_label.setText("ROI output: default")
+        return
+
+    summary = recording_display_summary(recording)
+    recording_summary_label.setText("\n\n".join(summary.lines()))
+    analysis_path_label.setText(
+        "Analysis output: "
+        f"{format_twopy_h5_output(resolved_analysis_path(analysis_path, recording))}"
+    )
+    roi_save_path_label.setText(
+        "ROI output: "
+        f"{format_twopy_h5_output(resolved_roi_save_file(roi_save_file, recording))}"
+    )

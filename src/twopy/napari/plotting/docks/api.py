@@ -1,0 +1,151 @@
+"""Dock entry points for response plotting in the twopy napari adapter.
+
+Inputs: a napari viewer, optional converted recording, and optional ROI layer
+state.
+Outputs: response plotting and response options dock widgets.
+
+This module keeps napari-facing factory functions separate from the larger Qt
+widget implementation so import callers see a small, stable API.
+"""
+
+from pathlib import Path
+
+from qtpy.QtWidgets import QApplication
+
+from twopy.converted import RecordingData
+from twopy.napari.plotting.docks.response_plot_widget import _ResponsePlotWidget
+from twopy.napari.protocols import NapariViewer
+
+_QT_APPLICATION: object | None = None
+
+
+def add_twopy_response_plot_widget(
+    viewer: NapariViewer,
+    *,
+    recording: RecordingData | None,
+    roi_labels_layer: object | None = None,
+    roi_save_file: Path | None = None,
+    dock_name: str = "twopy responses",
+    dock_area: str = "top",
+) -> tuple[object, object]:
+    """Add the response plotting dock widget to a napari viewer.
+
+    Args:
+        viewer: Napari viewer that should receive the dock widget.
+        recording: Optional loaded converted recording.
+        roi_labels_layer: Optional napari Labels layer used for analysis
+            previews from current ROIs.
+        roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
+        dock_name: Dock widget title.
+        dock_area: Napari dock area.
+
+    Returns:
+        ``(widget, dock_widget)`` created by Qt and napari.
+    """
+    widget = create_response_plot_widget(
+        recording,
+        viewer=viewer,
+        roi_labels_layer=roi_labels_layer,
+        roi_save_file=roi_save_file,
+    )
+    dock_widget = viewer.window.add_dock_widget(
+        widget,
+        name=dock_name,
+        area=dock_area,
+    )
+    return widget, dock_widget
+
+
+def add_twopy_response_options_widget(
+    viewer: NapariViewer,
+    response_plot_widget: object,
+    *,
+    dock_name: str = "twopy response options",
+    dock_area: str = "right",
+) -> tuple[object, object] | tuple[None, None]:
+    """Add the response plot options as a separate napari dock.
+
+    Args:
+        viewer: Napari viewer that should receive the dock widget.
+        response_plot_widget: Widget returned by ``create_response_plot_widget``.
+        dock_name: Dock widget title.
+        dock_area: Napari dock area.
+
+    Returns:
+        ``(widget, dock_widget)`` when the plot widget owns options, otherwise
+        ``(None, None)``.
+    """
+    if not isinstance(response_plot_widget, _ResponsePlotWidget):
+        return None, None
+    widget = response_plot_widget.options_widget()
+    dock_widget = viewer.window.add_dock_widget(
+        widget,
+        name=dock_name,
+        area=dock_area,
+    )
+    return widget, dock_widget
+
+
+def create_response_plot_widget(
+    recording: RecordingData | None,
+    *,
+    viewer: object | None = None,
+    roi_labels_layer: object | None = None,
+    roi_save_file: Path | None = None,
+) -> object:
+    """Create a response plotting widget.
+
+    Args:
+        recording: Optional loaded converted recording.
+        viewer: Optional napari viewer used for figure export.
+        roi_labels_layer: Optional napari Labels layer used when the user asks
+            to compute responses from the current ROIs.
+        roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
+
+    Returns:
+        Qt widget as a plain object for napari docking.
+    """
+    _ensure_qapplication()
+    widget = _ResponsePlotWidget(viewer=viewer)
+    refresh_response_plot_widget(
+        widget,
+        recording=recording,
+        roi_labels_layer=roi_labels_layer,
+        roi_save_file=roi_save_file,
+    )
+    return widget
+
+
+def refresh_response_plot_widget(
+    widget: object | None,
+    *,
+    recording: RecordingData | None,
+    roi_labels_layer: object | None = None,
+    roi_save_file: Path | None = None,
+) -> None:
+    """Refresh a response plotting widget after a recording is loaded.
+
+    Args:
+        widget: Optional widget returned by ``create_response_plot_widget``.
+        recording: Optional loaded converted recording.
+        roi_labels_layer: Optional current ROI Labels layer.
+        roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
+
+    Returns:
+        None.
+    """
+    if not isinstance(widget, _ResponsePlotWidget):
+        return
+    widget.set_roi_labels_layer(roi_labels_layer)
+    widget.set_roi_save_file(roi_save_file)
+    if recording is None:
+        widget.clear_recording()
+        return
+    widget.load_recording(recording)
+
+
+def _ensure_qapplication() -> None:
+    """Create a Qt application when tests instantiate widgets without napari."""
+    global _QT_APPLICATION
+    if QApplication.instance() is None:
+        _QT_APPLICATION = QApplication([])
