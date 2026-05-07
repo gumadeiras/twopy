@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Features
+
+- Added napari Plot-tab dF/F controls for background subtraction, gray
+  interleave baseline sampling, fit mode, and motion masking.
+- Added shared and ROI y-stripe percentile background subtraction for broad
+  row-dependent background in dense process recordings.
+- Renamed Plot-tab labels and dropdown entries to concise readable names and
+  populated the dF/F interleave selector from recording epoch names, defaulting
+  to names that look like gray, grey, or interleave baselines.
+- Added shared helpers for default interleave epoch selection and converted
+  recording frame-rate parsing.
+
+### Fixes
+
+- Centered live napari response plot titles above their plots.
+- Trimmed unused vertical space below live napari response plots.
+- Added the package version to the napari window title.
+
 ## 0.1.3 - 2026-05-07
 
 ### Fixes
@@ -73,7 +91,7 @@ Initial PyPI release.
 - GUI-independent ROI mask objects, label-image conversion, ROI HDF5 save/load,
   and chunked ROI trace extraction.
 - Background-corrected ROI trace extraction with no correction, global movie
-  percentile subtraction, and local y-neighborhood percentile subtraction.
+  percentile subtraction, and ROI y-stripe percentile subtraction.
 - Alignment-valid crop support for analysis-time trace extraction and background
   correction.
 - ROI dF/F calculation with gray-interleave baseline fitting, robust fitting by

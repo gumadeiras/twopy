@@ -76,8 +76,9 @@ decided.
 - GUI-independent `twopy.analysis` package for analysis-time modules.
 - ROI background-corrected trace extraction with raw, background, and corrected
   arrays kept side by side for audit.
-- Implemented three ROI background modes: no correction, global movie
-  percentile subtraction, and local y-neighborhood percentile subtraction.
+- Implemented four ROI background modes: no correction, global movie percentile
+  subtraction, shared y-stripe percentile subtraction, and ROI y-stripe
+  percentile subtraction.
 - Global movie percentile background correction defaults to the saved
   alignment-valid crop, validates full-frame ROI masks against that crop, and
   streams only the selected crop from HDF5 for lower I/O.
@@ -201,6 +202,12 @@ decided.
   responses and saves the selected settings plus ROI inclusion scores.
   Smoothing supports moving-average and Savitzky-Golay methods, with
   Savitzky-Golay defaulting to a seven-frame second-order local fit.
+- Napari Plot tab now exposes dF/F analysis settings before smoothing:
+  background mode, gray interleave baseline epoch, interleave span, fit mode,
+  and motion masking all feed live previews and saved analysis. Dropdown labels
+  are concise and user-facing, and interleave choices use the recording's epoch
+  names, defaulting to names that contain gray, grey, or interleave before
+  falling back to epoch 1.
 - Launch script for opening napari from a converted output directory, a source
   recording directory, or an explicit `recording_data.h5` path. When a source
   recording has no converted twopy files yet, napari runs conversion first and

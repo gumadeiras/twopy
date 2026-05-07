@@ -34,16 +34,27 @@ from twopy.typing_guards import require_string_choice
 
 __all__ = ["ResponseProcessingOptionsWidget"]
 
-_SMOOTHING_METHODS: tuple[SmoothingMethod, ...] = (
-    "none",
-    "moving_average",
-    "savgol",
+_SMOOTHING_METHOD_LABELS: tuple[tuple[str, SmoothingMethod], ...] = (
+    ("none", "none"),
+    ("moving average", "moving_average"),
+    ("Savitzky-Golay", "savgol"),
 )
-_LOW_PASS_METHODS: tuple[LowPassFilterMethod, ...] = ("none", "butterworth")
-_CORRELATION_REFERENCES: tuple[CorrelationFilterReference, ...] = (
-    "none",
-    "epoch_mean",
-    "epoch_peak",
+_SMOOTHING_METHODS = tuple(value for _label, value in _SMOOTHING_METHOD_LABELS)
+_LOW_PASS_METHOD_LABELS: tuple[tuple[str, LowPassFilterMethod], ...] = (
+    ("none", "none"),
+    ("Butterworth", "butterworth"),
+)
+_LOW_PASS_METHODS = tuple(value for _label, value in _LOW_PASS_METHOD_LABELS)
+_CORRELATION_REFERENCE_LABELS: tuple[
+    tuple[str, CorrelationFilterReference],
+    ...,
+] = (
+    ("none", "none"),
+    ("epoch mean", "epoch_mean"),
+    ("epoch peak", "epoch_peak"),
+)
+_CORRELATION_REFERENCES = tuple(
+    value for _label, value in _CORRELATION_REFERENCE_LABELS
 )
 
 
@@ -70,7 +81,7 @@ class ResponseProcessingOptionsWidget(QWidget):
         """
         super().__init__()
         self._on_change = on_change
-        self._smoothing_method = _combo_box(_SMOOTHING_METHODS)
+        self._smoothing_method = _combo_box(_SMOOTHING_METHOD_LABELS)
         self._smoothing_window_frames = _spin_box(
             minimum=1,
             maximum=1001,
@@ -81,7 +92,7 @@ class ResponseProcessingOptionsWidget(QWidget):
             maximum=16,
             value=options.smoothing.polynomial_order,
         )
-        self._low_pass_method = _combo_box(_LOW_PASS_METHODS)
+        self._low_pass_method = _combo_box(_LOW_PASS_METHOD_LABELS)
         self._low_pass_cutoff_hz = _double_spin_box(
             minimum=0.001,
             maximum=1_000_000.0,
@@ -93,7 +104,7 @@ class ResponseProcessingOptionsWidget(QWidget):
             maximum=16,
             value=options.low_pass.order,
         )
-        self._correlation_reference = _combo_box(_CORRELATION_REFERENCES)
+        self._correlation_reference = _combo_box(_CORRELATION_REFERENCE_LABELS)
         self._minimum_correlation = _double_spin_box(
             minimum=-1.0,
             maximum=1.0,
@@ -123,9 +134,9 @@ class ResponseProcessingOptionsWidget(QWidget):
         layout.addStretch(1)
         self.setLayout(layout)
 
-        self._set_combo_value(self._smoothing_method, options.smoothing.method)
-        self._set_combo_value(self._low_pass_method, options.low_pass.method)
-        self._set_combo_value(
+        self._set_combo_data(self._smoothing_method, options.smoothing.method)
+        self._set_combo_data(self._low_pass_method, options.low_pass.method)
+        self._set_combo_data(
             self._correlation_reference,
             options.correlation_filter.reference,
         )
@@ -142,14 +153,14 @@ class ResponseProcessingOptionsWidget(QWidget):
             ``ResponseProcessingOptions`` built from the current controls.
         """
         low_pass_method = require_string_choice(
-            self._low_pass_method.currentText(),
+            str(self._low_pass_method.currentData()),
             name="low-pass method",
             allowed=_LOW_PASS_METHODS,
         )
         return ResponseProcessingOptions(
             smoothing=SmoothingOptions(
                 method=require_string_choice(
-                    self._smoothing_method.currentText(),
+                    str(self._smoothing_method.currentData()),
                     name="smoothing method",
                     allowed=_SMOOTHING_METHODS,
                 ),
@@ -167,7 +178,7 @@ class ResponseProcessingOptionsWidget(QWidget):
             ),
             correlation_filter=CorrelationFilterOptions(
                 reference=require_string_choice(
-                    self._correlation_reference.currentText(),
+                    str(self._correlation_reference.currentData()),
                     name="correlation reference",
                     allowed=_CORRELATION_REFERENCES,
                 ),
@@ -207,16 +218,16 @@ class ResponseProcessingOptionsWidget(QWidget):
             QSignalBlocker(self._correlation_window_stop),
             QSignalBlocker(self._correlation_window_has_stop),
         ]
-        self._set_combo_value(self._smoothing_method, options.smoothing.method)
+        self._set_combo_data(self._smoothing_method, options.smoothing.method)
         self._smoothing_window_frames.setValue(options.smoothing.window_frames)
         self._smoothing_polynomial_order.setValue(
             options.smoothing.polynomial_order,
         )
-        self._set_combo_value(self._low_pass_method, options.low_pass.method)
+        self._set_combo_data(self._low_pass_method, options.low_pass.method)
         if options.low_pass.cutoff_hz is not None:
             self._low_pass_cutoff_hz.setValue(options.low_pass.cutoff_hz)
         self._low_pass_order.setValue(options.low_pass.order)
-        self._set_combo_value(
+        self._set_combo_data(
             self._correlation_reference,
             options.correlation_filter.reference,
         )
@@ -272,7 +283,7 @@ class ResponseProcessingOptionsWidget(QWidget):
             self._low_pass_method,
             self._correlation_reference,
         ):
-            combo.currentTextChanged.connect(self._emit_change)
+            combo.currentIndexChanged.connect(self._emit_change)
         for spin_box in (
             self._smoothing_window_frames,
             self._smoothing_polynomial_order,
@@ -294,16 +305,17 @@ class ResponseProcessingOptionsWidget(QWidget):
     def _refresh_enabled_state(self) -> None:
         """Enable parameters only when their processing method is active."""
         self._refresh_smoothing_window_constraints()
+        smoothing_method = self._smoothing_method.currentData()
         self._smoothing_window_frames.setEnabled(
-            self._smoothing_method.currentText() in {"moving_average", "savgol"},
+            smoothing_method in {"moving_average", "savgol"},
         )
         self._smoothing_polynomial_order.setEnabled(
-            self._smoothing_method.currentText() == "savgol",
+            smoothing_method == "savgol",
         )
-        low_pass_enabled = self._low_pass_method.currentText() == "butterworth"
+        low_pass_enabled = self._low_pass_method.currentData() == "butterworth"
         self._low_pass_cutoff_hz.setEnabled(low_pass_enabled)
         self._low_pass_order.setEnabled(low_pass_enabled)
-        correlation_enabled = self._correlation_reference.currentText() != "none"
+        correlation_enabled = self._correlation_reference.currentData() != "none"
         self._minimum_correlation.setEnabled(correlation_enabled)
         self._correlation_window_start.setEnabled(correlation_enabled)
         self._correlation_window_stop.setEnabled(
@@ -313,7 +325,7 @@ class ResponseProcessingOptionsWidget(QWidget):
 
     def _refresh_smoothing_window_constraints(self) -> None:
         """Keep the smoothing window spinbox aligned with the selected method."""
-        if self._smoothing_method.currentText() != "savgol":
+        if self._smoothing_method.currentData() != "savgol":
             self._smoothing_window_frames.setMinimum(1)
             self._smoothing_window_frames.setSingleStep(1)
             return
@@ -341,17 +353,18 @@ class ResponseProcessingOptionsWidget(QWidget):
             return value + 1
         return value - 1
 
-    def _set_combo_value(self, combo_box: QComboBox, value: str) -> None:
-        """Set a combo box by text when the item exists."""
-        index = combo_box.findText(value)
+    def _set_combo_data(self, combo_box: QComboBox, value: str) -> None:
+        """Set a combo box by stored item data when the item exists."""
+        index = combo_box.findData(value)
         if index >= 0:
             combo_box.setCurrentIndex(index)
 
 
-def _combo_box(values: tuple[str, ...]) -> QComboBox:
+def _combo_box(values: tuple[tuple[str, str], ...]) -> QComboBox:
     """Create one combo box with fixed text options."""
     combo_box = QComboBox()
-    combo_box.addItems(values)
+    for label, value in values:
+        combo_box.addItem(label, value)
     return combo_box
 
 

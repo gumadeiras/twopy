@@ -18,6 +18,7 @@ from typing import Protocol, cast
 import numpy as np
 from qtpy.QtCore import QTimer
 
+from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.converted import RecordingData
 from twopy.napari.plotting.data import ResponsePlotData
@@ -110,6 +111,7 @@ class LiveResponseController:
         self._plot_widget: ResponsePlotReceiver | None = plot_widget
         self._recording: RecordingData | None = None
         self._roi_labels_layer: object | None = None
+        self._delta_f_over_f_options = DeltaFOverFOptions()
         self._response_processing_options = ResponseProcessingOptions()
         self._connections: list[_ConnectedEmitter] = []
         self._is_shutdown = False
@@ -171,6 +173,22 @@ class LiveResponseController:
         if options == self._response_processing_options:
             return
         self._response_processing_options = options
+        self._version += 1
+
+    def set_delta_f_over_f_options(self, options: DeltaFOverFOptions) -> None:
+        """Store dF/F options used by the next live response update.
+
+        Args:
+            options: GUI-selected dF/F analysis settings.
+
+        Returns:
+            None.
+        """
+        if self._is_shutdown:
+            return
+        if options == self._delta_f_over_f_options:
+            return
+        self._delta_f_over_f_options = options
         self._version += 1
 
     def request_update(self, *_event_args: object) -> None:
@@ -277,6 +295,7 @@ class LiveResponseController:
             recording,
             roi_set,
             source_path=None,
+            delta_f_over_f_options=self._delta_f_over_f_options,
             response_processing_options=self._response_processing_options,
         )
         self._poll_timer.start()
@@ -316,6 +335,7 @@ class LiveResponseController:
             self._require_recording(),
             make_roi_set_from_label_image(label_image),
             source_path=None,
+            delta_f_over_f_options=self._delta_f_over_f_options,
             response_processing_options=self._response_processing_options,
         )
 

@@ -18,6 +18,11 @@ from qtpy.QtWidgets import QLayout, QSizePolicy, QWidget
 
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
+_LEFT_MARGIN = 88.0
+_TOP_MARGIN = 12.0
+_RIGHT_MARGIN = 18.0
+_BOTTOM_MARGIN = 46.0
+
 __all__ = [
     "EpochPlotWidget",
     "clear_layout",
@@ -74,7 +79,7 @@ class EpochPlotWidget(QWidget):
             time_max: Shared x-axis maximum.
             value_min: Shared y-axis minimum.
             value_max: Shared y-axis maximum.
-            plot_size: Square widget size in screen pixels.
+            plot_size: Plot width in screen pixels.
         """
         super().__init__()
         self._data = data
@@ -86,19 +91,19 @@ class EpochPlotWidget(QWidget):
         self._value_min = value_min
         self._value_max = value_max
         self._plot_size = int(plot_size)
-        self.setMinimumSize(self._plot_size, self._plot_size)
+        self.setFixedSize(self._plot_size, _plot_widget_height(self._plot_size))
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
     def sizeHint(self) -> QSize:
-        """Return the preferred square size for one epoch plot.
+        """Return the preferred size for one epoch plot.
 
         Args:
             None.
 
         Returns:
-            Qt size with equal width and height.
+            Qt size with a square data area plus axis label margins.
         """
-        return QSize(self._plot_size, self._plot_size)
+        return QSize(self._plot_size, _plot_widget_height(self._plot_size))
 
     def update_display(
         self,
@@ -122,7 +127,7 @@ class EpochPlotWidget(QWidget):
             time_max: Shared x-axis maximum.
             value_min: Shared y-axis minimum.
             value_max: Shared y-axis maximum.
-            plot_size: Square widget size in screen pixels.
+            plot_size: Plot width in screen pixels.
 
         Returns:
             None.
@@ -140,7 +145,7 @@ class EpochPlotWidget(QWidget):
         self._value_min = value_min
         self._value_max = value_max
         self._plot_size = int(plot_size)
-        self.setMinimumSize(self._plot_size, self._plot_size)
+        self.setFixedSize(self._plot_size, _plot_widget_height(self._plot_size))
         self.updateGeometry()
         self.update()
 
@@ -204,18 +209,27 @@ def _square_plot_rect(bounds: QRectF) -> QRectF:
     Returns:
         Square drawing rectangle inside the widget.
     """
-    left_margin = 88.0
-    top_margin = 12.0
-    right_margin = 18.0
-    bottom_margin = 46.0
     side = max(
         1.0,
         min(
-            bounds.width() - left_margin - right_margin,
-            bounds.height() - top_margin - bottom_margin,
+            bounds.width() - _LEFT_MARGIN - _RIGHT_MARGIN,
+            bounds.height() - _TOP_MARGIN - _BOTTOM_MARGIN,
         ),
     )
-    return QRectF(left_margin, top_margin, side, side)
+    return QRectF(_LEFT_MARGIN, _TOP_MARGIN, side, side)
+
+
+def _plot_widget_height(plot_width: int) -> int:
+    """Return the compact widget height that preserves a square data area.
+
+    Args:
+        plot_width: Requested plot widget width in screen pixels.
+
+    Returns:
+        Widget height in screen pixels.
+    """
+    axis_side = max(1.0, float(plot_width) - _LEFT_MARGIN - _RIGHT_MARGIN)
+    return int(_TOP_MARGIN + axis_side + _BOTTOM_MARGIN)
 
 
 def clear_layout(layout: QLayout) -> None:

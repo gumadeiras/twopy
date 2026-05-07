@@ -7,6 +7,7 @@ This module owns generic panel layout only. It does not load data, compute
 responses, or export figures.
 """
 
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
@@ -36,7 +37,9 @@ def epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
     """
     panel = QWidget()
     layout = QVBoxLayout()
-    layout.addWidget(QLabel(title))
+    title_label = QLabel(title)
+    title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    layout.addWidget(title_label)
     layout.addWidget(plot)
     panel.setLayout(layout)
     return panel

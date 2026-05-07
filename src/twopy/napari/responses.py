@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
+from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.workflow import compute_recording_responses
 from twopy.converted import RecordingData
@@ -33,6 +34,7 @@ def compute_response_plot_data_from_labels(
     roi_labels_layer: object,
     *,
     source_path: Path | None = None,
+    delta_f_over_f_options: DeltaFOverFOptions | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
 ) -> ResponsePlotData:
     """Compute plot-ready ROI responses from the current napari Labels layer.
@@ -41,6 +43,7 @@ def compute_response_plot_data_from_labels(
         recording: Loaded converted recording shown in napari.
         roi_labels_layer: Active napari Labels layer containing ROI pixels.
         source_path: Optional display path attached to the plot data.
+        delta_f_over_f_options: Optional dF/F analysis settings.
         response_processing_options: Optional smoothing, low-pass, and
             correlation-QC settings.
 
@@ -65,6 +68,7 @@ def compute_response_plot_data_from_labels(
         recording,
         roi_set,
         source_path=source_path,
+        delta_f_over_f_options=delta_f_over_f_options,
         response_processing_options=response_processing_options,
     )
 
@@ -74,6 +78,7 @@ def compute_response_plot_data_from_roi_set(
     roi_set: RoiSet,
     *,
     source_path: Path | None = None,
+    delta_f_over_f_options: DeltaFOverFOptions | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
 ) -> ResponsePlotData:
     """Compute plot-ready ROI responses from a prepared ROI set.
@@ -82,6 +87,7 @@ def compute_response_plot_data_from_roi_set(
         recording: Loaded converted recording shown in napari.
         roi_set: ROI masks created from the current Labels layer.
         source_path: Optional display path attached to the plot data.
+        delta_f_over_f_options: Optional dF/F analysis settings.
         response_processing_options: Optional smoothing, low-pass, and
             correlation-QC settings.
 
@@ -92,13 +98,21 @@ def compute_response_plot_data_from_roi_set(
     label pixels on the GUI thread, then run the heavier movie streaming work in
     a worker thread.
     """
+    dff_options = delta_f_over_f_options or DeltaFOverFOptions()
     computation = compute_recording_responses(
         recording,
         roi_set,
+        interleave_epoch_number=dff_options.interleave_epoch_number,
+        interleave_epoch_name=dff_options.interleave_epoch_name,
+        background_method=dff_options.background_method,
+        seconds_interleave_use=dff_options.seconds_interleave_use,
+        fit_mode=dff_options.fit_mode,
+        apply_motion_mask=dff_options.apply_motion_mask,
         response_processing_options=response_processing_options,
     )
     return response_plot_data_from_grouped(
         computation.grouped_responses,
         source_path=source_path,
+        delta_f_over_f_options=dff_options,
         response_processing_options=computation.response_processing_options,
     )

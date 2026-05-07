@@ -64,6 +64,7 @@ from twopy import (
     load_converted_recording,
     make_roi_set,
     map_stimulus_epochs_to_frame_windows,
+    recording_frame_rate_hz,
     select_epoch_frame_windows,
 )
 
@@ -86,7 +87,7 @@ interleave_windows = select_epoch_frame_windows(
 dff = compute_roi_delta_f_over_f(
     traces,
     interleave_windows,
-    data_rate_hz=float(recording.acquisition_metadata["acq.frameRate"]),
+    data_rate_hz=recording_frame_rate_hz(recording),
     fit_mode="robust",
 )
 ```
@@ -94,7 +95,13 @@ dff = compute_roi_delta_f_over_f(
 ROI masks are GUI-independent and full-frame. Trace extraction streams movie
 chunks and uses the saved alignment-valid crop by default. Pass
 `spatial_domain="full_frame"` only for an explicit audit path. The lower-level
-`extract_roi_traces` helper is the full-frame raw primitive.
+`extract_roi_traces` helper is the full-frame raw primitive. For dense
+axon/dendrite process fields, `method="movie_y_stripe_percentile"` estimates a
+low-percentile background separately for each frame and y-stripe, then subtracts
+the stripe background from ROIs by position. `method="roi_y_stripe_percentile"`
+takes rows near each ROI center, excludes ROI pixels, keeps dim pixels by
+percentile, averages those pixels over time, and subtracts that trace from that
+ROI only.
 
 Stimulus epoch windows come from classified photodiode events, not nominal
 frame-rate assumptions. `timing.events` keeps the start, transition, and end

@@ -27,8 +27,8 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
-from twopy.analysis.responses import is_gray_epoch_name
 from twopy.analysis.workflow import analyze_recording_responses
 from twopy.converted import RecordingData
 from twopy.napari.display_paths import (
@@ -42,6 +42,7 @@ from twopy.napari.plotting.data import (
     default_analysis_output_path,
     load_response_plot_data,
 )
+from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
 from twopy.napari.plotting.export_controls import (
     ResponseExportState,
     create_response_export_tab,
@@ -76,6 +77,11 @@ from twopy.napari.roi import (
     save_napari_label_rois,
 )
 from twopy.napari.text import counted_noun
+from twopy.stimulus import (
+    default_interleave_epoch_number,
+    is_interleave_epoch_name,
+    stimulus_epoch_names_by_number,
+)
 
 __all__ = [
     "add_twopy_response_options_widget",
@@ -253,9 +259,13 @@ class _ResponsePlotWidget(QWidget):
         self._manual_x_max: float | None = None
         self._manual_y_min: float | None = None
         self._manual_y_max: float | None = None
+        self._delta_f_over_f_options = DeltaFOverFOptions()
         self._response_processing_options = ResponseProcessingOptions()
         self._is_shutdown = False
         self._live_controller = LiveResponseController(self)
+        self._live_controller.set_delta_f_over_f_options(
+            self._delta_f_over_f_options,
+        )
         self._live_controller.set_response_processing_options(
             self._response_processing_options,
         )
@@ -307,8 +317,13 @@ class _ResponsePlotWidget(QWidget):
             self._response_processing_options,
             on_change=self._set_response_processing_options,
         )
+        self._delta_f_over_f_options_widget = DeltaFOverFOptionsWidget(
+            self._delta_f_over_f_options,
+            on_change=self._set_delta_f_over_f_options,
+        )
         self._plot_options_layout.addWidget(self._show_sem_checkbox)
         self._plot_options_layout.addWidget(plot_display_options_widget)
+        self._plot_options_layout.addWidget(self._delta_f_over_f_options_widget)
         self._plot_options_layout.addWidget(self._processing_options_widget)
         self._plot_options_layout.addStretch(1)
         self._roi_options_layout = QVBoxLayout()
@@ -433,6 +448,10 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path = None
         self._plot_data = None
         self._live_controller.set_context(None, None)
+        self._delta_f_over_f_options_widget.set_epoch_choices(
+            {},
+            selected_epoch_number=self._delta_f_over_f_options.interleave_epoch_number,
+        )
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
         self._analysis_path_label.setText("Analysis output: default")
@@ -452,6 +471,15 @@ class _ResponsePlotWidget(QWidget):
         """
         self._recording = recording
         self._analysis_path = default_analysis_output_path(recording)
+        epoch_names = stimulus_epoch_names_by_number(recording)
+        self._delta_f_over_f_options_widget.set_epoch_choices(
+            epoch_names,
+            selected_epoch_number=default_interleave_epoch_number(epoch_names),
+        )
+        self._delta_f_over_f_options = self._delta_f_over_f_options_widget.options()
+        self._live_controller.set_delta_f_over_f_options(
+            self._delta_f_over_f_options,
+        )
         self._refresh_update_path_labels()
         self.reload()
         self._live_controller.set_context(self._recording, self._roi_labels_layer)
@@ -510,6 +538,16 @@ class _ResponsePlotWidget(QWidget):
                 self._recording.path,
                 roi_set,
                 output_path=analysis_output_path,
+                interleave_epoch_number=(
+                    self._delta_f_over_f_options.interleave_epoch_number
+                ),
+                interleave_epoch_name=self._delta_f_over_f_options.interleave_epoch_name,
+                background_method=self._delta_f_over_f_options.background_method,
+                seconds_interleave_use=(
+                    self._delta_f_over_f_options.seconds_interleave_use
+                ),
+                fit_mode=self._delta_f_over_f_options.fit_mode,
+                apply_motion_mask=self._delta_f_over_f_options.apply_motion_mask,
                 response_processing_options=self._response_processing_options,
             )
         except ValueError as error:
@@ -547,6 +585,8 @@ class _ResponsePlotWidget(QWidget):
             self._load_response_processing_options(
                 plot_data.response_processing_options,
             )
+        if plot_data.delta_f_over_f_options is not None:
+            self._load_delta_f_over_f_options(plot_data.delta_f_over_f_options)
         self._sync_plot_state(reset_axes=reset_axes)
         self._render_plots()
 
@@ -583,7 +623,7 @@ class _ResponsePlotWidget(QWidget):
         self._update_visible_plot_widgets(apply_roi_layer_visibility=False)
 
     def _set_plot_size(self, value: int) -> None:
-        """Update the square pixel size used for live response plots."""
+        """Update the pixel width used for live response plots."""
         self._plot_size = int(value)
         self._update_visible_plot_widgets(apply_roi_layer_visibility=False)
 
@@ -600,6 +640,16 @@ class _ResponsePlotWidget(QWidget):
             return
         self._update_status_label.setText("Processing settings updated for next run.")
 
+    def _set_delta_f_over_f_options(self, options: DeltaFOverFOptions) -> None:
+        """Store Plot-tab dF/F settings for preview and save actions."""
+        self._delta_f_over_f_options = options
+        self._live_controller.set_delta_f_over_f_options(options)
+        if self._recording is not None and self._roi_labels_layer is not None:
+            self._live_controller.request_update()
+            self._update_status_label.setText("dF/F settings updated.")
+            return
+        self._update_status_label.setText("dF/F settings updated for next run.")
+
     def _load_response_processing_options(
         self,
         options: ResponseProcessingOptions,
@@ -615,6 +665,19 @@ class _ResponsePlotWidget(QWidget):
         self._response_processing_options = options
         self._processing_options_widget.set_options(options)
         self._live_controller.set_response_processing_options(options)
+
+    def _load_delta_f_over_f_options(self, options: DeltaFOverFOptions) -> None:
+        """Load saved dF/F settings into Plot-tab controls.
+
+        Args:
+            options: dF/F settings read from analysis persistence.
+
+        Returns:
+            None.
+        """
+        self._delta_f_over_f_options = options
+        self._delta_f_over_f_options_widget.set_options(options)
+        self._live_controller.set_delta_f_over_f_options(options)
 
     def _sync_plot_state(self, *, reset_axes: bool) -> None:
         """Synchronize option state with currently loaded plot data.
@@ -645,7 +708,7 @@ class _ResponsePlotWidget(QWidget):
         self._epoch_visibility = {
             index: self._epoch_visibility.get(
                 index,
-                not is_gray_epoch_name(epoch.epoch_name),
+                not is_interleave_epoch_name(epoch.epoch_name),
             )
             for index, epoch in enumerate(self._plot_data.epochs)
         }

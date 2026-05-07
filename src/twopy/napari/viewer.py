@@ -14,6 +14,7 @@ from typing import Protocol, cast
 import numpy as np
 import numpy.typing as npt
 
+from twopy._version import __version__
 from twopy.converted import ConvertedMovie, load_converted_recording
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.display import (
@@ -32,7 +33,7 @@ from twopy.napari.types import NapariRecordingView
 from twopy.roi import RoiSet
 from twopy.spatial import SpatialCrop
 
-APPLICATION_TITLE = "twopy"
+APPLICATION_TITLE = f"twopy {__version__}"
 
 __all__ = ["APPLICATION_TITLE", "create_viewer", "open_recording_in_napari"]
 

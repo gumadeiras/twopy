@@ -49,10 +49,24 @@ interleave frames are available, show two seconds before stimulus onset and two
 seconds after offset. Saved trials include `time_seconds`, so plots use recorded
 response times instead of inferred array indices.
 
-Response options include smoothing, low-pass filtering, and correlation QC.
-Smoothing and low-pass filters run on continuous dF/F before trial grouping.
-Correlation filtering scores grouped trials and stores the selected settings
-plus QC scores in the analysis HDF5 output. Smoothing supports moving-average
+Response options include dF/F, smoothing, low-pass filtering, and correlation
+QC settings. The dF/F section controls background correction, the baseline
+epoch selected from the recording's epoch names, interleave span, fit mode, and
+motion masking. Its visible menu labels use concise analysis terms such as
+global percentile, shared y-stripe P%, ROI y-stripe P%, robust, and
+log-amplitude bounded while preserving the stored analysis values in saved
+outputs. The background menu renders `%` as a subscript in the P% labels.
+Shared y-stripe P% divides each frame into row stripes, takes a dim percentile
+in each stripe, and subtracts that frame's stripe background from ROIs by
+position. ROI y-stripe P% takes rows near each ROI center, excludes ROI pixels,
+keeps dim pixels by percentile, averages those pixels over time, and subtracts
+that trace from that ROI only. The baseline selector
+defaults to the first epoch name containing `gray`, `grey`, or `interleave`, and
+falls back to epoch 1 only when names give no baseline hint. Smoothing and
+low-pass filters run on continuous dF/F before trial grouping. Correlation
+filtering scores grouped trials and stores the selected settings plus QC scores
+in the analysis HDF5 output. Processing menus use readable labels such as
+moving average, epoch mean, and epoch peak. Smoothing supports moving-average
 and Savitzky-Golay methods; Savitzky-Golay defaults to a seven-frame window with
 polynomial order two.
 

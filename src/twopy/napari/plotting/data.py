@@ -14,7 +14,9 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from twopy.analysis.dff import RoiDeltaFOverF
+from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
+from twopy.analysis.dff import DeltaFOverFFitMode, RoiDeltaFOverF
+from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.persistence import load_analysis_outputs
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
@@ -24,7 +26,6 @@ from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseTrial,
     group_delta_f_over_f_by_epoch,
-    is_gray_epoch_name,
 )
 from twopy.analysis.trials import EpochFrameWindow
 from twopy.analysis.workflow import (
@@ -32,6 +33,8 @@ from twopy.analysis.workflow import (
     DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
 )
 from twopy.converted import RecordingData
+from twopy.stimulus import is_interleave_epoch_name
+from twopy.typing_guards import require_string_choice
 
 __all__ = [
     "EpochResponsePlotData",
@@ -72,6 +75,7 @@ class ResponsePlotData:
 
     source_path: Path | None
     epochs: tuple[EpochResponsePlotData, ...]
+    delta_f_over_f_options: DeltaFOverFOptions | None = None
     response_processing_options: ResponseProcessingOptions | None = None
 
 
@@ -79,6 +83,7 @@ def response_plot_data_from_grouped(
     grouped: GroupedRoiResponses,
     *,
     source_path: Path | None = None,
+    delta_f_over_f_options: DeltaFOverFOptions | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
 ) -> ResponsePlotData:
     """Summarize grouped responses into mean and SEM traces for plotting.
@@ -86,6 +91,8 @@ def response_plot_data_from_grouped(
     Args:
         grouped: Grouped response object from analysis.
         source_path: Optional analysis output path used for display.
+        delta_f_over_f_options: Optional dF/F settings used to produce the
+            grouped responses.
         response_processing_options: Optional processing settings used to
             produce the grouped responses.
 
@@ -114,6 +121,7 @@ def response_plot_data_from_grouped(
     return ResponsePlotData(
         source_path=source_path,
         epochs=epochs,
+        delta_f_over_f_options=delta_f_over_f_options,
         response_processing_options=response_processing_options,
     )
 
@@ -164,6 +172,10 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
             return response_plot_data_from_grouped(
                 grouped,
                 source_path=outputs.path,
+                delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
+                    traces=outputs.traces,
+                    dff=outputs.dff,
+                ),
                 response_processing_options=outputs.response_processing_options,
             )
     if outputs.grouped_responses is None:
@@ -171,8 +183,81 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
     return response_plot_data_from_grouped(
         outputs.grouped_responses,
         source_path=outputs.path,
+        delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
+            traces=outputs.traces,
+            dff=outputs.dff,
+        ),
         response_processing_options=outputs.response_processing_options,
     )
+
+
+def _delta_f_over_f_options_from_outputs(
+    *,
+    traces: BackgroundCorrectedRoiTraces | None,
+    dff: RoiDeltaFOverF | None,
+) -> DeltaFOverFOptions | None:
+    """Return inspectable dF/F options from saved analysis metadata.
+
+    Args:
+        traces: Optional saved trace outputs carrying the background method.
+        dff: Optional saved dF/F outputs carrying baseline and fit metadata.
+
+    Returns:
+        ``DeltaFOverFOptions`` when saved outputs expose dF/F settings,
+        otherwise ``None``.
+    """
+    if traces is None and dff is None:
+        return None
+
+    defaults = DeltaFOverFOptions()
+    background_method = (
+        traces.method if traces is not None else defaults.background_method
+    )
+    if dff is None:
+        return DeltaFOverFOptions(background_method=background_method)
+
+    return DeltaFOverFOptions(
+        background_method=background_method,
+        seconds_interleave_use=_saved_interleave_seconds(dff),
+        fit_mode=_saved_fit_mode(dff),
+        apply_motion_mask="motion_artifact_masked_frame_count" in dff.metadata,
+    )
+
+
+def _saved_interleave_seconds(dff: RoiDeltaFOverF) -> float | None:
+    """Return the saved interleave sampling window from dF/F metadata.
+
+    Args:
+        dff: Saved dF/F object with audit metadata.
+
+    Returns:
+        Seconds from each interleave window end, or ``None`` for full windows.
+    """
+    value = dff.metadata.get("seconds_interleave_use")
+    if value == "full":
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return DeltaFOverFOptions().seconds_interleave_use
+
+
+def _saved_fit_mode(dff: RoiDeltaFOverF) -> DeltaFOverFFitMode:
+    """Return the saved dF/F fit mode from metadata when recognized.
+
+    Args:
+        dff: Saved dF/F object with audit metadata.
+
+    Returns:
+        Recognized fit mode, otherwise the current default.
+    """
+    value = dff.metadata.get("fit_mode")
+    if isinstance(value, str) and value in {"robust", "source_bounds"}:
+        return require_string_choice(
+            value,
+            name="dF/F fit mode",
+            allowed=("robust", "source_bounds"),
+        )
+    return DeltaFOverFOptions().fit_mode
 
 
 def _epoch_plot_data(
@@ -285,6 +370,6 @@ def _response_post_window_seconds(
         Two seconds when a gray interleave epoch exists, otherwise zero.
     """
     for epoch_window in epoch_windows:
-        if is_gray_epoch_name(epoch_window.epoch_name):
+        if is_interleave_epoch_name(epoch_window.epoch_name):
             return DEFAULT_RESPONSE_POST_WINDOW_SECONDS
     return 0.0

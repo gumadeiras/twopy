@@ -68,7 +68,7 @@ def plot_display_options_group(
     x_max_spin = _axis_spin_box(x_max)
     y_min_spin = _axis_spin_box(y_min)
     y_max_spin = _axis_spin_box(y_max)
-    layout.addRow("Size", plot_size_spin)
+    layout.addRow("size", plot_size_spin)
     layout.addRow("x min", x_min_spin)
     layout.addRow("x max", x_max_spin)
     layout.addRow("y min", y_min_spin)

@@ -15,6 +15,7 @@ from twopy.analysis import (
     BackgroundCorrectionMethod,
     CorrelationFilterOptions,
     DeltaFOverFFitMode,
+    DeltaFOverFOptions,
     EpochFrameWindow,
     FrameWindow,
     GroupedRoiResponses,
@@ -37,7 +38,7 @@ from twopy.analysis import (
     frame_windows_from_photodiode_alignment,
     group_delta_f_over_f_by_epoch,
     interpolate_stimulus_epochs_to_frame_windows,
-    is_gray_epoch_name,
+    is_interleave_epoch_name,
     load_analysis_outputs,
     make_frame_windows,
     map_stimulus_epochs_to_frame_windows,
@@ -51,7 +52,7 @@ from twopy.analysis import (
 )
 from twopy.api import find_recordings
 from twopy.conversion import convert_recording_to_twopy, load_source_conversion_inputs
-from twopy.converted import load_converted_recording
+from twopy.converted import load_converted_recording, recording_frame_rate_hz
 from twopy.napari import (
     NapariControlDocks,
     NapariRecordingView,
@@ -82,7 +83,9 @@ from twopy.roi import (
 from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
 from twopy.stimulus import (
     StimulusSpecificColumnMapping,
+    default_interleave_epoch_number,
     map_stimulus_specific_column,
+    stimulus_epoch_names_by_number,
 )
 from twopy.synchronization import (
     AlignedPhotodiodeEvent,
@@ -114,9 +117,11 @@ __all__ = [
     "convert_recording_to_twopy",
     "DEFAULT_RESPONSE_POST_WINDOW_SECONDS",
     "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
+    "default_interleave_epoch_number",
     "detect_photodiode_events",
     "detect_recording_photodiode_events",
     "DeltaFOverFFitMode",
+    "DeltaFOverFOptions",
     "EpochFrameWindow",
     "extract_background_corrected_roi_traces",
     "extract_roi_traces",
@@ -129,7 +134,7 @@ __all__ = [
     "GroupedRoiResponses",
     "InterpolatedEpochMapping",
     "interpolate_stimulus_epochs_to_frame_windows",
-    "is_gray_epoch_name",
+    "is_interleave_epoch_name",
     "launch_napari",
     "load_analysis_outputs",
     "load_converted_recording",
@@ -152,6 +157,7 @@ __all__ = [
     "PhotodiodeEventType",
     "PhotodiodeEventSet",
     "ResponseProcessingOptions",
+    "recording_frame_rate_hz",
     "RoiDeltaFOverF",
     "RoiCorrelationScores",
     "RoiResponseSummary",
@@ -169,6 +175,7 @@ __all__ = [
     "SpatialCrop",
     "SpatialDomain",
     "StimulusSpecificColumnMapping",
+    "stimulus_epoch_names_by_number",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
     "WindowedRoiResponse",

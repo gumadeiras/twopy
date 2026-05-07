@@ -18,6 +18,7 @@ from twopy.analysis.dff import (
     RoiDeltaFOverF,
     compute_roi_delta_f_over_f,
 )
+from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.epoch_mapping import (
     InterpolatedEpochMapping,
     interpolate_stimulus_epochs_to_frame_windows,
@@ -44,7 +45,7 @@ from twopy.analysis.responses import (
     RoiResponseSummary,
     RoiResponseTrial,
     group_delta_f_over_f_by_epoch,
-    is_gray_epoch_name,
+    is_interleave_epoch_name,
     summarize_epoch_roi_responses,
     summarize_grouped_responses,
 )
@@ -80,6 +81,7 @@ __all__ = [
     "compute_roi_delta_f_over_f",
     "compute_recording_responses",
     "CorrelationFilterOptions",
+    "DeltaFOverFOptions",
     "DeltaFOverFFitMode",
     "EpochFrameWindow",
     "extract_background_corrected_roi_traces",
@@ -90,7 +92,7 @@ __all__ = [
     "GroupedRoiResponses",
     "InterpolatedEpochMapping",
     "interpolate_stimulus_epochs_to_frame_windows",
-    "is_gray_epoch_name",
+    "is_interleave_epoch_name",
     "load_analysis_outputs",
     "LoadedAnalysisOutputs",
     "LowPassFilterOptions",

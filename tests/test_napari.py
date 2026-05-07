@@ -22,14 +22,17 @@ import numpy.typing as npt
 from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 from napari.layers import Labels
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
+    QFormLayout,
     QGroupBox,
     QLabel,
     QListWidget,
     QPushButton,
+    QSpinBox,
     QTabWidget,
     QWidget,
 )
@@ -43,7 +46,9 @@ from twopy import (
     save_napari_label_rois,
     save_roi_set,
 )
+from twopy._version import __version__
 from twopy.analysis.dff import RoiDeltaFOverF
+from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     SmoothingOptions,
@@ -72,6 +77,7 @@ from twopy.napari.plotting.data import (
     ResponsePlotData,
     response_plot_data_from_grouped,
 )
+from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
 from twopy.napari.plotting.docks import create_response_plot_widget
 from twopy.napari.plotting.export import (
     draw_roi_contours,
@@ -80,7 +86,11 @@ from twopy.napari.plotting.export import (
     roi_boundary_segments,
 )
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
-from twopy.napari.plotting.options import visibility_options_widget
+from twopy.napari.plotting.options import (
+    plot_display_options_group,
+    visibility_options_widget,
+)
+from twopy.napari.plotting.panels import epoch_plot_panel
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
@@ -404,11 +414,11 @@ class NapariAdapterTest(unittest.TestCase):
             environ["TWOPY_NAPARI_STATE_FILE"] = self._previous_state_file
         self._state_temp_dir.cleanup()
 
-    def test_create_viewer_uses_twopy_window_title(self) -> None:
+    def test_create_viewer_uses_twopy_version_window_title(self) -> None:
         """Confirm the launcher brands the top-level napari window.
 
         Inputs: patched napari Viewer constructor.
-        Outputs: viewer construction receives the twopy application title.
+        Outputs: viewer construction receives the twopy name and version.
         """
         viewer = _FakeViewer()
 
@@ -416,6 +426,7 @@ class NapariAdapterTest(unittest.TestCase):
             created = create_viewer()
 
         self.assertIs(created, viewer)
+        self.assertEqual(APPLICATION_TITLE, f"twopy {__version__}")
         viewer_constructor.assert_called_once_with(title=APPLICATION_TITLE)
 
     def test_opens_empty_roi_labels_layer_by_default(self) -> None:
@@ -754,6 +765,17 @@ class NapariAdapterTest(unittest.TestCase):
             _, roi_set = analyze.call_args.args
             self.assertEqual(roi_set.labels, ("roi_0001",))
             self.assertEqual(analyze.call_args.kwargs["output_path"], analysis_path)
+            self.assertEqual(
+                analyze.call_args.kwargs["background_method"],
+                "movie_global_percentile",
+            )
+            self.assertEqual(
+                analyze.call_args.kwargs["seconds_interleave_use"],
+                1.0,
+            )
+            self.assertIsNone(analyze.call_args.kwargs["interleave_epoch_name"])
+            self.assertEqual(analyze.call_args.kwargs["fit_mode"], "robust")
+            self.assertTrue(analyze.call_args.kwargs["apply_motion_mask"])
             self.assertIsInstance(
                 analyze.call_args.kwargs["response_processing_options"],
                 ResponseProcessingOptions,
@@ -797,6 +819,208 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertEqual(requests, ["requested"])
 
+    def test_delta_f_over_f_option_changes_request_preview_update(self) -> None:
+        """Confirm dF/F controls trigger debounced preview recompute.
+
+        Inputs: loaded recording, active ROI Labels layer, and a dF/F settings
+        change.
+        Outputs: the live response controller receives an update request.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            requests: list[str] = []
+            response_widget._live_controller.request_update = lambda: requests.append(
+                "requested"
+            )
+
+            response_widget._set_delta_f_over_f_options(
+                DeltaFOverFOptions(
+                    background_method="none",
+                    seconds_interleave_use=None,
+                    fit_mode="source_bounds",
+                    apply_motion_mask=False,
+                ),
+            )
+
+            self.assertEqual(requests, ["requested"])
+
+    def test_plot_tab_shows_delta_f_over_f_before_smoothing(self) -> None:
+        """Confirm the Plot tab presents dF/F controls before smoothing.
+
+        Inputs: a newly created response widget.
+        Outputs: the Plot tab has a dF/F group before processing controls.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+
+        self.assertIsInstance(
+            response_widget._delta_f_over_f_options_widget,
+            DeltaFOverFOptionsWidget,
+        )
+        self.assertLess(
+            response_widget._plot_options_layout.indexOf(
+                response_widget._delta_f_over_f_options_widget,
+            ),
+            response_widget._plot_options_layout.indexOf(
+                response_widget._processing_options_widget,
+            ),
+        )
+
+    def test_delta_f_over_f_controls_use_readable_menu_labels(self) -> None:
+        """Confirm Plot-tab menus show readable labels, not stored values.
+
+        Inputs: dF/F and processing option widgets with default settings.
+        Outputs: dropdowns hide internal option names.
+        """
+        _ = QApplication.instance() or QApplication([])
+        dff_widget = cast(Any, DeltaFOverFOptionsWidget(DeltaFOverFOptions()))
+        processing_widget = cast(
+            Any,
+            ResponseProcessingOptionsWidget(ResponseProcessingOptions()),
+        )
+
+        background_labels = tuple(
+            dff_widget._background_method.itemText(index)
+            for index in range(dff_widget._background_method.count())
+        )
+        fit_labels = tuple(
+            dff_widget._fit_mode.itemText(index)
+            for index in range(dff_widget._fit_mode.count())
+        )
+        smoothing_labels = tuple(
+            processing_widget._smoothing_method.itemText(index)
+            for index in range(processing_widget._smoothing_method.count())
+        )
+        correlation_labels = tuple(
+            processing_widget._correlation_reference.itemText(index)
+            for index in range(processing_widget._correlation_reference.count())
+        )
+
+        self.assertIn("global percentile", background_labels)
+        self.assertIn("shared y-stripe P%", background_labels)
+        self.assertIn("ROI y-stripe P%", background_labels)
+        self.assertNotIn("roi_y_stripe_percentile", background_labels)
+        rich_label_role = int(Qt.ItemDataRole.UserRole) + 1
+        self.assertEqual(
+            dff_widget._background_method.itemData(2, rich_label_role),
+            "shared y-stripe P<sub>%</sub>",
+        )
+        self.assertEqual(
+            dff_widget._background_method.itemData(3, rich_label_role),
+            "ROI y-stripe P<sub>%</sub>",
+        )
+        self.assertIn("log-amplitude bounded", fit_labels)
+        self.assertNotIn("source_bounds", fit_labels)
+        self.assertIn("moving average", smoothing_labels)
+        self.assertNotIn("moving_average", smoothing_labels)
+        self.assertIn("epoch mean", correlation_labels)
+        self.assertNotIn("epoch_mean", correlation_labels)
+
+    def test_plot_display_size_label_is_lowercase(self) -> None:
+        """Confirm the Plot subsection labels size in lowercase.
+
+        Inputs: plot display options group with default numeric bounds.
+        Outputs: first form row label is the requested lowercase text.
+        """
+        _ = QApplication.instance() or QApplication([])
+        group = plot_display_options_group(
+            plot_size_spin=QSpinBox(),
+            x_min=0.0,
+            x_max=1.0,
+            y_min=-1.0,
+            y_max=1.0,
+            on_change=lambda **_kwargs: None,
+        )
+        layout = cast(QFormLayout, group.layout())
+        label_item = layout.itemAt(0, QFormLayout.ItemRole.LabelRole)
+        if label_item is None:
+            self.fail("Plot display size label is missing")
+        label_widget = label_item.widget()
+        if not isinstance(label_widget, QLabel):
+            self.fail("Plot display size label is not a QLabel")
+
+        self.assertEqual(label_widget.text(), "size")
+
+    def test_interleave_epoch_dropdown_uses_recording_epoch_names(self) -> None:
+        """Confirm interleave selection shows actual recording epoch names.
+
+        Inputs: converted recording with stimulus parameter epoch names.
+        Outputs: the dF/F interleave dropdown lists those names and stores the
+        selected epoch selector.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName": "Gray Interleave"}, {"epochName": "Odor A"}]'
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            dff_widget = response_widget._delta_f_over_f_options_widget
+
+            labels = tuple(
+                dff_widget._interleave_epoch.itemText(index)
+                for index in range(dff_widget._interleave_epoch.count())
+            )
+            dff_widget._interleave_epoch.setCurrentIndex(1)
+
+            self.assertEqual(labels, ("1: Gray Interleave", "2: Odor A"))
+            self.assertEqual(
+                dff_widget.options().interleave_epoch_name,
+                "Odor A",
+            )
+
+    def test_interleave_epoch_dropdown_defaults_to_gray_like_epoch(self) -> None:
+        """Confirm the dF/F baseline defaults to the gray/interleave epoch.
+
+        Inputs: converted recording where the gray-like epoch is not epoch one.
+        Outputs: the interleave dropdown selects that named epoch by default.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName": "Odor A"}, {"epochName": "Grey screen"}]'
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            options = response_widget._delta_f_over_f_options_widget.options()
+
+            self.assertEqual(options.interleave_epoch_number, 2)
+            self.assertEqual(options.interleave_epoch_name, "Grey screen")
+
+    def test_interleave_epoch_dropdown_accepts_interleave_without_gray(self) -> None:
+        """Confirm interleave names are accepted even without gray spelling.
+
+        Inputs: converted recording with an ``interleave`` baseline name.
+        Outputs: the interleave dropdown selects that epoch by default.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName": "Odor A"}, {"epochName": "Baseline Interleave"}]'
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            options = response_widget._delta_f_over_f_options_widget.options()
+
+            self.assertEqual(options.interleave_epoch_number, 2)
+            self.assertEqual(options.interleave_epoch_name, "Baseline Interleave")
+
     def test_saved_processing_options_update_plot_tab_controls(self) -> None:
         """Confirm saved analysis settings hydrate Plot-tab controls.
 
@@ -825,6 +1049,34 @@ class NapariAdapterTest(unittest.TestCase):
             options.smoothing,
         )
         self.assertEqual(response_widget._response_processing_options, options)
+
+    def test_saved_delta_f_over_f_options_update_plot_tab_controls(self) -> None:
+        """Confirm saved dF/F settings hydrate Plot-tab controls.
+
+        Inputs: plot data carrying persisted dF/F options.
+        Outputs: response widget controls show the saved dF/F settings.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        options = DeltaFOverFOptions(
+            background_method="roi_y_stripe_percentile",
+            seconds_interleave_use=None,
+            fit_mode="source_bounds",
+            apply_motion_mask=False,
+        )
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=_tiny_response_plot_data().epochs,
+            delta_f_over_f_options=options,
+        )
+
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+
+        self.assertEqual(
+            response_widget._delta_f_over_f_options_widget.options(),
+            options,
+        )
+        self.assertEqual(response_widget._delta_f_over_f_options, options)
 
     def test_savgol_window_control_steps_through_valid_values(self) -> None:
         """Confirm Savitzky-Golay window clicks stay on valid values.
@@ -2216,11 +2468,12 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(colors[1].red(), 0)
         self.assertEqual(colors[1].blue(), 255)
 
-    def test_epoch_plot_widget_prefers_square_size(self) -> None:
-        """Confirm response plots ask Qt for a square panel.
+    def test_epoch_plot_widget_uses_compact_height(self) -> None:
+        """Confirm response plots trim unused height below the x-axis.
 
         Inputs: plot-ready data for one epoch.
-        Outputs: equal preferred width and height.
+        Outputs: widget height preserves the square data area without bottom
+        slack.
         """
         _ = QApplication.instance() or QApplication([])
         plot_data = _tiny_response_plot_data()
@@ -2237,8 +2490,8 @@ class NapariAdapterTest(unittest.TestCase):
             plot_size=480,
         )
 
-        self.assertEqual(widget.sizeHint().width(), widget.sizeHint().height())
         self.assertEqual(widget.sizeHint().width(), 480)
+        self.assertEqual(widget.sizeHint().height(), 432)
 
         widget.update_display(
             show_sem=False,
@@ -2252,6 +2505,33 @@ class NapariAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(widget.sizeHint().width(), 320)
+        self.assertEqual(widget.sizeHint().height(), 272)
+
+    def test_epoch_plot_panel_centers_title(self) -> None:
+        """Confirm epoch titles are centered above live response plots.
+
+        Inputs: one titled epoch plot panel.
+        Outputs: the title label uses horizontal center alignment.
+        """
+        _ = QApplication.instance() or QApplication([])
+        plot_data = _tiny_response_plot_data()
+        plot = EpochPlotWidget(
+            plot_data.epochs[0],
+            show_sem=True,
+            roi_indices=(0,),
+            roi_colors=(QColor("#ff0000"),),
+            time_min=0.0,
+            time_max=1.0,
+            value_min=0.0,
+            value_max=1.0,
+            plot_size=320,
+        )
+
+        panel = epoch_plot_panel(title="Epoch 1: Odor", plot=plot)
+        title_label = panel.findChild(QLabel)
+
+        self.assertEqual(title_label.text(), "Epoch 1: Odor")
+        self.assertTrue(title_label.alignment() & Qt.AlignmentFlag.AlignHCenter)
 
     def test_response_plot_export_writes_editable_figure_bundle(self) -> None:
         """Confirm response plots export in the expected file formats.
@@ -2422,6 +2702,7 @@ def _write_converted_recording(
     movie_values: npt.NDArray[np.float64] | None = None,
     alignment_valid_crop: SpatialCrop | None = None,
     source_session_dir: Path | None = None,
+    stimulus_parameters_json: str = "[]",
 ) -> Path:
     """Write a tiny converted recording for adapter tests.
 
@@ -2431,6 +2712,8 @@ def _write_converted_recording(
         alignment_valid_crop: Optional spatial crop metadata.
         source_session_dir: Optional source recording folder stored in the
             converted recording metadata.
+        stimulus_parameters_json: JSON list of stimulus epoch parameter
+            dictionaries.
 
     Returns:
         Path to ``recording_data.h5``.
@@ -2495,7 +2778,7 @@ def _write_converted_recording(
                 dtype=h5py.string_dtype("utf-8"),
             ),
         )
-        stimulus_group.create_dataset("parameters_json", data="[]")
+        stimulus_group.create_dataset("parameters_json", data=stimulus_parameters_json)
         stimulus_group.create_dataset("function_lookup_json", data="{}")
         stimulus_group.create_dataset("stimulus_specific_columns_json", data="{}")
         photodiode_group = h5_file.create_group("photodiode")
