@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Ignored macOS AppleDouble sidecar files when discovering source recordings so
+  napari can auto-convert recordings on mounted volumes.
+
 ## 0.1.2 - 2026-05-06
 
 ### Features

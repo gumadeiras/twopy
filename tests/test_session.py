@@ -82,6 +82,30 @@ class DiscoverSessionFilesTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "raw TIFF movie"):
                 discover_session_files(session_dir)
 
+    def test_ignores_macos_appledouble_sidecars(self) -> None:
+        """Confirm mounted-volume sidecars do not make discovery ambiguous.
+
+        Inputs: a valid session folder plus ``._`` sidecar files created by
+            macOS on some network and external volumes.
+        Outputs: discovered raw movie and alignment paths ignore sidecars.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_required_session(session_dir)
+            (session_dir / "._stimulus_name_changes_001.tif").touch()
+            (
+                session_dir
+                / "._stimulus_name_changes_001_ch1_disinterleaved_alignment.txt"
+            ).touch()
+
+            files = discover_session_files(session_dir)
+
+            self.assertEqual(files.raw_tif.name, "stimulus_name_changes_001.tif")
+            self.assertEqual(
+                files.alignment_text.name,
+                "stimulus_name_changes_001_ch1_disinterleaved_alignment.txt",
+            )
+
     def _write_required_session(self, session_dir: Path) -> None:
         """Create the smallest valid session-folder fixture.
 

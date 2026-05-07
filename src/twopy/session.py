@@ -154,7 +154,11 @@ def _find_one_file(session_dir: Path, pattern: str, label: str) -> Path:
     The raw movie and alignment text include stimulus/run details in their
     names. A strict one-match check avoids guessing when the folder is messy.
     """
-    matches = sorted(path for path in session_dir.glob(pattern) if path.is_file())
+    matches = sorted(
+        path
+        for path in session_dir.glob(pattern)
+        if path.is_file() and not path.name.startswith("._")
+    )
 
     if len(matches) != 1:
         joined = ", ".join(str(path) for path in matches) if matches else "none"
