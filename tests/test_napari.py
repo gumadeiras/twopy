@@ -916,11 +916,14 @@ class NapariAdapterTest(unittest.TestCase):
                 "movie_global_percentile",
             )
             self.assertEqual(
-                analyze.call_args.kwargs["seconds_interleave_use"],
+                analyze.call_args.kwargs["baseline_sample_seconds"],
                 1.0,
             )
-            self.assertIsNone(analyze.call_args.kwargs["interleave_epoch_name"])
-            self.assertEqual(analyze.call_args.kwargs["fit_mode"], "robust")
+            self.assertIsNone(analyze.call_args.kwargs["baseline_epoch_name"])
+            self.assertEqual(
+                analyze.call_args.kwargs["fit_mode"],
+                "direct_bounded_tau",
+            )
             self.assertTrue(analyze.call_args.kwargs["apply_motion_mask"])
             self.assertEqual(
                 analyze.call_args.kwargs["response_pre_window_seconds"],
@@ -994,8 +997,8 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget._set_delta_f_over_f_options(
                 DeltaFOverFOptions(
                     background_method="none",
-                    seconds_interleave_use=None,
-                    fit_mode="source_bounds",
+                    baseline_sample_seconds=None,
+                    fit_mode="direct_bounded_tau_and_log_amplitude",
                     apply_motion_mask=False,
                 ),
             )
@@ -1107,18 +1110,20 @@ class NapariAdapterTest(unittest.TestCase):
             dff_widget._background_method.itemData(3, rich_label_role),
             "ROI y-stripe P<sub>%</sub>",
         )
-        self.assertIn("log-amplitude bounded", fit_labels)
-        self.assertNotIn("source_bounds", fit_labels)
+        self.assertIn("bounded tau", fit_labels)
+        self.assertIn("bounded tau/amplitude", fit_labels)
+        self.assertIn("log-linear", fit_labels)
+        self.assertNotIn("direct_bounded_tau", fit_labels)
         self.assertIn("moving average", smoothing_labels)
         self.assertNotIn("moving_average", smoothing_labels)
         self.assertIn("epoch mean", correlation_labels)
         self.assertNotIn("epoch_mean", correlation_labels)
 
-    def test_plot_display_size_label_is_lowercase(self) -> None:
+    def test_plot_display_size_label_preserves_ui_text(self) -> None:
         """Confirm the Plot subsection puts show SEM before size.
 
         Inputs: plot display options group with default numeric bounds.
-        Outputs: first field row is the SEM toggle, then lowercase size text.
+        Outputs: first field row is the SEM toggle, then the configured size label.
         """
         _ = QApplication.instance() or QApplication([])
         group = plot_display_options_group(
@@ -1148,7 +1153,7 @@ class NapariAdapterTest(unittest.TestCase):
         if not isinstance(label_widget, QLabel):
             self.fail("Plot display size label is not a QLabel")
 
-        self.assertEqual(label_widget.text(), "size")
+        self.assertEqual(label_widget.text(), "Size")
         self.assertTrue(layout.formAlignment() & Qt.AlignmentFlag.AlignHCenter)
 
     def test_plot_display_numeric_controls_share_width_and_rounding(self) -> None:
@@ -1220,6 +1225,7 @@ class NapariAdapterTest(unittest.TestCase):
             ResponseProcessingOptionsWidget(ResponseProcessingOptions()),
         )
         for widget in (response_window_widget, dff_widget, processing_widget):
+            widget.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
             widget.ensurePolished()
             widget.adjustSize()
             widget.show()
@@ -1228,8 +1234,8 @@ class NapariAdapterTest(unittest.TestCase):
         wide_controls: list[QWidget] = [
             response_window_widget._auto,
             dff_widget._background_method,
-            dff_widget._interleave_epoch,
-            dff_widget._use_full_interleave,
+            dff_widget._baseline_epoch,
+            dff_widget._use_full_baseline,
             dff_widget._fit_mode,
             dff_widget._apply_motion_mask,
             processing_widget._smoothing_method,
@@ -1239,7 +1245,7 @@ class NapariAdapterTest(unittest.TestCase):
         ]
         dropdowns: list[QComboBox] = [
             dff_widget._background_method,
-            dff_widget._interleave_epoch,
+            dff_widget._baseline_epoch,
             dff_widget._fit_mode,
             processing_widget._smoothing_method,
             processing_widget._low_pass_method,
@@ -1248,7 +1254,7 @@ class NapariAdapterTest(unittest.TestCase):
         compact_controls: list[QWidget] = [
             response_window_widget._pre_seconds,
             response_window_widget._post_seconds,
-            dff_widget._interleave_seconds,
+            dff_widget._baseline_seconds,
             processing_widget._smoothing_window_frames,
             processing_widget._smoothing_polynomial_order,
             processing_widget._low_pass_cutoff_hz,
@@ -1310,17 +1316,17 @@ class NapariAdapterTest(unittest.TestCase):
             ResponseProcessingOptions(),
         )
 
-        self.assertEqual(dff_widget._interleave_seconds.decimals(), 2)
+        self.assertEqual(dff_widget._baseline_seconds.decimals(), 2)
         self.assertEqual(processing_widget._low_pass_cutoff_hz.decimals(), 2)
         self.assertEqual(processing_widget._minimum_correlation.decimals(), 2)
         self.assertEqual(processing_widget._correlation_window_start.decimals(), 2)
         self.assertEqual(processing_widget._correlation_window_stop.decimals(), 2)
 
-    def test_interleave_epoch_dropdown_uses_recording_epoch_names(self) -> None:
-        """Confirm interleave selection shows actual recording epoch names.
+    def test_baseline_epoch_dropdown_uses_recording_epoch_names(self) -> None:
+        """Confirm baseline selection shows actual recording epoch names.
 
         Inputs: converted recording with stimulus parameter epoch names.
-        Outputs: the dF/F interleave dropdown lists those names and stores the
+        Outputs: the dF/F baseline dropdown lists those names and stores the
         selected epoch selector.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1337,22 +1343,22 @@ class NapariAdapterTest(unittest.TestCase):
             dff_widget = response_widget._delta_f_over_f_options_widget
 
             labels = tuple(
-                dff_widget._interleave_epoch.itemText(index)
-                for index in range(dff_widget._interleave_epoch.count())
+                dff_widget._baseline_epoch.itemText(index)
+                for index in range(dff_widget._baseline_epoch.count())
             )
-            dff_widget._interleave_epoch.setCurrentIndex(1)
+            dff_widget._baseline_epoch.setCurrentIndex(1)
 
             self.assertEqual(labels, ("1: Gray Interleave", "2: Odor A"))
             self.assertEqual(
-                dff_widget.options().interleave_epoch_name,
+                dff_widget.options().baseline_epoch_name,
                 "Odor A",
             )
 
-    def test_interleave_epoch_dropdown_defaults_to_gray_like_epoch(self) -> None:
+    def test_baseline_epoch_dropdown_defaults_to_gray_like_epoch(self) -> None:
         """Confirm the dF/F baseline defaults to the gray/interleave epoch.
 
         Inputs: converted recording where the gray-like epoch is not epoch one.
-        Outputs: the interleave dropdown selects that named epoch by default.
+        Outputs: the baseline dropdown selects that named epoch by default.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1367,14 +1373,14 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget = cast(Any, opened.response_plot_widget)
             options = response_widget._delta_f_over_f_options_widget.options()
 
-            self.assertEqual(options.interleave_epoch_number, 2)
-            self.assertEqual(options.interleave_epoch_name, "Grey screen")
+            self.assertEqual(options.baseline_epoch_number, 2)
+            self.assertEqual(options.baseline_epoch_name, "Grey screen")
 
-    def test_interleave_epoch_dropdown_accepts_interleave_without_gray(self) -> None:
+    def test_baseline_epoch_dropdown_accepts_interleave_without_gray(self) -> None:
         """Confirm interleave names are accepted even without gray spelling.
 
         Inputs: converted recording with an ``interleave`` baseline name.
-        Outputs: the interleave dropdown selects that epoch by default.
+        Outputs: the baseline dropdown selects that epoch by default.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1389,8 +1395,8 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget = cast(Any, opened.response_plot_widget)
             options = response_widget._delta_f_over_f_options_widget.options()
 
-            self.assertEqual(options.interleave_epoch_number, 2)
-            self.assertEqual(options.interleave_epoch_name, "Baseline Interleave")
+            self.assertEqual(options.baseline_epoch_number, 2)
+            self.assertEqual(options.baseline_epoch_name, "Baseline Interleave")
 
     def test_saved_processing_options_update_plot_tab_controls(self) -> None:
         """Confirm saved analysis settings hydrate Plot-tab controls.
@@ -1431,8 +1437,8 @@ class NapariAdapterTest(unittest.TestCase):
         response_widget = cast(Any, create_response_plot_widget(None))
         options = DeltaFOverFOptions(
             background_method="roi_y_stripe_percentile",
-            seconds_interleave_use=None,
-            fit_mode="source_bounds",
+            baseline_sample_seconds=None,
+            fit_mode="direct_bounded_tau_and_log_amplitude",
             apply_motion_mask=False,
         )
         plot_data = ResponsePlotData(
@@ -2463,8 +2469,8 @@ class NapariAdapterTest(unittest.TestCase):
             stop_frame=4,
             tau=0.0,
             amplitudes=np.ones(2, dtype=np.float64),
-            interleave_frame_numbers=np.array([0.0]),
-            interleave_fluorescence=np.ones((1, 2), dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 2), dtype=np.float64),
             metadata={"method": "test"},
         )
         grouped = group_delta_f_over_f_by_epoch(
@@ -2506,8 +2512,8 @@ class NapariAdapterTest(unittest.TestCase):
             stop_frame=2,
             tau=0.0,
             amplitudes=np.ones(1, dtype=np.float64),
-            interleave_frame_numbers=np.array([0.0]),
-            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
             metadata={"method": "test"},
         )
         grouped = group_delta_f_over_f_by_epoch(
@@ -2540,8 +2546,8 @@ class NapariAdapterTest(unittest.TestCase):
             stop_frame=4,
             tau=0.0,
             amplitudes=np.ones(1, dtype=np.float64),
-            interleave_frame_numbers=np.array([0.0]),
-            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
             metadata={"method": "test"},
         )
         grouped = group_delta_f_over_f_by_epoch(
@@ -2577,8 +2583,8 @@ class NapariAdapterTest(unittest.TestCase):
             stop_frame=4,
             tau=0.0,
             amplitudes=np.ones(1, dtype=np.float64),
-            interleave_frame_numbers=np.array([0.0]),
-            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
             metadata={"method": "test"},
         )
         grouped = group_delta_f_over_f_by_epoch(
@@ -2613,8 +2619,8 @@ class NapariAdapterTest(unittest.TestCase):
             stop_frame=4,
             tau=0.0,
             amplitudes=np.ones(1, dtype=np.float64),
-            interleave_frame_numbers=np.array([0.0]),
-            interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
             metadata={"method": "test"},
         )
         plot_data = response_plot_data_from_grouped(
@@ -2735,8 +2741,8 @@ class NapariAdapterTest(unittest.TestCase):
             stop_frame=4,
             tau=0.0,
             amplitudes=np.ones(2, dtype=np.float64),
-            interleave_frame_numbers=np.array([0.0]),
-            interleave_fluorescence=np.ones((1, 2), dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 2), dtype=np.float64),
             metadata={"method": "test"},
         )
         plot_data = response_plot_data_from_grouped(
@@ -2806,8 +2812,8 @@ class NapariAdapterTest(unittest.TestCase):
             stop_frame=4,
             tau=0.0,
             amplitudes=np.ones(2, dtype=np.float64),
-            interleave_frame_numbers=np.array([0.0]),
-            interleave_fluorescence=np.ones((1, 2), dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 2), dtype=np.float64),
             metadata={"method": "test"},
         )
         grouped = group_delta_f_over_f_by_epoch(
@@ -3202,8 +3208,8 @@ def _tiny_grouped_responses() -> GroupedRoiResponses:
         stop_frame=2,
         tau=0.0,
         amplitudes=np.ones(1, dtype=np.float64),
-        interleave_frame_numbers=np.array([0.0]),
-        interleave_fluorescence=np.ones((1, 1), dtype=np.float64),
+        baseline_frame_numbers=np.array([0.0]),
+        baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
         metadata={"method": "test"},
     )
     return group_delta_f_over_f_by_epoch(

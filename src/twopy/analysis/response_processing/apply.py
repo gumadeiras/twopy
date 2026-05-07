@@ -95,8 +95,8 @@ def process_roi_delta_f_over_f(
         stop_frame=dff.stop_frame,
         tau=dff.tau,
         amplitudes=dff.amplitudes,
-        interleave_frame_numbers=dff.interleave_frame_numbers,
-        interleave_fluorescence=dff.interleave_fluorescence,
+        baseline_frame_numbers=dff.baseline_frame_numbers,
+        baseline_fluorescence=dff.baseline_fluorescence,
         metadata=metadata,
     )
 

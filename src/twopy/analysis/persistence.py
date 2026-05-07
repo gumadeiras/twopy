@@ -420,10 +420,10 @@ def _write_dff(group: h5py.Group, dff: RoiDeltaFOverF) -> None:
     group.create_dataset("baseline", data=dff.baseline, compression="gzip")
     group.create_dataset("values", data=dff.values, compression="gzip")
     group.create_dataset("amplitudes", data=dff.amplitudes)
-    group.create_dataset("interleave_frame_numbers", data=dff.interleave_frame_numbers)
+    group.create_dataset("baseline_frame_numbers", data=dff.baseline_frame_numbers)
     group.create_dataset(
-        "interleave_fluorescence",
-        data=dff.interleave_fluorescence,
+        "baseline_fluorescence",
+        data=dff.baseline_fluorescence,
         compression="gzip",
     )
 
@@ -458,14 +458,14 @@ def _read_dff(group: h5py.Group) -> RoiDeltaFOverF:
             name="dff/amplitudes",
             ndim=1,
         ),
-        interleave_frame_numbers=require_float64_array(
-            group["interleave_frame_numbers"][()],
-            name="dff/interleave_frame_numbers",
+        baseline_frame_numbers=require_float64_array(
+            group["baseline_frame_numbers"][()],
+            name="dff/baseline_frame_numbers",
             ndim=1,
         ),
-        interleave_fluorescence=require_float64_array(
-            group["interleave_fluorescence"][()],
-            name="dff/interleave_fluorescence",
+        baseline_fluorescence=require_float64_array(
+            group["baseline_fluorescence"][()],
+            name="dff/baseline_fluorescence",
             ndim=2,
         ),
         metadata=_read_metadata(group["metadata"]),

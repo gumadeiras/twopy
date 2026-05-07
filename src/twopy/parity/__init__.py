@@ -1,7 +1,7 @@
 """Read-only parity helpers for comparing twopy outputs to prior analyses.
 
 Inputs: optional lab-generated reference outputs.
-Outputs: small typed objects for audit scripts and tests.
+Outputs: small typed objects for comparison scripts and tests.
 
 Normal twopy analysis should not import this package. Analysis starts from
 converted twopy objects; parity helpers only read prior outputs to check that
@@ -13,6 +13,11 @@ from twopy.parity.dff import (
     compare_saved_analysis_delta_f_over_f,
     saved_analysis_epoch_windows,
 )
+from twopy.parity.psycho5 import (
+    analyze_psycho5_default_recording_responses,
+    compute_psycho5_default_recording_responses,
+    psycho5_default_interleave_epoch_numbers,
+)
 from twopy.parity.roi import SavedAnalysisRoiSet, roi_set_from_saved_analysis
 from twopy.parity.saved_analysis import (
     SavedAnalysisLastRoi,
@@ -23,8 +28,11 @@ __all__ = [
     "SavedAnalysisDeltaFOverFComparison",
     "SavedAnalysisLastRoi",
     "SavedAnalysisRoiSet",
+    "analyze_psycho5_default_recording_responses",
     "compare_saved_analysis_delta_f_over_f",
+    "compute_psycho5_default_recording_responses",
     "load_saved_analysis_last_roi",
+    "psycho5_default_interleave_epoch_numbers",
     "roi_set_from_saved_analysis",
     "saved_analysis_epoch_windows",
 ]

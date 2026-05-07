@@ -34,9 +34,9 @@ from twopy.analysis.responses import (
     RoiResponseTrial,
     group_delta_f_over_f_by_epoch,
 )
-from twopy.analysis.trials import EpochFrameWindow
+from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData, recording_frame_rate_hz
-from twopy.stimulus import is_interleave_epoch_name, stimulus_epoch_names_by_number
+from twopy.stimulus import stimulus_epoch_names_by_number
 from twopy.typing_guards import require_string_choice
 
 __all__ = [
@@ -44,7 +44,7 @@ __all__ = [
     "ResponsePlotData",
     "default_analysis_output_path",
     "load_response_plot_data",
-    "response_plot_interleave_window_limit_for_recording",
+    "response_plot_baseline_window_limit_for_recording",
     "response_plot_post_window_seconds_for_recording",
     "response_plot_post_window_seconds",
     "response_plot_window_seconds_for_recording",
@@ -162,14 +162,14 @@ def response_plot_post_window_seconds(epoch_names: Iterable[str]) -> float:
             analysis output.
 
     Returns:
-        Two seconds when an interleave/gray epoch exists, otherwise zero.
+        Two seconds when a baseline-like gray/interleave epoch exists, otherwise zero.
 
-    Response plots show the return into gray interleave when the recording has
+    Response plots show the return into baseline context when the recording has
     such a baseline epoch. Keeping this rule shared prevents saved-output plots
     and live recompute previews from showing different x-axis ranges.
     """
     for epoch_name in epoch_names:
-        if is_interleave_epoch_name(epoch_name):
+        if is_baseline_epoch_name(epoch_name):
             return DEFAULT_RESPONSE_POST_WINDOW_SECONDS
     return 0.0
 
@@ -181,17 +181,17 @@ def response_plot_post_window_seconds_for_recording(recording: RecordingData) ->
         recording: Loaded converted recording with stimulus epoch metadata.
 
     Returns:
-        Two seconds when an interleave/gray epoch exists, otherwise zero.
+        Two seconds when a baseline-like gray/interleave epoch exists, otherwise zero.
     """
     return response_plot_post_window_seconds(
         stimulus_epoch_names_by_number(recording).values(),
     )
 
 
-def _response_plot_interleave_window_seconds_for_recording(
+def _response_plot_baseline_window_seconds_for_recording(
     recording: RecordingData,
 ) -> float | None:
-    """Return the shortest named interleave epoch duration for one recording.
+    """Return the shortest named baseline epoch duration for one recording.
 
     Args:
         recording: Loaded converted recording with stimulus epoch metadata.
@@ -201,7 +201,7 @@ def _response_plot_interleave_window_seconds_for_recording(
         or ``None`` when no such named window is available.
 
     Manual Plot-tab response windows are capped by this value so pre/post
-    context cannot exceed the available interleave epoch duration.
+    context cannot exceed the available baseline epoch duration.
     """
     mapping = interpolate_stimulus_epochs_to_frame_windows(recording)
     frame_rate_hz = recording_frame_rate_hz(recording)
@@ -209,14 +209,14 @@ def _response_plot_interleave_window_seconds_for_recording(
         (epoch_window.window.stop_frame - epoch_window.window.start_frame)
         / frame_rate_hz
         for epoch_window in mapping.windows
-        if is_interleave_epoch_name(epoch_window.epoch_name)
+        if is_baseline_epoch_name(epoch_window.epoch_name)
     )
     if len(durations) == 0:
         return None
     return max(0.0, min(durations))
 
 
-def response_plot_interleave_window_limit_for_recording(
+def response_plot_baseline_window_limit_for_recording(
     recording: RecordingData,
 ) -> float | None:
     """Return the manual response-window cap for one recording.
@@ -229,7 +229,7 @@ def response_plot_interleave_window_limit_for_recording(
         when no reliable cap is available.
     """
     try:
-        return _response_plot_interleave_window_seconds_for_recording(recording)
+        return _response_plot_baseline_window_seconds_for_recording(recording)
     except ValueError:
         return None
 
@@ -253,7 +253,7 @@ def response_plot_window_seconds_for_recording(
         automatic_post_window_seconds=response_plot_post_window_seconds_for_recording(
             recording,
         ),
-        max_window_seconds=response_plot_interleave_window_limit_for_recording(
+        max_window_seconds=response_plot_baseline_window_limit_for_recording(
             recording,
         ),
     )
@@ -375,27 +375,27 @@ def _delta_f_over_f_options_from_outputs(
 
     return DeltaFOverFOptions(
         background_method=background_method,
-        seconds_interleave_use=_saved_interleave_seconds(dff),
+        baseline_sample_seconds=_saved_baseline_sample_seconds(dff),
         fit_mode=_saved_fit_mode(dff),
         apply_motion_mask="motion_artifact_masked_frame_count" in dff.metadata,
     )
 
 
-def _saved_interleave_seconds(dff: RoiDeltaFOverF) -> float | None:
-    """Return the saved interleave sampling window from dF/F metadata.
+def _saved_baseline_sample_seconds(dff: RoiDeltaFOverF) -> float | None:
+    """Return the saved baseline sampling window from dF/F metadata.
 
     Args:
         dff: Saved dF/F object with audit metadata.
 
     Returns:
-        Seconds from each interleave window end, or ``None`` for full windows.
+        Seconds from each baseline window end, or ``None`` for full windows.
     """
-    value = dff.metadata.get("seconds_interleave_use")
+    value = dff.metadata.get("baseline_sample_seconds")
     if value == "full":
         return None
     if isinstance(value, int | float):
         return float(value)
-    return DeltaFOverFOptions().seconds_interleave_use
+    return DeltaFOverFOptions().baseline_sample_seconds
 
 
 def _saved_fit_mode(dff: RoiDeltaFOverF) -> DeltaFOverFFitMode:
@@ -408,11 +408,19 @@ def _saved_fit_mode(dff: RoiDeltaFOverF) -> DeltaFOverFFitMode:
         Recognized fit mode, otherwise the current default.
     """
     value = dff.metadata.get("fit_mode")
-    if isinstance(value, str) and value in {"robust", "source_bounds"}:
+    if isinstance(value, str) and value in {
+        "direct_bounded_tau",
+        "direct_bounded_tau_and_log_amplitude",
+        "log_linear",
+    }:
         return require_string_choice(
             value,
             name="dF/F fit mode",
-            allowed=("robust", "source_bounds"),
+            allowed=(
+                "direct_bounded_tau",
+                "direct_bounded_tau_and_log_amplitude",
+                "log_linear",
+            ),
         )
     return DeltaFOverFOptions().fit_mode
 

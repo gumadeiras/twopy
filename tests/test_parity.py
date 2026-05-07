@@ -101,7 +101,7 @@ class ParityTest(unittest.TestCase):
                 recording,
                 saved,
                 background_method="none",
-                seconds_interleave_use=None,
+                baseline_sample_seconds=None,
                 trace_start_frame=0,
                 data_rate_hz=1.0,
                 chunk_frames=2,

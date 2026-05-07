@@ -52,8 +52,13 @@ _BACKGROUND_METHOD_LABELS: tuple[
 )
 _BACKGROUND_METHODS = tuple(value for _label, value, _rich in _BACKGROUND_METHOD_LABELS)
 _FIT_MODE_LABELS: tuple[tuple[str, DeltaFOverFFitMode, str | None], ...] = (
-    ("robust", "robust", None),
-    ("log-amplitude bounded", "source_bounds", None),
+    ("bounded tau", "direct_bounded_tau", None),
+    ("log-linear", "log_linear", None),
+    (
+        "bounded tau/amplitude",
+        "direct_bounded_tau_and_log_amplitude",
+        None,
+    ),
 )
 _FIT_MODES = tuple(value for _label, value, _rich in _FIT_MODE_LABELS)
 
@@ -82,19 +87,19 @@ class DeltaFOverFOptionsWidget(QWidget):
         super().__init__()
         self._on_change = on_change
         self._background_method = _combo_box(_BACKGROUND_METHOD_LABELS)
-        self._interleave_epoch = QComboBox()
-        set_plot_dropdown_width(self._interleave_epoch)
-        self._interleave_epoch_names: dict[int, str] = {}
-        self._interleave_epoch_name_values: dict[int, str | None] = {}
-        self._interleave_seconds = _double_spin_box(
+        self._baseline_epoch = QComboBox()
+        set_plot_dropdown_width(self._baseline_epoch)
+        self._baseline_epoch_names: dict[int, str] = {}
+        self._baseline_epoch_name_values: dict[int, str | None] = {}
+        self._baseline_seconds = _double_spin_box(
             minimum=0.001,
             maximum=1_000_000.0,
-            value=options.seconds_interleave_use or 1.0,
+            value=options.baseline_sample_seconds or 1.0,
             suffix=" s",
         )
-        self._use_full_interleave = QCheckBox("Use full interleave")
-        set_plot_control_width(self._use_full_interleave)
-        self._use_full_interleave.setChecked(options.seconds_interleave_use is None)
+        self._use_full_baseline = QCheckBox("Use full baseline")
+        set_plot_control_width(self._use_full_baseline)
+        self._use_full_baseline.setChecked(options.baseline_sample_seconds is None)
         self._fit_mode = _combo_box(_FIT_MODE_LABELS)
         self._apply_motion_mask = QCheckBox("Mask motion artifacts")
         set_plot_control_width(self._apply_motion_mask)
@@ -106,10 +111,10 @@ class DeltaFOverFOptionsWidget(QWidget):
         self.setLayout(layout)
 
         self.set_epoch_choices(
-            {options.interleave_epoch_number: options.interleave_epoch_name}
-            if options.interleave_epoch_name is not None
+            {options.baseline_epoch_number: options.baseline_epoch_name}
+            if options.baseline_epoch_name is not None
             else {},
-            selected_epoch_number=options.interleave_epoch_number,
+            selected_epoch_number=options.baseline_epoch_number,
         )
         self._set_combo_data(self._background_method, options.background_method)
         self._set_combo_data(self._fit_mode, options.fit_mode)
@@ -125,21 +130,21 @@ class DeltaFOverFOptionsWidget(QWidget):
         Returns:
             ``DeltaFOverFOptions`` built from the current controls.
         """
-        interleave_epoch_number = self._selected_interleave_epoch_number()
+        baseline_epoch_number = self._selected_baseline_epoch_number()
         return DeltaFOverFOptions(
-            interleave_epoch_number=interleave_epoch_number,
-            interleave_epoch_name=self._interleave_epoch_name_values.get(
-                interleave_epoch_number,
+            baseline_epoch_number=baseline_epoch_number,
+            baseline_epoch_name=self._baseline_epoch_name_values.get(
+                baseline_epoch_number,
             ),
             background_method=require_string_choice(
                 str(self._background_method.currentData()),
                 name="background",
                 allowed=_BACKGROUND_METHODS,
             ),
-            seconds_interleave_use=(
+            baseline_sample_seconds=(
                 None
-                if self._use_full_interleave.isChecked()
-                else self._interleave_seconds.value()
+                if self._use_full_baseline.isChecked()
+                else self._baseline_seconds.value()
             ),
             fit_mode=require_string_choice(
                 str(self._fit_mode.currentData()),
@@ -155,7 +160,7 @@ class DeltaFOverFOptionsWidget(QWidget):
         *,
         selected_epoch_number: int | None = None,
     ) -> None:
-        """Update the interleave epoch dropdown from recording metadata.
+        """Update the baseline epoch dropdown from recording metadata.
 
         Args:
             epoch_names: Mapping from stimulus epoch numbers to display names.
@@ -165,21 +170,21 @@ class DeltaFOverFOptionsWidget(QWidget):
         Returns:
             None.
         """
-        selected = selected_epoch_number or self._selected_interleave_epoch_number()
-        self._interleave_epoch_names = dict(sorted(epoch_names.items()))
-        self._interleave_epoch_name_values = dict(sorted(epoch_names.items()))
-        if selected not in self._interleave_epoch_names:
-            self._interleave_epoch_names[selected] = f"Epoch {selected}"
-            self._interleave_epoch_name_values[selected] = None
+        selected = selected_epoch_number or self._selected_baseline_epoch_number()
+        self._baseline_epoch_names = dict(sorted(epoch_names.items()))
+        self._baseline_epoch_name_values = dict(sorted(epoch_names.items()))
+        if selected not in self._baseline_epoch_names:
+            self._baseline_epoch_names[selected] = f"Epoch {selected}"
+            self._baseline_epoch_name_values[selected] = None
 
-        blocker = QSignalBlocker(self._interleave_epoch)
-        self._interleave_epoch.clear()
-        for epoch_number, epoch_name in sorted(self._interleave_epoch_names.items()):
-            self._interleave_epoch.addItem(
+        blocker = QSignalBlocker(self._baseline_epoch)
+        self._baseline_epoch.clear()
+        for epoch_number, epoch_name in sorted(self._baseline_epoch_names.items()):
+            self._baseline_epoch.addItem(
                 _epoch_choice_label(epoch_number, epoch_name),
                 epoch_number,
             )
-        self._set_combo_data(self._interleave_epoch, selected)
+        self._set_combo_data(self._baseline_epoch, selected)
         del blocker
 
     def set_options(self, options: DeltaFOverFOptions) -> None:
@@ -197,27 +202,27 @@ class DeltaFOverFOptionsWidget(QWidget):
         """
         blockers = [
             QSignalBlocker(self._background_method),
-            QSignalBlocker(self._interleave_epoch),
-            QSignalBlocker(self._interleave_seconds),
-            QSignalBlocker(self._use_full_interleave),
+            QSignalBlocker(self._baseline_epoch),
+            QSignalBlocker(self._baseline_seconds),
+            QSignalBlocker(self._use_full_baseline),
             QSignalBlocker(self._fit_mode),
             QSignalBlocker(self._apply_motion_mask),
         ]
         epoch_names = {
             epoch_number: epoch_name
-            for epoch_number, epoch_name in self._interleave_epoch_name_values.items()
+            for epoch_number, epoch_name in self._baseline_epoch_name_values.items()
             if epoch_name is not None
         }
-        if options.interleave_epoch_name is not None:
-            epoch_names[options.interleave_epoch_number] = options.interleave_epoch_name
+        if options.baseline_epoch_name is not None:
+            epoch_names[options.baseline_epoch_number] = options.baseline_epoch_name
         self.set_epoch_choices(
             epoch_names,
-            selected_epoch_number=options.interleave_epoch_number,
+            selected_epoch_number=options.baseline_epoch_number,
         )
         self._set_combo_data(self._background_method, options.background_method)
-        if options.seconds_interleave_use is not None:
-            self._interleave_seconds.setValue(options.seconds_interleave_use)
-        self._use_full_interleave.setChecked(options.seconds_interleave_use is None)
+        if options.baseline_sample_seconds is not None:
+            self._baseline_seconds.setValue(options.baseline_sample_seconds)
+        self._use_full_baseline.setChecked(options.baseline_sample_seconds is None)
         self._set_combo_data(self._fit_mode, options.fit_mode)
         self._apply_motion_mask.setChecked(options.apply_motion_mask)
         del blockers
@@ -228,9 +233,9 @@ class DeltaFOverFOptionsWidget(QWidget):
         group = QGroupBox("dF/F")
         layout = plot_form_layout()
         layout.addRow("Background", self._background_method)
-        layout.addRow("Interleave epoch", self._interleave_epoch)
-        layout.addRow("Interleave span", self._interleave_seconds)
-        layout.addRow("", self._use_full_interleave)
+        layout.addRow("Baseline epoch", self._baseline_epoch)
+        layout.addRow("Baseline span", self._baseline_seconds)
+        layout.addRow("", self._use_full_baseline)
         layout.addRow("Fit mode", self._fit_mode)
         layout.addRow("", self._apply_motion_mask)
         group.setLayout(layout)
@@ -238,10 +243,10 @@ class DeltaFOverFOptionsWidget(QWidget):
 
     def _connect_changes(self) -> None:
         """Connect control changes to state refresh and callback dispatch."""
-        for combo in (self._background_method, self._interleave_epoch, self._fit_mode):
+        for combo in (self._background_method, self._baseline_epoch, self._fit_mode):
             combo.currentIndexChanged.connect(self._emit_change)
-        self._interleave_seconds.valueChanged.connect(self._emit_change)
-        self._use_full_interleave.stateChanged.connect(self._emit_change)
+        self._baseline_seconds.valueChanged.connect(self._emit_change)
+        self._use_full_baseline.stateChanged.connect(self._emit_change)
         self._apply_motion_mask.stateChanged.connect(self._emit_change)
 
     def _emit_change(self, *_args: object) -> None:
@@ -252,11 +257,11 @@ class DeltaFOverFOptionsWidget(QWidget):
 
     def _refresh_enabled_state(self) -> None:
         """Enable interleave seconds only when partial-window sampling is used."""
-        self._interleave_seconds.setEnabled(not self._use_full_interleave.isChecked())
+        self._baseline_seconds.setEnabled(not self._use_full_baseline.isChecked())
 
-    def _selected_interleave_epoch_number(self) -> int:
-        """Return the selected interleave epoch number."""
-        data = self._interleave_epoch.currentData()
+    def _selected_baseline_epoch_number(self) -> int:
+        """Return the selected baseline epoch number."""
+        data = self._baseline_epoch.currentData()
         if isinstance(data, int):
             return data
         try:

@@ -59,9 +59,9 @@ class WorkflowTest(unittest.TestCase):
                 roi_path,
                 epoch_windows=windows,
                 background_method="none",
-                seconds_interleave_use=None,
+                baseline_sample_seconds=None,
                 apply_motion_mask=False,
-                fit_mode="robust",
+                fit_mode="direct_bounded_tau",
                 chunk_frames=2,
             )
 
@@ -75,7 +75,7 @@ class WorkflowTest(unittest.TestCase):
                 root / "exports" / "csvs" / "response_summary_grouped.csv",
             )
             self.assertEqual(len(run.grouped_responses.trials), 2)
-            self.assertEqual(run.interleave_windows, (windows[0].window,))
+            self.assertEqual(run.baseline_windows, (windows[0].window,))
             np.testing.assert_allclose(run.dff.values[:2, :], 0.0)
 
             loaded = load_analysis_outputs(run.output_path)
@@ -121,9 +121,9 @@ class WorkflowTest(unittest.TestCase):
                 roi_set,
                 epoch_windows=windows,
                 background_method="none",
-                seconds_interleave_use=None,
+                baseline_sample_seconds=None,
                 apply_motion_mask=False,
-                fit_mode="robust",
+                fit_mode="direct_bounded_tau",
                 chunk_frames=2,
             )
 
@@ -133,11 +133,60 @@ class WorkflowTest(unittest.TestCase):
             self.assertFalse((root / "response_summary_grouped.csv").exists())
             self.assertFalse((root / "exports" / "csvs").exists())
 
-    def _write_converted_recording(self, root: Path) -> Path:
+    def test_compute_recording_responses_accepts_explicit_baseline_windows(
+        self,
+    ) -> None:
+        """Confirm callers can provide baseline windows directly.
+
+        Inputs: explicit epoch windows and an explicit baseline window.
+        Outputs: dF/F metadata and trace range from the normal workflow.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = self._write_converted_recording(root)
+            recording = load_converted_recording(recording_path)
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            windows = (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor A"),
+                EpochFrameWindow(
+                    FrameWindow(1, 2, 4, "gray"),
+                    2,
+                    "Gray Interleave",
+                ),
+            )
+
+            result = compute_recording_responses(
+                recording,
+                roi_set,
+                epoch_windows=windows,
+                baseline_windows=(windows[1].window,),
+                background_method="none",
+                baseline_sample_seconds=None,
+                fit_mode="log_linear",
+                apply_motion_mask=False,
+                chunk_frames=2,
+            )
+
+            self.assertEqual(result.baseline_windows, (windows[1].window,))
+            self.assertEqual(result.traces.start_frame, 0)
+            self.assertEqual(result.traces.stop_frame, 4)
+            self.assertEqual(result.dff.metadata["baseline_sample_seconds"], "full")
+            self.assertEqual(result.dff.metadata["fit_mode"], "log_linear")
+
+    def _write_converted_recording(
+        self,
+        root: Path,
+        *,
+        stimulus_parameters_json: str | None = None,
+    ) -> Path:
         """Write a minimal converted recording and movie pair.
 
         Args:
             root: Temporary directory that receives HDF5 files.
+            stimulus_parameters_json: Optional JSON stimulus parameter list.
 
         Returns:
             Path to ``recording_data.h5``.
@@ -192,7 +241,7 @@ class WorkflowTest(unittest.TestCase):
             )
             stimulus_group.create_dataset(
                 "parameters_json",
-                data='[{"epochName":"Gray"}]',
+                data=stimulus_parameters_json or '[{"epochName":"Gray"}]',
             )
             stimulus_group.create_dataset("function_lookup_json", data="{}")
             stimulus_group.create_dataset(

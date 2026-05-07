@@ -11,13 +11,15 @@ from pathlib import Path
 import numpy as np
 
 from twopy import (
+    default_baseline_epoch_number,
     frame_windows_from_photodiode_alignment,
+    is_baseline_epoch_name,
     make_frame_windows,
     map_stimulus_epochs_to_frame_windows,
-    select_epoch_frame_windows,
+    select_baseline_frame_windows,
     split_traces_by_frame_windows,
 )
-from twopy.analysis.trials import FrameWindow
+from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
 from twopy.roi import RoiTraces
@@ -154,10 +156,53 @@ class ResponsesTest(unittest.TestCase):
             ],
             [(0, 5), (5, 10), (10, 15)],
         )
-        selected = select_epoch_frame_windows(
+        selected = select_baseline_frame_windows(
             epoch_windows,
             epoch_name="Gray Interleave",
+            epoch_number=None,
         )
+        self.assertEqual(
+            [(window.start_frame, window.stop_frame) for window in selected],
+            [(0, 5), (10, 15)],
+        )
+
+    def test_default_baseline_epoch_uses_gray_like_name(self) -> None:
+        """Confirm baseline epoch selection uses the shared name rule."""
+        epoch_names = {1: "Odor A", 2: "Grey screen", 3: "Odor B"}
+
+        self.assertEqual(default_baseline_epoch_number(epoch_names), 2)
+
+    def test_default_baseline_epoch_accepts_interleave_name(self) -> None:
+        """Confirm interleave text is accepted without gray spelling."""
+        epoch_names = {1: "Odor A", 2: "Baseline Interleave"}
+
+        self.assertEqual(default_baseline_epoch_number(epoch_names), 2)
+
+    def test_default_baseline_epoch_falls_back_to_one(self) -> None:
+        """Confirm unknown epoch names preserve the historical default."""
+        self.assertEqual(default_baseline_epoch_number({2: "Odor A"}), 1)
+
+    def test_baseline_epoch_name_predicate_is_shared(self) -> None:
+        """Confirm the gray/interleave string rule stays explicit."""
+        self.assertTrue(is_baseline_epoch_name("Gray Interleave"))
+        self.assertTrue(is_baseline_epoch_name("Grey screen"))
+        self.assertTrue(is_baseline_epoch_name("Baseline Interleave"))
+        self.assertFalse(is_baseline_epoch_name("Odor A"))
+
+    def test_selects_baseline_windows_by_multiple_epoch_numbers(self) -> None:
+        """Confirm parity can reuse native baseline window selection."""
+        epoch_windows = (
+            self._epoch_window(1, 0, 5, "Gray Interleave"),
+            self._epoch_window(2, 5, 10, "Odor A"),
+            self._epoch_window(3, 10, 15, "Gray Interleave"),
+        )
+
+        selected = select_baseline_frame_windows(
+            epoch_windows,
+            epoch_number=None,
+            epoch_numbers=(3, 1),
+        )
+
         self.assertEqual(
             [(window.start_frame, window.stop_frame) for window in selected],
             [(0, 5), (10, 15)],
@@ -175,6 +220,20 @@ class ResponsesTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "epoch runs"):
             map_stimulus_epochs_to_frame_windows(recording, self._alignment((0, 5)))
+
+    def _epoch_window(
+        self,
+        epoch_number: int,
+        start_frame: int,
+        stop_frame: int,
+        epoch_name: str,
+    ) -> EpochFrameWindow:
+        """Create one labeled epoch frame window."""
+        return EpochFrameWindow(
+            FrameWindow(epoch_number - 1, start_frame, stop_frame, epoch_name),
+            epoch_number,
+            epoch_name,
+        )
 
     def _alignment(self, frames: tuple[int, ...]) -> PhotodiodeAlignment:
         """Create photodiode alignment with paired events at selected frames.

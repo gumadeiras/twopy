@@ -77,11 +77,11 @@ def plot_display_options_group(
     set_plot_control_width(show_sem_checkbox)
     set_plot_control_width(plot_size_spin)
     layout.addRow("", show_sem_checkbox)
-    layout.addRow("size", plot_size_spin)
-    layout.addRow("x min", x_min_spin)
-    layout.addRow("x max", x_max_spin)
-    layout.addRow("y min", y_min_spin)
-    layout.addRow("y max", y_max_spin)
+    layout.addRow("Size", plot_size_spin)
+    layout.addRow("X min", x_min_spin)
+    layout.addRow("X max", x_max_spin)
+    layout.addRow("Y min", y_min_spin)
+    layout.addRow("Y max", y_max_spin)
 
     def update_bounds() -> None:
         """Pass current spin-box values back to the response widget."""

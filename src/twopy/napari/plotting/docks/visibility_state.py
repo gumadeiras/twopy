@@ -8,9 +8,9 @@ The helpers keep callback value validation and row-index logic shared between
 ROI and epoch controls.
 """
 
+from twopy.analysis.trials import is_baseline_epoch_name
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.label_visibility import roi_label_values_from_labels
-from twopy.stimulus import is_interleave_epoch_name
 
 
 def row_index_or_none(value: object, row_count: int) -> int | None:
@@ -60,7 +60,7 @@ def epoch_visibility(
     return {
         index: existing_visibility.get(
             index,
-            not is_interleave_epoch_name(epoch.epoch_name),
+            not is_baseline_epoch_name(epoch.epoch_name),
         )
         for index, epoch in enumerate(epochs)
     }

@@ -54,8 +54,8 @@ class MotionArtifactMaskTest(unittest.TestCase):
             stop_frame=4,
             tau=0.0,
             amplitudes=np.ones(2, dtype=np.float64),
-            interleave_frame_numbers=np.array([1.0], dtype=np.float64),
-            interleave_fluorescence=np.ones((1, 2), dtype=np.float64),
+            baseline_frame_numbers=np.array([1.0], dtype=np.float64),
+            baseline_fluorescence=np.ones((1, 2), dtype=np.float64),
             metadata={"method": "test"},
         )
 

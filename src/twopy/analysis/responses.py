@@ -16,7 +16,6 @@ import numpy.typing as npt
 
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.trials import EpochFrameWindow
-from twopy.stimulus import is_interleave_epoch_name
 
 __all__ = [
     "GroupedRoiResponseSummary",
@@ -24,7 +23,6 @@ __all__ = [
     "RoiResponseSummary",
     "RoiResponseTrial",
     "group_delta_f_over_f_by_epoch",
-    "is_interleave_epoch_name",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
 ]
@@ -129,7 +127,7 @@ def group_delta_f_over_f_by_epoch(
         epoch_windows: Stimulus-labeled windows to slice.
         data_rate_hz: Imaging frame rate in hertz for relative trial time.
         pre_window_seconds: Seconds before each epoch window to include. This
-            is useful for plots that show the gray interleave baseline before
+            is useful for plots that show the gray baseline before
             stimulus onset.
         post_window_seconds: Seconds after each epoch window to include. This
             is useful for plots that show the response returning into the next

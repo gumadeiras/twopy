@@ -9,7 +9,6 @@ can reuse the same slot for different meanings. These helpers make that
 per-``stimtype`` mapping explicit for scripts and analysis code.
 """
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 from twopy.converted import RecordingData
@@ -17,10 +16,7 @@ from twopy.typing_guards import require_string_key_mapping
 
 __all__ = [
     "StimulusSpecificColumnMapping",
-    "default_interleave_epoch_number",
-    "is_interleave_epoch_name",
     "map_stimulus_specific_column",
-    "psycho5_default_interleave_epoch_numbers",
     "stimulus_column_index",
     "stimulus_epoch_names_by_number",
 ]
@@ -132,117 +128,6 @@ def stimulus_epoch_names_by_number(recording: RecordingData) -> dict[int, str]:
         epoch_name = parameters.get("epochName", f"epoch_{index}")
         names[index] = str(epoch_name)
     return names
-
-
-def is_interleave_epoch_name(epoch_name: str) -> bool:
-    """Return whether an epoch name looks like an interleave baseline.
-
-    Args:
-        epoch_name: Stimulus epoch name.
-
-    Returns:
-        ``True`` for ``gray`` or ``grey`` spelling, or for names containing
-        ``interleave``.
-    """
-    lowered = epoch_name.lower()
-    return "gray" in lowered or "grey" in lowered or "interleave" in lowered
-
-
-def default_interleave_epoch_number(epoch_names: Mapping[int, str]) -> int:
-    """Return the default interleave epoch from readable epoch names.
-
-    Args:
-        epoch_names: Mapping from stimulus epoch number to epoch name.
-
-    Returns:
-        First epoch whose name looks like gray/grey/interleave, otherwise
-        epoch 1.
-    """
-    for epoch_number, epoch_name in sorted(epoch_names.items()):
-        if is_interleave_epoch_name(epoch_name):
-            return epoch_number
-    return 1
-
-
-def psycho5_default_interleave_epoch_numbers(
-    recording: RecordingData,
-) -> tuple[int, ...]:
-    """Return the source-style default interleave epoch selection.
-
-    Args:
-        recording: Loaded converted recording with decoded stimulus parameters.
-
-    Returns:
-        One or more one-based epoch numbers to use as gray-interleave baselines.
-
-    psycho5 first uses ``paramsHere(end).nextEpoch`` when present. Otherwise it
-    selects epochs named exactly ``Gray Interleave`` and reverses the list when
-    epoch one is the first of multiple gray interleaves. If neither source
-    convention is present, twopy falls back to its readable-name helper so older
-    scripts still get an explicit baseline instead of an empty selection.
-    """
-    if recording.stimulus_parameters:
-        next_epoch = recording.stimulus_parameters[-1].get("nextEpoch")
-        if next_epoch is not None:
-            return _epoch_numbers_from_source_value(next_epoch, name="nextEpoch")
-
-    exact_gray_epochs = tuple(
-        index
-        for index, parameters in enumerate(recording.stimulus_parameters, start=1)
-        if parameters.get("epochName") == "Gray Interleave"
-    )
-    if len(exact_gray_epochs) > 1 and exact_gray_epochs[0] == 1:
-        return exact_gray_epochs[::-1]
-    if exact_gray_epochs:
-        return exact_gray_epochs
-
-    return (default_interleave_epoch_number(stimulus_epoch_names_by_number(recording)),)
-
-
-def _epoch_numbers_from_source_value(value: object, *, name: str) -> tuple[int, ...]:
-    """Decode one MATLAB-like epoch-number value from converted metadata.
-
-    Args:
-        value: Scalar or sequence value decoded from stimulus parameters.
-        name: Field name used in validation messages.
-
-    Returns:
-        Tuple of one-based epoch numbers.
-    """
-    if isinstance(value, bool):
-        msg = f"{name} must be an epoch number, not a boolean"
-        raise ValueError(msg)
-    if isinstance(value, int | float):
-        return (_source_epoch_number(value, name=name),)
-    if isinstance(value, list | tuple):
-        epoch_numbers = tuple(_source_epoch_number(item, name=name) for item in value)
-        if not epoch_numbers:
-            msg = f"{name} must contain at least one epoch number"
-            raise ValueError(msg)
-        return epoch_numbers
-
-    msg = f"{name} must be an epoch number or list of epoch numbers; got {value!r}"
-    raise ValueError(msg)
-
-
-def _source_epoch_number(value: object, *, name: str) -> int:
-    """Validate one one-based epoch number from source metadata.
-
-    Args:
-        value: Candidate numeric epoch identifier.
-        name: Field name used in validation messages.
-
-    Returns:
-        Integer epoch number.
-    """
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        msg = f"{name} entries must be numeric epoch numbers; got {value!r}"
-        raise ValueError(msg)
-    epoch_number = int(value)
-    if epoch_number < 1 or float(value) != float(epoch_number):
-        msg = f"{name} entries must be positive integer epoch numbers; got {value!r}"
-        raise ValueError(msg)
-    return epoch_number
 
 
 def _selected_stimtypes(

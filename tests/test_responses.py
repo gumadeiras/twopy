@@ -170,8 +170,8 @@ class ResponseGroupingTest(unittest.TestCase):
             stop_frame=14,
             tau=0.0,
             amplitudes=np.array([10.0, 10.0]),
-            interleave_frame_numbers=np.array([10.5]),
-            interleave_fluorescence=np.array([[10.0, 10.0]]),
+            baseline_frame_numbers=np.array([10.5]),
+            baseline_fluorescence=np.array([[10.0, 10.0]]),
             metadata={"method": "test"},
         )
 

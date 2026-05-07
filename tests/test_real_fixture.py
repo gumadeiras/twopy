@@ -66,9 +66,9 @@ class RealDataFixtureTest(unittest.TestCase):
                 response_summary_grouped_csv_path=root / "response_summary_grouped.csv",
                 epoch_windows=windows,
                 background_method="none",
-                seconds_interleave_use=None,
+                baseline_sample_seconds=None,
                 apply_motion_mask=True,
-                fit_mode="robust",
+                fit_mode="direct_bounded_tau",
                 chunk_frames=11,
             )
 
@@ -98,9 +98,9 @@ class RealDataFixtureTest(unittest.TestCase):
                 output_path=root / "processed_analysis_outputs.h5",
                 epoch_windows=windows,
                 background_method="none",
-                seconds_interleave_use=None,
+                baseline_sample_seconds=None,
                 apply_motion_mask=True,
-                fit_mode="robust",
+                fit_mode="direct_bounded_tau",
                 chunk_frames=11,
                 response_processing_options=ResponseProcessingOptions(
                     smoothing=SmoothingOptions(

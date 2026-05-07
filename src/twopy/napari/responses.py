@@ -115,10 +115,10 @@ def compute_response_plot_data_from_roi_set(
     computation = compute_recording_responses(
         recording,
         roi_set,
-        interleave_epoch_number=dff_options.interleave_epoch_number,
-        interleave_epoch_name=dff_options.interleave_epoch_name,
+        baseline_epoch_number=dff_options.baseline_epoch_number,
+        baseline_epoch_name=dff_options.baseline_epoch_name,
         background_method=dff_options.background_method,
-        seconds_interleave_use=dff_options.seconds_interleave_use,
+        baseline_sample_seconds=dff_options.baseline_sample_seconds,
         fit_mode=dff_options.fit_mode,
         apply_motion_mask=dff_options.apply_motion_mask,
         response_pre_window_seconds=pre_window_seconds,

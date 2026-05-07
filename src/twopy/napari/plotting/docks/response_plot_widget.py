@@ -22,12 +22,13 @@ from qtpy.QtWidgets import (
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.response_window_options import ResponseWindowOptions
+from twopy.analysis.trials import default_baseline_epoch_number
 from twopy.converted import RecordingData
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.plotting.data import (
     ResponsePlotData,
     load_response_plot_data,
-    response_plot_interleave_window_limit_for_recording,
+    response_plot_baseline_window_limit_for_recording,
 )
 from twopy.napari.plotting.docks.dynamic_options import (
     add_plot_display_options_group,
@@ -58,10 +59,7 @@ from twopy.napari.plotting.widgets import (
     resolved_value_bounds,
     roi_colors_from_label_values,
 )
-from twopy.stimulus import (
-    default_interleave_epoch_number,
-    stimulus_epoch_names_by_number,
-)
+from twopy.stimulus import stimulus_epoch_names_by_number
 
 
 class _ResponsePlotWidget(QWidget):
@@ -249,7 +247,7 @@ class _ResponsePlotWidget(QWidget):
         self._live_controller.set_context(None, None)
         self._delta_f_over_f_options_widget.set_epoch_choices(
             {},
-            selected_epoch_number=self._delta_f_over_f_options.interleave_epoch_number,
+            selected_epoch_number=self._delta_f_over_f_options.baseline_epoch_number,
         )
         self._response_window_options_widget.set_max_window_seconds(None)
         self._reset_plot_state()
@@ -278,10 +276,10 @@ class _ResponsePlotWidget(QWidget):
         epoch_names = stimulus_epoch_names_by_number(recording)
         self._delta_f_over_f_options_widget.set_epoch_choices(
             epoch_names,
-            selected_epoch_number=default_interleave_epoch_number(epoch_names),
+            selected_epoch_number=default_baseline_epoch_number(epoch_names),
         )
         self._response_window_options_widget.set_max_window_seconds(
-            response_plot_interleave_window_limit_for_recording(recording),
+            response_plot_baseline_window_limit_for_recording(recording),
         )
         self._delta_f_over_f_options = self._delta_f_over_f_options_widget.options()
         self._live_controller.set_delta_f_over_f_options(

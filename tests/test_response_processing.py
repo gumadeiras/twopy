@@ -254,8 +254,8 @@ def _dff(values: np.ndarray) -> RoiDeltaFOverF:
         stop_frame=float_values.shape[0],
         tau=0.0,
         amplitudes=np.ones(float_values.shape[1], dtype=np.float64),
-        interleave_frame_numbers=np.array([0.0], dtype=np.float64),
-        interleave_fluorescence=np.ones((1, float_values.shape[1]), dtype=np.float64),
+        baseline_frame_numbers=np.array([0.0], dtype=np.float64),
+        baseline_fluorescence=np.ones((1, float_values.shape[1]), dtype=np.float64),
         metadata={"method": "test"},
     )
 

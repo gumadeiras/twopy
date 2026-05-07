@@ -10,7 +10,7 @@ Stimulus-specific labels can be added when the stimulus metadata has been
 decoded.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,10 +25,13 @@ __all__ = [
     "EpochFrameWindow",
     "FrameWindow",
     "WindowedRoiResponse",
+    "default_baseline_epoch_number",
     "frame_windows_from_photodiode_alignment",
+    "is_baseline_epoch_name",
     "make_frame_windows",
     "map_stimulus_epochs_to_frame_windows",
-    "select_epoch_frame_windows",
+    "resolve_baseline_frame_windows",
+    "select_baseline_frame_windows",
     "split_traces_by_frame_windows",
 ]
 
@@ -195,39 +198,114 @@ def map_stimulus_epochs_to_frame_windows(
     )
 
 
-def select_epoch_frame_windows(
-    epoch_windows: tuple[EpochFrameWindow, ...],
+def is_baseline_epoch_name(epoch_name: str) -> bool:
+    """Return whether an epoch name looks like a baseline epoch.
+
+    Args:
+        epoch_name: Stimulus epoch name.
+
+    Returns:
+        ``True`` for ``gray`` or ``grey`` spelling, or for names containing
+        ``interleave``.
+    """
+    lowered = epoch_name.lower()
+    return "gray" in lowered or "grey" in lowered or "interleave" in lowered
+
+
+def default_baseline_epoch_number(epoch_names: Mapping[int, str]) -> int:
+    """Return the default baseline epoch from readable epoch names.
+
+    Args:
+        epoch_names: Mapping from stimulus epoch number to epoch name.
+
+    Returns:
+        First epoch whose name looks like gray/grey/interleave, otherwise
+        epoch 1.
+    """
+    for epoch_number, epoch_name in sorted(epoch_names.items()):
+        if is_baseline_epoch_name(epoch_name):
+            return epoch_number
+    return 1
+
+
+def resolve_baseline_frame_windows(
+    epoch_windows: Sequence[EpochFrameWindow],
+    *,
+    baseline_windows: Sequence[FrameWindow] | None = None,
+    epoch_name: str | None = None,
+    epoch_number: int | None = 1,
+    epoch_numbers: Sequence[int] | None = None,
+) -> tuple[FrameWindow, ...]:
+    """Resolve explicit or epoch-selected baseline frame windows.
+
+    Args:
+        epoch_windows: Stimulus-labeled frame windows.
+        baseline_windows: Optional explicit baseline windows. When present,
+            these are returned directly.
+        epoch_name: Optional baseline epoch name selector.
+        epoch_number: Optional single baseline epoch number selector.
+        epoch_numbers: Optional multiple baseline epoch number selector.
+
+    Returns:
+        Baseline frame windows.
+    """
+    if baseline_windows is not None:
+        return tuple(baseline_windows)
+    return select_baseline_frame_windows(
+        epoch_windows,
+        epoch_name=epoch_name,
+        epoch_number=epoch_number,
+        epoch_numbers=epoch_numbers,
+    )
+
+
+def select_baseline_frame_windows(
+    epoch_windows: Sequence[EpochFrameWindow],
     *,
     epoch_name: str | None = None,
     epoch_number: int | None = None,
+    epoch_numbers: Sequence[int] | None = None,
 ) -> tuple[FrameWindow, ...]:
-    """Select frame windows for one stimulus epoch.
+    """Select baseline frame windows from stimulus-labeled epoch windows.
 
     Args:
         epoch_windows: Stimulus-labeled frame windows.
         epoch_name: Optional epoch name to match exactly.
-        epoch_number: Optional epoch number to match exactly.
+        epoch_number: Optional single epoch number to match exactly.
+        epoch_numbers: Optional multiple epoch numbers to match exactly.
 
     Returns:
         Matching ``FrameWindow`` objects.
 
     Raises:
-        ValueError: If neither selector is supplied.
+        ValueError: If no selector is supplied or both number selector forms are
+            supplied.
 
-    This is the small script-facing helper used for baseline windows such as
-    ``Gray Interleave`` without making dF/F code know stimulus-table details.
+    This is the native twopy baseline selector. Callers that need psycho5's
+    historical default rules should compute epoch numbers in ``twopy.parity``
+    and pass them here.
     """
-    if epoch_name is None and epoch_number is None:
-        msg = "Select by epoch_name, epoch_number, or both"
+    if epoch_number is not None and epoch_numbers is not None:
+        msg = "Select by epoch_number or epoch_numbers, not both"
+        raise ValueError(msg)
+    selected_numbers = frozenset(
+        epoch_numbers
+        if epoch_numbers is not None
+        else (epoch_number,)
+        if epoch_number is not None
+        else ()
+    )
+    if epoch_name is None and len(selected_numbers) == 0:
+        msg = "Select by epoch_name, epoch_number, or epoch_numbers"
         raise ValueError(msg)
 
     return tuple(
         epoch_window.window
         for epoch_window in epoch_windows
-        if _matches_epoch_window(
+        if _matches_baseline_epoch_window(
             epoch_window,
             epoch_name=epoch_name,
-            epoch_number=epoch_number,
+            epoch_numbers=selected_numbers,
         )
     )
 
@@ -281,25 +359,25 @@ def _epoch_window_label(epoch_number: int, epoch_name: str) -> str:
     return f"epoch_{epoch_number:04d}_{safe_name}"
 
 
-def _matches_epoch_window(
+def _matches_baseline_epoch_window(
     epoch_window: EpochFrameWindow,
     *,
     epoch_name: str | None,
-    epoch_number: int | None,
+    epoch_numbers: frozenset[int],
 ) -> bool:
     """Check whether one epoch window matches optional selectors.
 
     Args:
         epoch_window: Candidate stimulus-labeled window.
         epoch_name: Optional epoch name selector.
-        epoch_number: Optional epoch number selector.
+        epoch_numbers: Optional epoch number selectors.
 
     Returns:
         ``True`` when all supplied selectors match.
     """
     if epoch_name is not None and epoch_window.epoch_name != epoch_name:
         return False
-    return epoch_number is None or epoch_window.epoch_number == epoch_number
+    return len(epoch_numbers) == 0 or epoch_window.epoch_number in epoch_numbers
 
 
 def _resolve_window_labels(

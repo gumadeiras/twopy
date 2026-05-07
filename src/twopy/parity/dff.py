@@ -65,10 +65,10 @@ def compare_saved_analysis_delta_f_over_f(
     saved_analysis: SavedAnalysisLastRoi,
     *,
     saved_trace_index: int = 0,
-    interleave_epoch_number: int = 1,
+    baseline_epoch_number: int = 1,
     background_method: BackgroundCorrectionMethod = "movie_global_percentile",
-    seconds_interleave_use: float | None = 1.0,
-    fit_mode: DeltaFOverFFitMode = "source_bounds",
+    baseline_sample_seconds: float | None = 1.0,
+    fit_mode: DeltaFOverFFitMode = "direct_bounded_tau_and_log_amplitude",
     trace_start_frame: int | None = None,
     trace_stop_frame: int | None = None,
     data_rate_hz: float | None = None,
@@ -80,10 +80,10 @@ def compare_saved_analysis_delta_f_over_f(
         recording: Loaded converted recording.
         saved_analysis: Read-only saved-analysis data.
         saved_trace_index: Which saved trace cell to compare.
-        interleave_epoch_number: One-based saved epoch number used as baseline.
+        baseline_epoch_number: One-based saved epoch number used as baseline.
         background_method: twopy background method used before dF/F.
-        seconds_interleave_use: Seconds from the end of each interleave window.
-            ``None`` uses each full interleave window.
+        baseline_sample_seconds: Seconds from the end of each baseline window.
+            ``None`` uses each full baseline window.
         fit_mode: dF/F exponential fit mode.
         trace_start_frame: Optional absolute movie frame for saved row zero.
             When omitted, twopy infers the stimulus-bounded frame range from
@@ -101,7 +101,7 @@ def compare_saved_analysis_delta_f_over_f(
         ValueError: If saved traces, ROI masks, or windows do not agree with the
             converted recording frame contract.
 
-    The comparison uses saved ROI masks and saved interleave windows, then runs
+    The comparison uses saved ROI masks and saved baseline windows, then runs
     the normal twopy analysis path over converted HDF5 data.
     """
     saved_values = _saved_trace_values(saved_analysis, saved_trace_index)
@@ -124,7 +124,7 @@ def compare_saved_analysis_delta_f_over_f(
     )
     interleave_windows = saved_analysis_epoch_windows(
         saved_analysis,
-        epoch_number=interleave_epoch_number,
+        epoch_number=baseline_epoch_number,
         trace_start_frame=frame_start,
         trace_stop_frame=frame_stop,
     )
@@ -136,7 +136,7 @@ def compare_saved_analysis_delta_f_over_f(
             if data_rate_hz is None
             else float(data_rate_hz)
         ),
-        seconds_interleave_use=seconds_interleave_use,
+        baseline_sample_seconds=baseline_sample_seconds,
         fit_mode=fit_mode,
     )
     _validate_comparison_shapes(computed.values, saved_values)

@@ -45,7 +45,7 @@ from twopy.analysis.responses import (
 from twopy.analysis.trials import (
     EpochFrameWindow,
     FrameWindow,
-    select_epoch_frame_windows,
+    resolve_baseline_frame_windows,
 )
 from twopy.converted import (
     RecordingData,
@@ -82,7 +82,7 @@ class AnalysisResponseComputation:
     dff: RoiDeltaFOverF
     epoch_mapping: InterpolatedEpochMapping | None
     epoch_windows: tuple[EpochFrameWindow, ...]
-    interleave_windows: tuple[FrameWindow, ...]
+    baseline_windows: tuple[FrameWindow, ...]
     grouped_responses: GroupedRoiResponses
     response_processing_options: ResponseProcessingOptions
     correlation_scores: RoiCorrelationScores | None
@@ -113,11 +113,12 @@ def analyze_recording_responses(
     response_summary_grouped_csv_path: Path | None = None,
     write_summary_csv: bool = True,
     epoch_windows: Sequence[EpochFrameWindow] | None = None,
-    interleave_epoch_number: int | None = 1,
-    interleave_epoch_name: str | None = None,
+    baseline_windows: Sequence[FrameWindow] | None = None,
+    baseline_epoch_number: int | None = 1,
+    baseline_epoch_name: str | None = None,
     background_method: BackgroundCorrectionMethod = "movie_global_percentile",
-    seconds_interleave_use: float | None = 1.0,
-    fit_mode: DeltaFOverFFitMode = "robust",
+    baseline_sample_seconds: float | None = 1.0,
+    fit_mode: DeltaFOverFFitMode = "direct_bounded_tau",
     apply_motion_mask: bool = True,
     data_rate_hz: float | None = None,
     chunk_frames: int = 128,
@@ -142,10 +143,12 @@ def analyze_recording_responses(
         write_summary_csv: Whether to write response time-series CSV files.
         epoch_windows: Optional explicit epoch windows. When omitted, twopy
             interpolates epochs from converted stimulus data.
-        interleave_epoch_number: Optional baseline epoch number selector.
-        interleave_epoch_name: Optional baseline epoch name selector.
+        baseline_windows: Optional explicit baseline windows. When omitted,
+            twopy selects baseline windows from epoch name or number.
+        baseline_epoch_number: Optional baseline epoch number selector.
+        baseline_epoch_name: Optional baseline epoch name selector.
         background_method: Background correction method before dF/F.
-        seconds_interleave_use: Seconds from the end of each interleave window.
+        baseline_sample_seconds: Seconds from the end of each baseline window.
         fit_mode: dF/F exponential fit mode.
         apply_motion_mask: Whether to mark converted high-motion frames as NaN
             after dF/F.
@@ -155,7 +158,7 @@ def analyze_recording_responses(
         spatial_domain: Spatial domain used for trace extraction.
         response_pre_window_seconds: Seconds before each stimulus window to
             include in grouped responses. The default shows the transition from
-            gray interleave baseline into the stimulus.
+            baseline context into the stimulus.
         response_post_window_seconds: Seconds after each stimulus window to
             include in grouped responses. The default is zero so persisted
             summaries keep their epoch-window meaning; plotting code can add
@@ -169,7 +172,7 @@ def analyze_recording_responses(
         ``AnalysisResponseRun`` with computed objects and output paths.
 
     Raises:
-        ValueError: If no interleave windows match the selector.
+        ValueError: If no baseline windows match the selector.
 
     This is the main script API for a converted recording: load, extract traces,
     compute dF/F, group responses, and persist the results.
@@ -180,10 +183,11 @@ def analyze_recording_responses(
         recording,
         loaded_roi_set,
         epoch_windows=epoch_windows,
-        interleave_epoch_number=interleave_epoch_number,
-        interleave_epoch_name=interleave_epoch_name,
+        baseline_windows=baseline_windows,
+        baseline_epoch_number=baseline_epoch_number,
+        baseline_epoch_name=baseline_epoch_name,
         background_method=background_method,
-        seconds_interleave_use=seconds_interleave_use,
+        baseline_sample_seconds=baseline_sample_seconds,
         fit_mode=fit_mode,
         apply_motion_mask=apply_motion_mask,
         data_rate_hz=data_rate_hz,
@@ -193,7 +197,36 @@ def analyze_recording_responses(
         response_post_window_seconds=response_post_window_seconds,
         response_processing_options=response_processing_options,
     )
-    resolved_output_path = _resolve_output_path(recording.path, output_path)
+    return _save_response_analysis_run(
+        computation,
+        output_path=output_path,
+        response_summary_trials_csv_path=response_summary_trials_csv_path,
+        response_summary_grouped_csv_path=response_summary_grouped_csv_path,
+        write_summary_csv=write_summary_csv,
+    )
+
+
+def _save_response_analysis_run(
+    computation: AnalysisResponseComputation,
+    *,
+    output_path: Path | None,
+    response_summary_trials_csv_path: Path | None,
+    response_summary_grouped_csv_path: Path | None,
+    write_summary_csv: bool,
+) -> AnalysisResponseRun:
+    """Persist one in-memory response computation.
+
+    Args:
+        computation: Computed response-analysis objects.
+        output_path: Optional destination HDF5 path.
+        response_summary_trials_csv_path: Optional trial-level CSV path.
+        response_summary_grouped_csv_path: Optional grouped CSV path.
+        write_summary_csv: Whether to write response CSV files.
+
+    Returns:
+        ``AnalysisResponseRun`` with saved output paths.
+    """
+    resolved_output_path = _resolve_output_path(computation.recording.path, output_path)
     resolved_trials_summary_path = _resolve_summary_csv_path(
         output_path=resolved_output_path,
         requested_path=response_summary_trials_csv_path,
@@ -226,7 +259,7 @@ def analyze_recording_responses(
         dff=computation.dff,
         epoch_mapping=computation.epoch_mapping,
         epoch_windows=computation.epoch_windows,
-        interleave_windows=computation.interleave_windows,
+        baseline_windows=computation.baseline_windows,
         grouped_responses=computation.grouped_responses,
         response_processing_options=computation.response_processing_options,
         correlation_scores=computation.correlation_scores,
@@ -241,11 +274,12 @@ def compute_recording_responses(
     roi_set: RoiSet,
     *,
     epoch_windows: Sequence[EpochFrameWindow] | None = None,
-    interleave_epoch_number: int | None = 1,
-    interleave_epoch_name: str | None = None,
+    baseline_windows: Sequence[FrameWindow] | None = None,
+    baseline_epoch_number: int | None = 1,
+    baseline_epoch_name: str | None = None,
     background_method: BackgroundCorrectionMethod = "movie_global_percentile",
-    seconds_interleave_use: float | None = 1.0,
-    fit_mode: DeltaFOverFFitMode = "robust",
+    baseline_sample_seconds: float | None = 1.0,
+    fit_mode: DeltaFOverFFitMode = "direct_bounded_tau",
     apply_motion_mask: bool = True,
     data_rate_hz: float | None = None,
     chunk_frames: int = 128,
@@ -261,10 +295,12 @@ def compute_recording_responses(
         roi_set: ROI masks to extract from the recording.
         epoch_windows: Optional explicit epoch windows. When omitted, twopy
             interpolates epochs from converted stimulus data.
-        interleave_epoch_number: Optional baseline epoch number selector.
-        interleave_epoch_name: Optional baseline epoch name selector.
+        baseline_windows: Optional explicit baseline windows. When omitted,
+            twopy selects baseline windows from epoch name or number.
+        baseline_epoch_number: Optional baseline epoch number selector.
+        baseline_epoch_name: Optional baseline epoch name selector.
         background_method: Background correction method before dF/F.
-        seconds_interleave_use: Seconds from the end of each interleave window.
+        baseline_sample_seconds: Seconds from the end of each baseline window.
         fit_mode: dF/F exponential fit mode.
         apply_motion_mask: Whether to mark converted high-motion frames as NaN
             after dF/F.
@@ -283,7 +319,7 @@ def compute_recording_responses(
         In-memory response-analysis objects.
 
     Raises:
-        ValueError: If no interleave windows match the selector.
+        ValueError: If no baseline windows match the selector.
 
     This is the shared calculation used by scripts, tests, and the napari live
     plotter. It streams movie frames in chunks and leaves file writing to a
@@ -306,15 +342,81 @@ def compute_recording_responses(
         pre_window_seconds=response_pre_window_seconds,
         post_window_seconds=response_post_window_seconds,
     )
-    interleave_windows = select_epoch_frame_windows(
+    resolved_baseline_windows = resolve_baseline_frame_windows(
         resolved_epoch_windows,
-        epoch_name=interleave_epoch_name,
-        epoch_number=interleave_epoch_number,
+        baseline_windows=baseline_windows,
+        epoch_name=baseline_epoch_name,
+        epoch_number=baseline_epoch_number,
     )
-    if len(interleave_windows) == 0:
-        msg = "No interleave windows matched the requested selector"
+    if len(resolved_baseline_windows) == 0:
+        msg = "No baseline windows matched the requested selector"
         raise ValueError(msg)
 
+    return _compute_recording_responses_from_baseline(
+        recording,
+        roi_set,
+        mapping=mapping,
+        resolved_epoch_windows=resolved_epoch_windows,
+        baseline_windows=resolved_baseline_windows,
+        frame_rate_hz=frame_rate_hz,
+        processing_options=processing_options,
+        background_method=background_method,
+        baseline_sample_seconds=baseline_sample_seconds,
+        fit_mode=fit_mode,
+        apply_motion_mask=apply_motion_mask,
+        chunk_frames=chunk_frames,
+        spatial_domain=spatial_domain,
+        trace_start=trace_start,
+        trace_stop=trace_stop,
+        response_pre_window_seconds=response_pre_window_seconds,
+        response_post_window_seconds=response_post_window_seconds,
+    )
+
+
+def _compute_recording_responses_from_baseline(
+    recording: RecordingData,
+    roi_set: RoiSet,
+    *,
+    mapping: InterpolatedEpochMapping | None,
+    resolved_epoch_windows: Sequence[EpochFrameWindow],
+    baseline_windows: tuple[FrameWindow, ...],
+    frame_rate_hz: float,
+    processing_options: ResponseProcessingOptions,
+    background_method: BackgroundCorrectionMethod,
+    baseline_sample_seconds: float | None,
+    fit_mode: DeltaFOverFFitMode,
+    apply_motion_mask: bool,
+    chunk_frames: int,
+    spatial_domain: SpatialDomain,
+    trace_start: int,
+    trace_stop: int,
+    response_pre_window_seconds: float,
+    response_post_window_seconds: float,
+) -> AnalysisResponseComputation:
+    """Run the shared response computation after baseline windows are selected.
+
+    Args:
+        recording: Loaded converted recording.
+        roi_set: ROI masks to extract from the recording.
+        mapping: Optional interpolated epoch mapping provenance.
+        resolved_epoch_windows: Stimulus windows used for grouping.
+        baseline_windows: Baseline windows used for dF/F fitting.
+        frame_rate_hz: Effective analysis frame rate.
+        processing_options: Post-dF/F response processing settings.
+        background_method: Background correction method before dF/F.
+        baseline_sample_seconds: Optional seconds from each baseline end.
+        fit_mode: dF/F exponential fit mode.
+        apply_motion_mask: Whether to mark converted high-motion frames as NaN.
+        chunk_frames: Number of movie frames to read per HDF5 chunk.
+        spatial_domain: Spatial domain used for trace extraction.
+        trace_start: First movie frame to extract.
+        trace_stop: Exclusive stop movie frame to extract.
+        response_pre_window_seconds: Seconds before each stimulus window.
+        response_post_window_seconds: Seconds after each stimulus window.
+
+    Returns:
+        In-memory response-analysis objects.
+    """
     traces = extract_background_corrected_roi_traces(
         recording,
         roi_set,
@@ -326,9 +428,9 @@ def compute_recording_responses(
     )
     dff = compute_roi_delta_f_over_f(
         traces,
-        interleave_windows,
+        baseline_windows,
         data_rate_hz=frame_rate_hz,
-        seconds_interleave_use=seconds_interleave_use,
+        baseline_sample_seconds=baseline_sample_seconds,
         fit_mode=fit_mode,
     )
     if apply_motion_mask:
@@ -360,8 +462,8 @@ def compute_recording_responses(
         traces=traces,
         dff=dff,
         epoch_mapping=mapping,
-        epoch_windows=resolved_epoch_windows,
-        interleave_windows=interleave_windows,
+        epoch_windows=tuple(resolved_epoch_windows),
+        baseline_windows=baseline_windows,
         grouped_responses=grouped_responses,
         response_processing_options=processing_options,
         correlation_scores=correlation_scores,

@@ -233,8 +233,8 @@ class PersistenceTest(unittest.TestCase):
                 stop_frame=2,
                 tau=0.0,
                 amplitudes=np.ones(1, dtype=np.float64),
-                interleave_frame_numbers=np.array([], dtype=np.float64),
-                interleave_fluorescence=np.empty((0, 1), dtype=np.float64),
+                baseline_frame_numbers=np.array([], dtype=np.float64),
+                baseline_fluorescence=np.empty((0, 1), dtype=np.float64),
                 metadata={},
             )
             grouped = group_delta_f_over_f_by_epoch(
@@ -371,9 +371,9 @@ class PersistenceTest(unittest.TestCase):
             stop_frame=3,
             tau=0.0,
             amplitudes=np.array([10.0, 10.0]),
-            interleave_frame_numbers=np.array([0.5]),
-            interleave_fluorescence=np.array([[10.0, 10.0]]),
-            metadata={"method": "test", "fit_mode": "robust"},
+            baseline_frame_numbers=np.array([0.5]),
+            baseline_fluorescence=np.array([[10.0, 10.0]]),
+            metadata={"method": "test", "fit_mode": "direct_bounded_tau"},
         )
 
 

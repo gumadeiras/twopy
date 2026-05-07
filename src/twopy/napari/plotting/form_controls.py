@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 PLOT_CONTROL_WIDTH = 100
-PLOT_DROPDOWN_WIDTH = 140
+PLOT_DROPDOWN_WIDTH = 160
 
 
 def plot_form_layout() -> QFormLayout:

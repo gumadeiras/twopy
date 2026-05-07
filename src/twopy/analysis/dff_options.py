@@ -18,8 +18,8 @@ __all__ = ["DeltaFOverFOptions"]
 class DeltaFOverFOptions:
     """Options that control ROI dF/F computation before response grouping.
 
-    Inputs: baseline epoch selection, background correction method, interleave
-    baseline sampling, dF/F fit mode, and motion-artifact masking choice.
+    Inputs: baseline epoch selection, background correction method, baseline
+    window sampling, dF/F fit mode, and motion-artifact masking choice.
     Outputs: typed parameters that map directly to
     ``compute_recording_responses`` and ``analyze_recording_responses``.
 
@@ -27,9 +27,9 @@ class DeltaFOverFOptions:
     response processing choices such as smoothing and correlation filtering.
     """
 
-    interleave_epoch_number: int = 1
-    interleave_epoch_name: str | None = None
+    baseline_epoch_number: int = 1
+    baseline_epoch_name: str | None = None
     background_method: BackgroundCorrectionMethod = "movie_global_percentile"
-    seconds_interleave_use: float | None = 1.0
-    fit_mode: DeltaFOverFFitMode = "robust"
+    baseline_sample_seconds: float | None = 1.0
+    fit_mode: DeltaFOverFFitMode = "direct_bounded_tau"
     apply_motion_mask: bool = True

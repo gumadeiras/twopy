@@ -56,7 +56,7 @@ from twopy import (
     make_roi_set,
     map_stimulus_epochs_to_frame_windows,
     recording_frame_rate_hz,
-    select_epoch_frame_windows,
+    select_baseline_frame_windows,
 )
 
 recording = load_converted_recording(Path("/path/to/recording_data.h5"))
@@ -71,21 +71,21 @@ traces = extract_background_corrected_roi_traces(
 alignment = detect_recording_photodiode_events(recording)
 timing = classify_recording_photodiode_events(recording, alignment)
 epoch_windows = map_stimulus_epochs_to_frame_windows(recording, alignment)
-interleave_windows = select_epoch_frame_windows(
+baseline_windows = select_baseline_frame_windows(
     epoch_windows,
     epoch_name="Gray Interleave",
 )
 dff = compute_roi_delta_f_over_f(
     traces,
-    interleave_windows,
+    baseline_windows,
     data_rate_hz=recording_frame_rate_hz(recording),
-    fit_mode="robust",
+    fit_mode="direct_bounded_tau",
 )
 ```
 
-ROI masks are GUI-independent and full-frame. Trace extraction streams movie chunks and uses the saved alignment-valid crop by default. Pass `spatial_domain="full_frame"` only for an explicit audit path. The lower-level `extract_roi_traces` helper is the full-frame raw primitive. For dense axon/dendrite process fields, `method="movie_y_stripe_percentile"` estimates a low-percentile background separately for each frame and y-stripe, then subtracts the stripe background from ROIs by position. `method="roi_y_stripe_percentile"` takes rows near each ROI center, excludes ROI pixels, keeps dim pixels by percentile, averages those pixels over time, and subtracts that trace from that ROI only.
+ROI masks are GUI-independent and full-frame. Trace extraction streams movie chunks and uses the saved alignment-valid crop by default. Pass `spatial_domain="full_frame"` only when you need explicit full-frame extraction. The lower-level `extract_roi_traces` helper is the full-frame raw primitive. For dense axon/dendrite process fields, `method="movie_y_stripe_percentile"` estimates a low-percentile background separately for each frame and y-stripe, then subtracts the stripe background from ROIs by position. `method="roi_y_stripe_percentile"` takes rows near each ROI center, excludes ROI pixels, keeps dim pixels by percentile, averages those pixels over time, and subtracts that trace from that ROI only.
 
-Stimulus epoch windows come from classified photodiode events, not nominal frame-rate assumptions. `timing.events` keeps the start, transition, and end classifications auditable. ROI dF/F uses corrected fluorescence plus gray interleave windows to fit one shared exponential tau and one amplitude per ROI. The default dF/F fit mode is `robust`; pass `fit_mode="source_bounds"` for source-bound audit comparisons.
+Stimulus epoch windows come from classified photodiode events, not nominal frame-rate assumptions. `timing.events` keeps the start, transition, and end classifications auditable. ROI dF/F uses corrected fluorescence plus baseline windows to fit one shared exponential tau and one amplitude per ROI. The default dF/F fit mode is `direct_bounded_tau`; use `log_linear` for a log-space linear fit, or `direct_bounded_tau_and_log_amplitude` when both tau and log-amplitude should be bounded.
 
 Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response processing. Smoothing and low-pass filters run on continuous dF/F before trial grouping. Correlation filtering scores grouped trials and stores the selected settings plus QC scores in the analysis HDF5 output.
 
