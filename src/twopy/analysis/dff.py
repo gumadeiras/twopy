@@ -27,7 +27,10 @@ __all__ = [
     "compute_roi_delta_f_over_f",
 ]
 
-DeltaFOverFFitMode = Literal["robust", "source_bounds"]
+DeltaFOverFFitMode = Literal["robust", "source_bounds", "legacy_log_linear"]
+_FIT_MODES: frozenset[DeltaFOverFFitMode] = frozenset(
+    ("robust", "source_bounds", "legacy_log_linear"),
+)
 DffMetadataValue = str | int | float | bool
 
 
@@ -74,13 +77,14 @@ def compute_roi_delta_f_over_f(
         data_rate_hz: Imaging frame rate in frames per second.
         seconds_interleave_use: Number of seconds to keep from the end of each
             interleave window. ``None`` uses the full window.
-        fit_mode: Exponential fit bounds. ``"robust"`` keeps the shared tau
+        fit_mode: Exponential fit mode. ``"robust"`` keeps the shared tau
             bounded but leaves log-amplitude unbounded and ignores nonpositive
             fit samples. ``"source_bounds"`` uses bounded log-amplitude from the
-            original analysis source for audit comparisons. ``"robust"`` is the
-            default because the source log-amplitude upper bound depends on the
-            first baseline sample; if that sample is small, nonpositive, or
-            noisy, the bound can become invalid or overly restrictive.
+            newer direct-fit branch in the original analysis source.
+            ``"legacy_log_linear"`` matches the psycho5 default branch by
+            fitting a line to ``log(F)`` with ``polyfit``. ``"robust"`` remains
+            the normal twopy default because source-compatible modes are less
+            defensive around dim or negative corrected fluorescence.
 
     Returns:
         ``RoiDeltaFOverF`` with dF/F values shaped ``(frames, rois)``.
@@ -208,7 +212,7 @@ def _validate_dff_inputs(
             f"got {seconds_interleave_use}"
         )
         raise ValueError(msg)
-    if fit_mode not in {"robust", "source_bounds"}:
+    if fit_mode not in _FIT_MODES:
         msg = f"Unknown dF/F fit_mode {fit_mode!r}"
         raise ValueError(msg)
 
@@ -347,9 +351,14 @@ def _fit_shared_tau(
     The fit model is ``exp(tau * t + b)`` on the ROI-averaged interleave trace.
     Only ``tau`` is shared; per-ROI amplitudes are computed in a separate
     transparent step. ``robust`` mode handles nonpositive outliers defensively;
-    ``source_bounds`` preserves the original bounded log-amplitude fit for
-    audit comparisons.
+    ``source_bounds`` preserves the newer bounded log-amplitude fit; and
+    ``legacy_log_linear`` preserves the psycho5 default log-linear fit.
     """
+    if fit_mode == "legacy_log_linear":
+        return _fit_shared_tau_legacy_log_linear(
+            frame_numbers=frame_numbers,
+            mean_fluorescence=mean_fluorescence,
+        )
     if fit_mode == "source_bounds":
         return _fit_shared_tau_with_source_bounds(
             frame_numbers=frame_numbers,
@@ -409,6 +418,48 @@ def _fit_shared_tau_robust(
         ),
     )
     return float(fit.x[0])
+
+
+def _fit_shared_tau_legacy_log_linear(
+    *,
+    frame_numbers: npt.NDArray[np.float64],
+    mean_fluorescence: npt.NDArray[np.float64],
+) -> float:
+    """Fit shared tau with the psycho5 default log-linear method.
+
+    Args:
+        frame_numbers: One-based frame number for each interleave sample.
+        mean_fluorescence: Mean fluorescence across ROIs for each sample.
+
+    Returns:
+        Shared exponential ``tau`` from ``polyfit(t, log(F), 1)``.
+
+    Raises:
+        ValueError: If any fit sample is nonfinite or nonpositive.
+
+    MATLAB psycho5 defaults to this branch. It intentionally fits in log space
+    with no tau bounds, then the usual ROI-amplitude step uses the fitted tau.
+    twopy keeps the same positive-data math but fails loudly when corrected
+    fluorescence cannot define a real-valued logarithm.
+    """
+    if np.any(~np.isfinite(mean_fluorescence)):
+        msg = "legacy_log_linear dF/F fit requires finite interleave fluorescence"
+        raise ValueError(msg)
+    if mean_fluorescence.size == 0:
+        msg = "legacy_log_linear dF/F fit requires at least one interleave sample"
+        raise ValueError(msg)
+    if np.any(mean_fluorescence <= 0):
+        msg = "legacy_log_linear dF/F fit requires positive interleave fluorescence"
+        raise ValueError(msg)
+    if mean_fluorescence.size == 1:
+        return 0.0
+
+    slope, _intercept = np.polyfit(
+        frame_numbers,
+        np.log(mean_fluorescence),
+        deg=1,
+    )
+    return float(slope)
 
 
 def _fit_shared_tau_with_source_bounds(

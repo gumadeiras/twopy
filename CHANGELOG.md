@@ -9,6 +9,7 @@
 - Added shared and ROI y-stripe percentile background subtraction for broad row-dependent background in dense process recordings.
 - Renamed Plot-tab labels and dropdown entries to concise readable names and populated the dF/F interleave selector from recording epoch names, defaulting to names that look like gray, grey, or interleave baselines.
 - Added shared helpers for default interleave epoch selection and converted recording frame-rate parsing.
+- Added source-compatible psycho5 helpers for default interleave epoch selection and legacy log-linear dF/F tau fitting.
 
 ### Fixes
 
