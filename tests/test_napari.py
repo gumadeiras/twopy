@@ -27,6 +27,7 @@ from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
@@ -86,6 +87,10 @@ from twopy.napari.plotting.export import (
     export_epoch_plots,
     labels_for_recording_image,
     roi_boundary_segments,
+)
+from twopy.napari.plotting.form_controls import (
+    PLOT_CONTROL_WIDTH,
+    PLOT_DROPDOWN_WIDTH,
 )
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.options import (
@@ -1133,6 +1138,8 @@ class NapariAdapterTest(unittest.TestCase):
         if not isinstance(sem_widget, QCheckBox):
             self.fail("Plot display show SEM row is not a QCheckBox")
         self.assertEqual(sem_widget.text(), "show SEM")
+        self.assertEqual(sem_widget.minimumWidth(), PLOT_DROPDOWN_WIDTH)
+        self.assertEqual(sem_widget.maximumWidth(), PLOT_DROPDOWN_WIDTH)
 
         label_item = layout.itemAt(1, QFormLayout.ItemRole.LabelRole)
         if label_item is None:
@@ -1194,6 +1201,102 @@ class NapariAdapterTest(unittest.TestCase):
             [spin.value() for spin in axis_spins],
             [1.12, 1.46, -1.12, -1.46],
         )
+
+    def test_plot_tab_option_controls_use_shared_widths(self) -> None:
+        """Confirm Plot-tab fields use shared widths by control type.
+
+        Inputs: response-window, dF/F, and processing option widgets.
+        Outputs: dropdowns and checkboxes use the wider width, while spin boxes
+        use the compact control width.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_window_widget = cast(
+            Any,
+            ResponseWindowOptionsWidget(ResponseWindowOptions()),
+        )
+        dff_widget = cast(Any, DeltaFOverFOptionsWidget(DeltaFOverFOptions()))
+        processing_widget = cast(
+            Any,
+            ResponseProcessingOptionsWidget(ResponseProcessingOptions()),
+        )
+        for widget in (response_window_widget, dff_widget, processing_widget):
+            widget.ensurePolished()
+            widget.adjustSize()
+            widget.show()
+        QApplication.processEvents()
+
+        wide_controls: list[QWidget] = [
+            response_window_widget._auto,
+            dff_widget._background_method,
+            dff_widget._interleave_epoch,
+            dff_widget._use_full_interleave,
+            dff_widget._fit_mode,
+            dff_widget._apply_motion_mask,
+            processing_widget._smoothing_method,
+            processing_widget._low_pass_method,
+            processing_widget._correlation_reference,
+            processing_widget._correlation_window_has_stop,
+        ]
+        dropdowns: list[QComboBox] = [
+            dff_widget._background_method,
+            dff_widget._interleave_epoch,
+            dff_widget._fit_mode,
+            processing_widget._smoothing_method,
+            processing_widget._low_pass_method,
+            processing_widget._correlation_reference,
+        ]
+        compact_controls: list[QWidget] = [
+            response_window_widget._pre_seconds,
+            response_window_widget._post_seconds,
+            dff_widget._interleave_seconds,
+            processing_widget._smoothing_window_frames,
+            processing_widget._smoothing_polynomial_order,
+            processing_widget._low_pass_cutoff_hz,
+            processing_widget._low_pass_order,
+            processing_widget._minimum_correlation,
+            processing_widget._correlation_window_start,
+            processing_widget._correlation_window_stop,
+        ]
+
+        self.assertTrue(
+            all(
+                isinstance(
+                    control,
+                    QSpinBox | QDoubleSpinBox,
+                )
+                for control in compact_controls
+            ),
+        )
+        self.assertEqual(
+            {control.width() for control in compact_controls},
+            {PLOT_CONTROL_WIDTH},
+        )
+        self.assertEqual(
+            {control.minimumWidth() for control in wide_controls},
+            {PLOT_DROPDOWN_WIDTH},
+        )
+        self.assertEqual(
+            {control.maximumWidth() for control in wide_controls},
+            {PLOT_DROPDOWN_WIDTH},
+        )
+        self.assertEqual(
+            {control.width() for control in wide_controls},
+            {PLOT_DROPDOWN_WIDTH},
+        )
+        popup_view_widths: set[int] = set()
+        popup_window_widths: set[int] = set()
+        for control in dropdowns:
+            view = control.view()
+            self.assertIsNotNone(view)
+            if view is None:
+                continue
+            popup_view_widths.add(view.width())
+            popup = view.window()
+            self.assertIsNotNone(popup)
+            if popup is not None:
+                popup_window_widths.add(popup.width())
+        self.assertEqual(popup_view_widths, {PLOT_DROPDOWN_WIDTH})
+        self.assertEqual(popup_window_widths, {PLOT_DROPDOWN_WIDTH})
 
     def test_plot_tab_decimal_controls_show_two_places(self) -> None:
         """Confirm Plot-tab dF/F and processing decimals show two places.

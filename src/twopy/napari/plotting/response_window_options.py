@@ -14,17 +14,19 @@ from qtpy.QtCore import QSignalBlocker
 from qtpy.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
-    QFormLayout,
     QGroupBox,
     QVBoxLayout,
     QWidget,
 )
 
 from twopy.analysis.response_window_options import ResponseWindowOptions
+from twopy.napari.plotting.form_controls import (
+    plot_form_layout,
+    set_plot_control_width,
+)
 
 __all__ = ["ResponseWindowOptionsWidget"]
 
-_WINDOW_SPIN_WIDTH = 140
 _UNCAPPED_WINDOW_SECONDS = 1_000_000.0
 
 
@@ -56,6 +58,7 @@ class ResponseWindowOptionsWidget(QWidget):
         super().__init__()
         self._on_change = on_change
         self._auto = QCheckBox("Auto")
+        set_plot_control_width(self._auto)
         self._auto.setChecked(options.auto)
         self._pre_seconds = _window_spin_box(options.pre_window_seconds)
         self._post_seconds = _window_spin_box(options.post_window_seconds)
@@ -130,7 +133,7 @@ class ResponseWindowOptionsWidget(QWidget):
     def _response_window_group(self) -> QGroupBox:
         """Create the response-window control group."""
         group = QGroupBox("Response window")
-        layout = QFormLayout()
+        layout = plot_form_layout()
         layout.addRow("", self._auto)
         layout.addRow("Pre stim.", self._pre_seconds)
         layout.addRow("Post stim.", self._post_seconds)
@@ -163,6 +166,6 @@ def _window_spin_box(value: float) -> QDoubleSpinBox:
     spin_box.setDecimals(1)
     spin_box.setSingleStep(0.1)
     spin_box.setSuffix(" s")
-    spin_box.setFixedWidth(_WINDOW_SPIN_WIDTH)
+    set_plot_control_width(spin_box)
     spin_box.setValue(value)
     return spin_box

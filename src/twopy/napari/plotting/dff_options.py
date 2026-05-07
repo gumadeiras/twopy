@@ -16,7 +16,6 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
-    QFormLayout,
     QGroupBox,
     QStyle,
     QStyledItemDelegate,
@@ -28,6 +27,11 @@ from qtpy.QtWidgets import (
 from twopy.analysis.background_subtraction import BackgroundCorrectionMethod
 from twopy.analysis.dff import DeltaFOverFFitMode
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.napari.plotting.form_controls import (
+    plot_form_layout,
+    set_plot_control_width,
+    set_plot_dropdown_width,
+)
 from twopy.typing_guards import require_string_choice
 
 __all__ = ["DeltaFOverFOptionsWidget"]
@@ -79,6 +83,7 @@ class DeltaFOverFOptionsWidget(QWidget):
         self._on_change = on_change
         self._background_method = _combo_box(_BACKGROUND_METHOD_LABELS)
         self._interleave_epoch = QComboBox()
+        set_plot_dropdown_width(self._interleave_epoch)
         self._interleave_epoch_names: dict[int, str] = {}
         self._interleave_epoch_name_values: dict[int, str | None] = {}
         self._interleave_seconds = _double_spin_box(
@@ -88,9 +93,11 @@ class DeltaFOverFOptionsWidget(QWidget):
             suffix=" s",
         )
         self._use_full_interleave = QCheckBox("Use full interleave")
+        set_plot_control_width(self._use_full_interleave)
         self._use_full_interleave.setChecked(options.seconds_interleave_use is None)
         self._fit_mode = _combo_box(_FIT_MODE_LABELS)
         self._apply_motion_mask = QCheckBox("Mask motion artifacts")
+        set_plot_control_width(self._apply_motion_mask)
         self._apply_motion_mask.setChecked(options.apply_motion_mask)
 
         layout = QVBoxLayout()
@@ -219,7 +226,7 @@ class DeltaFOverFOptionsWidget(QWidget):
     def _dff_group(self) -> QGroupBox:
         """Create the dF/F control group."""
         group = QGroupBox("dF/F")
-        layout = QFormLayout()
+        layout = plot_form_layout()
         layout.addRow("Background", self._background_method)
         layout.addRow("Interleave epoch", self._interleave_epoch)
         layout.addRow("Interleave span", self._interleave_seconds)
@@ -344,6 +351,7 @@ def _combo_box(values: tuple[tuple[str, str, str | None], ...]) -> QComboBox:
     if has_rich_text:
         combo_box.setItemDelegate(_RichTextComboDelegate(combo_box))
         combo_box.setLabelDrawingMode(QComboBox.LabelDrawingMode.UseDelegate)
+    set_plot_dropdown_width(combo_box)
     return combo_box
 
 
@@ -374,6 +382,7 @@ def _double_spin_box(
     spin_box.setValue(value)
     if suffix:
         spin_box.setSuffix(suffix)
+    set_plot_control_width(spin_box)
     return spin_box
 
 

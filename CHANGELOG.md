@@ -16,6 +16,7 @@
 - Trimmed unused vertical space below live napari response plots.
 - Kept live napari Plot-tab recomputes on the same post-stimulus x-axis window used when loading saved response plots.
 - Moved the show SEM toggle into the napari Plot subsection and aligned two-decimal Plot-tab numeric controls.
+- Standardized napari Plot-tab control widths across dropdowns, spin boxes, and checkboxes for more consistent option-panel layout.
 - Added the package version to the napari window title.
 
 ## 0.1.3 - 2026-05-07

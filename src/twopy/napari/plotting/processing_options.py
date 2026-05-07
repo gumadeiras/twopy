@@ -14,7 +14,6 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
-    QFormLayout,
     QGroupBox,
     QSpinBox,
     QVBoxLayout,
@@ -29,6 +28,11 @@ from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     SmoothingMethod,
     SmoothingOptions,
+)
+from twopy.napari.plotting.form_controls import (
+    plot_form_layout,
+    set_plot_control_width,
+    set_plot_dropdown_width,
 )
 from twopy.typing_guards import require_string_choice
 
@@ -125,6 +129,7 @@ class ResponseProcessingOptionsWidget(QWidget):
             suffix=" s",
         )
         self._correlation_window_has_stop = QCheckBox("Use stop")
+        set_plot_control_width(self._correlation_window_has_stop)
         self._correlation_window_has_stop.setChecked(stop_seconds is not None)
 
         layout = QVBoxLayout()
@@ -247,7 +252,7 @@ class ResponseProcessingOptionsWidget(QWidget):
     def _smoothing_group(self) -> QGroupBox:
         """Create the smoothing control group."""
         group = QGroupBox("Smoothing")
-        layout = QFormLayout()
+        layout = plot_form_layout()
         layout.addRow("Method", self._smoothing_method)
         layout.addRow("Window", self._smoothing_window_frames)
         layout.addRow("Order", self._smoothing_polynomial_order)
@@ -257,7 +262,7 @@ class ResponseProcessingOptionsWidget(QWidget):
     def _low_pass_group(self) -> QGroupBox:
         """Create the low-pass control group."""
         group = QGroupBox("Low-pass filter")
-        layout = QFormLayout()
+        layout = plot_form_layout()
         layout.addRow("Method", self._low_pass_method)
         layout.addRow("Cutoff", self._low_pass_cutoff_hz)
         layout.addRow("Order", self._low_pass_order)
@@ -267,7 +272,7 @@ class ResponseProcessingOptionsWidget(QWidget):
     def _correlation_group(self) -> QGroupBox:
         """Create the correlation-filter control group."""
         group = QGroupBox("Correlation filter")
-        layout = QFormLayout()
+        layout = plot_form_layout()
         layout.addRow("Reference", self._correlation_reference)
         layout.addRow("Minimum r", self._minimum_correlation)
         layout.addRow("Window start", self._correlation_window_start)
@@ -365,6 +370,7 @@ def _combo_box(values: tuple[tuple[str, str], ...]) -> QComboBox:
     combo_box = QComboBox()
     for label, value in values:
         combo_box.addItem(label, value)
+    set_plot_dropdown_width(combo_box)
     return combo_box
 
 
@@ -373,6 +379,7 @@ def _spin_box(*, minimum: int, maximum: int, value: int) -> QSpinBox:
     spin_box = QSpinBox()
     spin_box.setRange(minimum, maximum)
     spin_box.setValue(value)
+    set_plot_control_width(spin_box)
     return spin_box
 
 
@@ -400,4 +407,5 @@ def _double_spin_box(
     spin_box.setValue(value)
     if suffix:
         spin_box.setSuffix(suffix)
+    set_plot_control_width(spin_box)
     return spin_box
