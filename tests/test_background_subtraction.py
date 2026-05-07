@@ -254,6 +254,75 @@ class BackgroundSubtractionTest(unittest.TestCase):
                 np.array([[15.0], [15.0]]),
             )
 
+    def test_extracts_movie_y_stripe_percentile_corrected_traces(self) -> None:
+        """Confirm framewise y-stripe background subtraction is per stripe.
+
+        Inputs: two ROIs in different image rows and per-frame row backgrounds.
+        Outputs: each ROI is corrected by the low-percentile value from its own
+        frame stripe.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            movie = np.array(
+                [
+                    [
+                        [10.0, 2.0],
+                        [99.0, 99.0],
+                        [50.0, 20.0],
+                        [99.0, 99.0],
+                    ],
+                    [
+                        [12.0, 4.0],
+                        [99.0, 99.0],
+                        [55.0, 25.0],
+                        [99.0, 99.0],
+                    ],
+                ],
+            )
+            recording = self._write_recording(Path(temp_dir), movie=movie)
+            roi_set = make_roi_set(
+                np.array(
+                    [
+                        [
+                            [True, False],
+                            [False, False],
+                            [False, False],
+                            [False, False],
+                        ],
+                        [
+                            [False, False],
+                            [False, False],
+                            [True, False],
+                            [False, False],
+                        ],
+                    ],
+                ),
+                labels=("top", "lower"),
+            )
+
+            traces = extract_background_corrected_roi_traces(
+                recording,
+                roi_set,
+                method="movie_y_stripe_percentile",
+                stripe_y_height=1,
+                stripe_percentile=50.0,
+            )
+
+            self.assertEqual(traces.method, "movie_y_stripe_percentile")
+            self.assertEqual(traces.metadata["stripe_y_height"], 1)
+            self.assertEqual(traces.metadata["stripe_count"], 4)
+            np.testing.assert_array_equal(
+                traces.raw_values,
+                np.array([[10.0, 50.0], [12.0, 55.0]]),
+            )
+            np.testing.assert_array_equal(
+                traces.background_values,
+                np.array([[6.0, 35.0], [8.0, 40.0]]),
+            )
+            np.testing.assert_array_equal(
+                traces.corrected_values,
+                np.array([[4.0, 15.0], [4.0, 15.0]]),
+            )
+
     def test_crop_domain_rejects_roi_pixels_outside_crop(self) -> None:
         """Confirm crop-domain analysis never drops ROI pixels silently.
 
@@ -330,8 +399,8 @@ class BackgroundSubtractionTest(unittest.TestCase):
                     statistic=cast(TraceStatistic, "median"),
                 )
 
-    def test_extracts_roi_local_y_corrected_traces(self) -> None:
-        """Confirm local-y correction subtracts one background trace per ROI.
+    def test_extracts_roi_y_stripe_corrected_traces(self) -> None:
+        """Confirm ROI y-stripe correction subtracts one background trace per ROI.
 
         Inputs: two ROIs at different image rows and row-local background
         pixels outside all ROIs.
@@ -378,7 +447,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
             traces = extract_background_corrected_roi_traces(
                 recording,
                 roi_set,
-                method="roi_local_percentile_y",
+                method="roi_y_stripe_percentile",
                 local_y_radius=0,
             )
 

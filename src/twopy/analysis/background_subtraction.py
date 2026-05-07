@@ -28,7 +28,8 @@ __all__ = [
 BackgroundCorrectionMethod = Literal[
     "none",
     "movie_global_percentile",
-    "roi_local_percentile_y",
+    "movie_y_stripe_percentile",
+    "roi_y_stripe_percentile",
 ]
 BackgroundMetadataValue = str | int | float | bool
 
@@ -68,6 +69,8 @@ def extract_background_corrected_roi_traces(
     chunk_frames: int = 128,
     statistic: TraceStatistic = "mean",
     global_percentile: float = 10.0,
+    stripe_y_height: int | None = None,
+    stripe_percentile: float = 20.0,
     local_y_radius: int | None = None,
     local_percentile: float = 20.0,
     spatial_domain: SpatialDomain = "alignment_valid_crop",
@@ -80,9 +83,10 @@ def extract_background_corrected_roi_traces(
         method: Background correction method. ``"none"`` keeps raw traces inside
             the selected spatial domain, ``"movie_global_percentile"`` subtracts
             a framewise background estimated from dim global pixels in the mean
-            image, and
-            ``"roi_local_percentile_y"`` subtracts a local y-neighborhood
-            background trace from each ROI.
+            image, ``"movie_y_stripe_percentile"`` subtracts a framewise
+            low-percentile y-stripe background field, and
+            ``"roi_y_stripe_percentile"`` subtracts a per-ROI y-stripe
+            background trace.
         start_frame: Optional first frame to extract.
         stop_frame: Optional exclusive stop frame.
         chunk_frames: Number of movie frames to read per chunk.
@@ -90,10 +94,15 @@ def extract_background_corrected_roi_traces(
             supported.
         global_percentile: Percentile of the recording mean image used to pick
             global background pixels.
-        local_y_radius: Half-width in rows for local-y background pixels. When
+        stripe_y_height: Height in rows for framewise y-stripe background
+            correction. When omitted, twopy uses roughly five percent of the
+            image height.
+        stripe_percentile: Percentile inside each frame stripe used to estimate
+            the framewise y-stripe background field.
+        local_y_radius: Half-width in rows for the per-ROI y-stripe. When
             omitted, twopy uses roughly five percent of the image height.
-        local_percentile: Percentile inside each local row window used to keep
-            dim background pixels and reject bright non-ROI structures.
+        local_percentile: Percentile inside each ROI y-stripe used to keep dim
+            background pixels and reject bright non-ROI structures.
         spatial_domain: Spatial region used for analysis extraction. The default
             uses the alignment-valid crop saved during conversion, matching the
             crop-domain analysis contract while keeping ROI masks stored in
@@ -153,9 +162,23 @@ def extract_background_corrected_roi_traces(
                 spatial_domain=spatial_domain,
             )
         )
-    elif method == "roi_local_percentile_y":
+    elif method == "movie_y_stripe_percentile":
         raw_values, background_values, corrected_values, metadata = (
-            _extract_roi_local_y_corrected_traces(
+            _extract_movie_y_stripe_percentile_corrected_traces(
+                recording=recording,
+                roi_pixel_indices=roi_pixel_indices,
+                frame_start=frame_start,
+                frame_stop=frame_stop,
+                chunk_frames=chunk_frames,
+                stripe_y_height=stripe_y_height,
+                percentile=stripe_percentile,
+                spatial_crop=crop,
+                spatial_domain=spatial_domain,
+            )
+        )
+    elif method == "roi_y_stripe_percentile":
+        raw_values, background_values, corrected_values, metadata = (
+            _extract_roi_y_stripe_percentile_corrected_traces(
                 recording=recording,
                 roi_masks=cropped_roi_masks,
                 roi_pixel_indices=roi_pixel_indices,
@@ -200,7 +223,8 @@ def _validate_background_method(method: BackgroundCorrectionMethod) -> None:
     allowed_methods = {
         "none",
         "movie_global_percentile",
-        "roi_local_percentile_y",
+        "movie_y_stripe_percentile",
+        "roi_y_stripe_percentile",
     }
     if method not in allowed_methods:
         msg = (
@@ -332,7 +356,104 @@ def _extract_movie_global_percentile_corrected_traces(
     return raw_values, background_values, corrected_values, metadata
 
 
-def _extract_roi_local_y_corrected_traces(
+def _extract_movie_y_stripe_percentile_corrected_traces(
+    *,
+    recording: RecordingData,
+    roi_pixel_indices: tuple[npt.NDArray[np.int64], ...],
+    frame_start: int,
+    frame_stop: int,
+    chunk_frames: int,
+    stripe_y_height: int | None,
+    percentile: float,
+    spatial_crop: SpatialCrop,
+    spatial_domain: SpatialDomain,
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    dict[str, BackgroundMetadataValue],
+]:
+    """Extract traces corrected by a framewise y-stripe background field.
+
+    Args:
+        recording: Converted recording with lazy movie batches.
+        roi_pixel_indices: Flattened pixel indices for each ROI.
+        frame_start: First frame to read.
+        frame_stop: Exclusive stop frame.
+        chunk_frames: Maximum number of frames per HDF5 read.
+        stripe_y_height: Optional stripe height in image rows. When omitted,
+            twopy uses roughly five percent of the image height.
+        percentile: Percentile used inside each frame stripe.
+        spatial_crop: Spatial domain used for background and ROI pixels.
+        spatial_domain: User-facing name of ``spatial_crop``.
+
+    Returns:
+        Raw ROI traces, stripe-field background traces, corrected traces, and
+        audit metadata.
+
+    Plain algorithm:
+        divide each frame into y-stripes
+        take the dim percentile inside each stripe for that frame
+        assign each ROI pixel the background from its stripe
+        average those background pixels over each ROI
+        subtract the stripe background from each ROI pixel
+
+    This models broad, row-dependent background without assuming that pixels
+    near one ROI are safe neuropil reference pixels.
+    """
+    _validate_percentile(percentile)
+    crop_shape = spatial_crop.crop_image(recording.mean_image).shape
+    stripe_height = _resolve_stripe_y_height(
+        row_count=crop_shape[0],
+        stripe_y_height=stripe_y_height,
+    )
+    row_slices = _stripe_row_slices(
+        row_count=crop_shape[0],
+        stripe_y_height=stripe_height,
+    )
+    frame_count = frame_stop - frame_start
+    roi_count = len(roi_pixel_indices)
+    raw_values = np.empty((frame_count, roi_count), dtype=np.float64)
+    background_values = np.empty((frame_count, roi_count), dtype=np.float64)
+    corrected_values = np.empty((frame_count, roi_count), dtype=np.float64)
+
+    for chunk_start, chunk_stop, frames in recording.movie.iter_frame_batches(
+        chunk_frames=chunk_frames,
+        start=frame_start,
+        stop=frame_stop,
+        spatial_crop=spatial_crop,
+    ):
+        chunk_offset = chunk_start - frame_start
+        chunk_slice = slice(chunk_offset, chunk_offset + (chunk_stop - chunk_start))
+        background_field = _framewise_y_stripe_background_field(
+            frames,
+            row_slices=row_slices,
+            percentile=percentile,
+        )
+        chunk_flat = frames.reshape(frames.shape[0], -1)
+        background_flat = background_field.reshape(background_field.shape[0], -1)
+        for roi_index, pixel_indices in enumerate(roi_pixel_indices):
+            roi_pixels = chunk_flat[:, pixel_indices]
+            roi_background_pixels = background_flat[:, pixel_indices]
+            raw_values[chunk_slice, roi_index] = roi_pixels.mean(axis=1)
+            background_values[chunk_slice, roi_index] = roi_background_pixels.mean(
+                axis=1,
+            )
+            corrected_pixels = np.maximum(roi_pixels - roi_background_pixels, 0.0)
+            corrected_values[chunk_slice, roi_index] = corrected_pixels.mean(axis=1)
+
+    metadata: dict[str, BackgroundMetadataValue] = {
+        "method": "movie_y_stripe_percentile",
+        "stripe_y_height": stripe_height,
+        "stripe_percentile": float(percentile),
+        "stripe_count": len(row_slices),
+        "negative_values_clamped": True,
+        **_spatial_crop_metadata(spatial_domain, spatial_crop),
+    }
+    return raw_values, background_values, corrected_values, metadata
+
+
+def _extract_roi_y_stripe_percentile_corrected_traces(
     *,
     recording: RecordingData,
     roi_masks: npt.NDArray[np.bool_],
@@ -350,7 +471,7 @@ def _extract_roi_local_y_corrected_traces(
     npt.NDArray[np.float64],
     dict[str, BackgroundMetadataValue],
 ]:
-    """Extract ROI traces corrected by local y-neighborhood background.
+    """Extract ROI traces corrected by per-ROI y-stripe background.
 
     Args:
         recording: Converted recording with lazy movie batches.
@@ -359,25 +480,33 @@ def _extract_roi_local_y_corrected_traces(
         frame_start: First frame to read.
         frame_stop: Exclusive stop frame.
         chunk_frames: Maximum number of frames per HDF5 read.
-        local_y_radius: Optional row half-width for local background pixels.
-        local_percentile: Percentile used to keep dim local background pixels.
+        local_y_radius: Optional row half-width for the ROI y-stripe.
+        local_percentile: Percentile used to keep dim pixels in each ROI
+            y-stripe.
         spatial_crop: Spatial domain used for background and ROI pixels.
         spatial_domain: User-facing name of ``spatial_crop``.
 
     Returns:
         Raw ROI traces, local background traces, corrected traces, and metadata.
 
+    Plain algorithm:
+        take rows near that ROI center
+        exclude all ROI pixels
+        keep dim pixels by percentile
+        average those pixels over time
+        subtract that trace from that ROI only
+
     The method estimates a background trace per ROI from dim pixels that are
-    outside every ROI and close to that ROI along the scanline axis. It is
-    designed for stimulus bleedthrough that varies across rows without
-    requiring relaxation labeling or connected-component heuristics.
+    outside every ROI and inside that ROI's y-stripe. It is designed for
+    stimulus bleedthrough that varies across rows without requiring relaxation
+    labeling or connected-component heuristics.
     """
-    radius = _resolve_local_y_radius(
+    radius = _resolve_roi_y_stripe_radius(
         row_count=roi_masks.shape[1],
         local_y_radius=local_y_radius,
     )
     _validate_percentile(local_percentile)
-    background_indices_by_roi = _local_y_background_pixel_indices(
+    background_indices_by_roi = _roi_y_stripe_background_pixel_indices(
         roi_masks=roi_masks,
         mean_image=spatial_crop.crop_image(recording.mean_image),
         local_y_radius=radius,
@@ -404,7 +533,7 @@ def _extract_roi_local_y_corrected_traces(
         int(pixel_indices.size) for pixel_indices in background_indices_by_roi
     )
     metadata: dict[str, BackgroundMetadataValue] = {
-        "method": "roi_local_percentile_y",
+        "method": "roi_y_stripe_percentile",
         "local_y_radius": radius,
         "local_percentile": float(local_percentile),
         "background_pixel_count_min": min(background_counts),
@@ -523,12 +652,12 @@ def _global_background_pixel_indices(
     return background_indices, threshold
 
 
-def _resolve_local_y_radius(
+def _resolve_roi_y_stripe_radius(
     *,
     row_count: int,
     local_y_radius: int | None,
 ) -> int:
-    """Resolve the row radius for local-y background correction.
+    """Resolve the row radius for ROI y-stripe background correction.
 
     Args:
         row_count: Number of image rows.
@@ -544,14 +673,81 @@ def _resolve_local_y_radius(
     return radius
 
 
-def _local_y_background_pixel_indices(
+def _resolve_stripe_y_height(
+    *,
+    row_count: int,
+    stripe_y_height: int | None,
+) -> int:
+    """Resolve y-stripe height for framewise background correction.
+
+    Args:
+        row_count: Number of image rows.
+        stripe_y_height: Optional caller-provided stripe height.
+
+    Returns:
+        Positive stripe height in rows.
+    """
+    height = (
+        max(1, round(row_count / 20)) if stripe_y_height is None else stripe_y_height
+    )
+    if height <= 0:
+        msg = f"stripe_y_height must be positive; got {height}"
+        raise ValueError(msg)
+    return height
+
+
+def _stripe_row_slices(
+    *,
+    row_count: int,
+    stripe_y_height: int,
+) -> tuple[slice, ...]:
+    """Split image rows into contiguous y-stripe slices.
+
+    Args:
+        row_count: Number of image rows.
+        stripe_y_height: Stripe height in rows.
+
+    Returns:
+        Tuple of row slices covering the image.
+    """
+    return tuple(
+        slice(start, min(start + stripe_y_height, row_count))
+        for start in range(0, row_count, stripe_y_height)
+    )
+
+
+def _framewise_y_stripe_background_field(
+    frames: npt.NDArray[np.float64],
+    *,
+    row_slices: tuple[slice, ...],
+    percentile: float,
+) -> npt.NDArray[np.float64]:
+    """Build one low-percentile y-stripe background image per frame.
+
+    Args:
+        frames: Movie chunk shaped ``(frames, rows, columns)``.
+        row_slices: Row stripes used for the background field.
+        percentile: Percentile used inside each frame stripe.
+
+    Returns:
+        Background field shaped like ``frames``.
+    """
+    background = np.empty_like(frames, dtype=np.float64)
+    for row_slice in row_slices:
+        stripe_values = frames[:, row_slice, :].reshape(frames.shape[0], -1)
+        stripe_background = np.percentile(stripe_values, percentile, axis=1)
+        background[:, row_slice, :] = stripe_background[:, None, None]
+    return background
+
+
+def _roi_y_stripe_background_pixel_indices(
     *,
     roi_masks: npt.NDArray[np.bool_],
     mean_image: npt.NDArray[np.float64],
     local_y_radius: int,
     local_percentile: float,
 ) -> tuple[npt.NDArray[np.int64], ...]:
-    """Find local y-neighborhood background pixels for each ROI.
+    """Find ROI y-stripe background pixels for each ROI.
 
     Args:
         roi_masks: ROI masks used to exclude foreground pixels.

@@ -74,7 +74,8 @@ _TRACE_STATISTICS: tuple[TraceStatistic, ...] = ("mean",)
 _BACKGROUND_CORRECTION_METHODS: tuple[BackgroundCorrectionMethod, ...] = (
     "none",
     "movie_global_percentile",
-    "roi_local_percentile_y",
+    "movie_y_stripe_percentile",
+    "roi_y_stripe_percentile",
 )
 
 
