@@ -18,6 +18,7 @@
 - Trimmed unused vertical space below live napari response plots.
 - Kept live napari Plot-tab recomputes on the same post-stimulus x-axis window used when loading saved response plots.
 - Rejected malformed grouped response time, frame, and ROI axes consistently before processing, loading, or exporting response summaries.
+- Reused one shared frame-range validator for conversion, converted movie reads, ROI trace extraction, and background-corrected trace extraction.
 - Moved the show SEM toggle into the napari Plot subsection and aligned two-decimal Plot-tab numeric controls.
 - Standardized napari Plot-tab control widths across dropdowns, spin boxes, and checkboxes for more consistent option-panel layout.
 - Added the package version to the napari window title.

@@ -16,6 +16,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.converted import RecordingData
+from twopy.frame_ranges import normalize_frame_range
 from twopy.roi import RoiSet, TraceStatistic, validate_trace_statistic
 from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
 
@@ -124,10 +125,11 @@ def extract_background_corrected_roi_traces(
     validate_trace_statistic(statistic)
     _validate_roi_movie_shape(roi_set, recording)
 
-    frame_start, frame_stop = _normalize_trace_frame_range(
+    frame_start, frame_stop = normalize_frame_range(
         frame_count=recording.movie.shape[0],
         start_frame=start_frame,
         stop_frame=stop_frame,
+        context="trace frame range",
     )
 
     crop = _resolve_spatial_domain(recording, spatial_domain)
@@ -842,27 +844,3 @@ def _spatial_crop_metadata(
         "spatial_original_axis0": spatial_crop.original_shape[0],
         "spatial_original_axis1": spatial_crop.original_shape[1],
     }
-
-
-def _normalize_trace_frame_range(
-    *,
-    frame_count: int,
-    start_frame: int | None,
-    stop_frame: int | None,
-) -> tuple[int, int]:
-    """Normalize and validate the frame range for trace extraction.
-
-    Args:
-        frame_count: Number of frames in the movie.
-        start_frame: Optional first frame index.
-        stop_frame: Optional exclusive stop frame.
-
-    Returns:
-        ``(start, stop)`` frame bounds.
-    """
-    start = 0 if start_frame is None else start_frame
-    stop = frame_count if stop_frame is None else stop_frame
-    if start < 0 or stop > frame_count or start >= stop:
-        msg = f"Invalid trace frame range [{start}, {stop}) for {frame_count} frames"
-        raise ValueError(msg)
-    return start, stop

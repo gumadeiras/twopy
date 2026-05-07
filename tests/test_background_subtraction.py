@@ -399,6 +399,24 @@ class BackgroundSubtractionTest(unittest.TestCase):
                     statistic=cast(TraceStatistic, "median"),
                 )
 
+    def test_rejects_invalid_trace_frame_range(self) -> None:
+        """Confirm background trace extraction validates frame bounds.
+
+        Inputs: a converted movie and an empty trace frame range.
+        Outputs: clear validation error before background branch work starts.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = self._write_recording(Path(temp_dir))
+            roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
+
+            with self.assertRaisesRegex(ValueError, "trace frame range"):
+                extract_background_corrected_roi_traces(
+                    recording,
+                    roi_set,
+                    start_frame=1,
+                    stop_frame=1,
+                )
+
     def test_extracts_roi_y_stripe_corrected_traces(self) -> None:
         """Confirm ROI y-stripe correction subtracts one background trace per ROI.
 

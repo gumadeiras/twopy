@@ -16,6 +16,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.converted import RecordingData
+from twopy.frame_ranges import normalize_frame_range
 from twopy.typing_guards import require_bool_array
 
 __all__ = [
@@ -262,10 +263,11 @@ def extract_roi_traces(
     if roi_set.masks.shape[1:] != recording.movie.shape[1:]:
         _raise_roi_movie_shape_error(roi_set, recording)
 
-    frame_start, frame_stop = _normalize_trace_frame_range(
+    frame_start, frame_stop = normalize_frame_range(
         frame_count=recording.movie.shape[0],
         start_frame=start_frame,
         stop_frame=stop_frame,
+        context="trace frame range",
     )
     roi_pixel_indices = _roi_pixel_indices(roi_set)
     traces = _extract_mean_traces_from_indices(
@@ -436,27 +438,3 @@ def _decode_label(value: object) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8")
     return str(value)
-
-
-def _normalize_trace_frame_range(
-    *,
-    frame_count: int,
-    start_frame: int | None,
-    stop_frame: int | None,
-) -> tuple[int, int]:
-    """Normalize and validate the frame range for trace extraction.
-
-    Args:
-        frame_count: Number of frames in the movie.
-        start_frame: Optional first frame index.
-        stop_frame: Optional exclusive stop frame.
-
-    Returns:
-        ``(start, stop)`` frame bounds.
-    """
-    start = 0 if start_frame is None else start_frame
-    stop = frame_count if stop_frame is None else stop_frame
-    if start < 0 or stop > frame_count or start >= stop:
-        msg = f"Invalid trace frame range [{start}, {stop}) for {frame_count} frames"
-        raise ValueError(msg)
-    return start, stop

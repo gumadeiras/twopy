@@ -19,6 +19,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.conversion.types import FrameCountAudit
+from twopy.frame_ranges import normalize_frame_range
 from twopy.spatial import SpatialCrop, full_frame_crop
 from twopy.typing_guards import (
     require_bool_array,
@@ -72,7 +73,13 @@ class ConvertedMovie:
         This is the direct escape hatch for previews, tests, and small frame
         ranges. Trace extraction should prefer ``iter_frame_batches``.
         """
-        frame_slice = slice(start, stop)
+        start_frame, stop_frame = normalize_frame_range(
+            frame_count=self.shape[0],
+            start_frame=start,
+            stop_frame=stop,
+            context="converted movie frame range",
+        )
+        frame_slice = slice(start_frame, stop_frame)
         crop = _normalize_spatial_crop(self.shape[1:], spatial_crop)
         with h5py.File(self.path, "r") as h5_file:
             dataset = h5_file[self.dataset_name]
@@ -108,10 +115,11 @@ class ConvertedMovie:
         The iterator streams from disk and keeps memory bounded by the chunk
         size. This is the intended access pattern for trace extraction.
         """
-        start_frame, stop_frame = _normalize_movie_frame_range(
+        start_frame, stop_frame = normalize_frame_range(
             frame_count=self.shape[0],
-            start=start,
-            stop=stop,
+            start_frame=start,
+            stop_frame=stop,
+            context="converted movie frame range",
         )
         if chunk_frames < 1:
             msg = f"chunk_frames must be at least 1; got {chunk_frames}"
@@ -678,30 +686,3 @@ def _normalize_spatial_crop(
         )
         raise ValueError(msg)
     return spatial_crop
-
-
-def _normalize_movie_frame_range(
-    *,
-    frame_count: int,
-    start: int | None,
-    stop: int | None,
-) -> tuple[int, int]:
-    """Normalize and validate a converted movie frame range.
-
-    Args:
-        frame_count: Total number of frames in the movie.
-        start: Optional first frame index.
-        stop: Optional exclusive stop frame.
-
-    Returns:
-        ``(start, stop)`` frame bounds.
-    """
-    start_frame = 0 if start is None else start
-    stop_frame = frame_count if stop is None else stop
-    if start_frame < 0 or stop_frame > frame_count or start_frame >= stop_frame:
-        msg = (
-            f"Invalid frame range [{start_frame}, {stop_frame}) for "
-            f"{frame_count} frames"
-        )
-        raise ValueError(msg)
-    return start_frame, stop_frame

@@ -362,6 +362,26 @@ class ConversionTest(unittest.TestCase):
                 self.assertEqual(h5_file["movie/mean_image"].attrs["start_frame"], 1)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["stop_frame"], 3)
 
+    def test_rejects_invalid_conversion_mean_image_frame_range(self) -> None:
+        """Confirm conversion validates requested mean-image frame bounds.
+
+        Inputs: a temporary source recording and an empty mean-image range.
+        Outputs: clear validation error before writing converted files.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            session_dir = root / "recording"
+            output_dir = root / "output"
+            self._write_session(session_dir)
+
+            with self.assertRaisesRegex(ValueError, "frame range for mean image"):
+                convert_recording_to_twopy(
+                    session_dir,
+                    output_dir,
+                    mean_start_frame=2,
+                    mean_stop_frame=2,
+                )
+
     def test_conversion_uses_configured_analysis_output_by_default(self) -> None:
         """Confirm conversion defaults to ``analysis_output`` from config.
 

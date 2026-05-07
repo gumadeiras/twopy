@@ -10,7 +10,6 @@ Analysis code should operate on the converted HDF5 files.
 from pathlib import Path
 
 from twopy.config import DEFAULT_CONFIG_PATH, load_config, resolve_analysis_output_dir
-from twopy.conversion.frame_ranges import normalize_frame_range
 from twopy.conversion.hdf5_writing import (
     CONVERTED_ALIGNED_MOVIE_FILENAME,
     CONVERTED_RECORDING_FILENAME,
@@ -19,6 +18,7 @@ from twopy.conversion.hdf5_writing import (
 )
 from twopy.conversion.source_loading import load_source_conversion_inputs
 from twopy.conversion.types import ConvertedRecording
+from twopy.frame_ranges import normalize_frame_range
 
 __all__ = ["convert_recording_to_twopy"]
 
@@ -53,6 +53,7 @@ def convert_recording_to_twopy(
         frame_count=inputs.aligned_movie.shape[0],
         start_frame=mean_start_frame,
         stop_frame=mean_stop_frame,
+        context="frame range for mean image",
     )
     mean_image = inputs.aligned_movie.mean_image(
         start_frame=start_frame,

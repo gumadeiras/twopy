@@ -104,6 +104,22 @@ class ConvertedRecordingTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Missing converted aligned movie"):
                 load_converted_recording(root / "recording_data.h5")
 
+    def test_converted_movie_rejects_invalid_frame_ranges(self) -> None:
+        """Confirm lazy converted movie reads share frame-range validation.
+
+        Inputs: loaded converted movie and negative or empty frame ranges.
+        Outputs: clear validation errors before HDF5 slicing.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._write_converted_recording(root)
+            recording = load_converted_recording(root / "recording_data.h5")
+
+            with self.assertRaisesRegex(ValueError, "converted movie frame range"):
+                recording.movie.read_frames(-1, 2)
+            with self.assertRaisesRegex(ValueError, "converted movie frame range"):
+                tuple(recording.movie.iter_frame_batches(start=2, stop=2))
+
     def test_rejects_imaging_photodiode_length_mismatch(self) -> None:
         """Confirm loaded recordings keep one PD sample per movie frame.
 

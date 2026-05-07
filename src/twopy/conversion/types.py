@@ -12,7 +12,7 @@ import h5py
 import numpy as np
 import numpy.typing as npt
 
-from twopy.conversion.frame_ranges import normalize_frame_range
+from twopy.frame_ranges import normalize_frame_range
 from twopy.session import TwoPhotonSessionFiles
 from twopy.spatial import SpatialCrop
 
@@ -52,7 +52,13 @@ class AlignedMovieSource:
         This method exists for conversion checks and small previews, not for
         long-lived analysis workflows.
         """
-        frame_slice = slice(start, stop)
+        start_frame, stop_frame = normalize_frame_range(
+            frame_count=self.shape[0],
+            start_frame=start,
+            stop_frame=stop,
+            context="source movie frame range",
+        )
+        frame_slice = slice(start_frame, stop_frame)
         with h5py.File(self.path, "r") as mat_file:
             dataset = mat_file[self.dataset_name]
             return cast(npt.NDArray[np.float64], dataset[frame_slice, :, :])
@@ -81,6 +87,7 @@ class AlignedMovieSource:
             frame_count=self.shape[0],
             start_frame=start_frame,
             stop_frame=stop_frame,
+            context="frame range for mean image",
         )
         if chunk_frames < 1:
             msg = f"chunk_frames must be at least 1; got {chunk_frames}"
