@@ -7,6 +7,8 @@
 - Clamped stale napari movie preview ranges when loading a shorter recording.
 - Ignored macOS AppleDouble sidecar files when discovering source recordings so
   napari can auto-convert recordings on mounted volumes.
+- Reported source-recording validation errors during napari loading instead of
+  replacing them with a missing converted-file message.
 
 ## 0.1.2 - 2026-05-06
 

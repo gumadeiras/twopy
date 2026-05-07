@@ -1416,6 +1416,20 @@ class NapariAdapterTest(unittest.TestCase):
                 (source_dir / "twopy" / "aligned_movie.h5").resolve(),
             )
 
+    def test_source_recording_validation_error_is_reported(self) -> None:
+        """Confirm malformed source folders do not look like missing HDF5.
+
+        Inputs: source-shaped recording folder with two real TIFF movies.
+        Outputs: the source discovery error reaches the caller.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_dir = Path(temp_dir)
+            _write_source_recording_shape(source_dir)
+            (source_dir / "second_movie.tif").touch()
+
+            with self.assertRaisesRegex(ValueError, "raw TIFF movie"):
+                resolve_or_convert_recording(source_dir)
+
     def test_recording_path_resolution_repairs_missing_converted_movie(self) -> None:
         """Confirm incomplete source-local twopy output is regenerated in place.
 

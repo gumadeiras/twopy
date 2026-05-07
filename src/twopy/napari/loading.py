@@ -193,6 +193,7 @@ def _first_source_recording_dir(candidates: tuple[Path | None, ...]) -> Path | N
         Resolved source folder, or ``None``.
     """
     seen: set[Path] = set()
+    validation_error: FileNotFoundError | ValueError | None = None
     for candidate in candidates:
         if candidate is None:
             continue
@@ -202,6 +203,57 @@ def _first_source_recording_dir(candidates: tuple[Path | None, ...]) -> Path | N
         seen.add(expanded)
         try:
             return discover_session_files(expanded).session_dir.resolve()
-        except (FileNotFoundError, ValueError):
+        except (FileNotFoundError, ValueError) as error:
+            if validation_error is None and _looks_like_source_recording_dir(expanded):
+                validation_error = error
             continue
+    if validation_error is not None:
+        raise validation_error
     return None
+
+
+def _looks_like_source_recording_dir(path: Path) -> bool:
+    """Return whether a folder appears to be microscope source output.
+
+    Args:
+        path: Candidate folder.
+
+    Returns:
+        ``True`` when the folder contains stable source-recording markers.
+
+    Discovery errors from source-like folders should reach the user. Errors
+    from arbitrary folders should stay quiet so twopy can continue checking
+    other candidates such as a parent source folder.
+    """
+    if not path.is_dir():
+        return False
+    fixed_markers = (
+        "stimulusData",
+        "alignedMovie.mat",
+        "defaultAlignChannel.txt",
+        "highResPd.mat",
+        "imageDescription.mat",
+        "imagingResPd.mat",
+    )
+    if any((path / marker).exists() for marker in fixed_markers):
+        return True
+    return any(_source_candidate_files(path, "*.tif")) or any(
+        _source_candidate_files(path, "*_alignment.txt")
+    )
+
+
+def _source_candidate_files(path: Path, pattern: str) -> tuple[Path, ...]:
+    """Return source files matching a flexible microscope filename pattern.
+
+    Args:
+        path: Candidate source folder.
+        pattern: Glob pattern.
+
+    Returns:
+        Matching files excluding macOS AppleDouble sidecars.
+    """
+    return tuple(
+        candidate
+        for candidate in path.glob(pattern)
+        if candidate.is_file() and not candidate.name.startswith("._")
+    )
