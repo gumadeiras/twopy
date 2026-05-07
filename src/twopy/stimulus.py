@@ -9,6 +9,7 @@ can reuse the same slot for different meanings. These helpers make that
 per-``stimtype`` mapping explicit for scripts and analysis code.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from twopy.converted import RecordingData
@@ -16,6 +17,8 @@ from twopy.typing_guards import require_string_key_mapping
 
 __all__ = [
     "StimulusSpecificColumnMapping",
+    "default_interleave_epoch_number",
+    "is_interleave_epoch_name",
     "map_stimulus_specific_column",
     "stimulus_column_index",
     "stimulus_epoch_names_by_number",
@@ -128,6 +131,36 @@ def stimulus_epoch_names_by_number(recording: RecordingData) -> dict[int, str]:
         epoch_name = parameters.get("epochName", f"epoch_{index}")
         names[index] = str(epoch_name)
     return names
+
+
+def is_interleave_epoch_name(epoch_name: str) -> bool:
+    """Return whether an epoch name looks like an interleave baseline.
+
+    Args:
+        epoch_name: Stimulus epoch name.
+
+    Returns:
+        ``True`` for ``gray`` or ``grey`` spelling, or for names containing
+        ``interleave``.
+    """
+    lowered = epoch_name.lower()
+    return "gray" in lowered or "grey" in lowered or "interleave" in lowered
+
+
+def default_interleave_epoch_number(epoch_names: Mapping[int, str]) -> int:
+    """Return the default interleave epoch from readable epoch names.
+
+    Args:
+        epoch_names: Mapping from stimulus epoch number to epoch name.
+
+    Returns:
+        First epoch whose name looks like gray/grey/interleave, otherwise
+        epoch 1.
+    """
+    for epoch_number, epoch_name in sorted(epoch_names.items()):
+        if is_interleave_epoch_name(epoch_name):
+            return epoch_number
+    return 1
 
 
 def _selected_stimtypes(

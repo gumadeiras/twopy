@@ -16,6 +16,7 @@ import numpy.typing as npt
 
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.trials import EpochFrameWindow
+from twopy.stimulus import is_interleave_epoch_name
 
 __all__ = [
     "GroupedRoiResponseSummary",
@@ -23,7 +24,7 @@ __all__ = [
     "RoiResponseSummary",
     "RoiResponseTrial",
     "group_delta_f_over_f_by_epoch",
-    "is_gray_epoch_name",
+    "is_interleave_epoch_name",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
 ]
@@ -277,19 +278,6 @@ def summarize_epoch_roi_responses(
             ),
         )
     return tuple(rows)
-
-
-def is_gray_epoch_name(epoch_name: str) -> bool:
-    """Return whether an epoch name looks like a gray interleave.
-
-    Args:
-        epoch_name: Stimulus epoch name.
-
-    Returns:
-        ``True`` for ``gray`` or ``grey`` spelling.
-    """
-    lowered = epoch_name.lower()
-    return "gray" in lowered or "grey" in lowered
 
 
 def _validate_grouping_inputs(

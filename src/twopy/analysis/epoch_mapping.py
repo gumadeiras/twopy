@@ -17,7 +17,7 @@ import numpy.typing as npt
 
 from twopy._segments import constant_segments
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
-from twopy.converted import RecordingData
+from twopy.converted import RecordingData, recording_frame_rate_hz
 from twopy.photodiode import stimulus_frame_bounds_from_photodiode
 from twopy.stimulus import stimulus_column_index, stimulus_epoch_names_by_number
 
@@ -66,7 +66,7 @@ def interpolate_stimulus_epochs_to_frame_windows(
     nearest-neighbor interpolation assigns the stimulus epoch number to each
     frame inside that range.
     """
-    frame_rate_hz = _required_float_metadata(recording, "acq.frameRate")
+    frame_rate_hz = recording_frame_rate_hz(recording)
     start_frame, stop_frame = stimulus_frame_bounds_from_photodiode(
         recording.high_res_pd,
         movie_frame_count=recording.movie.shape[0],
@@ -198,26 +198,3 @@ def _epoch_windows_from_frame_values(
             ),
         )
     return tuple(windows)
-
-
-def _required_float_metadata(recording: RecordingData, key: str) -> float:
-    """Read one required numeric acquisition metadata field.
-
-    Args:
-        recording: Loaded converted recording.
-        key: Acquisition metadata key.
-
-    Returns:
-        Metadata value as a float.
-    """
-    try:
-        value = recording.acquisition_metadata[key]
-    except KeyError as error:
-        msg = f"Recording metadata is missing required field {key!r}"
-        raise ValueError(msg) from error
-    if isinstance(value, str | bytes | int | float | np.generic):
-        return float(value)
-
-    value_type = type(value).__name__
-    msg = f"Recording metadata field {key!r} must be numeric, got {value_type}"
-    raise ValueError(msg)

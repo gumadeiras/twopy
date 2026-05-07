@@ -31,6 +31,7 @@ __all__ = [
     "ConvertedMovie",
     "RecordingData",
     "load_converted_recording",
+    "recording_frame_rate_hz",
 ]
 
 
@@ -355,6 +356,31 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
             f"got {recording.motion_artifact_mask.shape} for {frame_count} frames"
         )
         raise ValueError(msg)
+
+
+def recording_frame_rate_hz(recording: RecordingData) -> float:
+    """Read the imaging frame rate from converted recording metadata.
+
+    Args:
+        recording: Loaded converted recording.
+
+    Returns:
+        Frame rate in hertz.
+
+    Raises:
+        ValueError: If ``acq.frameRate`` is missing or not numeric.
+    """
+    try:
+        value = recording.acquisition_metadata["acq.frameRate"]
+    except KeyError as error:
+        msg = "Recording metadata is missing required field 'acq.frameRate'"
+        raise ValueError(msg) from error
+    if isinstance(value, str | bytes | int | float | np.generic):
+        return float(value)
+
+    value_type = type(value).__name__
+    msg = f"Recording metadata field 'acq.frameRate' must be numeric, got {value_type}"
+    raise ValueError(msg)
 
 
 def _require_format(h5_file: h5py.File, *, expected: str, path: Path) -> None:

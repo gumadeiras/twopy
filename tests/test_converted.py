@@ -12,7 +12,8 @@ from typing import cast
 import h5py
 import numpy as np
 
-from twopy import load_converted_recording
+from twopy import load_converted_recording, recording_frame_rate_hz
+from twopy.converted import RecordingData
 
 
 class ConvertedRecordingTest(unittest.TestCase):
@@ -35,6 +36,7 @@ class ConvertedRecordingTest(unittest.TestCase):
             self.assertEqual(recording.movie.path, root / "aligned_movie.h5")
             self.assertEqual(recording.movie.shape, (3, 2, 2))
             self.assertEqual(recording.acquisition_metadata["acq.frameRate"], 10.0)
+            self.assertEqual(recording_frame_rate_hz(recording), 10.0)
             self.assertEqual(recording.run_metadata["rig_name"], "OdorRig")
             self.assertEqual(recording.stimulus_parameters[1]["epochName"], "LR20")
             self.assertEqual(
@@ -119,6 +121,35 @@ class ConvertedRecordingTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "one sample per aligned movie"):
                 load_converted_recording(root / "recording_data.h5")
 
+    def test_recording_frame_rate_rejects_missing_metadata(self) -> None:
+        """Confirm frame-rate parsing fails near the recording contract.
+
+        Inputs: a minimal loaded recording without ``acq.frameRate``.
+        Outputs: a clear metadata error.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = self._recording_with_acquisition_metadata(root, {})
+
+            with self.assertRaisesRegex(ValueError, "acq.frameRate"):
+                recording_frame_rate_hz(recording)
+
+    def test_recording_frame_rate_rejects_non_numeric_metadata(self) -> None:
+        """Confirm frame-rate metadata must be numeric.
+
+        Inputs: a minimal loaded recording with a nonnumeric frame rate.
+        Outputs: a clear metadata error.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = self._recording_with_acquisition_metadata(
+                root,
+                {"acq.frameRate": object()},
+            )
+
+            with self.assertRaisesRegex(ValueError, "must be numeric"):
+                recording_frame_rate_hz(recording)
+
     def test_rejects_malformed_stimulus_specific_column_metadata(self) -> None:
         """Confirm nested stimulus metadata is validated when loading.
 
@@ -191,6 +222,43 @@ class ConvertedRecordingTest(unittest.TestCase):
         """
         self._write_aligned_movie_file(root / "aligned_movie.h5")
         self._write_recording_data_file(root / "recording_data.h5")
+
+    def _recording_with_acquisition_metadata(
+        self,
+        root: Path,
+        acquisition_metadata: dict[str, object],
+    ) -> RecordingData:
+        """Create a minimal recording object with custom acquisition metadata.
+
+        Args:
+            root: Temporary directory used for placeholder paths.
+            acquisition_metadata: Metadata dictionary to attach.
+
+        Returns:
+            ``RecordingData`` suitable for metadata-helper tests.
+        """
+        self._write_converted_recording(root)
+        recording = load_converted_recording(root / "recording_data.h5")
+        return RecordingData(
+            path=recording.path,
+            movie=recording.movie,
+            source_session_dir=recording.source_session_dir,
+            acquisition_metadata=acquisition_metadata,
+            run_metadata=recording.run_metadata,
+            synchronization_metadata=recording.synchronization_metadata,
+            stimulus_data=recording.stimulus_data,
+            stimulus_data_column_names=recording.stimulus_data_column_names,
+            stimulus_parameters=recording.stimulus_parameters,
+            stimulus_function_lookup=recording.stimulus_function_lookup,
+            stimulus_specific_columns=recording.stimulus_specific_columns,
+            imaging_res_pd=recording.imaging_res_pd,
+            high_res_pd=recording.high_res_pd,
+            mean_image=recording.mean_image,
+            alignment_valid_crop=recording.alignment_valid_crop,
+            alignment_shift_pixels=recording.alignment_shift_pixels,
+            motion_artifact_mask=recording.motion_artifact_mask,
+            frame_counts=recording.frame_counts,
+        )
 
     def _write_aligned_movie_file(self, path: Path) -> None:
         """Write a tiny converted aligned movie file.

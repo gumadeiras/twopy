@@ -25,7 +25,7 @@ from twopy.analysis.dff import (
 )
 from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
 from twopy.analysis.trials import FrameWindow
-from twopy.converted import RecordingData
+from twopy.converted import RecordingData, recording_frame_rate_hz
 from twopy.parity.roi import SavedAnalysisRoiSet, roi_set_from_saved_analysis
 from twopy.parity.saved_analysis import SavedAnalysisLastRoi
 
@@ -132,7 +132,7 @@ def compare_saved_analysis_delta_f_over_f(
         traces,
         interleave_windows,
         data_rate_hz=(
-            _recording_frame_rate_hz(recording)
+            recording_frame_rate_hz(recording)
             if data_rate_hz is None
             else float(data_rate_hz)
         ),
@@ -344,28 +344,6 @@ def _validate_comparison_shapes(
             f"computed={computed_values.shape}, saved={saved_values.shape}"
         )
         raise ValueError(msg)
-
-
-def _recording_frame_rate_hz(recording: RecordingData) -> float:
-    """Read the imaging frame rate from converted recording metadata.
-
-    Args:
-        recording: Converted recording with acquisition metadata.
-
-    Returns:
-        Frame rate in hertz.
-    """
-    try:
-        value = recording.acquisition_metadata["acq.frameRate"]
-    except KeyError as error:
-        msg = "Recording metadata is missing required field 'acq.frameRate'"
-        raise ValueError(msg) from error
-    if isinstance(value, str | bytes | int | float | np.generic):
-        return float(value)
-
-    value_type = type(value).__name__
-    msg = f"Recording metadata field 'acq.frameRate' must be numeric, got {value_type}"
-    raise ValueError(msg)
 
 
 def _correlation_by_roi(

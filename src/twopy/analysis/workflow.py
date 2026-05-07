@@ -11,8 +11,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-
 from twopy.analysis.background_subtraction import (
     BackgroundCorrectedRoiTraces,
     BackgroundCorrectionMethod,
@@ -45,7 +43,11 @@ from twopy.analysis.trials import (
     FrameWindow,
     select_epoch_frame_windows,
 )
-from twopy.converted import RecordingData, load_converted_recording
+from twopy.converted import (
+    RecordingData,
+    load_converted_recording,
+    recording_frame_rate_hz,
+)
 from twopy.roi import RoiSet, load_roi_set
 from twopy.spatial import SpatialDomain
 
@@ -287,7 +289,7 @@ def compute_recording_responses(
     separate explicit call.
     """
     frame_rate_hz = (
-        _recording_frame_rate_hz(recording)
+        recording_frame_rate_hz(recording)
         if data_rate_hz is None
         else float(data_rate_hz)
     )
@@ -457,28 +459,6 @@ def _frame_range_for_epoch_windows(
         for epoch_window in epoch_windows
     ]
     return min(starts), max(stops)
-
-
-def _recording_frame_rate_hz(recording: RecordingData) -> float:
-    """Read the imaging frame rate from converted metadata.
-
-    Args:
-        recording: Loaded converted recording.
-
-    Returns:
-        Frame rate in hertz.
-    """
-    try:
-        value = recording.acquisition_metadata["acq.frameRate"]
-    except KeyError as error:
-        msg = "Recording metadata is missing required field 'acq.frameRate'"
-        raise ValueError(msg) from error
-    if isinstance(value, str | bytes | int | float | np.generic):
-        return float(value)
-
-    value_type = type(value).__name__
-    msg = f"Recording metadata field 'acq.frameRate' must be numeric, got {value_type}"
-    raise ValueError(msg)
 
 
 def _resolve_output_path(recording_data_path: Path, output_path: Path | None) -> Path:
