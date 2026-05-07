@@ -5,6 +5,7 @@ Outputs: processed arrays, validation errors, and auditable correlation masks.
 """
 
 import unittest
+from dataclasses import replace
 
 import numpy as np
 
@@ -14,6 +15,7 @@ from twopy.analysis.response_processing import (
     LowPassFilterOptions,
     ResponseProcessingOptions,
     SmoothingOptions,
+    mask_grouped_roi_responses_by_included_rois,
     nan_aware_moving_average,
     nan_aware_savgol_filter,
     process_grouped_roi_responses,
@@ -240,6 +242,58 @@ class ResponseProcessingTest(unittest.TestCase):
             result.correlation_scores.included_mask,
             np.array([True, True]),
         )
+
+    def test_grouped_processing_rejects_misaligned_trial_axes(self) -> None:
+        """Confirm grouped processing uses the shared response validator.
+
+        Inputs: grouped responses with fewer time samples than value rows.
+        Outputs: clear validation error before value transforms run.
+        """
+        grouped = _grouped_responses(
+            trial_values=(np.array([[0.0, 1.0], [2.0, 3.0]], dtype=np.float64),),
+        )
+        trial = replace(
+            grouped.trials[0],
+            time_seconds=np.array([0.0], dtype=np.float64),
+        )
+        malformed = replace(grouped, trials=(trial,))
+
+        with self.assertRaisesRegex(ValueError, "time_seconds"):
+            process_grouped_roi_responses(
+                malformed,
+                options=ResponseProcessingOptions(
+                    smoothing=SmoothingOptions(
+                        method="moving_average",
+                        window_frames=3,
+                    ),
+                ),
+            )
+
+    def test_roi_masking_rejects_malformed_grouped_responses(self) -> None:
+        """Confirm public grouped-response masking validates the full contract.
+
+        Inputs: grouped responses whose frame numbers do not match the stored
+            frame range.
+        Outputs: clear validation error before assigning NaNs.
+        """
+        grouped = _grouped_responses(
+            trial_values=(np.array([[0.0, 1.0], [2.0, 3.0]], dtype=np.float64),),
+        )
+        malformed = replace(
+            grouped,
+            trials=(
+                replace(
+                    grouped.trials[0],
+                    frame_numbers=np.array([20, 21], dtype=np.int64),
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "frame_numbers"):
+            mask_grouped_roi_responses_by_included_rois(
+                malformed,
+                included_mask=np.array([True, False], dtype=np.bool_),
+            )
 
 
 def _dff(values: np.ndarray) -> RoiDeltaFOverF:

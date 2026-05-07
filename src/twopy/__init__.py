@@ -49,6 +49,7 @@ from twopy.analysis import (
     split_traces_by_frame_windows,
     summarize_epoch_roi_responses,
     summarize_grouped_responses,
+    validate_grouped_roi_responses,
     write_response_summary_grouped_csv,
     write_response_summary_trials_csv,
 )
@@ -180,6 +181,7 @@ __all__ = [
     "stimulus_epoch_names_by_number",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
+    "validate_grouped_roi_responses",
     "WindowedRoiResponse",
     "write_response_summary_grouped_csv",
     "write_response_summary_trials_csv",

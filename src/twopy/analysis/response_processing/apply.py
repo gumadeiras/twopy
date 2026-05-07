@@ -27,7 +27,11 @@ from twopy.analysis.response_processing.signals import (
     nan_aware_moving_average,
     nan_aware_savgol_filter,
 )
-from twopy.analysis.responses import GroupedRoiResponses, RoiResponseTrial
+from twopy.analysis.responses import (
+    GroupedRoiResponses,
+    RoiResponseTrial,
+    validate_grouped_roi_responses,
+)
 
 __all__ = [
     "apply_correlation_filter_to_grouped_roi_responses",
@@ -123,7 +127,7 @@ def process_grouped_roi_responses(
     before grouping when smoothing or low-pass filtering are enabled.
     """
     validate_response_processing_options(options, data_rate_hz=grouped.data_rate_hz)
-    _validate_grouped_for_processing(grouped)
+    validate_grouped_roi_responses(grouped)
     processed = _copy_grouped_with_processed_values(grouped, options=options)
     processed, correlation_scores = apply_correlation_filter_to_grouped_roi_responses(
         processed,
@@ -157,7 +161,7 @@ def apply_correlation_filter_to_grouped_roi_responses(
     smoothing or filtering the same traces a second time.
     """
     validate_response_processing_options(options, data_rate_hz=grouped.data_rate_hz)
-    _validate_grouped_for_processing(grouped)
+    validate_grouped_roi_responses(grouped)
     if options.correlation_filter.reference not in {"epoch_mean", "epoch_peak"}:
         return grouped, None
     correlation_scores = score_roi_correlations(
@@ -192,6 +196,7 @@ def mask_grouped_roi_responses_by_included_rois(
     The mask is public because persisted QC scores should be able to hide ROIs
     during plot reloads without recomputing the scientific QC decision.
     """
+    validate_grouped_roi_responses(grouped)
     return _mask_excluded_rois(grouped, included_mask=included_mask)
 
 
@@ -308,25 +313,6 @@ def _validate_dff_for_processing(dff: RoiDeltaFOverF) -> None:
             f"{dff.values.shape[1]} values, {len(dff.labels)} labels"
         )
         raise ValueError(msg)
-
-
-def _validate_grouped_for_processing(grouped: GroupedRoiResponses) -> None:
-    """Validate grouped responses before value-only processing."""
-    if grouped.data_rate_hz <= 0:
-        msg = f"data_rate_hz must be positive; got {grouped.data_rate_hz}"
-        raise ValueError(msg)
-    for trial in grouped.trials:
-        if trial.values.ndim != 2:
-            msg = (
-                f"trial values must have shape (frames, rois); got {trial.values.shape}"
-            )
-            raise ValueError(msg)
-        if trial.values.shape[1] != len(grouped.roi_labels):
-            msg = (
-                "trial response width does not match ROI labels: "
-                f"{trial.values.shape[1]} values, {len(grouped.roi_labels)} labels"
-            )
-            raise ValueError(msg)
 
 
 def _processing_metadata(

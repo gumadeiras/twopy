@@ -34,6 +34,7 @@ from twopy.analysis.response_processing.persistence import (
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseTrial,
+    validate_grouped_roi_responses,
 )
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.roi import RoiSet, TraceStatistic, make_roi_set
@@ -148,6 +149,8 @@ def save_analysis_outputs(
     if correlation_scores is not None and response_processing_options is None:
         msg = "correlation_scores require response_processing_options"
         raise ValueError(msg)
+    if grouped_responses is not None:
+        validate_grouped_roi_responses(grouped_responses)
 
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -254,13 +257,13 @@ def write_response_summary_trials_csv(
     """
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    validate_grouped_roi_responses(grouped_responses)
     time_columns = _time_columns(grouped_responses.trials)
     fieldnames = (*_TRIAL_RESPONSE_CSV_BASE_COLUMNS, *time_columns)
     with output_path.open("w", encoding="utf-8", newline="") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
         for trial in grouped_responses.trials:
-            _validate_response_trial(trial, grouped_responses.roi_labels)
             for roi_index, roi_label in enumerate(grouped_responses.roi_labels):
                 writer.writerow(
                     _trial_response_row(
@@ -287,8 +290,7 @@ def write_response_summary_grouped_csv(
     """
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    for trial in grouped_responses.trials:
-        _validate_response_trial(trial, grouped_responses.roi_labels)
+    validate_grouped_roi_responses(grouped_responses)
     time_columns = _time_columns(grouped_responses.trials)
     fieldnames = (*_GROUPED_RESPONSE_CSV_BASE_COLUMNS, *time_columns)
     with output_path.open("w", encoding="utf-8", newline="") as csv_file:
@@ -626,7 +628,7 @@ def _read_grouped_responses(group: h5py.Group) -> GroupedRoiResponses:
         ``GroupedRoiResponses`` with one object per trial subgroup.
     """
     trials_group = group["trials"]
-    return GroupedRoiResponses(
+    grouped = GroupedRoiResponses(
         roi_labels=_read_string_dataset(group, "roi_labels"),
         data_rate_hz=float(group.attrs["data_rate_hz"]),
         trials=tuple(
@@ -636,6 +638,8 @@ def _read_grouped_responses(group: h5py.Group) -> GroupedRoiResponses:
         pre_window_seconds=_optional_float_attr(group, "pre_window_seconds"),
         post_window_seconds=_optional_float_attr(group, "post_window_seconds"),
     )
+    validate_grouped_roi_responses(grouped)
+    return grouped
 
 
 def _read_response_trial(group: h5py.Group) -> RoiResponseTrial:
@@ -786,28 +790,6 @@ def _time_column_name(time_seconds: float) -> str:
         Human-readable CSV column name.
     """
     return f"time_s_{time_seconds:.6f}"
-
-
-def _validate_response_trial(
-    trial: RoiResponseTrial,
-    roi_labels: tuple[str, ...],
-) -> None:
-    """Validate one response trial before flattening it into CSV rows.
-
-    Args:
-        trial: Trial response object to validate.
-        roi_labels: ROI labels that should match the response matrix width.
-
-    Returns:
-        None.
-    """
-    if trial.values.shape != (trial.time_seconds.size, len(roi_labels)):
-        msg = (
-            "Trial response values must have shape (timepoints, rois); "
-            f"got {trial.values.shape}, expected "
-            f"({trial.time_seconds.size}, {len(roi_labels)})"
-        )
-        raise ValueError(msg)
 
 
 def _trial_response_row(

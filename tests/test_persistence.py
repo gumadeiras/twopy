@@ -216,6 +216,34 @@ class PersistenceTest(unittest.TestCase):
                 )
             self.assertFalse(h5_path.exists())
 
+    def test_rejects_persisted_grouped_response_with_misaligned_time_axis(
+        self,
+    ) -> None:
+        """Confirm loaded grouped responses pass the shared shape contract.
+
+        Inputs: Analysis HDF5 with one response trial whose time axis is too
+            short for its value matrix.
+        Outputs: clear validation error before returning loaded outputs.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            h5_path = Path(temp_dir) / "analysis_outputs.h5"
+            grouped = group_delta_f_over_f_by_epoch(
+                self._dff(),
+                (EpochFrameWindow(FrameWindow(0, 0, 2, "gray"), 1, "Gray"),),
+                data_rate_hz=2.0,
+            )
+            save_analysis_outputs(h5_path, grouped_responses=grouped)
+            with h5py.File(h5_path, "r+") as h5_file:
+                trial_group = h5_file["responses/trials/trial_0001"]
+                del trial_group["time_seconds"]
+                trial_group.create_dataset(
+                    "time_seconds",
+                    data=np.array([0.0], dtype=np.float64),
+                )
+
+            with self.assertRaisesRegex(ValueError, "time_seconds"):
+                load_analysis_outputs(h5_path)
+
     def test_grouped_response_csv_keeps_time_series_statistics(self) -> None:
         """Confirm grouped CSV rows contain mean, SEM, and count traces.
 

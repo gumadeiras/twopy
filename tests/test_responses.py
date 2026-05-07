@@ -5,13 +5,17 @@ Outputs: grouped trial arrays and compact response summaries.
 """
 
 import unittest
+from dataclasses import replace
 
 import numpy as np
 
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.responses import (
+    GroupedRoiResponses,
+    RoiResponseTrial,
     group_delta_f_over_f_by_epoch,
     summarize_grouped_responses,
+    validate_grouped_roi_responses,
 )
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 
@@ -151,6 +155,129 @@ class ResponseGroupingTest(unittest.TestCase):
                 post_window_seconds=-1.0,
             )
 
+    def test_validates_grouped_response_contract(self) -> None:
+        """Confirm well-formed grouped responses pass shared validation.
+
+        Inputs: one trial with matching value, time, frame, and ROI axes.
+        Outputs: no validation error.
+        """
+        validate_grouped_roi_responses(_grouped_response_contract())
+
+    def test_rejects_grouped_response_with_invalid_data_rate(self) -> None:
+        """Confirm grouped responses require a finite positive frame rate.
+
+        Inputs: grouped responses with zero and NaN frame rates.
+        Outputs: clear validation errors before downstream math runs.
+        """
+        for data_rate_hz in (0.0, np.nan):
+            with self.subTest(data_rate_hz=data_rate_hz):
+                grouped = replace(
+                    _grouped_response_contract(),
+                    data_rate_hz=float(data_rate_hz),
+                )
+                with self.assertRaisesRegex(ValueError, "data_rate_hz"):
+                    validate_grouped_roi_responses(grouped)
+
+    def test_rejects_grouped_response_with_invalid_trial_array_rank(self) -> None:
+        """Confirm trial response values must stay frame-by-ROI matrices.
+
+        Inputs: one trial with a three-dimensional value array.
+        Outputs: clear validation error naming the values shape.
+        """
+        grouped = _replace_grouped_trial(
+            _grouped_response_contract(),
+            values=np.zeros((2, 2, 1), dtype=np.float64),
+        )
+
+        with self.assertRaisesRegex(ValueError, "trial values"):
+            validate_grouped_roi_responses(grouped)
+
+    def test_rejects_grouped_response_with_wrong_roi_width(self) -> None:
+        """Confirm trial ROI columns must match grouped ROI labels.
+
+        Inputs: two ROI labels and a one-column response matrix.
+        Outputs: clear validation error naming the label mismatch.
+        """
+        grouped = _replace_grouped_trial(
+            _grouped_response_contract(),
+            values=np.zeros((2, 1), dtype=np.float64),
+        )
+
+        with self.assertRaisesRegex(ValueError, "ROI labels"):
+            validate_grouped_roi_responses(grouped)
+
+    def test_rejects_grouped_response_with_mismatched_time_axis(self) -> None:
+        """Confirm trial time vectors must match response frame rows.
+
+        Inputs: two response frames and one relative time sample.
+        Outputs: clear validation error before CSV or QC alignment.
+        """
+        grouped = _replace_grouped_trial(
+            _grouped_response_contract(),
+            time_seconds=np.array([0.0], dtype=np.float64),
+        )
+
+        with self.assertRaisesRegex(ValueError, "time_seconds"):
+            validate_grouped_roi_responses(grouped)
+
+    def test_rejects_grouped_response_with_mismatched_frame_axis(self) -> None:
+        """Confirm trial frame-number vectors must match response frame rows.
+
+        Inputs: two response frames and one absolute frame number.
+        Outputs: clear validation error before persisted data is trusted.
+        """
+        grouped = _replace_grouped_trial(
+            _grouped_response_contract(),
+            frame_numbers=np.array([10], dtype=np.int64),
+        )
+
+        with self.assertRaisesRegex(ValueError, "frame_numbers"):
+            validate_grouped_roi_responses(grouped)
+
+    def test_rejects_grouped_response_with_wrong_frame_range(self) -> None:
+        """Confirm trial frame ranges must describe the stored response rows.
+
+        Inputs: two response frames and a three-frame half-open range.
+        Outputs: clear validation error naming the frame range.
+        """
+        grouped = _replace_grouped_trial(
+            _grouped_response_contract(),
+            stop_frame=13,
+        )
+
+        with self.assertRaisesRegex(ValueError, "frame range"):
+            validate_grouped_roi_responses(grouped)
+
+    def test_rejects_grouped_response_with_noncontiguous_frame_numbers(
+        self,
+    ) -> None:
+        """Confirm frame numbers must match the stored half-open range.
+
+        Inputs: response rows with absolute frame numbers from another range.
+        Outputs: clear validation error before time-series alignment.
+        """
+        grouped = _replace_grouped_trial(
+            _grouped_response_contract(),
+            frame_numbers=np.array([20, 21], dtype=np.int64),
+        )
+
+        with self.assertRaisesRegex(ValueError, "frame_numbers"):
+            validate_grouped_roi_responses(grouped)
+
+    def test_rejects_grouped_response_with_nonfinite_time(self) -> None:
+        """Confirm relative time axes cannot contain non-finite samples.
+
+        Inputs: response rows with a NaN time sample.
+        Outputs: clear validation error before plotting or CSV column naming.
+        """
+        grouped = _replace_grouped_trial(
+            _grouped_response_contract(),
+            time_seconds=np.array([0.0, np.nan], dtype=np.float64),
+        )
+
+        with self.assertRaisesRegex(ValueError, "time_seconds"):
+            validate_grouped_roi_responses(grouped)
+
     def _dff(self) -> RoiDeltaFOverF:
         """Create a small dF/F object for grouping tests.
 
@@ -174,6 +301,35 @@ class ResponseGroupingTest(unittest.TestCase):
             baseline_fluorescence=np.array([[10.0, 10.0]]),
             metadata={"method": "test"},
         )
+
+
+def _grouped_response_contract() -> GroupedRoiResponses:
+    """Create one valid grouped response object for contract tests."""
+    trial = RoiResponseTrial(
+        epoch_number=1,
+        epoch_name="Gray",
+        trial_index=1,
+        window_index=0,
+        start_frame=10,
+        stop_frame=12,
+        frame_numbers=np.array([10, 11], dtype=np.int64),
+        time_seconds=np.array([0.0, 0.5], dtype=np.float64),
+        values=np.array([[0.0, 1.0], [2.0, 3.0]], dtype=np.float64),
+    )
+    return GroupedRoiResponses(
+        roi_labels=("roi_1", "roi_2"),
+        data_rate_hz=2.0,
+        trials=(trial,),
+    )
+
+
+def _replace_grouped_trial(
+    grouped: GroupedRoiResponses,
+    **changes: object,
+) -> GroupedRoiResponses:
+    """Return grouped responses with changed fields on the first trial."""
+    trial = replace(grouped.trials[0], **changes)
+    return replace(grouped, trials=(trial,))
 
 
 if __name__ == "__main__":

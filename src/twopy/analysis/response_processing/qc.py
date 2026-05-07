@@ -17,7 +17,11 @@ from twopy.analysis.response_processing.options import (
     CorrelationFilterReference,
     CorrelationWindowSeconds,
 )
-from twopy.analysis.responses import GroupedRoiResponses, RoiResponseTrial
+from twopy.analysis.responses import (
+    GroupedRoiResponses,
+    RoiResponseTrial,
+    validate_grouped_roi_responses,
+)
 
 __all__ = [
     "RoiCorrelationScores",
@@ -180,21 +184,7 @@ def _validate_correlation_inputs(
     if reference not in {"epoch_mean", "epoch_peak"}:
         msg = f"Unknown correlation reference {reference!r}"
         raise ValueError(msg)
-    if grouped.data_rate_hz <= 0:
-        msg = f"data_rate_hz must be positive; got {grouped.data_rate_hz}"
-        raise ValueError(msg)
-    for trial in grouped.trials:
-        if trial.values.ndim != 2:
-            msg = (
-                f"trial values must have shape (frames, rois); got {trial.values.shape}"
-            )
-            raise ValueError(msg)
-        if trial.values.shape[1] != len(grouped.roi_labels):
-            msg = (
-                "trial ROI width does not match labels: "
-                f"{trial.values.shape[1]} values, {len(grouped.roi_labels)} labels"
-            )
-            raise ValueError(msg)
+    validate_grouped_roi_responses(grouped)
 
 
 def _trials_by_epoch(

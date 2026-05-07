@@ -25,6 +25,7 @@ __all__ = [
     "group_delta_f_over_f_by_epoch",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
+    "validate_grouped_roi_responses",
 ]
 
 
@@ -208,14 +209,9 @@ def summarize_grouped_responses(
     The summary uses NaN-aware metrics so motion-masked dF/F frames do not make
     an entire trial unusable.
     """
+    validate_grouped_roi_responses(grouped)
     summaries: list[RoiResponseSummary] = []
     for trial in grouped.trials:
-        if trial.values.shape[1] != len(grouped.roi_labels):
-            msg = (
-                "Trial response width does not match ROI labels: "
-                f"{trial.values.shape[1]} values, {len(grouped.roi_labels)} labels"
-            )
-            raise ValueError(msg)
         for roi_index, roi_label in enumerate(grouped.roi_labels):
             values = trial.values[:, roi_index]
             summaries.append(
@@ -280,6 +276,108 @@ def summarize_epoch_roi_responses(
             ),
         )
     return tuple(rows)
+
+
+def validate_grouped_roi_responses(grouped: GroupedRoiResponses) -> None:
+    """Validate the shared grouped-response data contract.
+
+    Args:
+        grouped: Grouped response object to check.
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: If the frame rate, trial vectors, or response matrices are
+            inconsistent.
+
+    Grouped responses cross processing, plotting, summaries, and HDF5
+    persistence. Keeping this contract in one helper makes every downstream
+    path reject malformed trial data the same way before it computes with
+    misaligned time, frame, or ROI axes.
+    """
+    if not np.isfinite(grouped.data_rate_hz) or grouped.data_rate_hz <= 0:
+        msg = f"data_rate_hz must be positive; got {grouped.data_rate_hz}"
+        raise ValueError(msg)
+    for trial in grouped.trials:
+        _validate_grouped_response_trial(trial, grouped.roi_labels)
+
+
+def _validate_grouped_response_trial(
+    trial: RoiResponseTrial,
+    roi_labels: tuple[str, ...],
+) -> None:
+    """Validate one grouped response trial against shared ROI labels."""
+    if not np.issubdtype(trial.values.dtype, np.floating):
+        msg = f"trial values must have floating dtype; got {trial.values.dtype}"
+        raise ValueError(msg)
+    if not np.issubdtype(trial.frame_numbers.dtype, np.integer):
+        msg = (
+            "trial frame_numbers must have integer dtype; "
+            f"got {trial.frame_numbers.dtype}"
+        )
+        raise ValueError(msg)
+    if not np.issubdtype(trial.time_seconds.dtype, np.floating):
+        msg = (
+            "trial time_seconds must have floating dtype; "
+            f"got {trial.time_seconds.dtype}"
+        )
+        raise ValueError(msg)
+    if trial.values.ndim != 2:
+        msg = f"trial values must have shape (frames, rois); got {trial.values.shape}"
+        raise ValueError(msg)
+    if trial.frame_numbers.ndim != 1:
+        msg = (
+            "trial frame_numbers must be one-dimensional; "
+            f"got {trial.frame_numbers.shape}"
+        )
+        raise ValueError(msg)
+    if trial.time_seconds.ndim != 1:
+        msg = (
+            "trial time_seconds must be one-dimensional; "
+            f"got {trial.time_seconds.shape}"
+        )
+        raise ValueError(msg)
+    if trial.values.shape[0] == 0:
+        msg = "trial values must include at least one frame"
+        raise ValueError(msg)
+    if trial.values.shape[1] != len(roi_labels):
+        msg = (
+            "trial response width does not match ROI labels: "
+            f"{trial.values.shape[1]} values, {len(roi_labels)} labels"
+        )
+        raise ValueError(msg)
+    if trial.values.shape[0] != trial.time_seconds.size:
+        msg = (
+            "trial response frame count does not match time_seconds: "
+            f"{trial.values.shape[0]} values, {trial.time_seconds.size} timepoints"
+        )
+        raise ValueError(msg)
+    if trial.values.shape[0] != trial.frame_numbers.size:
+        msg = (
+            "trial response frame count does not match frame_numbers: "
+            f"{trial.values.shape[0]} values, {trial.frame_numbers.size} frame numbers"
+        )
+        raise ValueError(msg)
+    expected_frame_count = trial.stop_frame - trial.start_frame
+    if expected_frame_count != trial.values.shape[0]:
+        msg = (
+            "trial response frame count does not match frame range: "
+            f"{trial.values.shape[0]} values for "
+            f"[{trial.start_frame}, {trial.stop_frame})"
+        )
+        raise ValueError(msg)
+    expected_frame_numbers = np.arange(
+        trial.start_frame,
+        trial.stop_frame,
+        dtype=np.int64,
+    )
+    if not np.array_equal(trial.frame_numbers, expected_frame_numbers):
+        msg = "trial frame_numbers must match the half-open frame range"
+        raise ValueError(msg)
+    if not np.all(np.isfinite(trial.time_seconds)):
+        msg = "trial time_seconds must be finite"
+        raise ValueError(msg)
 
 
 def _validate_grouping_inputs(

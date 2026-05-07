@@ -47,6 +47,7 @@ from twopy.analysis.responses import (
     group_delta_f_over_f_by_epoch,
     summarize_epoch_roi_responses,
     summarize_grouped_responses,
+    validate_grouped_roi_responses,
 )
 from twopy.analysis.trials import (
     EpochFrameWindow,
@@ -113,6 +114,7 @@ __all__ = [
     "SmoothingOptions",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
+    "validate_grouped_roi_responses",
     "WindowedRoiResponse",
     "write_response_summary_grouped_csv",
     "write_response_summary_trials_csv",
