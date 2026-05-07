@@ -272,9 +272,13 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
             )
             movie_range = None
             if load_movie:
+                start_frame, end_frame = _clamp_widget_movie_frame_range(
+                    movie_frame_range,
+                    frame_count=loaded_recording.movie.shape[0],
+                )
                 movie_range = resolve_movie_frame_range(
-                    start_frame=int(movie_frame_range[0]),
-                    end_frame=int(movie_frame_range[1]),
+                    start_frame=start_frame,
+                    end_frame=end_frame,
                     frame_count=loaded_recording.movie.shape[0],
                     zero_end_means_last=True,
                 )
@@ -715,6 +719,34 @@ def _default_movie_end_frame(recording: RecordingData | None) -> int:
     if recording is None:
         return 0
     return max(recording.movie.shape[0] - 1, 0)
+
+
+def _clamp_widget_movie_frame_range(
+    movie_frame_range: tuple[int, int],
+    *,
+    frame_count: int,
+) -> tuple[int, int]:
+    """Clamp a stale GUI movie preview range to a newly loaded recording.
+
+    Args:
+        movie_frame_range: Current range-slider value.
+        frame_count: Number of movie frames in the recording being loaded.
+
+    Returns:
+        Inclusive preview range constrained to the recording length.
+
+    The frame-range widget keeps its previous value until after a recording is
+    loaded. When the next recording is shorter, clamp the preview request before
+    strict validation so the picker can resize itself to the new movie.
+    """
+    last_frame = max(frame_count - 1, 0)
+    start_frame = int(movie_frame_range[0])
+    end_frame = int(movie_frame_range[1])
+    if start_frame > last_frame:
+        start_frame = last_frame
+    if end_frame > last_frame:
+        end_frame = last_frame
+    return (start_frame, end_frame)
 
 
 def _load_recording_for_defaults(

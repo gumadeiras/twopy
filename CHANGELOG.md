@@ -4,6 +4,7 @@
 
 ### Fixes
 
+- Clamped stale napari movie preview ranges when loading a shorter recording.
 - Ignored macOS AppleDouble sidecar files when discovering source recordings so
   napari can auto-convert recordings on mounted volumes.
 

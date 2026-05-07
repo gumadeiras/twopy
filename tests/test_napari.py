@@ -1311,6 +1311,41 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(load_widget.movie_frame_range.value, (0, 1))
             self.assertEqual(len(viewer.images), 2)
 
+    def test_loading_shorter_recording_clamps_stale_movie_range(self) -> None:
+        """Confirm old movie slider values do not block a shorter recording.
+
+        Inputs: two converted recordings where the first movie is longer.
+        Outputs: the second recording loads and the slider fits its frame count.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            _write_converted_recording(
+                first,
+                movie_values=np.arange(20, dtype=np.float64).reshape(5, 2, 2),
+            )
+            _write_converted_recording(
+                second,
+                movie_values=np.arange(12, dtype=np.float64).reshape(3, 2, 2),
+            )
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            controls = cast(_ControlWidget, control_docks.load_widget)
+            load_widget = cast(Any, controls[1])
+
+            load_widget(recording_folder=first)
+            load_widget(recording_folder=second)
+
+            self.assertEqual(load_widget.movie_frame_range.value, (0, 2))
+            self.assertEqual(len(viewer.images), 4)
+
     def test_recording_path_resolution_reports_available_files(self) -> None:
         """Confirm folder resolution finds optional movie and ROI paths.
 
