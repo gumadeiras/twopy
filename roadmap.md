@@ -18,6 +18,8 @@ decided.
 - Session path discovery for required microscope output files.
 - Mini input data spec in `docs/input_data_spec.md`.
 - Recording file reference schema in `docs/recording_file_schema.md`.
+- README kept as a short landing page, with detailed GUI, Python API, and
+  development guides split into `docs/`.
 - YAML config file and typed loader for `database_path` and `data_path`.
 - Tracked `config.example.yml` with instructions for creating private local
   `config.yml`.
