@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.3 - 2026-05-07
+
 ### Fixes
 
 - Clamped stale napari movie preview ranges when loading a shorter recording.
