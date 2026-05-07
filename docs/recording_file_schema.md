@@ -1,34 +1,21 @@
 # Recording File Reference Schema
 
-This document describes the files twopy expects in a two-photon microscope
-recording folder and what each file should be used for. It is based on the
-example recording inspected during development. Some values are example-specific
-and will vary with stimulus design, recording settings, rig configuration, and
-prior MATLAB analysis.
+This document describes the files twopy expects in a two-photon microscope recording folder and what each file should be used for. It is based on the example recording inspected during development. Some values are example-specific and will vary with stimulus design, recording settings, rig configuration, and prior MATLAB analysis.
 
 ## Source-Of-Truth Rules
 
-- Use `imageDescription.mat` as the primary source for recording acquisition
-  metadata.
-- Use the raw TIFF only when we need raw interleaved frame data or need to audit
-  that its embedded `ImageDescription` matches `imageDescription.mat`.
-- Do not treat TIFF `XResolution` or `YResolution` as microscope pixel size.
-  In the inspected example they look like display DPI metadata.
-- Use `alignedMovie.mat` as the primary movie source for ROI drawing and trace
-  extraction.
-- Use `stimulusData/stimParams.mat` and `stimulusData/stimdata.mat` as the
-  primary stimulus metadata/data sources.
-- Use `imagingResPd.mat` for frame-resolution stimulus alignment and
-  `highResPd.mat` when higher timing precision is needed.
-- Treat imaging frames and stimulus frames as independent clocks until the
-  photodiode signal aligns them.
-- Use `savedAnalysis/` only as optional prior MATLAB analysis output. New
-  recordings may not have it.
+- Use `imageDescription.mat` as the primary source for recording acquisition metadata.
+- Use the raw TIFF only when we need raw interleaved frame data or need to audit that its embedded `ImageDescription` matches `imageDescription.mat`.
+- Do not treat TIFF `XResolution` or `YResolution` as microscope pixel size. In the inspected example they look like display DPI metadata.
+- Use `alignedMovie.mat` as the primary movie source for ROI drawing and trace extraction.
+- Use `stimulusData/stimParams.mat` and `stimulusData/stimdata.mat` as the primary stimulus metadata/data sources.
+- Use `imagingResPd.mat` for frame-resolution stimulus alignment and `highResPd.mat` when higher timing precision is needed.
+- Treat imaging frames and stimulus frames as independent clocks until the photodiode signal aligns them.
+- Use `savedAnalysis/` only as optional prior MATLAB analysis output. New recordings may not have it.
 
 ## MATLAB File Layer
 
-twopy needs a MATLAB file layer because microscope source data arrives as a mix
-of older MAT files and HDF5-backed MAT files.
+twopy needs a MATLAB file layer because microscope source data arrives as a mix of older MAT files and HDF5-backed MAT files.
 
 The MATLAB layer should:
 
@@ -41,50 +28,30 @@ Observed formats in the inspected example:
 
 - `alignedMovie.mat`: HDF5-backed MAT file.
 - `savedAnalysis/*.mat`: HDF5-backed prior MATLAB analysis files.
-- `highResPd.mat`, `imageDescription.mat`, `imagingResPd.mat`,
-  `stimulusData/chosenparams.mat`, `stimulusData/runDetails.mat`,
-  `stimulusData/seedState.mat`, `stimulusData/stimParams.mat`, and
-  `stimulusData/stimdata.mat`: older MAT files.
+- `highResPd.mat`, `imageDescription.mat`, `imagingResPd.mat`, `stimulusData/chosenparams.mat`, `stimulusData/runDetails.mat`, `stimulusData/seedState.mat`, `stimulusData/stimParams.mat`, and `stimulusData/stimdata.mat`: older MAT files.
 
 ## Timing And Synchronization
 
 Imaging and stimulus presentation happen on different computers.
 
-The imaging computer records the two-photon movie at a relatively low frame
-rate. It also records a photodiode signal. In the converted data,
-`photodiode/imaging_res_pd` has one sample per aligned imaging frame, and
-`photodiode/high_res_pd` contains a higher-rate photodiode trace for more
-precise event detection.
+The imaging computer records the two-photon movie at a relatively low frame rate. It also records a photodiode signal. In the converted data, `photodiode/imaging_res_pd` has one sample per aligned imaging frame, and `photodiode/high_res_pd` contains a higher-rate photodiode trace for more precise event detection.
 
-The stimulus computer presents stimuli at a relatively high frame rate. It also
-flashes the photodiode at key timepoints, including stimulus start, trial
-transitions, and stimulus end. Different flash patterns or flash durations mark
-different event types.
+The stimulus computer presents stimuli at a relatively high frame rate. It also flashes the photodiode at key timepoints, including stimulus start, trial transitions, and stimulus end. Different flash patterns or flash durations mark different event types.
 
-Response analysis must use the photodiode to align the two clocks. Do not assign
-imaging frames to stimulus trials by assuming nominal frame rates are enough.
-The correct workflow is:
+Response analysis must use the photodiode to align the two clocks. Do not assign imaging frames to stimulus trials by assuming nominal frame rates are enough. The correct workflow is:
 
 1. Load the converted stimulus data and photodiode signals.
-2. Decode photodiode events from the high-resolution signal when precise timing
-   is needed.
+2. Decode photodiode events from the high-resolution signal when precise timing is needed.
 3. Map decoded stimulus events onto imaging frames.
 4. Extract ROI responses by trial or epoch from that aligned frame map.
 
 twopy now represents this in GUI-independent layers:
 
-- `load_converted_recording(...)` loads `recording_data.h5` and keeps
-  `aligned_movie.h5` lazy.
-- ROI masks are saved as twopy-owned HDF5 files and are independent from
-  napari.
-- `detect_recording_photodiode_events(...)` segments photodiode flashes in
-  `high_res_pd` and `imaging_res_pd`, then pairs matching events by order.
-- `classify_recording_photodiode_events(...)` cross-checks the paired events
-  against `stimulus/data` `photodiode_flash` segments, classifies stimulus
-  start, trial-transition, and stimulus-end events, then returns classified
-  stimulus windows with epoch metadata.
-- Frame windows are made from classified photodiode event frames and used to
-  split ROI traces.
+- `load_converted_recording(...)` loads `recording_data.h5` and keeps `aligned_movie.h5` lazy.
+- ROI masks are saved as twopy-owned HDF5 files and are independent from napari.
+- `detect_recording_photodiode_events(...)` segments photodiode flashes in `high_res_pd` and `imaging_res_pd`, then pairs matching events by order.
+- `classify_recording_photodiode_events(...)` cross-checks the paired events against `stimulus/data` `photodiode_flash` segments, classifies stimulus start, trial-transition, and stimulus-end events, then returns classified stimulus windows with epoch metadata.
+- Frame windows are made from classified photodiode event frames and used to split ROI traces.
 
 ## Session Folder
 
@@ -110,9 +77,7 @@ Treat these as acquisition or transfer artifacts, not twopy input contracts.
 
 ### `stimulusData/`
 
-Directory containing the stimulus program output and stimulus metadata. File
-names inside this directory can vary with stimulus design, but the observed
-example includes the files described below.
+Directory containing the stimulus program output and stimulus metadata. File names inside this directory can vary with stimulus design, but the observed example includes the files described below.
 
 ### `alignedMovie.mat`
 
@@ -127,14 +92,11 @@ Observed example contents:
 - Compression: gzip.
 - Chunking: `(1, 64, 127)`.
 
-Use this for ROI drawing and fluorescence trace extraction. Load lazily with
-HDF5/chunked reads; do not load the full movie into memory unless the caller
-explicitly requests it.
+Use this for ROI drawing and fluorescence trace extraction. Load lazily with HDF5/chunked reads; do not load the full movie into memory unless the caller explicitly requests it.
 
 ### `*.tif`
 
-Raw microscope TIFF movie. The filename includes stimulus/run details and will
-vary. There should be exactly one top-level raw TIFF in a session.
+Raw microscope TIFF movie. The filename includes stimulus/run details and will vary. There should be exactly one top-level raw TIFF in a session.
 
 Observed example contents:
 
@@ -143,22 +105,15 @@ Observed example contents:
 - Page count: `8334`.
 - First-page shape: `(127, 256)`.
 - Dtype: `uint16`.
-- Two channels are interleaved: the actual imaging recording and a photodiode
-  channel.
-- TIFF tags include `ImageWidth`, `ImageLength`, `BitsPerSample`,
-  `SamplesPerPixel`, `XResolution`, `YResolution`, `ResolutionUnit`, and
-  `ImageDescription`.
-- Each page contains a ScanImage `ImageDescription` text block with `state.*`
-  assignments.
+- Two channels are interleaved: the actual imaging recording and a photodiode channel.
+- TIFF tags include `ImageWidth`, `ImageLength`, `BitsPerSample`, `SamplesPerPixel`, `XResolution`, `YResolution`, `ResolutionUnit`, and `ImageDescription`.
+- Each page contains a ScanImage `ImageDescription` text block with `state.*` assignments.
 
-Use this for raw interleaved channel access. For ordinary recording metadata,
-prefer `imageDescription.mat` because it contains the same ScanImage state in a
-MATLAB struct that is easier to parse reliably.
+Use this for raw interleaved channel access. For ordinary recording metadata, prefer `imageDescription.mat` because it contains the same ScanImage state in a MATLAB struct that is easier to parse reliably.
 
 ### `*_alignment.txt`
 
-Per-frame alignment output from the lab MATLAB pipeline. The filename includes
-stimulus/run/channel details and will vary.
+Per-frame alignment output from the lab MATLAB pipeline. The filename includes stimulus/run/channel details and will vary.
 
 Observed example contents:
 
@@ -188,9 +143,7 @@ Observed example contents:
 - Shape: `(529336,)`.
 - Dtype: `float64`.
 
-Use this for precise stimulus timing or onset detection when frame-resolution
-alignment is not enough. This is the preferred signal for decoding photodiode
-flash patterns and event durations.
+Use this for precise stimulus timing or onset detection when frame-resolution alignment is not enough. This is the preferred signal for decoding photodiode flash patterns and event durations.
 
 ### `imageDescription.mat`
 
@@ -223,9 +176,7 @@ Observed example contents:
   - `motor.absYPosition`: `-4694.3`
   - `motor.absZPosition`: `-8503.4`
 
-Use this as the canonical source for acquisition settings. Values vary with the
-recording. Physical pixel size is not directly established from the inspected
-fields; it likely needs scanner/objective calibration.
+Use this as the canonical source for acquisition settings. Values vary with the recording. Physical pixel size is not directly established from the inspected fields; it likely needs scanner/objective calibration.
 
 ### `imagingResPd.mat`
 
@@ -238,15 +189,13 @@ Observed example contents:
 - Dtype: `float64`.
 - Row count matches `alignedMovie.mat/imgFrames_ch1`.
 
-Use this to align each imaging frame to stimulus timing after photodiode events
-have been decoded.
+Use this to align each imaging frame to stimulus timing after photodiode events have been decoded.
 
 ## Optional Top-Level Directory
 
 ### `savedAnalysis/`
 
-Prior MATLAB analysis output. This directory exists only if somebody already
-analyzed the recording with the lab MATLAB package.
+Prior MATLAB analysis output. This directory exists only if somebody already analyzed the recording with the lab MATLAB package.
 
 Observed example files:
 
@@ -272,8 +221,7 @@ Observed trace matrix shapes vary by analysis output:
 - `(30, 3909)`
 - `(1221, 3909)`
 
-Use this for fast inspection of prior ROI results. Do not require it for new
-analysis.
+Use this for fast inspection of prior ROI results. Do not require it for new analysis.
 
 ## Observed `stimulusData/` Files
 
@@ -289,8 +237,7 @@ Observed example contents include:
 - View locations file path.
 - Event log lines.
 
-Use this as human-readable run provenance. Treat format as stimulus-system
-output, not as the primary structured stimulus table.
+Use this as human-readable run provenance. Treat format as stimulus-system output, not as the primary structured stimulus table.
 
 ### `stimulusData/<stimulus_name>.txt`
 
@@ -314,11 +261,9 @@ Observed example contents:
   - `RL20Single`
   - `LR20Both`
   - `Empty`
-- Stimulus fields such as `stimtype`, `antenna`, `intensity`, `duration`, and
-  `ordertype`.
+- Stimulus fields such as `stimtype`, `antenna`, `intensity`, `duration`, and `ordertype`.
 
-Use this as a human-readable stimulus parameter source. Prefer
-`stimParams.mat` for structured loading.
+Use this as a human-readable stimulus parameter source. Prefer `stimParams.mat` for structured loading.
 
 ### `stimulusData/textStimData.csv`
 
@@ -340,8 +285,7 @@ Observed example contents:
   - epoch `6`: `1440`
   - epoch `7`: `1440`
 
-Use this for stimulus timing and per-row epoch labels when a CSV workflow is
-more convenient than MATLAB loading.
+Use this for stimulus timing and per-row epoch labels when a CSV workflow is more convenient than MATLAB loading.
 
 ### `stimulusData/stimdata.mat`
 
@@ -352,48 +296,28 @@ Observed example contents:
 - MATLAB variable: `stimData`.
 - Shape: `(18021, 35)`.
 - Dtype: `float64`.
-- Column 1, `time_seconds`: stimulus-computer time in seconds, written as
-  `Q.timing.flipt - Q.timing.t0`.
-- Column 2, `stimulus_frame_number`: stimulus-computer frame number, written
-  as `Q.timing.framenumber`.
-- Column 3, `epoch_number`: current stimulus epoch number, written as
-  `Q.stims.currStimNum`.
-- Columns 4-13, `closed_loop_01` through `closed_loop_10`: closed-loop slots
-  written from `Q.stims.stimData.cl(1:10)`. They are initialized as zeros in
-  `SetupLEDStimulus.m`; whether they are meaningful depends on the stimulus
-  code used during the recording.
-- Columns 14-33, `stimulus_specific_01` through `stimulus_specific_20`:
-  stimulus-specific slots written from `Q.stims.stimData.mat(1:20)`. Their
-  meaning is defined by the MATLAB stimulus function used for that epoch.
-- Column 34, `photodiode_flash`: photodiode flash value written from
-  `Q.stims.stimData.flash`. In `RunLEDStimulus.m`, this is set high while
-  `framesSinceEpochChange < 11`, and the stimulus function can pass it to the
-  LabJack photodiode output.
-- Column 35, `trailing_empty`: trailing empty CSV field caused by
-  `WriteStimData.m` writing a final comma after `photodiode_flash`. Do not
-  interpret this as stimulus data.
+- Column 1, `time_seconds`: stimulus-computer time in seconds, written as `Q.timing.flipt - Q.timing.t0`.
+- Column 2, `stimulus_frame_number`: stimulus-computer frame number, written as `Q.timing.framenumber`.
+- Column 3, `epoch_number`: current stimulus epoch number, written as `Q.stims.currStimNum`.
+- Columns 4-13, `closed_loop_01` through `closed_loop_10`: closed-loop slots written from `Q.stims.stimData.cl(1:10)`. They are initialized as zeros in `SetupLEDStimulus.m`; whether they are meaningful depends on the stimulus code used during the recording.
+- Columns 14-33, `stimulus_specific_01` through `stimulus_specific_20`: stimulus-specific slots written from `Q.stims.stimData.mat(1:20)`. Their meaning is defined by the MATLAB stimulus function used for that epoch.
+- Column 34, `photodiode_flash`: photodiode flash value written from `Q.stims.stimData.flash`. In `RunLEDStimulus.m`, this is set high while `framesSinceEpochChange < 11`, and the stimulus function can pass it to the LabJack photodiode output.
+- Column 35, `trailing_empty`: trailing empty CSV field caused by `WriteStimData.m` writing a final comma after `photodiode_flash`. Do not interpret this as stimulus data.
 
-Use this as the primary structured stimulus data. twopy also stores
-these code-derived labels in `stimulus/data_column_names`.
+Use this as the primary structured stimulus data. twopy also stores these code-derived labels in `stimulus/data_column_names`.
 
-The source of truth for the stable column order is the backed-up MATLAB code in
-each recording:
+The source of truth for the stable column order is the backed-up MATLAB code in each recording:
 
-- `stimulusData/filebackup/utils/ledUtils/RunLEDStimulus.m` initializes flash
-  events and calls the selected stimulus function.
-- `stimulusData/filebackup/utils/ledUtils/SetupLEDStimulus.m` initializes
-  `Q.stims.stimData.cl` with 10 slots and `Q.stims.stimData.mat` with 20 slots.
-- `stimulusData/filebackup/utils/ledUtils/WriteStimData.m` writes the stable
-  column order above.
+- `stimulusData/filebackup/utils/ledUtils/RunLEDStimulus.m` initializes flash events and calls the selected stimulus function.
+- `stimulusData/filebackup/utils/ledUtils/SetupLEDStimulus.m` initializes `Q.stims.stimData.cl` with 10 slots and `Q.stims.stimData.mat` with 20 slots.
+- `stimulusData/filebackup/utils/ledUtils/WriteStimData.m` writes the stable column order above.
 
 Stimulus-specific columns are decoded from the same backed-up code:
 
 1. Read `stimulusData/chosenparams.mat` or `stimulusData/stimParams.mat`.
 2. Use each epoch's `stimtype` number.
-3. Map that number through
-   `stimulusData/filebackup/paramfiles/stimulus_lookup.txt`.
-4. Read the matching MATLAB file in
-   `stimulusData/filebackup/stimfunctions/`.
+3. Map that number through `stimulusData/filebackup/paramfiles/stimulus_lookup.txt`.
+4. Read the matching MATLAB file in `stimulusData/filebackup/stimfunctions/`.
 5. Inspect assignments to `stimData.mat(...)`.
 
 In the inspected example, `stimtype` values map as follows:
@@ -402,8 +326,7 @@ In the inspected example, `stimtype` values map as follows:
 - `62005`: `LEDMovingBarsSingleAntenna`
 - `62006`: `LEDMovingBarsBothAntenna`
 
-Those three stimulus functions assign the same first seven
-stimulus-specific slots:
+Those three stimulus functions assign the same first seven stimulus-specific slots:
 
 - `stimulus_specific_01`: configured epoch antenna, `p.antenna`.
 - `stimulus_specific_02`: configured LED intensity, `p.intensity`.
@@ -412,8 +335,7 @@ stimulus-specific slots:
 - `stimulus_specific_05`: LabJack-read left LED value, `stimRead.LEFT`.
 - `stimulus_specific_06`: LabJack-read right LED value, `stimRead.RIGHT`.
 - `stimulus_specific_07`: LabJack-read photodiode value, `stimRead.PD`.
-- `stimulus_specific_08` through `stimulus_specific_20`: unused/zero in these
-  example stimulus functions.
+- `stimulus_specific_08` through `stimulus_specific_20`: unused/zero in these example stimulus functions.
 
 ### `stimulusData/stimParams.mat`
 
@@ -444,8 +366,7 @@ Observed example contents:
 
 - MATLAB variable: `params`.
 - Seven structs matching the observed stimulus epochs.
-- Includes fields similar to `stimParams.mat`, plus example-specific fields
-  such as `totalTime`.
+- Includes fields similar to `stimParams.mat`, plus example-specific fields such as `totalTime`.
 
 Use this to audit the exact parameters chosen for the run.
 
@@ -479,10 +400,7 @@ Use this for stimulus reproducibility.
 
 Archive of stimulus/runtime code files.
 
-Use this as provenance for the exact stimulus code state. During conversion,
-twopy reads `paramfiles/stimulus_lookup.txt` and the stimulus functions used by
-the recording to decode experiment-specific `stimulus_specific_*` slot
-metadata. Do not extract or modify it during normal analysis.
+Use this as provenance for the exact stimulus code state. During conversion, twopy reads `paramfiles/stimulus_lookup.txt` and the stimulus functions used by the recording to decode experiment-specific `stimulus_specific_*` slot metadata. Do not extract or modify it during normal analysis.
 
 ### `stimulusData/fileinfo.txt`
 
@@ -504,44 +422,25 @@ Minimum source-file load set for conversion:
 - `imagingResPd.mat`
 - one `*_alignment.txt` file
 
-twopy reads this set with `load_source_conversion_inputs(recording_dir)` and
-writes converted HDF5 files with `convert_recording_to_twopy(...)`. The source
-files are read-only conversion inputs. Response analysis should use the
-converted HDF5 files rather than reading MATLAB files directly.
+twopy reads this set with `load_source_conversion_inputs(recording_dir)` and writes converted HDF5 files with `convert_recording_to_twopy(...)`. The source files are read-only conversion inputs. Response analysis should use the converted HDF5 files rather than reading MATLAB files directly.
 
-This load set is smaller than the full required top-level folder contract. The
-raw `*.tif` movie and `defaultAlignChannel.txt` remain part of the source
-recording contract for raw-data access, metadata audit, and alignment provenance,
-but normal conversion does not need to read them.
+This load set is smaller than the full required top-level folder contract. The raw `*.tif` movie and `defaultAlignChannel.txt` remain part of the source recording contract for raw-data access, metadata audit, and alignment provenance, but normal conversion does not need to read them.
 
 The converted `recording_data.h5` file contains:
 
 - `movie`: attributes pointing to the separate aligned movie file and dataset.
-- `movie/mean_image`: uncompressed mean image generated during conversion. This
-  is one image, so compression is unnecessary complexity.
-- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from
-  stimulus-bounded alignment offsets. The converted aligned movie stays
-  full-frame; analysis code uses this crop when it needs the same valid spatial
-  contract as crop-domain background correction.
+- `movie/mean_image`: uncompressed mean image generated during conversion. This is one image, so compression is unnecessary complexity.
+- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from stimulus-bounded alignment offsets. The converted aligned movie stays full-frame; analysis code uses this crop when it needs the same valid spatial contract as crop-domain background correction.
 - `metadata`: selected acquisition fields as HDF5 attributes.
-- `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case
-  twopy field names such as `rig_name`, `run_number`, `fly_id`, and
-  `rig_temperature`.
+- `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case twopy field names such as `rig_name`, `run_number`, `fly_id`, and `rig_temperature`.
 - `stimulus/data`: numeric stimulus data.
 - `stimulus/data_column_names`: one label per data column.
 - `stimulus/parameters_json`: stimulus epoch parameters.
-- `stimulus/function_lookup_json`: `stimtype` to backed-up MATLAB stimulus
-  function names used by this recording.
-- `stimulus/stimulus_specific_columns_json`: per-`stimtype` assignments from
-  `stimData.mat(N)` slots to the source MATLAB expression and line number.
-  Use `map_stimulus_specific_column(...)` to map a stable column name such as
-  `stimulus_specific_04` to the per-`stimtype` meaning for scripts.
-- `photodiode`: synchronization metadata explaining the two-computer timing
-  model.
-- `photodiode/imaging_res_pd`: frame-resolution photodiode vector, one sample
-  per aligned imaging frame.
-- `photodiode/high_res_pd`: high-resolution photodiode vector for precise
-  photodiode event detection.
+- `stimulus/function_lookup_json`: `stimtype` to backed-up MATLAB stimulus function names used by this recording.
+- `stimulus/stimulus_specific_columns_json`: per-`stimtype` assignments from `stimData.mat(N)` slots to the source MATLAB expression and line number. Use `map_stimulus_specific_column(...)` to map a stable column name such as `stimulus_specific_04` to the per-`stimtype` meaning for scripts.
+- `photodiode`: synchronization metadata explaining the two-computer timing model.
+- `photodiode/imaging_res_pd`: frame-resolution photodiode vector, one sample per aligned imaging frame.
+- `photodiode/high_res_pd`: high-resolution photodiode vector for precise photodiode event detection.
 
 The converted `aligned_movie.h5` file contains:
 
@@ -549,23 +448,12 @@ The converted `aligned_movie.h5` file contains:
 
 The twopy ROI HDF5 file contains:
 
-- `masks`: boolean ROI masks with shape `(rois, x, y)` in aligned movie
-  coordinates.
+- `masks`: boolean ROI masks with shape `(rois, x, y)` in aligned movie coordinates.
 - `labels`: one human-readable label per ROI.
 
-The lower-level `extract_roi_traces` helper reads `movie/aligned` in chunks and
-writes full-frame ROI traces in memory for the requested frame range. Analysis
-trace extraction through `extract_background_corrected_roi_traces` reads only
-the selected spatial domain from the aligned movie, including `method="none"`
-when uncorrected crop-domain traces are needed. The default domain is
-`alignment_valid_crop`, so background pixels and ROI pixels come from the
-alignment-valid crop rather than invalid motion border pixels. ROI masks remain
-full-frame; crop-domain analysis validates that all ROI pixels lie inside the
-selected crop before extracting traces. Frame-window response splitting uses
-explicit imaging-frame boundaries, usually from paired photodiode events.
+The lower-level `extract_roi_traces` helper reads `movie/aligned` in chunks and writes full-frame ROI traces in memory for the requested frame range. Analysis trace extraction through `extract_background_corrected_roi_traces` reads only the selected spatial domain from the aligned movie, including `method="none"` when uncorrected crop-domain traces are needed. The default domain is `alignment_valid_crop`, so background pixels and ROI pixels come from the alignment-valid crop rather than invalid motion border pixels. ROI masks remain full-frame; crop-domain analysis validates that all ROI pixels lie inside the selected crop before extracting traces. Frame-window response splitting uses explicit imaging-frame boundaries, usually from paired photodiode events.
 
-By default, the mean image uses the entire aligned movie. Callers can pass
-`mean_start_frame` and `mean_stop_frame` to compute it over a frame range.
+By default, the mean image uses the entire aligned movie. Callers can pass `mean_start_frame` and `mean_stop_frame` to compute it over a frame range.
 
 Optional prior-analysis shortcut:
 
@@ -584,13 +472,9 @@ Raw-data fallback/audit:
 
 `config.yml` contains `analysis_output`.
 
-- `analysis_output: source` writes twopy outputs into a `twopy/` folder inside
-  the recording folder.
-- `analysis_output: /some/output/root` mirrors the recording directory structure
-  relative to `data_path` under that output root.
-- `convert_recording_to_twopy(recording)` uses this configured output routing by
-  default. Passing `output_dir` to that function is an explicit one-call
-  override.
+- `analysis_output: source` writes twopy outputs into a `twopy/` folder inside the recording folder.
+- `analysis_output: /some/output/root` mirrors the recording directory structure relative to `data_path` under that output root.
+- `convert_recording_to_twopy(recording)` uses this configured output routing by default. Passing `output_dir` to that function is an explicit one-call override.
 
 Example:
 
@@ -605,32 +489,19 @@ output: /Volumes/magic/clarklab/twopy_outputs/fly/stim/2023/10_17/10_02_49
 
 Conversion writes a `frame_counts` group into `recording_data.h5`.
 
-This group exists because ScanImage acquisition metadata uses a slightly
-different frame-count convention from the aligned movie and frame-resolution
-photodiode vector. Do not "fix" this by forcing every count to be identical.
+This group exists because ScanImage acquisition metadata uses a slightly different frame-count convention from the aligned movie and frame-resolution photodiode vector. Do not "fix" this by forcing every count to be identical.
 
-Random sampling on 2026-05-05 checked 20 candidate recordings from the mounted
-lab data paths. Among recordings whose `alignedMovie.mat` could be opened as
-HDF5, the pattern was consistent:
+Random sampling on 2026-05-05 checked 20 candidate recordings from the mounted lab data paths. Among recordings whose `alignedMovie.mat` could be opened as HDF5, the pattern was consistent:
 
 - `aligned_movie_frames == imaging_res_pd_samples`
 - `acq.numberOfFrames == aligned_movie_frames - 1`
 
-Two sampled Dropbox recordings had `alignedMovie.mat` files that were not
-HDF5-readable by the current loader, so they were skipped for this specific
-count comparison.
+Two sampled Dropbox recordings had `alignedMovie.mat` files that were not HDF5-readable by the current loader, so they were skipped for this specific count comparison.
 
 Interpretation:
 
 - `aligned_movie_frames` is the frame count twopy uses for ROI extraction.
-- `imaging_res_pd_samples` must match `aligned_movie_frames` exactly because it
-  is the frame-resolution photodiode vector used to map imaging frames to
-  stimulus timing.
-- `acq.numberOfFrames` may be equal to `aligned_movie_frames` or exactly one
-  less. The one-frame difference is treated as a known ScanImage metadata
-  convention, not as a dropped imaging frame.
+- `imaging_res_pd_samples` must match `aligned_movie_frames` exactly because it is the frame-resolution photodiode vector used to map imaging frames to stimulus timing.
+- `acq.numberOfFrames` may be equal to `aligned_movie_frames` or exactly one less. The one-frame difference is treated as a known ScanImage metadata convention, not as a dropped imaging frame.
 
-twopy stores all counts and deltas so response-analysis code can audit the frame
-contract before assigning trials. Conversion fails if `imaging_res_pd_samples`
-does not match `aligned_movie_frames`, or if `acq.numberOfFrames` differs by
-anything other than `0` or `-1`.
+twopy stores all counts and deltas so response-analysis code can audit the frame contract before assigning trials. Conversion fails if `imaging_res_pd_samples` does not match `aligned_movie_frames`, or if `acq.numberOfFrames` differs by anything other than `0` or `-1`.

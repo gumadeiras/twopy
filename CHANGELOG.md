@@ -4,20 +4,16 @@
 
 ### Features
 
-- Added napari Plot-tab dF/F controls for background subtraction, gray
-  interleave baseline sampling, fit mode, and motion masking.
-- Added shared and ROI y-stripe percentile background subtraction for broad
-  row-dependent background in dense process recordings.
-- Renamed Plot-tab labels and dropdown entries to concise readable names and
-  populated the dF/F interleave selector from recording epoch names, defaulting
-  to names that look like gray, grey, or interleave baselines.
-- Added shared helpers for default interleave epoch selection and converted
-  recording frame-rate parsing.
+- Added napari Plot-tab dF/F controls for background subtraction, gray interleave baseline sampling, fit mode, and motion masking.
+- Added shared and ROI y-stripe percentile background subtraction for broad row-dependent background in dense process recordings.
+- Renamed Plot-tab labels and dropdown entries to concise readable names and populated the dF/F interleave selector from recording epoch names, defaulting to names that look like gray, grey, or interleave baselines.
+- Added shared helpers for default interleave epoch selection and converted recording frame-rate parsing.
 
 ### Fixes
 
 - Centered live napari response plot titles above their plots.
 - Trimmed unused vertical space below live napari response plots.
+- Kept live napari Plot-tab recomputes on the same post-stimulus x-axis window used when loading saved response plots.
 - Added the package version to the napari window title.
 
 ## 0.1.3 - 2026-05-07
@@ -25,29 +21,23 @@
 ### Fixes
 
 - Clamped stale napari movie preview ranges when loading a shorter recording.
-- Ignored macOS AppleDouble sidecar files when discovering source recordings so
-  napari can auto-convert recordings on mounted volumes.
-- Reported source-recording validation errors during napari loading instead of
-  replacing them with a missing converted-file message.
+- Ignored macOS AppleDouble sidecar files when discovering source recordings so napari can auto-convert recordings on mounted volumes.
+- Reported source-recording validation errors during napari loading instead of replacing them with a missing converted-file message.
 - Renamed the napari window title to `twopy`.
 
 ## 0.1.2 - 2026-05-06
 
 ### Features
 
-- Added `twopy --version` and `twopy -v` so users can check the installed
-  package version from the command line.
+- Added `twopy --version` and `twopy -v` so users can check the installed package version from the command line.
 
 ## 0.1.1 - 2026-05-06
 
 ### Features
 
-- Added response processing controls for smoothing, low-pass filtering, and
-  correlation filtering in script and napari workflows.
-- Saved response processing settings and QC scores in analysis output so
-  results can be audited and reloaded later.
-- Restored saved response processing options when reopening analysis output in
-  napari.
+- Added response processing controls for smoothing, low-pass filtering, and correlation filtering in script and napari workflows.
+- Saved response processing settings and QC scores in analysis output so results can be audited and reloaded later.
+- Restored saved response processing options when reopening analysis output in napari.
 
 ### Fixes
 
@@ -65,44 +55,23 @@ Initial PyPI release.
 ### Features
 
 - Installable Python 3.13 package with the `twopy` command-line entrypoint.
-- Napari interface for loading two-photon recordings, converted recordings, and
-  existing ROI files.
-- Napari workflow for viewing mean images and aligned movies, drawing or editing
-  ROI Labels layers, saving ROIs, computing responses, plotting responses, and
-  reloading saved analysis output.
+- Napari interface for loading two-photon recordings, converted recordings, and existing ROI files.
+- Napari workflow for viewing mean images and aligned movies, drawing or editing ROI Labels layers, saving ROIs, computing responses, plotting responses, and reloading saved analysis output.
 - Source recording discovery for the Clark Lab two-photon output layout.
-- YAML configuration for database paths, data paths, database access mode, and
-  analysis output routing.
-- Schema-aware read-only SQLite database helpers for finding recordings by date,
-  genotype, stimulus, sensor, cell type, hemisphere, and person.
-- Source-to-twopy conversion into inspectable HDF5 files:
-  `recording_data.h5` for metadata, stimulus tables, photodiode signals, mean
-  image, synchronization metadata, and frame-count audit data, plus
-  `aligned_movie.h5` for the aligned movie.
-- Configurable converted-output routing to the source recording folder or a
-  mirrored output root.
+- YAML configuration for database paths, data paths, database access mode, and analysis output routing.
+- Schema-aware read-only SQLite database helpers for finding recordings by date, genotype, stimulus, sensor, cell type, hemisphere, and person.
+- Source-to-twopy conversion into inspectable HDF5 files: `recording_data.h5` for metadata, stimulus tables, photodiode signals, mean image, synchronization metadata, and frame-count audit data, plus `aligned_movie.h5` for the aligned movie.
+- Configurable converted-output routing to the source recording folder or a mirrored output root.
 - MATLAB, TIFF, text, CSV, ZIP, and general recording file inspection helpers.
 - Lazy loading of converted recordings and aligned movies.
-- Photodiode event detection, event pairing between high-resolution and
-  imaging-resolution traces, and classification of stimulus start, trial
-  transition, and stimulus end events.
-- Stimulus epoch mapping to imaging-frame windows through photodiode-aligned
-  timing instead of nominal frame-rate assumptions.
-- GUI-independent ROI mask objects, label-image conversion, ROI HDF5 save/load,
-  and chunked ROI trace extraction.
-- Background-corrected ROI trace extraction with no correction, global movie
-  percentile subtraction, and ROI y-stripe percentile subtraction.
-- Alignment-valid crop support for analysis-time trace extraction and background
-  correction.
-- ROI dF/F calculation with gray-interleave baseline fitting, robust fitting by
-  default, and source-bound fitting for audit comparisons.
+- Photodiode event detection, event pairing between high-resolution and imaging-resolution traces, and classification of stimulus start, trial transition, and stimulus end events.
+- Stimulus epoch mapping to imaging-frame windows through photodiode-aligned timing instead of nominal frame-rate assumptions.
+- GUI-independent ROI mask objects, label-image conversion, ROI HDF5 save/load, and chunked ROI trace extraction.
+- Background-corrected ROI trace extraction with no correction, global movie percentile subtraction, and ROI y-stripe percentile subtraction.
+- Alignment-valid crop support for analysis-time trace extraction and background correction.
+- ROI dF/F calculation with gray-interleave baseline fitting, robust fitting by default, and source-bound fitting for audit comparisons.
 - Motion artifact masking after dF/F using converted high-motion frame metadata.
 - Response grouping by epoch and trial with per-trial response time vectors.
-- Analysis output persistence to `analysis_outputs.h5`, including ROI masks,
-  fluorescence/background traces, dF/F arrays, epoch windows, grouped responses,
-  response processing data, and audit metadata.
-- CSV export of trial-level and epoch-grouped response time series under
-  `exports/csvs/`.
-- Public script-facing APIs for recording lookup, conversion, ROI handling,
-  converted recording loading, photodiode alignment, response analysis,
-  persistence, CSV export, and napari launch helpers.
+- Analysis output persistence to `analysis_outputs.h5`, including ROI masks, fluorescence/background traces, dF/F arrays, epoch windows, grouped responses, response processing data, and audit metadata.
+- CSV export of trial-level and epoch-grouped response time series under `exports/csvs/`.
+- Public script-facing APIs for recording lookup, conversion, ROI handling, converted recording loading, photodiode alignment, response analysis, persistence, CSV export, and napari launch helpers.

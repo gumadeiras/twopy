@@ -1,7 +1,6 @@
 # Python API Guide
 
-twopy scripts should work from converted HDF5 files. Source microscope folders
-are conversion inputs; analysis starts from twopy-owned outputs.
+twopy scripts should work from converted HDF5 files. Source microscope folders are conversion inputs; analysis starts from twopy-owned outputs.
 
 ## Find Recordings
 
@@ -21,9 +20,7 @@ recordings = find_recordings(
 )
 ```
 
-`config.yml` controls whether DB queries use mounted files directly or cached
-local copies. The default is `database_access: copy` because database searches
-over the network can be slow, while copying the DB file locally is usually fast.
+`config.yml` controls whether DB queries use mounted files directly or cached local copies. The default is `database_access: copy` because database searches over the network can be slow, while copying the DB file locally is usually fast.
 
 ## Convert Recording
 
@@ -39,15 +36,9 @@ print(converted.path)
 print(converted.movie_path)
 ```
 
-Conversion writes `recording_data.h5` for metadata, stimulus tables, photodiode
-signals, and the mean image. The large aligned movie is written separately to
-`aligned_movie.h5`. By default the mean image uses the full movie; pass
-`mean_start_frame` and `mean_stop_frame` to use a frame range.
+Conversion writes `recording_data.h5` for metadata, stimulus tables, photodiode signals, and the mean image. The large aligned movie is written separately to `aligned_movie.h5`. By default the mean image uses the full movie; pass `mean_start_frame` and `mean_stop_frame` to use a frame range.
 
-By default, conversion writes to the location configured by `analysis_output`.
-Use `analysis_output: source` to write into `recording/twopy`; use a path to
-mirror the recording directory structure under that output root. Pass
-`output_dir` only when overriding routing for a specific call.
+By default, conversion writes to the location configured by `analysis_output`. Use `analysis_output: source` to write into `recording/twopy`; use a path to mirror the recording directory structure under that output root. Pass `output_dir` only when overriding routing for a specific call.
 
 ## Analyze Converted Data
 
@@ -92,28 +83,11 @@ dff = compute_roi_delta_f_over_f(
 )
 ```
 
-ROI masks are GUI-independent and full-frame. Trace extraction streams movie
-chunks and uses the saved alignment-valid crop by default. Pass
-`spatial_domain="full_frame"` only for an explicit audit path. The lower-level
-`extract_roi_traces` helper is the full-frame raw primitive. For dense
-axon/dendrite process fields, `method="movie_y_stripe_percentile"` estimates a
-low-percentile background separately for each frame and y-stripe, then subtracts
-the stripe background from ROIs by position. `method="roi_y_stripe_percentile"`
-takes rows near each ROI center, excludes ROI pixels, keeps dim pixels by
-percentile, averages those pixels over time, and subtracts that trace from that
-ROI only.
+ROI masks are GUI-independent and full-frame. Trace extraction streams movie chunks and uses the saved alignment-valid crop by default. Pass `spatial_domain="full_frame"` only for an explicit audit path. The lower-level `extract_roi_traces` helper is the full-frame raw primitive. For dense axon/dendrite process fields, `method="movie_y_stripe_percentile"` estimates a low-percentile background separately for each frame and y-stripe, then subtracts the stripe background from ROIs by position. `method="roi_y_stripe_percentile"` takes rows near each ROI center, excludes ROI pixels, keeps dim pixels by percentile, averages those pixels over time, and subtracts that trace from that ROI only.
 
-Stimulus epoch windows come from classified photodiode events, not nominal
-frame-rate assumptions. `timing.events` keeps the start, transition, and end
-classifications auditable. ROI dF/F uses corrected fluorescence plus gray
-interleave windows to fit one shared exponential tau and one amplitude per ROI.
-The default dF/F fit mode is `robust`; pass `fit_mode="source_bounds"` for
-source-bound audit comparisons.
+Stimulus epoch windows come from classified photodiode events, not nominal frame-rate assumptions. `timing.events` keeps the start, transition, and end classifications auditable. ROI dF/F uses corrected fluorescence plus gray interleave windows to fit one shared exponential tau and one amplitude per ROI. The default dF/F fit mode is `robust`; pass `fit_mode="source_bounds"` for source-bound audit comparisons.
 
-Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response
-processing. Smoothing and low-pass filters run on continuous dF/F before trial
-grouping. Correlation filtering scores grouped trials and stores the selected
-settings plus QC scores in the analysis HDF5 output.
+Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response processing. Smoothing and low-pass filters run on continuous dF/F before trial grouping. Correlation filtering scores grouped trials and stores the selected settings plus QC scores in the analysis HDF5 output.
 
 ## Open Napari From Python
 
