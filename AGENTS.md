@@ -79,7 +79,9 @@ twopy is a two-photon imaging analysis tool.
 - `twopy.conversion` owns reading source microscope outputs such as MAT files, raw TIFF files, stimulus backups, and text metadata.
 - `twopy.analysis` owns scientific calculations over converted twopy objects and HDF5 files. Analysis code must not read source MAT/TIFF files directly.
 - GUI selects analysis parameters; workflow owns execution; processing modules own math; persistence owns the audit trail.
-- `twopy.parity` owns read-only comparison helpers for prior `savedAnalysis/` outputs. Normal conversion, analysis, and napari code should not import parity helpers.
+- `twopy.parity` owns read-only comparison helpers for prior `savedAnalysis/` outputs and external analysis stacks. Normal conversion, analysis, and napari code should not import parity helpers.
+- When implementing behavior inspired by psycho5, make it a native twopy feature with twopy names, twopy defaults, and twopy docs. Do not add psycho5 compatibility APIs, wrappers, aliases, flags, or defaults to normal twopy modules.
+- Code whose only purpose is to reproduce or compare psycho5 behavior belongs under `twopy.parity` and must stay out of conversion, analysis, persistence, and napari runtime paths.
 - If a feature needs source data, add it to conversion and persist the needed plain twopy object first; then analyze the converted object.
 
 ## Environment
@@ -112,6 +114,7 @@ twopy is a two-photon imaging analysis tool.
 - Keep `roadmap.md` updated as work lands.
 - Roadmap updates should be high signal and low noise: record completed progress, explicit next work, and decisions; avoid speculative feature lists.
 - Keep `CHANGELOG.md` updated for user-facing changes. If a commit adds a feature, fix, behavior change, CLI change, GUI change, output-format change, or other user-visible change, add or update an entry under the top `Unreleased` section in the same commit.
+- Never edit released changelog sections for current work. Corrections, renames, and behavior changes after a release must be recorded only under the top `Unreleased` section unless Gustavo explicitly asks for release-history repair.
 - Follow the changelog structure from `RELEASE.md`: use `Features`, `Fixes`, and `Changes` sections when they apply, omit empty sections, and write user-facing entries instead of repository chore notes.
 - Do not hard-wrap Markdown prose or other text docs. Keep each paragraph or list item on one source line, and use manual line breaks only for headings, lists, tables, code fences, and intentional structure.
 - Every file must start with a plain-language docstring explaining its purpose.

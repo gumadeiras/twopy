@@ -7,9 +7,10 @@
 - Added napari Plot-tab dF/F controls for background subtraction, gray interleave baseline sampling, fit mode, and motion masking.
 - Added napari Plot-tab response-window controls with automatic gray-interleave context by default and manual pre/post seconds that feed both previews and Save Analysis.
 - Added shared and ROI y-stripe percentile background subtraction for broad row-dependent background in dense process recordings.
-- Renamed Plot-tab labels and dropdown entries to concise readable names and populated the dF/F interleave selector from recording epoch names, defaulting to names that look like gray, grey, or interleave baselines.
-- Added shared helpers for default interleave epoch selection and converted recording frame-rate parsing.
-- Added source-compatible psycho5 helpers for default interleave epoch selection and legacy log-linear dF/F tau fitting.
+- Renamed Plot-tab labels and dropdown entries to concise readable names and populated the dF/F baseline selector from recording epoch names, defaulting to names that look like gray, grey, or interleave baselines.
+- Added shared helpers for default baseline epoch selection, baseline frame-window resolution, and converted recording frame-rate parsing.
+- Added descriptive dF/F fit modes for direct bounded-tau, direct bounded-tau-and-amplitude, and log-linear tau fitting.
+- Added parity helpers for psycho5-default response comparisons without adding psycho5-specific APIs to normal twopy analysis.
 
 ### Fixes
 
