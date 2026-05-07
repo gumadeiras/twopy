@@ -1341,6 +1341,7 @@ class NapariAdapterTest(unittest.TestCase):
             load_widget = cast(Any, controls[1])
 
             load_widget(recording_folder=first)
+            load_widget.movie_frame_range.value = (3, 4)
             load_widget(recording_folder=second)
 
             self.assertEqual(load_widget.movie_frame_range.value, (0, 2))

@@ -272,9 +272,10 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
             )
             movie_range = None
             if load_movie:
-                start_frame, end_frame = _clamp_widget_movie_frame_range(
+                start_frame, end_frame = _widget_movie_frame_range_for_load(
                     movie_frame_range,
                     frame_count=loaded_recording.movie.shape[0],
+                    preserve_current_range=replace_selected,
                 )
                 movie_range = resolve_movie_frame_range(
                     start_frame=start_frame,
@@ -721,25 +722,33 @@ def _default_movie_end_frame(recording: RecordingData | None) -> int:
     return max(recording.movie.shape[0] - 1, 0)
 
 
-def _clamp_widget_movie_frame_range(
+def _widget_movie_frame_range_for_load(
     movie_frame_range: tuple[int, int],
     *,
     frame_count: int,
+    preserve_current_range: bool,
 ) -> tuple[int, int]:
-    """Clamp a stale GUI movie preview range to a newly loaded recording.
+    """Choose a GUI movie preview range for the recording being loaded.
 
     Args:
         movie_frame_range: Current range-slider value.
         frame_count: Number of movie frames in the recording being loaded.
+        preserve_current_range: Whether this is a reload of the selected
+            recording after an option change.
 
     Returns:
-        Inclusive preview range constrained to the recording length.
+        Inclusive preview range constrained to the recording length. New
+        recordings default to their full movie, while reloads preserve the
+        visible slider value where possible.
 
-    The frame-range widget keeps its previous value until after a recording is
-    loaded. When the next recording is shorter, clamp the preview request before
-    strict validation so the picker can resize itself to the new movie.
+    The frame-range widget keeps its previous value until after a recording
+    loads. That value is meaningful when reloading the same recording after an
+    option change, but stale when choosing a different recording.
     """
     last_frame = max(frame_count - 1, 0)
+    if not preserve_current_range:
+        return (0, last_frame)
+
     start_frame = int(movie_frame_range[0])
     end_frame = int(movie_frame_range[1])
     if start_frame > last_frame:
