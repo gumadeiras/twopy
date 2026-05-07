@@ -210,6 +210,12 @@ micromamba run -n twopy python -m ruff format --check .
 - Add regression tests for bugs when feasible.
 - Tests should be readable evidence for expected behavior.
 - Prefer small fixtures and explicit expected values over opaque golden files.
+- Use the standard-library unittest runner for direct test runs. This repo does
+  not depend on pytest. Example:
+
+```sh
+micromamba run -n twopy python -m unittest tests.test_stimulus
+```
 
 ## Verification
 
