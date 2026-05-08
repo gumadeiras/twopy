@@ -34,7 +34,6 @@ from qtpy.QtWidgets import (
     QLabel,
     QListWidget,
     QPushButton,
-    QScrollArea,
     QSpinBox,
     QTabWidget,
     QWidget,
@@ -475,14 +474,16 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
             self.assertEqual(viewer.window.dock_widgets[1].area, "right")
-            self.assertIsInstance(opened.twopy_sidebar_widget, QScrollArea)
+            sidebar_tabs = cast(QTabWidget, opened.twopy_sidebar_widget)
+            self.assertIs(sidebar_tabs, opened.response_options_widget)
+            self.assertEqual(sidebar_tabs.currentIndex(), 0)
             options_widget = cast(QTabWidget, opened.response_options_widget)
             self.assertEqual(
                 tuple(
                     options_widget.tabText(index)
                     for index in range(options_widget.count())
                 ),
-                ("Update", "Plot", "ROIs", "Epochs", "Export"),
+                ("Load", "Update", "Plot", "ROIs", "Epochs", "Export"),
             )
             update_buttons = {
                 button.text() for button in options_widget.findChildren(QPushButton)

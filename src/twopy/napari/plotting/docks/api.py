@@ -68,8 +68,8 @@ def create_twopy_response_options_widget(
         Tabbed response-options widget when the plot widget owns options,
         otherwise ``None``.
 
-    The options widget is not docked here. The app places it inside the single
-    scrollable twopy sidebar so the right side has one resize/scroll contract.
+    The options widget is not docked here. The app prepends the Load tab to it
+    and docks that single twopy tab stack on the right side.
     """
     if not isinstance(response_plot_widget, _ResponsePlotWidget):
         return None

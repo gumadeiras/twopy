@@ -1,7 +1,7 @@
 """Magicgui controls for the twopy napari adapter.
 
 Inputs: napari viewer, current ROI Labels layer, and paths chosen by the user.
-Outputs: one scrollable right-sidebar dock for loading converted recordings,
+Outputs: one tabbed right-sidebar dock for loading converted recordings,
 tracking loaded recordings, and controlling response plots.
 
 The controls own GUI callbacks only. Loading recordings still goes through the
@@ -107,8 +107,8 @@ def add_twopy_magicgui_controls(
         recording: Optional loaded recording used to populate GUI defaults.
         response_plot_widget: Optional response plotting widget to refresh
             after a new recording is loaded.
-        response_options_widget: Optional response-options widget to place in
-            the same scrollable right sidebar as the load controls.
+        response_options_widget: Optional response-options tabs to place in the
+            same right sidebar as the Load tab.
         mean_image_layer: Optional mean-image layer for an already loaded
             startup recording.
         movie_layer: Optional movie layer for an already loaded startup
@@ -120,9 +120,9 @@ def add_twopy_magicgui_controls(
         Created load, loaded-recordings, and sidebar widgets plus the napari
         dock widget that contains them.
 
-    The sidebar keeps twopy's right-side controls in one scrollable dock. The
-    loader itself stays small and uses the same helpers as scripts, so a future
-    plugin can wrap this without changing recording-load semantics.
+    The sidebar keeps twopy's right-side controls in one tabbed dock. The loader
+    itself stays small and uses the same helpers as scripts, so a future plugin
+    can wrap this without changing recording-load semantics.
     """
     state = NapariControlState(
         viewer=viewer,

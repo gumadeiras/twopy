@@ -4,7 +4,8 @@
 
 ### Changes
 
-- Replaced the separate right-side napari twopy docks with one scrollable `twopy` dock containing recording loading, loaded-recording selection, and response options.
+- Replaced the separate right-side napari twopy docks with one tabbed `twopy` dock containing Load, Update, Plot, ROIs, Epochs, and Export tabs.
+- Reduced the default napari response plot size to 300 px.
 
 ## 0.1.4 - 2026-05-08
 

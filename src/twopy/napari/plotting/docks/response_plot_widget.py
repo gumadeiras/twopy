@@ -78,7 +78,7 @@ class _ResponsePlotWidget(QWidget):
         self._roi_save_file: Path | None = None
         self._plot_data: ResponsePlotData | None = None
         self._show_sem = True
-        self._plot_size = 360
+        self._plot_size = 300
         self._roi_visibility: dict[int, bool] = {}
         self._roi_colors: tuple[QColor, ...] = ()
         self._epoch_visibility: dict[int, bool] = {}

@@ -66,7 +66,7 @@ class EpochPlotWidget(QWidget):
         time_max: float,
         value_min: float,
         value_max: float,
-        plot_size: int = 360,
+        plot_size: int = 300,
     ) -> None:
         """Create a plot widget.
 
