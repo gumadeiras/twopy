@@ -17,7 +17,7 @@ from twopy.napari.plotting.docks.response_plot_widget import _ResponsePlotWidget
 from twopy.napari.protocols import NapariViewer
 
 _QT_APPLICATION: object | None = None
-DEFAULT_RESPONSE_DOCK_HEIGHT = 260
+DEFAULT_RESPONSE_DOCK_HEIGHT = 345
 
 
 def add_twopy_response_plot_widget(

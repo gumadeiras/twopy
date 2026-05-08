@@ -120,23 +120,56 @@ from twopy.napari.viewer import (
 from twopy.spatial import SpatialCrop
 
 
-class _ControlWidget(Protocol):
-    """Small protocol for the magicgui control container in tests.
+def _load_recording_widget(panel: object) -> "_RecordingLoadWidget":
+    """Return the callable magicgui loader from the compact Load panel.
 
-    Inputs: integer widget index.
+    Args:
+        panel: Load panel returned by ``add_twopy_magicgui_controls``.
+
+    Returns:
+        Magicgui callable used by tests to simulate user loading actions.
+    """
+    return cast(_RecordingLoadWidget, cast(_LoadRecordingPanel, panel).load_recording)
+
+
+class _LineEditControl(Protocol):
+    """Small protocol for a magicgui line-edit child used in tests."""
+
+    value: object
+
+
+class _RecordingFolderControl(Protocol):
+    """Small protocol for the recording-folder picker used in tests."""
+
+    value: object
+    line_edit: _LineEditControl
+
+
+class _MovieFrameRangeControl(Protocol):
+    """Small protocol for the movie-frame range slider used in tests."""
+
+    value: tuple[int, int]
+
+
+class _RecordingLoadWidget(Protocol):
+    """Small protocol for the magicgui recording-load callable in tests."""
+
+    recording_folder: _RecordingFolderControl
+    movie_frame_range: _MovieFrameRangeControl
+
+    def __call__(self, **kwargs: object) -> object:
+        """Call the recording loader with optional magicgui keyword values."""
+        ...
+
+
+class _LoadRecordingPanel(Protocol):
+    """Small protocol for the compact load-recording panel in tests.
+
+    Inputs: load-recording panel.
     Outputs: callable magicgui function widget.
     """
 
-    def __getitem__(self, index: int) -> Callable[..., object]:
-        """Return one child widget by index.
-
-        Args:
-            index: Child widget index.
-
-        Returns:
-            Callable widget.
-        """
-        ...
+    load_recording: Callable[..., object]
 
 
 @dataclass
@@ -522,13 +555,24 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.window.dock_widgets), 2)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
-            self.assertEqual(viewer.window._qt_window.resize_calls[0].sizes, [260])
+            self.assertEqual(viewer.window._qt_window.resize_calls[0].sizes, [345])
             self.assertEqual(
                 viewer.window._qt_window.resize_calls[0].docks,
                 [viewer.window.dock_widgets[0]],
             )
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
             self.assertEqual(viewer.window.dock_widgets[1].area, "right")
+            load_panel = cast(QWidget, opened.load_widget)
+            load_labels = {label.text() for label in load_panel.findChildren(QLabel)}
+            self.assertIn("Recording", load_labels)
+            self.assertIn("ROI file", load_labels)
+            self.assertIn("Frames", load_labels)
+            browse_buttons = [
+                button
+                for button in load_panel.findChildren(QPushButton)
+                if button.text() == "Browse"
+            ]
+            self.assertEqual(len(browse_buttons), 2)
             sidebar_tabs = cast(QTabWidget, opened.twopy_sidebar_widget)
             self.assertIs(sidebar_tabs, opened.response_options_widget)
             self.assertEqual(sidebar_tabs.currentIndex(), 0)
@@ -1685,8 +1729,7 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_labels_layer=None,
                 roi_save_file=roi_save_file,
             )
-            controls = cast(_ControlWidget, control_docks.load_widget)
-            load_widget = cast(Any, controls[1])
+            load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget.recording_folder.value = root
 
@@ -1719,8 +1762,7 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, control_docks.load_widget)
-            load_widget = cast(Any, controls[1])
+            load_widget = _load_recording_widget(control_docks.load_widget)
             panel = cast(QWidget, control_docks.loaded_recordings_widget)
             loaded_list = panel.findChild(QListWidget)
             unload_button = next(
@@ -1780,8 +1822,7 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, control_docks.load_widget)
-            load_widget = cast(Any, controls[1])
+            load_widget = _load_recording_widget(control_docks.load_widget)
 
             self.assertEqual(load_widget.recording_folder.value, Path("default"))
 
@@ -1805,8 +1846,7 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, control_docks.load_widget)
-            load_widget = cast(Any, controls[1])
+            load_widget = _load_recording_widget(control_docks.load_widget)
 
             result = load_widget(recording_folder=root)
 
@@ -1843,8 +1883,7 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, control_docks.load_widget)
-            load_widget = cast(Any, controls[1])
+            load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget(recording_folder=root)
 
@@ -1869,8 +1908,7 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, control_docks.load_widget)
-            load_widget = cast(Any, controls[1])
+            load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget(recording_folder=root)
             load_widget.movie_frame_range.value = (0, 1)
@@ -1904,8 +1942,7 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_labels_layer=None,
                 roi_save_file=Path("unused.h5"),
             )
-            controls = cast(_ControlWidget, control_docks.load_widget)
-            load_widget = cast(Any, controls[1])
+            load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget(recording_folder=first)
             load_widget.movie_frame_range.value = (3, 4)

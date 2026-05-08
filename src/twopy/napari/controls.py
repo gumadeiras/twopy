@@ -11,9 +11,11 @@ same typed helpers used by scripts.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 from magicgui.widgets import FileEdit
+from qtpy.QtCore import Qt
+from qtpy.QtWidgets import QFormLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
@@ -81,6 +83,19 @@ class NapariControlState:
     recording_picker_display_text: str = DEFAULT_PATH_TEXT
     is_loading: bool = False
     replace_selected_on_next_load: bool = False
+
+
+class _LoadRecordingGui(Protocol):
+    """Small shape of the magicgui recording-load callable.
+
+    Inputs: magicgui function widget created in ``_make_twopy_load_widget``.
+    Outputs: access to the child controls that need compact Qt placement.
+    """
+
+    recording_folder: object
+    roi_file_to_load: object
+    movie_frame_range: object
+    load_movie: object
 
 
 def add_twopy_magicgui_controls(
@@ -165,16 +180,15 @@ def add_twopy_magicgui_controls(
 
 
 def _make_twopy_load_widget(state: NapariControlState) -> object:
-    """Create the right-side magicgui widget for loading recordings.
+    """Create the right-side widget for loading recordings.
 
     Args:
         state: Mutable napari control state.
 
     Returns:
-        magicgui container with recording-load controls.
+        Qt widget with compact recording-load controls.
     """
     from magicgui import magicgui
-    from magicgui.widgets import Container, Label
 
     default_movie_end_frame = _default_movie_end_frame(state.recording)
 
@@ -291,10 +305,18 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     load_recording.recording_folder.mode = "d"
     load_recording.roi_file_to_load.mode = "r"
 
-    load_recording.recording_folder.label = "recording folder or file"
-    load_recording.roi_file_to_load.label = "ROI file to load"
-    load_recording.movie_frame_range.label = "movie frames"
-    load_recording.load_movie.label = "load movie"
+    load_recording.recording_folder.label = "Recording"
+    load_recording.roi_file_to_load.label = "ROI file"
+    load_recording.movie_frame_range.label = "Movie frames"
+    load_recording.load_movie.label = "Load movie"
+    _set_file_edit_button_text(
+        cast(FileEdit, load_recording.recording_folder),
+        text="Browse",
+    )
+    _set_file_edit_button_text(
+        cast(FileEdit, load_recording.roi_file_to_load),
+        text="Browse",
+    )
     _configure_recording_folder_picker(
         cast(FileEdit, load_recording.recording_folder),
         state,
@@ -348,14 +370,88 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     load_recording.movie_frame_range.changed.connect(reload_after_option_change)
     load_recording.load_movie.changed.connect(reload_after_option_change)
 
-    return Container(
-        widgets=[
-            Label(value="Load Recording"),
-            load_recording,
-        ],
-        layout="vertical",
-        labels=False,
-    )
+    return LoadRecordingPanel(load_recording=load_recording)
+
+
+class LoadRecordingPanel(QWidget):
+    """Compact Qt panel that owns the recording-load controls.
+
+    Args:
+        load_recording: Magicgui callable widget whose child controls and
+            callbacks perform recording loading.
+
+    Outputs:
+        QWidget with a tight form layout for the Load tab.
+
+    The magicgui callable still owns validation and callback wiring. This panel
+    only arranges the existing controls with shorter labels so the path fields
+    and frame slider have enough horizontal room.
+    """
+
+    load_recording: object
+
+    def __init__(self, *, load_recording: object) -> None:
+        """Create a compact Load Recording panel.
+
+        Args:
+            load_recording: Magicgui callable widget built by
+                ``_make_twopy_load_widget``.
+
+        Returns:
+            None.
+        """
+        super().__init__()
+        self.load_recording = load_recording
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        title = QLabel("Load Recording")
+        title.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        layout.addWidget(title)
+
+        recording_gui = cast(_LoadRecordingGui, load_recording)
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(8)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.addRow("Recording", _control_native(recording_gui.recording_folder))
+        form.addRow("ROI file", _control_native(recording_gui.roi_file_to_load))
+        form.addRow("Frames", _control_native(recording_gui.movie_frame_range))
+        form.addRow("", _control_native(recording_gui.load_movie))
+        layout.addLayout(form)
+        self.setLayout(layout)
+
+
+def _control_native(widget: object) -> QWidget:
+    """Return the Qt widget wrapped by a magicgui control.
+
+    Args:
+        widget: Magicgui widget or Qt widget.
+
+    Returns:
+        QWidget that can be inserted into the compact Load form.
+    """
+    native_widget = getattr(widget, "native", widget)
+    if not isinstance(native_widget, QWidget):
+        msg = f"Load control expected a QWidget, got {type(native_widget).__name__}."
+        raise TypeError(msg)
+    return native_widget
+
+
+def _set_file_edit_button_text(widget: FileEdit, *, text: str) -> None:
+    """Set concise button text on a magicgui file picker.
+
+    Args:
+        widget: File picker control.
+        text: Button label shown beside the path field.
+
+    Returns:
+        None.
+    """
+    widget.choose_btn.text = text
 
 
 def _make_loaded_recordings_widget(state: NapariControlState) -> object:
