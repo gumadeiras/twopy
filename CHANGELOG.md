@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.5 - 2026-05-08
+
 ### Changes
 
 - Replaced the separate right-side napari twopy docks with one tabbed `twopy` dock containing Load, Update, Plot, ROIs, Epochs, and Export tabs.
