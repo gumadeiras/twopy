@@ -1,11 +1,11 @@
 """Magicgui controls for the twopy napari adapter.
 
 Inputs: napari viewer, current ROI Labels layer, and paths chosen by the user.
-Outputs: small dock widgets for loading converted recordings and tracking the
-active loaded recording.
+Outputs: one scrollable right-sidebar dock for loading converted recordings,
+tracking loaded recordings, and controlling response plots.
 
-The control panel owns GUI callbacks only. Loading recordings still goes
-through the same typed helpers used by scripts.
+The controls own GUI callbacks only. Loading recordings still goes through the
+same typed helpers used by scripts.
 """
 
 from collections.abc import Callable
@@ -39,11 +39,11 @@ from twopy.napari.state import (
     write_last_recording_folder,
 )
 
-__all__ = ["NapariControlDocks", "add_twopy_magicgui_controls"]
+__all__ = ["NapariSidebarWidgets", "add_twopy_magicgui_controls"]
 
 
 @dataclass
-class NapariControlDocks:
+class NapariSidebarWidgets:
     """Widgets created for the twopy napari right sidebar.
 
     Inputs: Qt widgets and napari dock objects.
@@ -95,8 +95,8 @@ def add_twopy_magicgui_controls(
     movie_layer: object | None = None,
     dock_name: str = "twopy",
     dock_area: str = "right",
-) -> NapariControlDocks:
-    """Add the first twopy magicgui control panel to a napari viewer.
+) -> NapariSidebarWidgets:
+    """Add the twopy right sidebar to a napari viewer.
 
     Args:
         viewer: Napari viewer that should receive the dock widget.
@@ -155,7 +155,7 @@ def add_twopy_magicgui_controls(
         name=dock_name,
         area=dock_area,
     )
-    return NapariControlDocks(
+    return NapariSidebarWidgets(
         load_widget=load_widget,
         loaded_recordings_widget=loaded_recordings_widget,
         response_options_widget=response_options_widget,

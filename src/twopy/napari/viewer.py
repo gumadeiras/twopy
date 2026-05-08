@@ -82,7 +82,8 @@ def open_recording_in_napari(
         add_roi_labels_layer: Whether to add a napari Labels layer for ROI
             drawing or editing. When ``roi_set`` is omitted, the layer starts as
             an empty integer image with the movie spatial shape.
-        add_controls: Whether to add the small magicgui twopy control panel.
+        add_controls: Whether to add the twopy response plot and right
+            sidebar controls.
         roi_save_file: Default ROI HDF5 path used by the response-options
             persistence button. When omitted, twopy uses ``rois.h5`` beside
             ``recording_data.h5``.

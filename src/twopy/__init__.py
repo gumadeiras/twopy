@@ -57,8 +57,8 @@ from twopy.api import find_recordings
 from twopy.conversion import convert_recording_to_twopy, load_source_conversion_inputs
 from twopy.converted import load_converted_recording, recording_frame_rate_hz
 from twopy.napari import (
-    NapariControlDocks,
     NapariRecordingView,
+    NapariSidebarWidgets,
     add_twopy_magicgui_controls,
     launch_napari,
     open_recording_in_napari,
@@ -149,8 +149,8 @@ __all__ = [
     "make_roi_set",
     "map_stimulus_epochs_to_frame_windows",
     "map_stimulus_specific_column",
-    "NapariControlDocks",
     "NapariRecordingView",
+    "NapariSidebarWidgets",
     "open_recording_in_napari",
     "pair_photodiode_events_to_imaging_frames",
     "PhotodiodeAlignment",
