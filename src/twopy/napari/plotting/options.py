@@ -20,7 +20,6 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -163,11 +162,7 @@ def visibility_options_widget(
         list_layout.addWidget(_visibility_row(checkbox, _color_at(colors, index)))
     list_widget.setLayout(list_layout)
 
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setWidget(list_widget)
-    scroll.setMaximumHeight(_visibility_list_height(checkboxes, visible_rows=8))
-    layout.addWidget(scroll)
+    layout.addWidget(list_widget)
 
     def set_all(checked: bool) -> None:
         """Set all checkboxes and visibility flags together."""
@@ -256,24 +251,3 @@ def _color_at(colors: tuple[QColor, ...] | None, index: int) -> QColor | None:
     if colors is None or index >= len(colors):
         return None
     return colors[index]
-
-
-def _visibility_list_height(
-    checkboxes: list[QCheckBox],
-    *,
-    visible_rows: int,
-) -> int:
-    """Return a compact maximum height for a checkbox list.
-
-    Args:
-        checkboxes: Checkbox widgets in one visibility section.
-        visible_rows: Number of rows to show before scrolling.
-
-    Returns:
-        Pixel height for the scroll area.
-    """
-    if len(checkboxes) == 0:
-        return 0
-    row_height = max(checkbox.sizeHint().height() for checkbox in checkboxes)
-    rows = min(len(checkboxes), visible_rows)
-    return row_height * rows + 8

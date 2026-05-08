@@ -34,6 +34,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QListWidget,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QWidget,
@@ -2094,6 +2095,22 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertTrue(checkboxes[0].isChecked())
         self.assertFalse(checkboxes[1].isChecked())
+
+    def test_visibility_options_do_not_add_inner_scroll_area(self) -> None:
+        """Confirm ROI/Epoch rows rely on the tab scrollbar.
+
+        Inputs: many visibility labels.
+        Outputs: option widget has no nested list scroll area.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = visibility_options_widget(
+            title="ROIs",
+            labels=tuple(f"roi_{index}" for index in range(20)),
+            visibility={},
+            on_change=lambda _key, _visible: None,
+        )
+
+        self.assertEqual(widget.findChildren(QScrollArea), [])
 
     def test_roi_visibility_can_hide_labels_layer_rois(self) -> None:
         """Confirm plot ROI visibility can hide ROI labels in napari.
