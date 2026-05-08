@@ -12,6 +12,7 @@
 ### Fixes
 
 - Kept the Load-tab Recording path synchronized with the active loaded recording after database loads, list selection changes, and unloads.
+- Reported database-search setup failures and per-recording database load failures without hiding valid recordings from the same selection.
 - Reduced the live ROI plot update debounce so response plots refresh sooner after drawing finishes.
 
 ## 0.1.5 - 2026-05-08

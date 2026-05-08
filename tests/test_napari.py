@@ -44,6 +44,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+import twopy.napari.controls as napari_controls
 from twopy import (
     add_twopy_magicgui_controls,
     load_roi_set,
@@ -71,6 +72,7 @@ from twopy.napari.database_search import (
     ExperimentLoadFailure,
     ExperimentLoadResult,
     ExperimentSearchDialog,
+    ExperimentSearchErrorDialog,
 )
 from twopy.napari.display import (
     display_image_from_movie_image,
@@ -1963,6 +1965,161 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertIn("Could not find recording_data.h5.", details.toPlainText())
         self.assertIn("/missing/second", details.toPlainText())
         self.assertIn("Missing source files.", details.toPlainText())
+
+    def test_database_search_failure_shows_error_dialog(self) -> None:
+        """Confirm database search failures do not look like empty results.
+
+        Inputs: dialog pointed at a missing config file.
+        Outputs: search clears the tree and reports the actual error.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            errors: list[Exception] = []
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                    loaded_count=len(paths),
+                ),
+                config_path=Path(temp_dir) / "missing.yml",
+            )
+
+            with patch.object(
+                dialog,
+                "_show_search_error",
+                side_effect=lambda error: errors.append(error),
+            ):
+                dialog.search()
+
+            self.assertEqual(dialog._tree.topLevelItemCount(), 0)
+            self.assertEqual(len(errors), 1)
+            self.assertIsInstance(errors[0], FileNotFoundError)
+
+    def test_database_search_error_dialog_shows_details(self) -> None:
+        """Confirm search errors get readable scrollable details.
+
+        Inputs: a representative search exception.
+        Outputs: a dialog with a clear summary and exception details.
+        """
+        _ = QApplication.instance() or QApplication([])
+        dialog = ExperimentSearchErrorDialog(FileNotFoundError("missing config.yml"))
+        summary_text = "\n".join(label.text() for label in dialog.findChildren(QLabel))
+        details = dialog.findChild(QPlainTextEdit)
+        assert details is not None
+
+        self.assertIn("Could not search", summary_text)
+        self.assertTrue(details.isReadOnly())
+        self.assertIn("FileNotFoundError", details.toPlainText())
+        self.assertIn("missing config.yml", details.toPlainText())
+
+    def test_database_search_loads_valid_paths_when_one_row_is_bad(self) -> None:
+        """Confirm one bad DB path does not block valid selected siblings.
+
+        Inputs: one valid DB result and one unsafe relativeDataPath.
+        Outputs: the valid source path is loaded and the bad row is reported.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database_dir = root / "db"
+            data_dir = root / "data"
+            database_dir.mkdir()
+            data_dir.mkdir()
+            database_path = database_dir / "experimentLog.db"
+            _write_database(database_path)
+            connection = sqlite3.connect(database_path)
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO stimulusPresentation
+                        (
+                            stimulusPresentationId,
+                            fly,
+                            relativeDataPath,
+                            stimulusFunction,
+                            date,
+                            dataQuality
+                        )
+                    VALUES
+                        (
+                            20006,
+                            10923,
+                            '..\\escape\\2023\\10_17\\10_03_00',
+                            'combo_stim_singles',
+                            '2023-10-17 10:03:00',
+                            1
+                        )
+                    """,
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {database_dir}\n"
+                f"data_path: {data_dir}\n"
+                "database_access: direct\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            loaded_paths: list[tuple[Path, ...]] = []
+            shown_results: list[ExperimentLoadResult] = []
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: _record_loaded_paths(
+                    loaded_paths,
+                    paths,
+                ),
+                config_path=config_path,
+            )
+            dialog._user_filter.setText("Gus")
+            dialog.search()
+
+            result = dialog._tree.topLevelItem(0)
+            assert result is not None
+            result.setSelected(True)
+            with patch.object(
+                dialog,
+                "_show_load_errors",
+                side_effect=lambda load_result: shown_results.append(load_result),
+            ):
+                dialog.load_selected()
+
+            self.assertEqual(
+                loaded_paths,
+                [(data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49",)],
+            )
+            self.assertEqual(len(shown_results), 1)
+            self.assertEqual(shown_results[0].loaded_count, 1)
+            self.assertEqual(len(shown_results[0].failures), 1)
+            self.assertIn("relativeDataPath", shown_results[0].failures[0].message)
+
+    def test_database_load_records_non_value_errors_per_path(self) -> None:
+        """Confirm conversion KeyErrors become path-level load failures.
+
+        Inputs: database load callback with a loader raising ``KeyError``.
+        Outputs: structured failure result instead of an uncaught traceback.
+        """
+        state = napari_controls.NapariControlState(
+            viewer=_FakeViewer(),
+            roi_labels_layer=None,
+            roi_save_file=Path("rois.h5"),
+            recording=None,
+            response_plot_widget=None,
+        )
+
+        with patch.object(
+            napari_controls,
+            "_load_recording_path",
+            side_effect=KeyError("missing stimtype"),
+        ):
+            result = napari_controls._load_database_recording_paths(
+                state,
+                (Path("/bad/source"),),
+            )
+
+        self.assertEqual(result.loaded_count, 0)
+        self.assertEqual(len(result.failures), 1)
+        self.assertEqual(result.failures[0].path, Path("/bad/source"))
+        self.assertIn("KeyError", result.failures[0].message)
+        self.assertFalse(state.is_loading)
 
     def test_loaded_recordings_panel_selects_and_unloads_layers(self) -> None:
         """Confirm multi-recording selection controls layer ownership.

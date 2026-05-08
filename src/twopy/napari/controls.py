@@ -26,6 +26,7 @@ from qtpy.QtWidgets import (
 
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
+from twopy.napari.errors import exception_message_for_user
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.paths import (
     PathInput,
@@ -520,9 +521,12 @@ def _load_database_recording_paths(
                     replace_selected=False,
                     remember_selected_folder=False,
                 )
-            except (FileNotFoundError, OSError, ValueError) as error:
+            except Exception as error:
                 failures.append(
-                    ExperimentLoadFailure(path=path, message=str(error)),
+                    ExperimentLoadFailure(
+                        path=path,
+                        message=exception_message_for_user(error),
+                    ),
                 )
             else:
                 loaded_count += 1

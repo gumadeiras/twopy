@@ -37,14 +37,16 @@ from twopy.database.search import (
     ExperimentSearchNode,
     build_experiment_search_tree,
     find_recording_search_results,
-    recording_paths_for_database_experiments,
+    recording_path_for_database_experiment,
 )
 from twopy.database.types import DatabaseExperiment
+from twopy.napari.errors import exception_message_for_user
 
 __all__ = [
     "ExperimentLoadErrorDialog",
     "ExperimentLoadFailure",
     "ExperimentLoadResult",
+    "ExperimentSearchErrorDialog",
     "ExperimentSearchDialog",
 ]
 
@@ -82,6 +84,14 @@ class ExperimentLoadResult:
     """
 
     loaded_count: int
+    failures: tuple[ExperimentLoadFailure, ...] = ()
+
+
+@dataclass(frozen=True)
+class _ResolvedExperimentPaths:
+    """Resolved source paths plus database-row failures from one selection."""
+
+    paths: tuple[Path, ...]
     failures: tuple[ExperimentLoadFailure, ...] = ()
 
 
@@ -162,8 +172,9 @@ class ExperimentSearchDialog(QDialog):
                     date=self._date_filter.text(),
                 ),
             )
-        except (FileNotFoundError, OSError, ValueError):
+        except (FileNotFoundError, OSError, ValueError) as error:
             self._tree.clear()
+            self._show_search_error(error)
             return
 
         self._render_tree(build_experiment_search_tree(experiments))
@@ -281,24 +292,26 @@ class ExperimentSearchDialog(QDialog):
         )
         if len(experiments) == 0:
             return
-        try:
-            paths = recording_paths_for_database_experiments(
-                self._load_config(),
-                experiments,
-            )
-        except (FileNotFoundError, OSError, ValueError) as error:
-            result = ExperimentLoadResult(
-                loaded_count=0,
-                failures=(ExperimentLoadFailure(path=None, message=str(error)),),
-            )
-            self.accept()
-            ExperimentLoadErrorDialog(result, parent=self.parentWidget()).exec()
-            return
+        resolved = _resolve_experiment_paths(
+            self._load_config(),
+            experiments,
+        )
 
-        result = self._on_load_recording_paths(paths)
+        result = _merge_load_failures(
+            self._on_load_recording_paths(resolved.paths),
+            resolved.failures,
+        )
         self.accept()
         if result.failures:
-            ExperimentLoadErrorDialog(result, parent=self.parentWidget()).exec()
+            self._show_load_errors(result)
+
+    def _show_search_error(self, error: Exception) -> None:
+        """Show one database-search failure with clear details."""
+        ExperimentSearchErrorDialog(error, parent=self.parentWidget()).exec()
+
+    def _show_load_errors(self, result: ExperimentLoadResult) -> None:
+        """Show database-result load failures with path details."""
+        ExperimentLoadErrorDialog(result, parent=self.parentWidget()).exec()
 
 
 def _set_filter_hint_font(line_edit: QLineEdit, *, is_hint_visible: bool) -> None:
@@ -338,6 +351,36 @@ def _bottom_button_row(
     return layout
 
 
+class ExperimentSearchErrorDialog(QDialog):
+    """Dialog showing database-search failures.
+
+    Args:
+        error: Exception raised while querying configured database files.
+        parent: Optional Qt parent widget.
+
+    Outputs:
+        Modal dialog with a clear summary and scrollable diagnostic details.
+    """
+
+    def __init__(
+        self,
+        error: Exception,
+        *,
+        parent: QWidget | None = None,
+    ) -> None:
+        """Create an error dialog for failed database searches."""
+        super().__init__(parent)
+        self.setWindowTitle("Database Search Error")
+        self.resize(720, 360)
+
+        summary = QLabel("Could not search the experiment database.")
+        layout = QVBoxLayout()
+        layout.addWidget(summary)
+        layout.addWidget(_read_only_details(exception_message_for_user(error)))
+        layout.addWidget(_close_button_box(self))
+        self.setLayout(layout)
+
+
 class ExperimentLoadErrorDialog(QDialog):
     """Dialog showing database-search load failures.
 
@@ -361,18 +404,10 @@ class ExperimentLoadErrorDialog(QDialog):
         self.resize(720, 420)
 
         summary = QLabel(_load_failure_summary(result))
-        failures = QPlainTextEdit()
-        failures.setReadOnly(True)
-        failures.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        failures.setPlainText(_load_failure_text(result.failures))
-
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(self.reject)
-
         layout = QVBoxLayout()
         layout.addWidget(summary)
-        layout.addWidget(failures)
-        layout.addWidget(buttons)
+        layout.addWidget(_read_only_details(_load_failure_text(result.failures)))
+        layout.addWidget(_close_button_box(self))
         self.setLayout(layout)
 
 
@@ -394,3 +429,63 @@ def _load_failure_text(failures: tuple[ExperimentLoadFailure, ...]) -> str:
         path_text = "Selection" if failure.path is None else str(failure.path)
         entries.append(f"{path_text}\n{failure.message}")
     return "\n\n".join(entries)
+
+
+def _read_only_details(text: str) -> QPlainTextEdit:
+    """Return a scrollable read-only details box for error dialogs."""
+    details = QPlainTextEdit()
+    details.setReadOnly(True)
+    details.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+    details.setPlainText(text)
+    return details
+
+
+def _close_button_box(dialog: QDialog) -> QDialogButtonBox:
+    """Return a Close button box wired to one dialog."""
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+    buttons.rejected.connect(dialog.reject)
+    return buttons
+
+
+def _resolve_experiment_paths(
+    config: TwopyConfig,
+    experiments: tuple[DatabaseExperiment, ...],
+) -> _ResolvedExperimentPaths:
+    """Resolve selected experiments while preserving per-row failures."""
+    paths: list[Path] = []
+    failures: list[ExperimentLoadFailure] = []
+    seen: set[Path] = set()
+    for experiment in experiments:
+        try:
+            path = recording_path_for_database_experiment(config, experiment)
+        except (FileNotFoundError, OSError, ValueError) as error:
+            failures.append(
+                ExperimentLoadFailure(path=None, message=_experiment_error(error)),
+            )
+            continue
+        if path in seen:
+            continue
+        paths.append(path)
+        seen.add(path)
+    return _ResolvedExperimentPaths(paths=tuple(paths), failures=tuple(failures))
+
+
+def _merge_load_failures(
+    result: ExperimentLoadResult,
+    failures: tuple[ExperimentLoadFailure, ...],
+) -> ExperimentLoadResult:
+    """Return one load result with path-resolution and loader failures."""
+    if len(failures) == 0:
+        return result
+    return ExperimentLoadResult(
+        loaded_count=result.loaded_count,
+        failures=failures + result.failures,
+    )
+
+
+def _experiment_error(error: Exception) -> str:
+    """Return a clear path-resolution failure message."""
+    return (
+        "Could not resolve database experiment path.\n"
+        f"{exception_message_for_user(error)}"
+    )

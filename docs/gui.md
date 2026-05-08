@@ -22,7 +22,7 @@ twopy /path/to/recording_data.h5
 3. Update response plots from the current Labels layer.
 4. Click Save ROIs + analysis when the plots look right.
 
-By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Update, Plot, ROIs, Epochs, and Export. Recording selections from the Load tab always open the full movie. Search Database opens a separate side-by-side window with user, cell type, sensor, stimulus, and date filters on the left and results on the right. Results browse as user, cell type, sensor, stimulus, date, then source-folder experiment time; loading any hierarchy node loads all recordings under that node, closes the search window, and reports failed paths in a separate scrollable error dialog when needed.
+By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Update, Plot, ROIs, Epochs, and Export. Recording selections from the Load tab always open the full movie. Search Database opens a separate side-by-side window with user, cell type, sensor, stimulus, and date filters on the left and results on the right. Results browse as user, cell type, sensor, stimulus, date, then source-folder experiment time; loading any hierarchy node loads all recordings under that node, closes the search window, and reports failed paths in a separate scrollable error dialog when needed. Search setup or database-query failures appear in a separate error dialog instead of looking like empty results.
 
 ## ROI Editing
 
