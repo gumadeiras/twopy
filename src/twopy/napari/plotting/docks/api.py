@@ -17,6 +17,7 @@ from twopy.napari.plotting.docks.response_plot_widget import _ResponsePlotWidget
 from twopy.napari.protocols import NapariViewer
 
 _QT_APPLICATION: object | None = None
+DEFAULT_RESPONSE_DOCK_HEIGHT = 260
 
 
 def add_twopy_response_plot_widget(
@@ -27,6 +28,7 @@ def add_twopy_response_plot_widget(
     roi_save_file: Path | None = None,
     dock_name: str = "twopy responses",
     dock_area: str = "top",
+    initial_height: int = DEFAULT_RESPONSE_DOCK_HEIGHT,
 ) -> tuple[object, object]:
     """Add the response plotting dock widget to a napari viewer.
 
@@ -38,6 +40,8 @@ def add_twopy_response_plot_widget(
         roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
         dock_name: Dock widget title.
         dock_area: Napari dock area.
+        initial_height: Preferred height, in screen pixels, for the top response
+            dock when it first opens.
 
     Returns:
         ``(widget, dock_widget)`` created by Qt and napari.
@@ -53,7 +57,46 @@ def add_twopy_response_plot_widget(
         name=dock_name,
         area=dock_area,
     )
+    set_top_dock_initial_height(viewer, dock_widget, height=initial_height)
     return widget, dock_widget
+
+
+def set_top_dock_initial_height(
+    viewer: NapariViewer,
+    dock_widget: object,
+    *,
+    height: int,
+) -> None:
+    """Set a best-effort opening height for a top napari dock.
+
+    Args:
+        viewer: Napari viewer that owns the dock.
+        dock_widget: Dock widget returned by napari.
+        height: Preferred dock height in screen pixels.
+
+    Returns:
+        None.
+
+    Napari exposes dock creation but not a stable high-level opening-size API.
+    Qt's ``resizeDocks`` is the direct layout operation for this job. The helper
+    quietly skips non-Qt test doubles or future napari versions that do not
+    expose the underlying Qt window.
+    """
+    if height <= 0:
+        return
+    try:
+        from qtpy.QtCore import Qt
+    except ImportError:
+        return
+
+    qt_window = getattr(viewer.window, "_qt_window", None)
+    if qt_window is None or not hasattr(qt_window, "resizeDocks"):
+        return
+    qt_window.resizeDocks(
+        [dock_widget],
+        [height],
+        Qt.Orientation.Vertical,
+    )
 
 
 def create_twopy_response_options_widget(

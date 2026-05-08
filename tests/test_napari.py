@@ -169,10 +169,58 @@ class _FakeDockWidget:
     widget: object
 
 
+@dataclass
+class _FakeResizeCall:
+    """Dock resize request recorded by the fake Qt window.
+
+    Inputs: dock widgets, target sizes, and orientation.
+    Outputs: inspectable resize request for dock-layout tests.
+    """
+
+    docks: list[object]
+    sizes: list[int]
+    orientation: object
+
+
+class _FakeQtWindow:
+    """Small Qt-window-shaped object for dock resize tests."""
+
+    resize_calls: list[_FakeResizeCall]
+
+    def __init__(self) -> None:
+        """Create an empty fake Qt window.
+
+        Inputs: none.
+        Outputs: fake window with no resize calls.
+        """
+        self.resize_calls: list[_FakeResizeCall] = []
+
+    def resizeDocks(
+        self,
+        docks: list[object],
+        sizes: list[int],
+        orientation: object,
+    ) -> None:
+        """Record a Qt dock resize request.
+
+        Args:
+            docks: Dock widgets to resize.
+            sizes: Target sizes.
+            orientation: Resize orientation.
+
+        Returns:
+            None.
+        """
+        self.resize_calls.append(
+            _FakeResizeCall(docks=docks, sizes=sizes, orientation=orientation)
+        )
+
+
 class _FakeWindow:
     """Small napari-shaped window for dock-widget tests."""
 
     dock_widgets: list[_FakeDockWidget]
+    _qt_window: _FakeQtWindow
 
     def __init__(self) -> None:
         """Create an empty fake window.
@@ -181,6 +229,7 @@ class _FakeWindow:
         Outputs: window with no dock widgets.
         """
         self.dock_widgets: list[_FakeDockWidget] = []
+        self._qt_window = _FakeQtWindow()
 
     def add_dock_widget(
         self,
@@ -473,6 +522,11 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.window.dock_widgets), 2)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
+            self.assertEqual(viewer.window._qt_window.resize_calls[0].sizes, [260])
+            self.assertEqual(
+                viewer.window._qt_window.resize_calls[0].docks,
+                [viewer.window.dock_widgets[0]],
+            )
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
             self.assertEqual(viewer.window.dock_widgets[1].area, "right")
             sidebar_tabs = cast(QTabWidget, opened.twopy_sidebar_widget)

@@ -7,6 +7,7 @@
 - Replaced the separate right-side napari twopy docks with one tabbed `twopy` dock containing Load, Update, Plot, ROIs, Epochs, and Export tabs.
 - Reduced the default napari response plot size to 300 px.
 - Removed nested scrollbars from napari ROI and Epoch visibility lists so those tabs use the main tab scrollbar.
+- Set a compact 260 px opening height for the top napari response-plot dock.
 
 ## 0.1.4 - 2026-05-08
 
