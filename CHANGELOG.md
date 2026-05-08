@@ -22,6 +22,8 @@
 - Moved the show SEM toggle into the napari Plot subsection and aligned two-decimal Plot-tab numeric controls.
 - Standardized napari Plot-tab control widths across dropdowns, spin boxes, and checkboxes for more consistent option-panel layout.
 - Added the package version to the napari window title.
+- Restored the saved napari response-window Auto checkbox state when reloading analysis outputs.
+- Restored saved napari dF/F baseline epoch selections and persisted resolved baseline windows for analysis audits.
 
 ## 0.1.3 - 2026-05-07
 

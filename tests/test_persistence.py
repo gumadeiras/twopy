@@ -94,6 +94,7 @@ class PersistenceTest(unittest.TestCase):
                 traces=traces,
                 dff=dff,
                 epoch_windows=windows,
+                baseline_windows=(windows[0].window,),
                 grouped_responses=grouped,
                 response_processing_options=processing_options,
                 correlation_scores=correlation_scores,
@@ -110,6 +111,7 @@ class PersistenceTest(unittest.TestCase):
                 self.assertEqual(h5_file["traces/raw_values"].shape, (3, 2))
                 self.assertEqual(h5_file["dff/values"].shape, (3, 2))
                 self.assertEqual(h5_file["epoch_windows/start_frame"][0], 0)
+                self.assertEqual(h5_file["baseline_windows/start_frame"][0], 0)
                 self.assertEqual(
                     h5_file["response_processing/smoothing"].attrs["method"],
                     "moving_average",
@@ -171,6 +173,7 @@ class PersistenceTest(unittest.TestCase):
             self.assertIsNotNone(loaded.response_processing_options)
             self.assertIsNotNone(loaded.correlation_scores)
             self.assertEqual(len(loaded.epoch_windows), 1)
+            self.assertEqual(loaded.baseline_windows, (windows[0].window,))
             if loaded.roi_set is not None:
                 self.assertEqual(loaded.roi_set.labels, ("roi_1", "roi_2"))
             if loaded.traces is not None:

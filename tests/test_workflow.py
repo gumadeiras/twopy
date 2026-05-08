@@ -63,6 +63,7 @@ class WorkflowTest(unittest.TestCase):
                 apply_motion_mask=False,
                 fit_mode="direct_bounded_tau",
                 chunk_frames=2,
+                response_window_auto=True,
             )
 
             self.assertEqual(run.output_path, root / "analysis_outputs.h5")
@@ -75,14 +76,20 @@ class WorkflowTest(unittest.TestCase):
                 root / "exports" / "csvs" / "response_summary_grouped.csv",
             )
             self.assertEqual(len(run.grouped_responses.trials), 2)
+            self.assertTrue(run.grouped_responses.response_window_auto)
             self.assertEqual(run.baseline_windows, (windows[0].window,))
+            self.assertEqual(run.dff.metadata["baseline_epoch_number"], 1)
             np.testing.assert_allclose(run.dff.values[:2, :], 0.0)
 
             loaded = load_analysis_outputs(run.output_path)
             self.assertIsNotNone(loaded.dff)
             self.assertIsNotNone(loaded.grouped_responses)
+            self.assertEqual(loaded.baseline_windows, (windows[0].window,))
+            if loaded.dff is not None:
+                self.assertEqual(loaded.dff.metadata["baseline_epoch_number"], 1)
             if loaded.grouped_responses is not None:
                 self.assertEqual(len(loaded.grouped_responses.trials), 2)
+                self.assertTrue(loaded.grouped_responses.response_window_auto)
 
             self.assertIsNotNone(run.response_summary_trials_csv_path)
             summary_csv_path = run.response_summary_trials_csv_path

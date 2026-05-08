@@ -255,6 +255,7 @@ def _copy_grouped_with_processed_values(
         trials=trials,
         pre_window_seconds=grouped.pre_window_seconds,
         post_window_seconds=grouped.post_window_seconds,
+        response_window_auto=grouped.response_window_auto,
     )
 
 
@@ -281,6 +282,7 @@ def _mask_excluded_rois(
         trials=tuple(trials),
         pre_window_seconds=grouped.pre_window_seconds,
         post_window_seconds=grouped.post_window_seconds,
+        response_window_auto=grouped.response_window_auto,
     )
 
 

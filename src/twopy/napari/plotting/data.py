@@ -342,7 +342,9 @@ def _response_window_options_from_grouped(
     if pre_window_seconds is None or post_window_seconds is None:
         return None
     return ResponseWindowOptions(
-        auto=False,
+        auto=bool(grouped.response_window_auto)
+        if grouped.response_window_auto is not None
+        else False,
         pre_window_seconds=float(pre_window_seconds),
         post_window_seconds=float(post_window_seconds),
     )
@@ -374,6 +376,8 @@ def _delta_f_over_f_options_from_outputs(
         return DeltaFOverFOptions(background_method=background_method)
 
     return DeltaFOverFOptions(
+        baseline_epoch_number=_saved_baseline_epoch_number(dff),
+        baseline_epoch_name=_saved_baseline_epoch_name(dff),
         background_method=background_method,
         baseline_sample_seconds=_saved_baseline_sample_seconds(dff),
         fit_mode=_saved_fit_mode(dff),
@@ -393,9 +397,27 @@ def _saved_baseline_sample_seconds(dff: RoiDeltaFOverF) -> float | None:
     value = dff.metadata.get("baseline_sample_seconds")
     if value == "full":
         return None
+    if isinstance(value, bool):
+        return DeltaFOverFOptions().baseline_sample_seconds
     if isinstance(value, int | float):
         return float(value)
     return DeltaFOverFOptions().baseline_sample_seconds
+
+
+def _saved_baseline_epoch_number(dff: RoiDeltaFOverF) -> int:
+    """Return the saved baseline epoch number selector from dF/F metadata."""
+    value = dff.metadata.get("baseline_epoch_number")
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return DeltaFOverFOptions().baseline_epoch_number
+
+
+def _saved_baseline_epoch_name(dff: RoiDeltaFOverF) -> str | None:
+    """Return the saved baseline epoch name selector from dF/F metadata."""
+    value = dff.metadata.get("baseline_epoch_name")
+    if isinstance(value, str):
+        return value
+    return DeltaFOverFOptions().baseline_epoch_name
 
 
 def _saved_fit_mode(dff: RoiDeltaFOverF) -> DeltaFOverFFitMode:

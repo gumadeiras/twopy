@@ -96,6 +96,7 @@ class LoadedAnalysisOutputs:
     traces: BackgroundCorrectedRoiTraces | None
     dff: RoiDeltaFOverF | None
     epoch_windows: tuple[EpochFrameWindow, ...]
+    baseline_windows: tuple[FrameWindow, ...]
     grouped_responses: GroupedRoiResponses | None
     response_processing_options: ResponseProcessingOptions | None
     correlation_scores: RoiCorrelationScores | None
@@ -108,6 +109,7 @@ def save_analysis_outputs(
     traces: BackgroundCorrectedRoiTraces | None = None,
     dff: RoiDeltaFOverF | None = None,
     epoch_windows: Sequence[EpochFrameWindow] = (),
+    baseline_windows: Sequence[FrameWindow] = (),
     grouped_responses: GroupedRoiResponses | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
     correlation_scores: RoiCorrelationScores | None = None,
@@ -122,6 +124,7 @@ def save_analysis_outputs(
         traces: Optional raw/background/corrected fluorescence traces.
         dff: Optional ROI dF/F result.
         epoch_windows: Optional stimulus windows used for response grouping.
+        baseline_windows: Optional baseline windows used for dF/F fitting.
         grouped_responses: Optional grouped trial responses.
         response_processing_options: Optional smoothing, low-pass, and
             correlation-QC settings used for these outputs.
@@ -164,6 +167,11 @@ def save_analysis_outputs(
             _write_dff(h5_file.create_group("dff"), dff)
         if len(epoch_windows) > 0:
             _write_epoch_windows(h5_file.create_group("epoch_windows"), epoch_windows)
+        if len(baseline_windows) > 0:
+            _write_frame_windows(
+                h5_file.create_group("baseline_windows"),
+                baseline_windows,
+            )
         if grouped_responses is not None:
             _write_grouped_responses(
                 h5_file.create_group("responses"),
@@ -224,6 +232,13 @@ def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
             epoch_windows=(
                 _read_epoch_windows(h5_file["epoch_windows"])
                 if "epoch_windows" in h5_file
+                else ()
+            ),
+            baseline_windows=(
+                _read_frame_windows(
+                    h5_file["baseline_windows"], name="baseline_windows"
+                )
+                if "baseline_windows" in h5_file
                 else ()
             ),
             grouped_responses=(
@@ -487,24 +502,7 @@ def _write_epoch_windows(
     Returns:
         None.
     """
-    group.create_dataset(
-        "window_index",
-        data=np.asarray([item.window.index for item in epoch_windows], dtype=np.int64),
-    )
-    group.create_dataset(
-        "start_frame",
-        data=np.asarray(
-            [item.window.start_frame for item in epoch_windows],
-            dtype=np.int64,
-        ),
-    )
-    group.create_dataset(
-        "stop_frame",
-        data=np.asarray(
-            [item.window.stop_frame for item in epoch_windows],
-            dtype=np.int64,
-        ),
-    )
+    _write_frame_windows(group, tuple(item.window for item in epoch_windows))
     group.create_dataset(
         "epoch_number",
         data=np.asarray([item.epoch_number for item in epoch_windows], dtype=np.int64),
@@ -513,11 +511,6 @@ def _write_epoch_windows(
         group,
         "epoch_name",
         tuple(item.epoch_name for item in epoch_windows),
-    )
-    _write_string_dataset(
-        group,
-        "label",
-        tuple(item.window.label for item in epoch_windows),
     )
 
 
@@ -530,52 +523,94 @@ def _read_epoch_windows(group: h5py.Group) -> tuple[EpochFrameWindow, ...]:
     Returns:
         Tuple of stimulus-labeled frame windows.
     """
-    window_indices = require_int64_array(
-        group["window_index"][()],
-        name="epoch_windows/window_index",
-        ndim=1,
-    )
-    start_frames = require_int64_array(
-        group["start_frame"][()],
-        name="epoch_windows/start_frame",
-        ndim=1,
-    )
-    stop_frames = require_int64_array(
-        group["stop_frame"][()],
-        name="epoch_windows/stop_frame",
-        ndim=1,
-    )
+    windows = _read_frame_windows(group, name="epoch_windows")
     epoch_numbers = require_int64_array(
         group["epoch_number"][()],
         name="epoch_windows/epoch_number",
         ndim=1,
     )
     epoch_names = _read_string_dataset(group, "epoch_name")
-    labels = _read_string_dataset(group, "label")
     return tuple(
         EpochFrameWindow(
-            window=FrameWindow(
-                index=int(window_index),
-                start_frame=int(start_frame),
-                stop_frame=int(stop_frame),
-                label=label,
-            ),
+            window=window,
             epoch_number=int(epoch_number),
             epoch_name=epoch_name,
         )
         for (
-            window_index,
-            start_frame,
-            stop_frame,
+            window,
             epoch_number,
             epoch_name,
-            label,
         ) in zip(
+            windows,
+            epoch_numbers,
+            epoch_names,
+            strict=True,
+        )
+    )
+
+
+def _write_frame_windows(group: h5py.Group, windows: Sequence[FrameWindow]) -> None:
+    """Write plain frame windows as column datasets.
+
+    Args:
+        group: Destination HDF5 group.
+        windows: Frame windows to persist.
+
+    Returns:
+        None.
+    """
+    group.create_dataset(
+        "window_index",
+        data=np.asarray([window.index for window in windows], dtype=np.int64),
+    )
+    group.create_dataset(
+        "start_frame",
+        data=np.asarray([window.start_frame for window in windows], dtype=np.int64),
+    )
+    group.create_dataset(
+        "stop_frame",
+        data=np.asarray([window.stop_frame for window in windows], dtype=np.int64),
+    )
+    _write_string_dataset(group, "label", tuple(window.label for window in windows))
+
+
+def _read_frame_windows(group: h5py.Group, *, name: str) -> tuple[FrameWindow, ...]:
+    """Read persisted plain frame windows.
+
+    Args:
+        group: HDF5 group carrying frame-window datasets.
+        name: Group name used in validation messages.
+
+    Returns:
+        Tuple of frame windows.
+    """
+    window_indices = require_int64_array(
+        group["window_index"][()],
+        name=f"{name}/window_index",
+        ndim=1,
+    )
+    start_frames = require_int64_array(
+        group["start_frame"][()],
+        name=f"{name}/start_frame",
+        ndim=1,
+    )
+    stop_frames = require_int64_array(
+        group["stop_frame"][()],
+        name=f"{name}/stop_frame",
+        ndim=1,
+    )
+    labels = _read_string_dataset(group, "label")
+    return tuple(
+        FrameWindow(
+            index=int(window_index),
+            start_frame=int(start_frame),
+            stop_frame=int(stop_frame),
+            label=label,
+        )
+        for window_index, start_frame, stop_frame, label in zip(
             window_indices,
             start_frames,
             stop_frames,
-            epoch_numbers,
-            epoch_names,
             labels,
             strict=True,
         )
@@ -603,6 +638,8 @@ def _write_grouped_responses(
         group.attrs["pre_window_seconds"] = grouped.pre_window_seconds
     if grouped.post_window_seconds is not None:
         group.attrs["post_window_seconds"] = grouped.post_window_seconds
+    if grouped.response_window_auto is not None:
+        group.attrs["response_window_auto"] = grouped.response_window_auto
     _write_string_dataset(group, "roi_labels", grouped.roi_labels)
     trials_group = group.create_group("trials")
     for trial_position, trial in enumerate(grouped.trials):
@@ -637,6 +674,7 @@ def _read_grouped_responses(group: h5py.Group) -> GroupedRoiResponses:
         ),
         pre_window_seconds=_optional_float_attr(group, "pre_window_seconds"),
         post_window_seconds=_optional_float_attr(group, "post_window_seconds"),
+        response_window_auto=_optional_bool_attr(group, "response_window_auto"),
     )
     validate_grouped_roi_responses(grouped)
     return grouped
@@ -689,6 +727,24 @@ def _optional_float_attr(group: h5py.Group, name: str) -> float | None:
     if name not in group.attrs:
         return None
     return float(group.attrs[name])
+
+
+def _optional_bool_attr(group: h5py.Group, name: str) -> bool | None:
+    """Read one optional boolean HDF5 attribute.
+
+    Args:
+        group: HDF5 group carrying attrs.
+        name: Attribute name to read.
+
+    Returns:
+        Boolean value, or ``None`` when the attribute is absent.
+    """
+    if name not in group.attrs:
+        return None
+    value = group.attrs[name]
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    return None
 
 
 def _write_metadata(

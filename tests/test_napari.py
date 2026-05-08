@@ -8,7 +8,7 @@ import tempfile
 import unittest
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from os import chdir, environ
 from pathlib import Path
 from time import monotonic, sleep
@@ -51,6 +51,7 @@ from twopy import (
 from twopy._version import __version__
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.persistence import save_analysis_outputs
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     SmoothingOptions,
@@ -78,6 +79,7 @@ from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_
 from twopy.napari.plotting.data import (
     EpochResponsePlotData,
     ResponsePlotData,
+    load_response_plot_data,
     response_plot_data_from_grouped,
 )
 from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
@@ -933,6 +935,7 @@ class NapariAdapterTest(unittest.TestCase):
                 analyze.call_args.kwargs["response_post_window_seconds"],
                 1.5,
             )
+            self.assertFalse(analyze.call_args.kwargs["response_window_auto"])
             self.assertIsInstance(
                 analyze.call_args.kwargs["response_processing_options"],
                 ResponseProcessingOptions,
@@ -1436,6 +1439,8 @@ class NapariAdapterTest(unittest.TestCase):
         _ = QApplication.instance() or QApplication([])
         response_widget = cast(Any, create_response_plot_widget(None))
         options = DeltaFOverFOptions(
+            baseline_epoch_number=3,
+            baseline_epoch_name="Manual baseline",
             background_method="roi_y_stripe_percentile",
             baseline_sample_seconds=None,
             fit_mode="direct_bounded_tau_and_log_amplitude",
@@ -2568,6 +2573,73 @@ class NapariAdapterTest(unittest.TestCase):
             np.array([[0.0, 1.0, 2.0, 3.0]]),
         )
 
+    def test_load_response_plot_data_restores_saved_auto_response_window(self) -> None:
+        """Confirm saved analysis reloads the response-window Auto choice.
+
+        Inputs: grouped responses persisted with ``response_window_auto`` true.
+        Outputs: loaded plot data hydrates ``ResponseWindowOptions.auto`` true.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "analysis_outputs.h5"
+            grouped = replace(
+                _tiny_grouped_responses(),
+                response_window_auto=True,
+            )
+
+            save_analysis_outputs(path, grouped_responses=grouped)
+
+            result = load_response_plot_data(path)
+
+        self.assertIsInstance(result, ResponsePlotData)
+        if isinstance(result, ResponsePlotData):
+            self.assertEqual(
+                result.response_window_options,
+                ResponseWindowOptions(
+                    auto=True,
+                    pre_window_seconds=0.0,
+                    post_window_seconds=0.0,
+                ),
+            )
+
+    def test_load_response_plot_data_restores_saved_baseline_epoch_selection(
+        self,
+    ) -> None:
+        """Confirm saved analysis reloads the baseline epoch selector.
+
+        Inputs: persisted dF/F metadata with a non-default baseline epoch.
+        Outputs: loaded plot data hydrates the dF/F Plot-tab selector.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "analysis_outputs.h5"
+            save_analysis_outputs(
+                path,
+                dff=_tiny_dff(
+                    {
+                        "method": "test",
+                        "baseline_epoch_number": 3,
+                        "baseline_epoch_name": "Manual baseline",
+                        "baseline_sample_seconds": "full",
+                        "fit_mode": "log_linear",
+                    },
+                ),
+                grouped_responses=_tiny_grouped_responses(),
+            )
+
+            result = load_response_plot_data(path)
+
+        self.assertIsInstance(result, ResponsePlotData)
+        if isinstance(result, ResponsePlotData):
+            self.assertEqual(
+                result.delta_f_over_f_options,
+                DeltaFOverFOptions(
+                    baseline_epoch_number=3,
+                    baseline_epoch_name="Manual baseline",
+                    baseline_sample_seconds=None,
+                    fit_mode="log_linear",
+                    apply_motion_mask=False,
+                ),
+            )
+
     def test_response_plot_data_sorts_epochs_by_number(self) -> None:
         """Confirm epoch plots and option lists use epoch-number order.
 
@@ -3199,7 +3271,25 @@ def _tiny_grouped_responses() -> GroupedRoiResponses:
     Returns:
         Grouped response data with one ROI and one epoch.
     """
-    dff = RoiDeltaFOverF(
+    return group_delta_f_over_f_by_epoch(
+        _tiny_dff(),
+        (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),),
+        data_rate_hz=1.0,
+    )
+
+
+def _tiny_dff(
+    metadata: dict[str, str | int | float | bool] | None = None,
+) -> RoiDeltaFOverF:
+    """Build one tiny dF/F object for napari plot tests.
+
+    Args:
+        metadata: Optional dF/F metadata.
+
+    Returns:
+        dF/F data with one ROI and two frames.
+    """
+    return RoiDeltaFOverF(
         fluorescence=np.ones((2, 1), dtype=np.float64),
         baseline=np.ones((2, 1), dtype=np.float64),
         values=np.array([[0.0], [1.0]], dtype=np.float64),
@@ -3210,12 +3300,7 @@ def _tiny_grouped_responses() -> GroupedRoiResponses:
         amplitudes=np.ones(1, dtype=np.float64),
         baseline_frame_numbers=np.array([0.0]),
         baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
-        metadata={"method": "test"},
-    )
-    return group_delta_f_over_f_by_epoch(
-        dff,
-        (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),),
-        data_rate_hz=1.0,
+        metadata={"method": "test"} if metadata is None else metadata,
     )
 
 

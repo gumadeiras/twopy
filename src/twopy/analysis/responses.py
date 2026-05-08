@@ -68,6 +68,7 @@ class GroupedRoiResponses:
     trials: tuple[RoiResponseTrial, ...]
     pre_window_seconds: float | None = None
     post_window_seconds: float | None = None
+    response_window_auto: bool | None = None
 
 
 @dataclass(frozen=True)

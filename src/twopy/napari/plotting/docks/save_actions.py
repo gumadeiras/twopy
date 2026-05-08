@@ -113,6 +113,7 @@ def save_current_roi_analysis(
         apply_motion_mask=delta_f_over_f_options.apply_motion_mask,
         response_pre_window_seconds=pre_window_seconds,
         response_post_window_seconds=post_window_seconds,
+        response_window_auto=response_window_options.auto,
         response_processing_options=response_processing_options,
     )
     output_folder = format_output_folder(run.output_path, recording)

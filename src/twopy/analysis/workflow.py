@@ -8,7 +8,7 @@ source microscope files; callers must convert recordings before using it.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from twopy.analysis.background_subtraction import (
@@ -125,6 +125,7 @@ def analyze_recording_responses(
     spatial_domain: SpatialDomain = "alignment_valid_crop",
     response_pre_window_seconds: float = DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
     response_post_window_seconds: float = 0.0,
+    response_window_auto: bool | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
 ) -> AnalysisResponseRun:
     """Run the standard ROI response analysis workflow.
@@ -163,6 +164,8 @@ def analyze_recording_responses(
             include in grouped responses. The default is zero so persisted
             summaries keep their epoch-window meaning; plotting code can add
             visual context separately from saved dF/F and epoch windows.
+        response_window_auto: Optional provenance flag recording whether the
+            response window was selected by automatic GUI settings.
         response_processing_options: Optional smoothing, low-pass, and
             correlation-QC settings to apply after dF/F. Signal filters are
             applied to continuous dF/F before grouping; correlation QC is
@@ -196,6 +199,22 @@ def analyze_recording_responses(
         response_pre_window_seconds=response_pre_window_seconds,
         response_post_window_seconds=response_post_window_seconds,
         response_processing_options=response_processing_options,
+    )
+    if response_window_auto is not None:
+        computation = replace(
+            computation,
+            grouped_responses=replace(
+                computation.grouped_responses,
+                response_window_auto=bool(response_window_auto),
+            ),
+        )
+    computation = replace(
+        computation,
+        dff=_dff_with_analysis_options(
+            computation.dff,
+            baseline_epoch_number=baseline_epoch_number,
+            baseline_epoch_name=baseline_epoch_name,
+        ),
     )
     return _save_response_analysis_run(
         computation,
@@ -245,6 +264,7 @@ def _save_response_analysis_run(
         traces=computation.traces,
         dff=computation.dff,
         epoch_windows=computation.epoch_windows,
+        baseline_windows=computation.baseline_windows,
         grouped_responses=computation.grouped_responses,
         response_processing_options=computation.response_processing_options,
         correlation_scores=computation.correlation_scores,
@@ -267,6 +287,30 @@ def _save_response_analysis_run(
         response_summary_trials_csv_path=resolved_trials_summary_path,
         response_summary_grouped_csv_path=resolved_grouped_summary_path,
     )
+
+
+def _dff_with_analysis_options(
+    dff: RoiDeltaFOverF,
+    *,
+    baseline_epoch_number: int | None,
+    baseline_epoch_name: str | None,
+) -> RoiDeltaFOverF:
+    """Return dF/F with workflow-selected option provenance in metadata.
+
+    Args:
+        dff: Computed dF/F output.
+        baseline_epoch_number: Baseline epoch selector used by the workflow.
+        baseline_epoch_name: Optional baseline epoch name selector.
+
+    Returns:
+        dF/F output with metadata needed to hydrate saved GUI controls.
+    """
+    metadata = dict(dff.metadata)
+    if baseline_epoch_number is not None:
+        metadata["baseline_epoch_number"] = int(baseline_epoch_number)
+    if baseline_epoch_name is not None:
+        metadata["baseline_epoch_name"] = baseline_epoch_name
+    return replace(dff, metadata=metadata)
 
 
 def compute_recording_responses(
