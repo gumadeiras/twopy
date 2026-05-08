@@ -27,11 +27,10 @@ class NapariRecordingView:
     mean_image_layer: object
     movie_layer: object | None
     roi_labels_layer: object | None
-    controls_widget: object | None
-    controls_dock_widget: object | None
+    load_widget: object | None
     loaded_recordings_widget: object | None
-    loaded_recordings_dock_widget: object | None
+    twopy_sidebar_widget: object | None
+    twopy_sidebar_dock_widget: object | None
     response_plot_widget: object | None
     response_plot_dock_widget: object | None
     response_options_widget: object | None
-    response_options_dock_widget: object | None

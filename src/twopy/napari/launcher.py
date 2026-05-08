@@ -14,7 +14,6 @@ from pathlib import Path
 
 from twopy._version import __version__
 from twopy.napari.controls import add_twopy_magicgui_controls
-from twopy.napari.layout import place_response_options_after_recording_list
 from twopy.napari.loading import resolve_or_convert_launch_recording
 from twopy.napari.types import NapariRecordingView
 from twopy.napari.viewer import create_viewer, open_recording_in_napari
@@ -58,15 +57,18 @@ def launch_napari(
     viewer = create_viewer()
     if resolved_recording is None:
         from twopy.napari.plotting import (
-            add_twopy_response_options_widget,
             add_twopy_response_plot_widget,
+            create_twopy_response_options_widget,
         )
 
         response_plot_widget, _response_plot_dock = add_twopy_response_plot_widget(
             viewer,
             recording=None,
         )
-        control_docks = add_twopy_magicgui_controls(
+        response_options_widget = create_twopy_response_options_widget(
+            response_plot_widget,
+        )
+        add_twopy_magicgui_controls(
             viewer,
             roi_labels_layer=None,
             roi_save_file=(
@@ -75,14 +77,7 @@ def launch_napari(
                 else Path.cwd() / "rois.h5"
             ),
             response_plot_widget=response_plot_widget,
-        )
-        _response_options_widget, response_options_dock = (
-            add_twopy_response_options_widget(viewer, response_plot_widget)
-        )
-        place_response_options_after_recording_list(
-            viewer,
-            control_docks.loaded_recordings_dock_widget,
-            response_options_dock,
+            response_options_widget=response_options_widget,
         )
         view = None
     else:

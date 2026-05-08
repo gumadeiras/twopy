@@ -2,7 +2,7 @@
 
 Inputs: a napari viewer, optional converted recording, and optional ROI layer
 state.
-Outputs: response plotting and response options dock widgets.
+Outputs: response plotting dock widgets and the response-options widget.
 
 This module keeps napari-facing factory functions separate from the larger Qt
 widget implementation so import callers see a small, stable API.
@@ -56,34 +56,24 @@ def add_twopy_response_plot_widget(
     return widget, dock_widget
 
 
-def add_twopy_response_options_widget(
-    viewer: NapariViewer,
+def create_twopy_response_options_widget(
     response_plot_widget: object,
-    *,
-    dock_name: str = "twopy response options",
-    dock_area: str = "right",
-) -> tuple[object, object] | tuple[None, None]:
-    """Add the response plot options as a separate napari dock.
+) -> object | None:
+    """Return the response plot options widget.
 
     Args:
-        viewer: Napari viewer that should receive the dock widget.
         response_plot_widget: Widget returned by ``create_response_plot_widget``.
-        dock_name: Dock widget title.
-        dock_area: Napari dock area.
 
     Returns:
-        ``(widget, dock_widget)`` when the plot widget owns options, otherwise
-        ``(None, None)``.
+        Tabbed response-options widget when the plot widget owns options,
+        otherwise ``None``.
+
+    The options widget is not docked here. The app places it inside the single
+    scrollable twopy sidebar so the right side has one resize/scroll contract.
     """
     if not isinstance(response_plot_widget, _ResponsePlotWidget):
-        return None, None
-    widget = response_plot_widget.options_widget()
-    dock_widget = viewer.window.add_dock_widget(
-        widget,
-        name=dock_name,
-        area=dock_area,
-    )
-    return widget, dock_widget
+        return None
+    return response_plot_widget.options_widget()
 
 
 def create_response_plot_widget(

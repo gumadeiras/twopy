@@ -34,6 +34,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QListWidget,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QWidget,
@@ -454,14 +455,13 @@ class NapariAdapterTest(unittest.TestCase):
             opened = open_recording_in_napari(recording_path, viewer=viewer)
 
             self.assertIsNotNone(opened.roi_labels_layer)
-            self.assertIsNotNone(opened.controls_widget)
-            self.assertIsNotNone(opened.controls_dock_widget)
+            self.assertIsNotNone(opened.load_widget)
             self.assertIsNotNone(opened.loaded_recordings_widget)
-            self.assertIsNotNone(opened.loaded_recordings_dock_widget)
+            self.assertIsNotNone(opened.twopy_sidebar_widget)
+            self.assertIsNotNone(opened.twopy_sidebar_dock_widget)
             self.assertIsNotNone(opened.response_plot_widget)
             self.assertIsNotNone(opened.response_plot_dock_widget)
             self.assertIsNotNone(opened.response_options_widget)
-            self.assertIsNotNone(opened.response_options_dock_widget)
             self.assertEqual(len(viewer.labels), 1)
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
@@ -470,20 +470,12 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(viewer.images[0].options["gamma"], 1.3)
             self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
             self.assertEqual(viewer.images[0].contrast_limits_range, (4.0, 7.0))
-            self.assertEqual(len(viewer.window.dock_widgets), 4)
+            self.assertEqual(len(viewer.window.dock_widgets), 2)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
-            self.assertEqual(
-                viewer.window.dock_widgets[2].name,
-                "twopy loaded recordings",
-            )
-            self.assertEqual(viewer.window.dock_widgets[2].area, "right")
-            self.assertEqual(
-                viewer.window.dock_widgets[3].name,
-                "twopy response options",
-            )
-            self.assertEqual(viewer.window.dock_widgets[3].area, "right")
+            self.assertEqual(viewer.window.dock_widgets[1].area, "right")
+            self.assertIsInstance(opened.twopy_sidebar_widget, QScrollArea)
             options_widget = cast(QTabWidget, opened.response_options_widget)
             self.assertEqual(
                 tuple(

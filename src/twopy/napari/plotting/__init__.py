@@ -9,13 +9,13 @@ does not own conversion, ROI storage, or scientific analysis logic.
 """
 
 from twopy.napari.plotting.docks import (
-    add_twopy_response_options_widget,
     add_twopy_response_plot_widget,
+    create_twopy_response_options_widget,
     refresh_response_plot_widget,
 )
 
 __all__ = [
-    "add_twopy_response_options_widget",
     "add_twopy_response_plot_widget",
+    "create_twopy_response_options_widget",
     "refresh_response_plot_widget",
 ]

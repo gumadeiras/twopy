@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changes
+
+- Replaced the separate right-side napari twopy docks with one scrollable `twopy` dock containing recording loading, loaded-recording selection, and response options.
+
 ## 0.1.4 - 2026-05-08
 
 ### Features

@@ -21,11 +21,10 @@ from twopy.napari.display import (
     display_image_from_movie_image,
     display_metadata_for_spatial_crop,
 )
-from twopy.napari.layout import place_response_options_after_recording_list
 from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
 from twopy.napari.plotting import (
-    add_twopy_response_options_widget,
     add_twopy_response_plot_widget,
+    create_twopy_response_options_widget,
 )
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import resolve_roi_save_file, roi_label_image_for_display
@@ -154,14 +153,13 @@ def open_recording_in_napari(
             metadata=layer_metadata,
         )
         set_labels_brush_size(roi_layer, brush_size=6)
-    controls_widget = None
-    controls_dock = None
+    load_widget = None
     loaded_recordings_widget = None
-    loaded_recordings_dock = None
+    twopy_sidebar_widget = None
+    twopy_sidebar_dock = None
     response_plot_widget = None
     response_plot_dock = None
     response_options_widget = None
-    response_options_dock = None
     if add_controls:
         resolved_roi_save_file = resolve_roi_save_file(
             recording_data_path=recording.path,
@@ -174,30 +172,23 @@ def open_recording_in_napari(
             roi_labels_layer=roi_layer,
             roi_save_file=resolved_roi_save_file,
         )
+        response_options_widget = create_twopy_response_options_widget(
+            response_plot_widget,
+        )
         control_docks = add_twopy_magicgui_controls(
             resolved_viewer,
             roi_labels_layer=roi_layer,
             roi_save_file=resolved_roi_save_file,
             recording=recording,
             response_plot_widget=response_plot_widget,
+            response_options_widget=response_options_widget,
             mean_image_layer=mean_layer,
             movie_layer=movie_layer,
         )
-        controls_widget = control_docks.load_widget
-        controls_dock = control_docks.load_dock_widget
+        load_widget = control_docks.load_widget
         loaded_recordings_widget = control_docks.loaded_recordings_widget
-        loaded_recordings_dock = control_docks.loaded_recordings_dock_widget
-        response_options_widget, response_options_dock = (
-            add_twopy_response_options_widget(
-                resolved_viewer,
-                response_plot_widget,
-            )
-        )
-        place_response_options_after_recording_list(
-            resolved_viewer,
-            loaded_recordings_dock,
-            response_options_dock,
-        )
+        twopy_sidebar_widget = control_docks.sidebar_widget
+        twopy_sidebar_dock = control_docks.sidebar_dock_widget
 
     return NapariRecordingView(
         viewer=resolved_viewer,
@@ -205,14 +196,13 @@ def open_recording_in_napari(
         mean_image_layer=mean_layer,
         movie_layer=movie_layer,
         roi_labels_layer=roi_layer,
-        controls_widget=controls_widget,
-        controls_dock_widget=controls_dock,
+        load_widget=load_widget,
         loaded_recordings_widget=loaded_recordings_widget,
-        loaded_recordings_dock_widget=loaded_recordings_dock,
+        twopy_sidebar_widget=twopy_sidebar_widget,
+        twopy_sidebar_dock_widget=twopy_sidebar_dock,
         response_plot_widget=response_plot_widget,
         response_plot_dock_widget=response_plot_dock,
         response_options_widget=response_options_widget,
-        response_options_dock_widget=response_options_dock,
     )
 
 

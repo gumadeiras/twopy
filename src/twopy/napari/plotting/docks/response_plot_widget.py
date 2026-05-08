@@ -151,7 +151,7 @@ class _ResponsePlotWidget(QWidget):
         )
 
     def options_widget(self) -> object:
-        """Return the separately docked response-options widget.
+        """Return the response-options widget owned by this plot widget.
 
         Args:
             None.

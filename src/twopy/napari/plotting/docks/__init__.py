@@ -9,15 +9,15 @@ widget coordination, and option-panel construction in separate modules.
 """
 
 from twopy.napari.plotting.docks.api import (
-    add_twopy_response_options_widget,
     add_twopy_response_plot_widget,
     create_response_plot_widget,
+    create_twopy_response_options_widget,
     refresh_response_plot_widget,
 )
 
 __all__ = [
-    "add_twopy_response_options_widget",
     "add_twopy_response_plot_widget",
     "create_response_plot_widget",
+    "create_twopy_response_options_widget",
     "refresh_response_plot_widget",
 ]

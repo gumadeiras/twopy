@@ -17,7 +17,6 @@ from magicgui.widgets import FileEdit
 
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
-from twopy.napari.layout import place_loaded_recordings_dock_after_load
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import (
@@ -33,6 +32,7 @@ from twopy.napari.session import (
     select_loaded_recording,
     unload_loaded_recording,
 )
+from twopy.napari.sidebar import create_twopy_sidebar_widget
 from twopy.napari.state import (
     read_last_recording_folder,
     recording_folder_for_state,
@@ -44,16 +44,17 @@ __all__ = ["NapariControlDocks", "add_twopy_magicgui_controls"]
 
 @dataclass
 class NapariControlDocks:
-    """Dock widgets created for twopy napari controls.
+    """Widgets created for the twopy napari right sidebar.
 
     Inputs: Qt widgets and napari dock objects.
     Outputs: grouped references for scripts and tests.
     """
 
     load_widget: object
-    load_dock_widget: object
     loaded_recordings_widget: object
-    loaded_recordings_dock_widget: object
+    response_options_widget: object | None
+    sidebar_widget: object
+    sidebar_dock_widget: object
 
 
 @dataclass
@@ -89,6 +90,7 @@ def add_twopy_magicgui_controls(
     roi_save_file: Path,
     recording: RecordingData | None = None,
     response_plot_widget: object | None = None,
+    response_options_widget: object | None = None,
     mean_image_layer: object | None = None,
     movie_layer: object | None = None,
     dock_name: str = "twopy",
@@ -105,6 +107,8 @@ def add_twopy_magicgui_controls(
         recording: Optional loaded recording used to populate GUI defaults.
         response_plot_widget: Optional response plotting widget to refresh
             after a new recording is loaded.
+        response_options_widget: Optional response-options widget to place in
+            the same scrollable right sidebar as the load controls.
         mean_image_layer: Optional mean-image layer for an already loaded
             startup recording.
         movie_layer: Optional movie layer for an already loaded startup
@@ -113,12 +117,12 @@ def add_twopy_magicgui_controls(
         dock_area: Napari dock area.
 
     Returns:
-        Created load and loaded-recordings widgets plus their napari dock
-        widgets.
+        Created load, loaded-recordings, and sidebar widgets plus the napari
+        dock widget that contains them.
 
-    The panel is intentionally small. It loads converted recordings through the
-    same helpers used by scripts, so a future plugin can wrap this without
-    changing recording-load semantics.
+    The sidebar keeps twopy's right-side controls in one scrollable dock. The
+    loader itself stays small and uses the same helpers as scripts, so a future
+    plugin can wrap this without changing recording-load semantics.
     """
     state = NapariControlState(
         viewer=viewer,
@@ -140,27 +144,23 @@ def add_twopy_magicgui_controls(
         )
         state.selected_recording_index = 0
     load_widget = _make_twopy_load_widget(state)
-    load_dock_widget = viewer.window.add_dock_widget(
-        load_widget,
+    loaded_recordings_widget = _make_loaded_recordings_widget(state)
+    sidebar_widget = create_twopy_sidebar_widget(
+        load_widget=load_widget,
+        loaded_recordings_widget=loaded_recordings_widget,
+        response_options_widget=response_options_widget,
+    )
+    sidebar_dock_widget = viewer.window.add_dock_widget(
+        sidebar_widget,
         name=dock_name,
         area=dock_area,
     )
-    loaded_recordings_widget = _make_loaded_recordings_widget(state)
-    loaded_recordings_dock_widget = viewer.window.add_dock_widget(
-        loaded_recordings_widget,
-        name="twopy loaded recordings",
-        area=dock_area,
-    )
-    place_loaded_recordings_dock_after_load(
-        viewer,
-        load_dock_widget,
-        loaded_recordings_dock_widget,
-    )
     return NapariControlDocks(
         load_widget=load_widget,
-        load_dock_widget=load_dock_widget,
         loaded_recordings_widget=loaded_recordings_widget,
-        loaded_recordings_dock_widget=loaded_recordings_dock_widget,
+        response_options_widget=response_options_widget,
+        sidebar_widget=sidebar_widget,
+        sidebar_dock_widget=sidebar_dock_widget,
     )
 
 

@@ -22,7 +22,7 @@ twopy /path/to/recording_data.h5
 3. Update response plots from the current Labels layer.
 4. Click Save ROIs + analysis when the plots look right.
 
-By default the launcher opens the mean image, full movie, editable `rois` Labels layer, recording-loading docks, response plots, and response options. Use `--no-movie` to skip the movie preview, or `--movie-start` and `--movie-end` to choose a preview range.
+By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a top response-plot dock, and one scrollable right-side `twopy` dock with recording loading, loaded-recording selection, and response options. Use `--no-movie` to skip the movie preview, or `--movie-start` and `--movie-end` to choose a preview range.
 
 ## ROI Editing
 
@@ -48,4 +48,4 @@ Export actions write recording views, ROI views, overlays, per-epoch response pl
 
 ## Architecture Note
 
-Napari is a thin adapter over converted twopy files. It displays the mean image, optional movie preview, editable ROI Labels layer, and small docks for loading recordings, plotting responses, and saving ROIs with analysis outputs. ROI saving uses the core ROI HDF5 helpers; response plotting calls the core analysis workflow. Napari code does not read source MATLAB/TIFF files or own analysis decisions.
+Napari is a thin adapter over converted twopy files. It displays the mean image, optional movie preview, editable ROI Labels layer, a top response-plot dock, and one scrollable right-side `twopy` dock for loading recordings, selecting loaded recordings, setting response options, and saving ROIs with analysis outputs. ROI saving uses the core ROI HDF5 helpers; response plotting calls the core analysis workflow. Napari code does not read source MATLAB/TIFF files or own analysis decisions.
