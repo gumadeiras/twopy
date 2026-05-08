@@ -133,10 +133,11 @@ class ResponseProcessingOptionsWidget(QWidget):
         self._correlation_window_has_stop.setChecked(stop_seconds is not None)
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
         layout.addWidget(self._smoothing_group())
         layout.addWidget(self._low_pass_group())
         layout.addWidget(self._correlation_group())
-        layout.addStretch(1)
         self.setLayout(layout)
 
         self._set_combo_data(self._smoothing_method, options.smoothing.method)

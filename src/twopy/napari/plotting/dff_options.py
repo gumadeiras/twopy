@@ -106,8 +106,8 @@ class DeltaFOverFOptionsWidget(QWidget):
         self._apply_motion_mask.setChecked(options.apply_motion_mask)
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._dff_group())
-        layout.addStretch(1)
         self.setLayout(layout)
 
         self.set_epoch_choices(

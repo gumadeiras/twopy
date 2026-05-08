@@ -64,8 +64,8 @@ class ResponseWindowOptionsWidget(QWidget):
         self._post_seconds = _window_spin_box(options.post_window_seconds)
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._response_window_group())
-        layout.addStretch(1)
         self.setLayout(layout)
 
         self.set_max_window_seconds(max_window_seconds)

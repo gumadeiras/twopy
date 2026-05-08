@@ -10,6 +10,7 @@
 - Set a compact 345 px opening height for the top napari response-plot dock.
 - Tightened the napari Load tab with shorter labels and compact Browse buttons.
 - Removed napari Load-tab frame controls; recording selection now always loads the full movie.
+- Tightened Plot-tab subsection spacing so display, response-window, dF/F, and processing controls use one compact rhythm.
 
 ## 0.1.4 - 2026-05-08
 

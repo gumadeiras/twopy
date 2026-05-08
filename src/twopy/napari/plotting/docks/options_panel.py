@@ -113,7 +113,9 @@ def create_response_options_panel(
     update_status_label.setWordWrap(True)
 
     plot_options_layout = QVBoxLayout()
+    plot_options_layout.setSpacing(6)
     plot_display_options_layout = QVBoxLayout()
+    plot_display_options_layout.setContentsMargins(0, 0, 0, 0)
     plot_display_options_widget = QWidget()
     plot_display_options_widget.setLayout(plot_display_options_layout)
 
