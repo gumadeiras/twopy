@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.6 - 2026-05-08
+
 ### Features
 
 - Added a Load-tab database search window with user, cell type, sensor, stimulus, and date filters plus a collapsible user, cell type, sensor, stimulus, date, and source-folder time result tree that can load any selected subtree.
