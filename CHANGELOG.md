@@ -11,6 +11,7 @@
 - Tightened the napari Load tab with shorter labels and compact Browse buttons.
 - Removed napari Load-tab frame controls; recording selection now always loads the full movie.
 - Tightened Plot-tab subsection spacing so display, response-window, dF/F, and processing controls use one compact rhythm.
+- Added an explicit minimum width for the twopy napari sidebar so controls do not collapse into clipped labels on smaller windows.
 
 ## 0.1.4 - 2026-05-08
 

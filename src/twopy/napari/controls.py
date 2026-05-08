@@ -33,7 +33,10 @@ from twopy.napari.session import (
     select_loaded_recording,
     unload_loaded_recording,
 )
-from twopy.napari.sidebar import create_twopy_sidebar_widget
+from twopy.napari.sidebar import (
+    TWOPY_SIDEBAR_MINIMUM_WIDTH,
+    create_twopy_sidebar_widget,
+)
 from twopy.napari.state import (
     read_last_recording_folder,
     recording_folder_for_state,
@@ -167,6 +170,8 @@ def add_twopy_magicgui_controls(
         name=dock_name,
         area=dock_area,
     )
+    if isinstance(sidebar_dock_widget, QWidget):
+        sidebar_dock_widget.setMinimumWidth(TWOPY_SIDEBAR_MINIMUM_WIDTH)
     return NapariSidebarWidgets(
         load_widget=load_widget,
         loaded_recordings_widget=loaded_recordings_widget,

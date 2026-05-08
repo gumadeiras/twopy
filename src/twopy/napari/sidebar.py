@@ -12,7 +12,9 @@ napari's built-in layer controls alone.
 
 from qtpy.QtWidgets import QScrollArea, QTabWidget, QVBoxLayout, QWidget
 
-__all__ = ["create_twopy_sidebar_widget"]
+__all__ = ["TWOPY_SIDEBAR_MINIMUM_WIDTH", "create_twopy_sidebar_widget"]
+
+TWOPY_SIDEBAR_MINIMUM_WIDTH = 420
 
 
 def create_twopy_sidebar_widget(
@@ -36,6 +38,7 @@ def create_twopy_sidebar_widget(
     their existing modules.
     """
     sidebar_tabs = _response_options_tabs(response_options_widget)
+    sidebar_tabs.setMinimumWidth(TWOPY_SIDEBAR_MINIMUM_WIDTH)
     sidebar_tabs.insertTab(
         0,
         _load_tab(

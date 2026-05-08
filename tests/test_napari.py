@@ -110,6 +110,7 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_layer,
 )
 from twopy.napari.responses import compute_response_plot_data_from_roi_set
+from twopy.napari.sidebar import TWOPY_SIDEBAR_MINIMUM_WIDTH
 from twopy.napari.state import write_last_recording_folder
 from twopy.napari.text import counted_noun
 from twopy.napari.viewer import (
@@ -568,6 +569,10 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(browse_buttons), 2)
             sidebar_tabs = cast(QTabWidget, opened.twopy_sidebar_widget)
             self.assertIs(sidebar_tabs, opened.response_options_widget)
+            self.assertEqual(
+                sidebar_tabs.minimumWidth(),
+                TWOPY_SIDEBAR_MINIMUM_WIDTH,
+            )
             self.assertEqual(sidebar_tabs.currentIndex(), 0)
             options_widget = cast(QTabWidget, opened.response_options_widget)
             self.assertEqual(
