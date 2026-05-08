@@ -43,6 +43,7 @@ __all__ = [
     "EpochResponsePlotData",
     "ResponsePlotData",
     "default_analysis_output_path",
+    "filter_response_plot_data_rois",
     "load_response_plot_data",
     "response_plot_baseline_window_limit_for_recording",
     "response_plot_post_window_seconds_for_recording",
@@ -139,6 +140,48 @@ def response_plot_data_from_grouped(
             else _response_window_options_from_grouped(grouped)
         ),
         response_processing_options=response_processing_options,
+    )
+
+
+def filter_response_plot_data_rois(
+    plot_data: ResponsePlotData,
+    roi_indices: Sequence[int],
+) -> ResponsePlotData:
+    """Return plot data with only the requested ROI rows.
+
+    Args:
+        plot_data: Current plot data shown in the response dock.
+        roi_indices: Zero-based ROI row indices to keep, in display order.
+
+    Returns:
+        Plot data with ROI labels, means, and SEMs filtered consistently for
+        every epoch.
+
+    This helper lets the GUI update ROI option rows immediately after users
+    delete Labels pixels, while the heavier response recomputation still runs
+    through the normal analysis path.
+    """
+    if len(plot_data.epochs) == 0:
+        return plot_data
+    roi_count = len(plot_data.epochs[0].roi_labels)
+    keep_indices = tuple(index for index in roi_indices if 0 <= index < roi_count)
+    keep_rows = list(keep_indices)
+    return ResponsePlotData(
+        source_path=plot_data.source_path,
+        epochs=tuple(
+            EpochResponsePlotData(
+                epoch_name=epoch.epoch_name,
+                epoch_number=epoch.epoch_number,
+                roi_labels=tuple(epoch.roi_labels[index] for index in keep_indices),
+                time_seconds=epoch.time_seconds,
+                mean_values=epoch.mean_values[keep_rows, :],
+                sem_values=epoch.sem_values[keep_rows, :],
+            )
+            for epoch in plot_data.epochs
+        ),
+        delta_f_over_f_options=plot_data.delta_f_over_f_options,
+        response_window_options=plot_data.response_window_options,
+        response_processing_options=plot_data.response_processing_options,
     )
 
 

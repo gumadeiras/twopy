@@ -32,6 +32,7 @@ from twopy.roi import (
 from twopy.spatial import SpatialCrop, full_frame_crop
 
 __all__ = [
+    "remove_roi_label_values_from_layer",
     "roi_label_image_from_layer",
     "roi_label_image_from_layer_for_recording",
     "save_napari_label_rois",
@@ -57,6 +58,46 @@ def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
         return movie_labels_from_display_layer(layer)
     data = cast(NapariLayerWithData, layer).data
     return np.asarray(data, dtype=np.int64)
+
+
+def remove_roi_label_values_from_layer(
+    layer: object | None,
+    label_values: tuple[int, ...],
+) -> int:
+    """Remove selected ROI label values from a napari Labels layer.
+
+    Args:
+        layer: Active napari Labels layer, or a test object with settable
+            ``data``.
+        label_values: Positive integer Labels values to erase.
+
+    Returns:
+        Number of distinct ROI labels found and removed.
+
+    The ROI tab selects ROIs by their napari integer label values. Deletion is
+    just a label-image edit: selected values become background ``0`` while all
+    other ROI pixels stay unchanged.
+    """
+    if layer is None:
+        return 0
+    values = tuple(sorted({value for value in label_values if value > 0}))
+    if len(values) == 0:
+        return 0
+
+    labels_layer = cast(NapariLayerWithData, layer)
+    label_image = np.asarray(labels_layer.data)
+    removal_mask = np.isin(label_image, values)
+    if not np.any(removal_mask):
+        return 0
+
+    updated = np.array(label_image, copy=True)
+    removed_count = len(np.unique(label_image[removal_mask]))
+    updated[removal_mask] = 0
+    labels_layer.data = updated
+    refresh = getattr(layer, "refresh", None)
+    if callable(refresh):
+        refresh()
+    return removed_count
 
 
 def roi_label_image_from_layer_for_recording(

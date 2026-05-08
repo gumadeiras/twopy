@@ -11,11 +11,18 @@ same typed helpers used by scripts.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from magicgui.widgets import FileEdit
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import QFormLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from qtpy.QtWidgets import (
+    QFormLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
@@ -42,6 +49,9 @@ from twopy.napari.state import (
     recording_folder_for_state,
     write_last_recording_folder,
 )
+
+if TYPE_CHECKING:
+    from twopy.napari.database_search import ExperimentLoadResult
 
 __all__ = ["NapariSidebarWidgets", "add_twopy_magicgui_controls"]
 
@@ -83,6 +93,8 @@ class NapariControlState:
     loaded_recordings_panel: LoadedRecordingsPanel | None = None
     recording_picker_path: Path | None = None
     recording_picker_display_text: str = DEFAULT_PATH_TEXT
+    recording_picker_widget: FileEdit | None = None
+    database_search_dialog: object | None = None
     is_loading: bool = False
     replace_selected_on_next_load: bool = False
 
@@ -222,48 +234,13 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
             state,
         )
         try:
-            resolved_recording = resolve_or_convert_recording(selected_recording_path)
-            paths = resolved_recording.paths
-            roi_path = (
-                paths.roi_file_to_load
-                if is_default_path(roi_file_to_load)
-                else _resolve_optional_roi_path(roi_file_to_load)
-            )
-
-            # Import here to avoid a top-level cycle: viewer creates controls,
-            # while controls can load recordings into that same viewer.
-            from twopy.napari.viewer import open_recording_in_napari
-
-            view = open_recording_in_napari(
-                paths.recording_data_path,
-                viewer=state.viewer,
-                roi_set=roi_path,
-                roi_save_file=paths.roi_save_file,
-                movie_path=paths.movie_path,
-                movie_frame_range=(0, None),
-                add_controls=False,
-            )
-            record_loaded_view(
+            return _load_recording_path(
                 state,
-                view=view,
-                roi_save_file=paths.roi_save_file,
+                selected_recording_path,
+                roi_file_to_load=roi_file_to_load,
                 replace_selected=replace_selected,
+                remember_selected_folder=True,
             )
-            write_last_recording_folder(
-                recording_folder_for_state(
-                    selected_recording_path,
-                    paths.recording_data_path,
-                ),
-            )
-            _set_recording_picker_display_path(
-                cast(FileEdit, load_recording.recording_folder),
-                state,
-                paths.recording_data_path.parent,
-            )
-            status = (
-                "Converted and loaded" if resolved_recording.was_converted else "Loaded"
-            )
-            return f"{status} {paths.recording_data_path}"
         finally:
             state.replace_selected_on_next_load = False
             state.is_loading = False
@@ -325,7 +302,10 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     load_recording.recording_folder.changed.connect(load_after_selection)
     load_recording.roi_file_to_load.changed.connect(reload_after_roi_change)
 
-    return LoadRecordingPanel(load_recording=load_recording)
+    return LoadRecordingPanel(
+        load_recording=load_recording,
+        on_search_database=lambda: _show_database_search_dialog(state),
+    )
 
 
 class LoadRecordingPanel(QWidget):
@@ -345,12 +325,18 @@ class LoadRecordingPanel(QWidget):
 
     load_recording: object
 
-    def __init__(self, *, load_recording: object) -> None:
+    def __init__(
+        self,
+        *,
+        load_recording: object,
+        on_search_database: Callable[[], None],
+    ) -> None:
         """Create a compact Load Recording panel.
 
         Args:
             load_recording: Magicgui callable widget built by
                 ``_make_twopy_load_widget``.
+            on_search_database: Callback that opens the database-search window.
 
         Returns:
             None.
@@ -375,6 +361,9 @@ class LoadRecordingPanel(QWidget):
         form.addRow("Recording", _control_native(recording_gui.recording_folder))
         form.addRow("ROI file", _control_native(recording_gui.roi_file_to_load))
         layout.addLayout(form)
+        search_button = QPushButton("Search Database")
+        search_button.clicked.connect(on_search_database)
+        layout.addWidget(search_button)
         self.setLayout(layout)
 
 
@@ -394,6 +383,158 @@ def _control_native(widget: object) -> QWidget:
     return native_widget
 
 
+def _load_recording_path(
+    state: NapariControlState,
+    selected_recording_path: Path,
+    *,
+    roi_file_to_load: PathInput,
+    replace_selected: bool,
+    remember_selected_folder: bool,
+) -> str:
+    """Load one source or converted recording path into napari.
+
+    Args:
+        state: Mutable napari control state.
+        selected_recording_path: Source folder, converted folder, or
+            ``recording_data.h5`` path.
+        roi_file_to_load: Optional ROI path widget value, or ``default``.
+        replace_selected: Whether to replace the selected loaded recording.
+        remember_selected_folder: Whether to save the selected folder as the
+            next file-dialog starting point.
+
+    Returns:
+        Human-readable load status.
+
+    This is shared by the folder picker and database search so both paths use
+    the same conversion, ROI default, viewer, and loaded-recording behavior.
+    """
+    resolved_recording = resolve_or_convert_recording(selected_recording_path)
+    paths = resolved_recording.paths
+    roi_path = (
+        paths.roi_file_to_load
+        if is_default_path(roi_file_to_load)
+        else _resolve_optional_roi_path(roi_file_to_load)
+    )
+
+    # Import here to avoid a top-level cycle: viewer creates controls,
+    # while controls can load recordings into that same viewer.
+    from twopy.napari.viewer import open_recording_in_napari
+
+    view = open_recording_in_napari(
+        paths.recording_data_path,
+        viewer=state.viewer,
+        roi_set=roi_path,
+        roi_save_file=paths.roi_save_file,
+        movie_path=paths.movie_path,
+        movie_frame_range=(0, None),
+        add_controls=False,
+    )
+    record_loaded_view(
+        state,
+        view=view,
+        roi_save_file=paths.roi_save_file,
+        replace_selected=replace_selected,
+    )
+    _sync_recording_picker_to_selected(state)
+    if remember_selected_folder:
+        write_last_recording_folder(
+            recording_folder_for_state(
+                selected_recording_path,
+                paths.recording_data_path,
+            ),
+        )
+    status = "Converted and loaded" if resolved_recording.was_converted else "Loaded"
+    return f"{status} {paths.recording_data_path}"
+
+
+def _show_database_search_dialog(state: NapariControlState) -> None:
+    """Open or raise the Load-tab database-search window.
+
+    Args:
+        state: Mutable napari control state.
+
+    Returns:
+        None.
+    """
+    from twopy.napari.database_search import ExperimentSearchDialog
+
+    if not isinstance(state.database_search_dialog, ExperimentSearchDialog):
+        state.database_search_dialog = ExperimentSearchDialog(
+            on_load_recording_paths=lambda paths: _load_database_recording_paths(
+                state,
+                paths,
+            ),
+        )
+    dialog = state.database_search_dialog
+    dialog.show()
+    dialog.raise_()
+    dialog.activateWindow()
+
+
+def _load_database_recording_paths(
+    state: NapariControlState,
+    paths: tuple[Path, ...],
+) -> "ExperimentLoadResult":
+    """Load all source recording paths selected from database search.
+
+    Args:
+        state: Mutable napari control state.
+        paths: Source recording folders resolved from selected DB experiments.
+
+    Returns:
+        Structured load result for the database-search dialog.
+    """
+    from twopy.napari.database_search import (
+        ExperimentLoadFailure,
+        ExperimentLoadResult,
+    )
+
+    if state.is_loading:
+        return ExperimentLoadResult(
+            loaded_count=0,
+            failures=(
+                ExperimentLoadFailure(
+                    path=None,
+                    message="Recording load already in progress.",
+                ),
+            ),
+        )
+    if len(paths) == 0:
+        return ExperimentLoadResult(
+            loaded_count=0,
+            failures=(
+                ExperimentLoadFailure(path=None, message="No recordings selected."),
+            ),
+        )
+
+    state.is_loading = True
+    loaded_count = 0
+    failures: list[ExperimentLoadFailure] = []
+    try:
+        for path in paths:
+            try:
+                _load_recording_path(
+                    state,
+                    path,
+                    roi_file_to_load=Path(DEFAULT_PATH_TEXT),
+                    replace_selected=False,
+                    remember_selected_folder=False,
+                )
+            except (FileNotFoundError, OSError, ValueError) as error:
+                failures.append(
+                    ExperimentLoadFailure(path=path, message=str(error)),
+                )
+            else:
+                loaded_count += 1
+    finally:
+        state.is_loading = False
+
+    return ExperimentLoadResult(
+        loaded_count=loaded_count,
+        failures=tuple(failures),
+    )
+
+
 def _make_loaded_recordings_widget(state: NapariControlState) -> object:
     """Create the loaded-recordings list panel.
 
@@ -403,9 +544,20 @@ def _make_loaded_recordings_widget(state: NapariControlState) -> object:
     Returns:
         Qt panel that lists loaded recordings and can unload the selected one.
     """
+
+    def select_recording(index: int | None) -> None:
+        """Select a loaded recording and mirror it in the Load-tab picker."""
+        select_loaded_recording(state, index)
+        _sync_recording_picker_to_selected(state)
+
+    def unload_recording(index: int) -> None:
+        """Unload a recording and mirror the next active item in the picker."""
+        unload_loaded_recording(state, index)
+        _sync_recording_picker_to_selected(state)
+
     panel = LoadedRecordingsPanel(
-        on_select=lambda index: select_loaded_recording(state, index),
-        on_unload=lambda index: unload_loaded_recording(state, index),
+        on_select=select_recording,
+        on_unload=unload_recording,
     )
     state.loaded_recordings_panel = panel
     render_loaded_recordings_panel(state)
@@ -430,6 +582,7 @@ def _configure_recording_folder_picker(
     Magicgui normally shows full paths. Twopy displays a shortened tail path so
     the useful recording date/folder stays visible in the compact dock.
     """
+    state.recording_picker_widget = widget
     widget.choose_btn.changed.disconnect(widget._on_choose_clicked)
 
     def choose_recording_folder() -> None:
@@ -451,6 +604,28 @@ def _configure_recording_folder_picker(
         _set_recording_picker_display_path(widget, state, state.recording.path.parent)
     else:
         _set_recording_picker_display_default(widget, state)
+
+
+def _sync_recording_picker_to_selected(state: NapariControlState) -> None:
+    """Mirror the active loaded recording in the Load-tab Recording field.
+
+    Args:
+        state: Current napari control state.
+
+    Returns:
+        None.
+
+    The loaded-recordings list owns the active analysis context. The Recording
+    field is display state only, so it must follow that list after manual
+    loads, database loads, selection changes, and unloads.
+    """
+    widget = state.recording_picker_widget
+    if widget is None:
+        return
+    if state.selected_recording_index is None or state.recording is None:
+        _set_recording_picker_display_default(widget, state)
+        return
+    _set_recording_picker_display_path(widget, state, state.recording.path.parent)
 
 
 def _set_recording_picker_display_default(

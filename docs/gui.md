@@ -6,7 +6,7 @@ Use the `twopy` command to open napari with the twopy docks.
 twopy
 ```
 
-Choose a source recording folder or `recording_data.h5` from the `twopy` dock. If the selected source folder has not been converted yet, twopy converts it first. If no recording is selected, napari still opens.
+Choose a source recording folder or `recording_data.h5` from the `twopy` dock, or use Search Database on the Load tab to find recordings from `config.yml`. If the selected source folder has not been converted yet, twopy converts it first. If no recording is selected, napari still opens.
 
 Open a recording directly:
 
@@ -17,16 +17,16 @@ twopy /path/to/recording_data.h5
 
 ## Workflow
 
-1. Load a source recording folder or converted `recording_data.h5`.
+1. Load a source recording folder, converted `recording_data.h5`, or database search result.
 2. Draw or edit ROIs in the `rois` Labels layer.
 3. Update response plots from the current Labels layer.
 4. Click Save ROIs + analysis when the plots look right.
 
-By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Update, Plot, ROIs, Epochs, and Export. Recording selections from the Load tab always open the full movie.
+By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Update, Plot, ROIs, Epochs, and Export. Recording selections from the Load tab always open the full movie. Search Database opens a separate side-by-side window with user, cell type, sensor, stimulus, and date filters on the left and results on the right. Results browse as user, cell type, sensor, stimulus, date, then source-folder experiment time; loading any hierarchy node loads all recordings under that node, closes the search window, and reports failed paths in a separate scrollable error dialog when needed.
 
 ## ROI Editing
 
-Napari ROI editing is crop-native. twopy displays the alignment-valid crop, then converts drawn Labels ROIs back to full-frame movie coordinates before saving or analysis. Response updates and saved analysis require the active Labels layer to match the displayed crop.
+Napari ROI editing is crop-native. twopy displays the alignment-valid crop, then converts drawn Labels ROIs back to full-frame movie coordinates before saving or analysis. Response updates and saved analysis require the active Labels layer to match the displayed crop. The ROIs tab can hide ROIs from plots and remove the currently selected ROI rows from the editable Labels layer.
 
 ROI masks are saved in twopy HDF5 format and stay independent from napari. Existing ROIs reload automatically when `rois.h5` is beside the converted recording.
 
@@ -48,4 +48,4 @@ Export actions write recording views, ROI views, overlays, per-epoch response pl
 
 ## Architecture Note
 
-Napari is a thin adapter over converted twopy files. It displays the mean image, optional movie preview, editable ROI Labels layer, a top response-plot dock, and one tabbed right-side `twopy` dock for loading recordings, selecting loaded recordings, setting response options, and saving ROIs with analysis outputs. ROI saving uses the core ROI HDF5 helpers; response plotting calls the core analysis workflow. Napari code does not read source MATLAB/TIFF files or own analysis decisions.
+Napari is a thin adapter over converted twopy files. It displays the mean image, optional movie preview, editable ROI Labels layer, a top response-plot dock, and one tabbed right-side `twopy` dock for loading recordings, selecting loaded recordings, setting response options, and saving ROIs with analysis outputs. Database search uses the core typed database helpers for querying, grouping, and source-path resolution; the Qt dialog only renders filters and results. ROI saving uses the core ROI HDF5 helpers; response plotting calls the core analysis workflow. Napari code does not read source MATLAB/TIFF files or own analysis decisions.

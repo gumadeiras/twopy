@@ -4,6 +4,7 @@ Inputs: a tiny converted recording, ROI labels, and a fake viewer.
 Outputs: layer data sent to napari-shaped methods and saved ROI HDF5 files.
 """
 
+import sqlite3
 import tempfile
 import unittest
 import warnings
@@ -28,14 +29,17 @@ from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QLabel,
     QListWidget,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QSplitter,
     QTabWidget,
     QWidget,
 )
@@ -62,6 +66,12 @@ from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_b
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
 from twopy.converted import load_converted_recording
+from twopy.napari.database_search import (
+    ExperimentLoadErrorDialog,
+    ExperimentLoadFailure,
+    ExperimentLoadResult,
+    ExperimentSearchDialog,
+)
 from twopy.napari.display import (
     display_image_from_movie_image,
     display_labels_from_movie_labels,
@@ -80,6 +90,7 @@ from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_
 from twopy.napari.plotting.data import (
     EpochResponsePlotData,
     ResponsePlotData,
+    filter_response_plot_data_rois,
     load_response_plot_data,
     response_plot_data_from_grouped,
 )
@@ -110,6 +121,7 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_layer,
 )
 from twopy.napari.responses import compute_response_plot_data_from_roi_set
+from twopy.napari.roi import remove_roi_label_values_from_layer
 from twopy.napari.sidebar import TWOPY_SIDEBAR_MINIMUM_WIDTH
 from twopy.napari.state import write_last_recording_folder
 from twopy.napari.text import counted_noun
@@ -465,6 +477,93 @@ def _wait_for_live_response_job(
     raise AssertionError("live response worker did not finish")
 
 
+def _record_loaded_paths(
+    loaded_paths: list[tuple[Path, ...]],
+    paths: tuple[Path, ...],
+) -> ExperimentLoadResult:
+    """Record database-search paths received by a test callback.
+
+    Args:
+        loaded_paths: Mutable list of callback payloads.
+        paths: Paths sent by the dialog.
+
+    Returns:
+        Structured load result for the dialog.
+    """
+    loaded_paths.append(paths)
+    return ExperimentLoadResult(loaded_count=len(paths))
+
+
+def _write_database(path: Path) -> None:
+    """Create the smallest SQLite DB needed by napari DB-search tests.
+
+    Args:
+        path: SQLite database path to create.
+
+    Returns:
+        None. The function writes one fly and one stimulus row.
+    """
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            """
+            CREATE TABLE fly (
+                flyId INTEGER PRIMARY KEY,
+                genotype TEXT,
+                cellType TEXT,
+                fluorescentProtein TEXT,
+                eye TEXT,
+                surgeon TEXT
+            )
+            """,
+        )
+        connection.execute(
+            """
+            CREATE TABLE stimulusPresentation (
+                stimulusPresentationId INTEGER PRIMARY KEY,
+                fly INT,
+                relativeDataPath TEXT,
+                stimulusFunction TEXT,
+                date TEXT,
+                dataQuality INT
+            )
+            """,
+        )
+        connection.execute(
+            """
+            INSERT INTO fly
+                (flyId, genotype, cellType, fluorescentProtein, eye, surgeon)
+            VALUES
+                (10923, 'gh146gal4', 'ALPN', 'g6f', 'left', 'Gustavo')
+            """,
+        )
+        connection.execute(
+            """
+            INSERT INTO stimulusPresentation
+                (
+                    stimulusPresentationId,
+                    fly,
+                    relativeDataPath,
+                    stimulusFunction,
+                    date,
+                    dataQuality
+                )
+            VALUES
+                (
+                    20005,
+                    10923,
+                    'genotype\\stimulus\\2023\\10_17\\10_02_49',
+                    'combo_stim_singles',
+                    '2023-10-17 10:03:14',
+                    1
+                )
+            """,
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
 class NapariAdapterTest(unittest.TestCase):
     """Tests napari loading and label saving without starting a GUI."""
 
@@ -585,6 +684,7 @@ class NapariAdapterTest(unittest.TestCase):
             update_buttons = {
                 button.text() for button in options_widget.findChildren(QPushButton)
             }
+            self.assertIn("Search Database", update_buttons)
             self.assertIn("Save ROIs + analysis", update_buttons)
             self.assertIn("Recompute preview now", update_buttons)
             self.assertIn("Reload saved analysis", update_buttons)
@@ -1596,6 +1696,21 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNotNone(receiver.plot_data)
             self.assertIsNone(receiver.status)
 
+    def test_live_response_controller_defaults_to_short_update_delay(self) -> None:
+        """Confirm live ROI updates use a short drawing debounce.
+
+        Inputs: default live controller.
+        Outputs: debounce and poll intervals stay low enough for responsive
+        post-drawing plot updates.
+        """
+        _ = QApplication.instance() or QApplication([])
+        receiver = _FakePlotReceiver()
+        controller = LiveResponseController(receiver)
+
+        self.assertEqual(controller._debounce_ms, 200)
+        self.assertEqual(controller._poll_timer.interval(), 30)
+        controller.shutdown()
+
     def test_live_response_controller_does_not_loop_on_echoed_options(self) -> None:
         """Confirm result option hydration does not schedule another recompute.
 
@@ -1739,6 +1854,116 @@ class NapariAdapterTest(unittest.TestCase):
                 np.zeros((2, 2), dtype=np.int64),
             )
 
+    def test_database_search_dialog_loads_selected_hierarchy_paths(self) -> None:
+        """Confirm DB search selections resolve to configured source paths.
+
+        Inputs: a temporary config, Clark-lab-style DB, and dialog callback.
+        Outputs: selecting a hierarchy node sends all descendant source paths to
+        the loader callback.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database_dir = root / "db"
+            data_dir = root / "data"
+            database_dir.mkdir()
+            data_dir.mkdir()
+            _write_database(database_dir / "experimentLog.db")
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {database_dir}\n"
+                f"data_path: {data_dir}\n"
+                "database_access: direct\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            loaded_paths: list[tuple[Path, ...]] = []
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: _record_loaded_paths(
+                    loaded_paths,
+                    paths,
+                ),
+                config_path=config_path,
+            )
+
+            dialog._user_filter.setText("Gus")
+            dialog.search()
+
+            self.assertIsNotNone(dialog.findChild(QSplitter))
+            self.assertEqual(dialog._user_filter.placeholderText(), "gustavo")
+            self.assertEqual(dialog._cell_type_filter.placeholderText(), "ALPN")
+            self.assertEqual(dialog._sensor_filter.placeholderText(), "g6f")
+            self.assertEqual(
+                dialog._stimulus_filter.placeholderText(),
+                "bars_singles_stim=5s_bars=3x400ms_dt=200ms_int=20",
+            )
+            self.assertEqual(dialog._date_filter.placeholderText(), "2025-10-22")
+            self.assertEqual(dialog._tree.columnWidth(1), 72)
+            self.assertEqual(dialog._user_filter.textMargins().left(), 6)
+            self.assertEqual(dialog._user_filter.textMargins().right(), 6)
+            self.assertFalse(dialog._user_filter.font().italic())
+            self.assertTrue(dialog._cell_type_filter.font().italic())
+            self.assertNotIn(
+                "Typing...",
+                {label.text() for label in dialog.findChildren(QLabel)},
+            )
+            dialog._cell_type_filter.setText("LN6")
+            self.assertFalse(dialog._cell_type_filter.font().italic())
+            dialog._cell_type_filter.clear()
+            self.assertTrue(dialog._cell_type_filter.font().italic())
+            bottom_buttons = [
+                button.text()
+                for button in dialog.findChildren(QPushButton)
+                if button.text() in {"Load Selected", "Close"}
+            ]
+            self.assertEqual(bottom_buttons, ["Load Selected", "Close"])
+
+            result = dialog._tree.topLevelItem(0)
+            assert result is not None
+            result.setSelected(True)
+            dialog.load_selected()
+
+            self.assertEqual(dialog.result(), QDialog.DialogCode.Accepted)
+            self.assertEqual(
+                loaded_paths,
+                [(data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49",)],
+            )
+
+    def test_database_load_error_dialog_shows_scrollable_failed_paths(self) -> None:
+        """Confirm load failures get a readable scrollable path list.
+
+        Inputs: structured load result with two failed recording paths.
+        Outputs: an error dialog with a clear summary and plain scrollable
+        failure details.
+        """
+        _ = QApplication.instance() or QApplication([])
+        result = ExperimentLoadResult(
+            loaded_count=1,
+            failures=(
+                ExperimentLoadFailure(
+                    path=Path("/missing/first"),
+                    message="Could not find recording_data.h5.",
+                ),
+                ExperimentLoadFailure(
+                    path=Path("/missing/second"),
+                    message="Missing source files.",
+                ),
+            ),
+        )
+
+        dialog = ExperimentLoadErrorDialog(result)
+        summary_text = "\n".join(label.text() for label in dialog.findChildren(QLabel))
+        details = dialog.findChild(QPlainTextEdit)
+        assert details is not None
+
+        self.assertIn("Loaded 1 recordings", summary_text)
+        self.assertIn("Failed to load 2 recordings", summary_text)
+        self.assertTrue(details.isReadOnly())
+        self.assertIn("/missing/first", details.toPlainText())
+        self.assertIn("Could not find recording_data.h5.", details.toPlainText())
+        self.assertIn("/missing/second", details.toPlainText())
+        self.assertIn("Missing source files.", details.toPlainText())
+
     def test_loaded_recordings_panel_selects_and_unloads_layers(self) -> None:
         """Confirm multi-recording selection controls layer ownership.
 
@@ -1784,6 +2009,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertTrue(viewer.labels[1].visible)
 
             loaded_list.setCurrentRow(0)
+            self.assertIn(first.name, str(load_widget.recording_folder.line_edit.value))
             self.assertTrue(viewer.images[0].visible)
             self.assertTrue(viewer.images[1].visible)
             self.assertTrue(viewer.labels[0].visible)
@@ -1802,6 +2028,14 @@ class NapariAdapterTest(unittest.TestCase):
             remaining_item = loaded_list.item(0)
             assert remaining_item is not None
             self.assertIn(str(second), remaining_item.text())
+            self.assertIn(
+                second.name, str(load_widget.recording_folder.line_edit.value)
+            )
+
+            unload_button.click()
+
+            self.assertEqual(loaded_list.count(), 0)
+            self.assertEqual(load_widget.recording_folder.value, Path("default"))
 
     def test_controls_hide_remembered_recording_folder(self) -> None:
         """Confirm the Load Recording control keeps long remembered paths hidden.
@@ -2088,6 +2322,163 @@ class NapariAdapterTest(unittest.TestCase):
         styles = "\n".join(child.styleSheet() for child in widget.findChildren(QWidget))
         self.assertIn("#ff0000", styles)
         self.assertIn("#0000ff", styles)
+
+    def test_remove_roi_label_values_from_layer_clears_only_selected_rois(
+        self,
+    ) -> None:
+        """Confirm ROI deletion edits only requested Labels values.
+
+        Inputs: Labels layer with three ROI values and two selected values.
+        Outputs: selected values become background while the other ROI remains.
+        """
+        layer = _FakeLayer(
+            name="rois",
+            data=np.array([[1, 2], [3, 2]], dtype=np.int64),
+            options={},
+        )
+
+        removed_count = remove_roi_label_values_from_layer(layer, (1, 3))
+
+        self.assertEqual(removed_count, 2)
+        np.testing.assert_array_equal(
+            layer.data,
+            np.array([[0, 2], [0, 2]], dtype=np.int64),
+        )
+
+    def test_roi_tab_remove_selected_deletes_checked_rois(self) -> None:
+        """Confirm the ROI tab can delete selected Labels values.
+
+        Inputs: response plot widget with two plotted ROIs and ROI 2 unchecked.
+        Outputs: Remove Selected clears ROI 1 and leaves ROI 2 in the layer.
+        """
+        _ = QApplication.instance() or QApplication([])
+        layer = _FakeLayer(
+            name="rois",
+            data=np.array([[1, 2], [0, 2]], dtype=np.int64),
+            options={},
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_roi_labels_layer(layer)
+        response_widget._live_controller.request_update = lambda: None
+        response_widget.set_response_plot_data(
+            _two_roi_response_plot_data(),
+            reset_axes=True,
+        )
+        response_widget._set_roi_visibility(1, False)
+        remove_button = next(
+            button
+            for button in response_widget.options_widget().findChildren(QPushButton)
+            if button.text() == "Remove Selected"
+        )
+
+        remove_button.click()
+
+        np.testing.assert_array_equal(
+            layer.data,
+            np.array([[0, 2], [0, 2]], dtype=np.int64),
+        )
+        self.assertEqual(response_widget._roi_labels(), ("roi_0002",))
+        checkbox_texts = {
+            checkbox.text()
+            for checkbox in response_widget.options_widget().findChildren(QCheckBox)
+        }
+        self.assertNotIn("roi_0001", checkbox_texts)
+        self.assertIn("roi_0002", checkbox_texts)
+
+    def test_roi_tab_remove_selected_handles_empty_roi_selection(self) -> None:
+        """Confirm deleting all selected ROIs leaves a stable empty ROI list.
+
+        Inputs: response plot widget with all plotted ROIs selected.
+        Outputs: Remove Selected clears the Labels layer and all ROI checkboxes
+        without trying to compute y-axis bounds from empty arrays.
+        """
+        _ = QApplication.instance() or QApplication([])
+        layer = _FakeLayer(
+            name="rois",
+            data=np.array([[1, 2], [0, 2]], dtype=np.int64),
+            options={},
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_roi_labels_layer(layer)
+        response_widget._live_controller.request_update = lambda: None
+        response_widget.set_response_plot_data(
+            _two_roi_response_plot_data(),
+            reset_axes=True,
+        )
+        remove_button = next(
+            button
+            for button in response_widget.options_widget().findChildren(QPushButton)
+            if button.text() == "Remove Selected"
+        )
+
+        remove_button.click()
+
+        np.testing.assert_array_equal(
+            layer.data,
+            np.zeros((2, 2), dtype=np.int64),
+        )
+        self.assertEqual(response_widget._roi_labels(), ())
+        checkbox_texts = {
+            checkbox.text()
+            for checkbox in response_widget.options_widget().findChildren(QCheckBox)
+        }
+        self.assertNotIn("roi_0001", checkbox_texts)
+        self.assertNotIn("roi_0002", checkbox_texts)
+
+    def test_response_status_clears_stale_roi_list(self) -> None:
+        """Confirm invalid live recomputes do not leave stale ROI rows.
+
+        Inputs: response widget with existing plot data.
+        Outputs: status-only state clears the old ROI option checkboxes.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_response_plot_data(
+            _two_roi_response_plot_data(),
+            reset_axes=True,
+        )
+
+        response_widget.show_response_status("No ROI labels to analyze.")
+
+        checkbox_texts = {
+            checkbox.text()
+            for checkbox in response_widget.options_widget().findChildren(QCheckBox)
+        }
+        self.assertNotIn("roi_0001", checkbox_texts)
+        self.assertNotIn("roi_0002", checkbox_texts)
+
+    def test_filter_response_plot_data_rois_keeps_matching_rows(self) -> None:
+        """Confirm plot data ROI filtering keeps labels and trace rows aligned.
+
+        Inputs: two-ROI plot data and one row index to keep.
+        Outputs: every epoch contains only the requested ROI row.
+        """
+        filtered = filter_response_plot_data_rois(
+            _two_roi_response_plot_data(),
+            (1,),
+        )
+        epoch = filtered.epochs[0]
+
+        self.assertEqual(epoch.roi_labels, ("roi_0002",))
+        np.testing.assert_array_equal(
+            epoch.mean_values,
+            np.array([[2.0, 3.0]], dtype=np.float64),
+        )
+        np.testing.assert_array_equal(
+            epoch.sem_values,
+            np.zeros((1, 2), dtype=np.float64),
+        )
+
+    def test_global_value_bounds_accepts_empty_roi_selection(self) -> None:
+        """Confirm empty ROI selection uses stable default y-axis bounds.
+
+        Inputs: two-ROI plot data with no visible ROI rows.
+        Outputs: default y-axis bounds instead of a NumPy empty-reduction
+        error.
+        """
+        self.assertEqual(
+            global_value_bounds(_two_roi_response_plot_data(), ()), (-1.0, 1.0)
+        )
 
     def test_visibility_select_none_uses_one_batch_callback(self) -> None:
         """Confirm bulk visibility changes avoid one redraw per checkbox.
@@ -3200,6 +3591,47 @@ def _tiny_response_plot_data() -> ResponsePlotData:
         Plot-ready response data with one ROI and one epoch.
     """
     return response_plot_data_from_grouped(_tiny_grouped_responses())
+
+
+def _two_roi_response_plot_data() -> ResponsePlotData:
+    """Build tiny response plot data with two ROI rows.
+
+    Args:
+        None.
+
+    Returns:
+        Plot data whose ROI labels map to Labels values 1 and 2.
+    """
+    return response_plot_data_from_grouped(_two_roi_grouped_responses())
+
+
+def _two_roi_grouped_responses() -> GroupedRoiResponses:
+    """Build one tiny grouped response object with two ROIs.
+
+    Args:
+        None.
+
+    Returns:
+        Grouped response data with one epoch and two ROI labels.
+    """
+    dff = RoiDeltaFOverF(
+        fluorescence=np.ones((2, 2), dtype=np.float64),
+        baseline=np.ones((2, 2), dtype=np.float64),
+        values=np.array([[0.0, 2.0], [1.0, 3.0]], dtype=np.float64),
+        labels=("roi_0001", "roi_0002"),
+        start_frame=0,
+        stop_frame=2,
+        tau=0.0,
+        amplitudes=np.ones(2, dtype=np.float64),
+        baseline_frame_numbers=np.array([0.0]),
+        baseline_fluorescence=np.ones((1, 2), dtype=np.float64),
+        metadata={"method": "test"},
+    )
+    return group_delta_f_over_f_by_epoch(
+        dff,
+        (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),),
+        data_rate_hz=1.0,
+    )
 
 
 def _tiny_grouped_responses() -> GroupedRoiResponses:

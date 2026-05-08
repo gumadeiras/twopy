@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Features
+
+- Added a Load-tab database search window with user, cell type, sensor, stimulus, and date filters plus a collapsible user, cell type, sensor, stimulus, date, and source-folder time result tree that can load any selected subtree.
+- Tightened the database search layout with side-by-side filters and results, placeholder filter hints, a wider experiment column, a compact count column, and deduplicated source-recording counts across database files.
+- Improved database search loading feedback so Load Selected closes the search window and failed paths appear in a separate scrollable error dialog.
+- Added a ROIs-tab action for deleting the selected ROIs from the active Labels layer.
+
+### Fixes
+
+- Kept the Load-tab Recording path synchronized with the active loaded recording after database loads, list selection changes, and unloads.
+- Reduced the live ROI plot update debounce so response plots refresh sooner after drawing finishes.
+
 ## 0.1.5 - 2026-05-08
 
 ### Changes

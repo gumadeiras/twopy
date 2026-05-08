@@ -9,11 +9,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from twopy.config import TwopyConfig
 from twopy.database import (
+    ExperimentSearchFilters,
+    build_experiment_search_tree,
     find_experiments,
+    find_recording_search_results,
     find_recordings,
     find_stimulus_presentations,
     read_database_catalog,
+    recording_path_for_database_experiment,
+    recording_paths_for_database_experiments,
 )
 
 
@@ -137,6 +143,115 @@ class DatabaseQueryTest(unittest.TestCase):
                 experiments[0].relative_data_path,
                 "genotype\\stimulus\\2023\\10_17\\10_02_49",
             )
+
+    def test_find_stimulus_presentations_filters_date_text(self) -> None:
+        """Confirm database search can filter by user-entered date text.
+
+        Inputs: a temporary Clark-lab-style DB row.
+        Outputs: date substring filters include matching rows and exclude
+        non-matching rows.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_dir = Path(temp_dir)
+            self._write_clark_style_log(database_dir / "experimentLog.db")
+
+            experiments = find_stimulus_presentations(
+                database_dir,
+                date_contains="2023-10-17",
+            )
+            missing = find_stimulus_presentations(
+                database_dir,
+                date_contains="2023-10-18",
+            )
+
+            self.assertEqual(len(experiments), 1)
+            self.assertEqual(missing, ())
+
+    def test_recording_search_tree_groups_loadable_hierarchy(self) -> None:
+        """Confirm search results group by the Load-tab browse hierarchy.
+
+        Inputs: a configured temporary DB and data root.
+        Outputs: user, cell type, sensor, stimulus, date, and time nodes that
+        all retain the experiments beneath them.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database_dir = root / "db"
+            data_dir = root / "data"
+            database_dir.mkdir()
+            data_dir.mkdir()
+            self._write_clark_style_log(database_dir / "experimentLog.db")
+            self._write_clark_style_log(database_dir / "experimentInitLog.db")
+            config = TwopyConfig(
+                database_path=database_dir,
+                data_path=data_dir,
+                database_access="direct",
+                analysis_output="source",
+            )
+
+            experiments = find_recording_search_results(
+                config,
+                ExperimentSearchFilters(user="Gus", date="2023-10-17"),
+            )
+            tree = build_experiment_search_tree(experiments)
+
+            self.assertEqual(len(experiments), 1)
+            user = tree.children[0]
+            cell_type = user.children[0]
+            sensor = cell_type.children[0]
+            stimulus = sensor.children[0]
+            date = stimulus.children[0]
+            time = date.children[0]
+            self.assertEqual(user.label, "Gustavo")
+            self.assertEqual(cell_type.label, "ALPN")
+            self.assertEqual(sensor.label, "g6f")
+            self.assertEqual(stimulus.label, "combo_stim_singles")
+            self.assertEqual(date.label, "2023-10-17")
+            self.assertEqual(time.label, "10:02:49")
+            self.assertEqual(time.experiments, experiments)
+            self.assertEqual(user.experiments, experiments)
+            self.assertEqual(
+                recording_path_for_database_experiment(config, experiments[0]),
+                data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49",
+            )
+            self.assertEqual(
+                recording_paths_for_database_experiments(config, experiments),
+                (data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49",),
+            )
+
+    def test_recording_search_uses_enough_rows_for_hierarchy_counts(self) -> None:
+        """Confirm GUI search counts are not distorted by early query limits.
+
+        Inputs: a temporary DB with more than 1000 Gustavo recordings and one
+        later LN6 recording.
+        Outputs: the search tree includes the later LN6 result instead of
+        silently stopping at the first 1000 rows.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database_dir = root / "db"
+            data_dir = root / "data"
+            database_dir.mkdir()
+            data_dir.mkdir()
+            self._write_large_clark_style_log(database_dir / "experimentLog.db")
+            config = TwopyConfig(
+                database_path=database_dir,
+                data_path=data_dir,
+                database_access="direct",
+                analysis_output="source",
+            )
+
+            experiments = find_recording_search_results(
+                config,
+                ExperimentSearchFilters(user="Gus"),
+            )
+            tree = build_experiment_search_tree(experiments)
+            user = tree.children[0]
+            counts = {child.label: len(child.experiments) for child in user.children}
+
+            self.assertEqual(len(experiments), 1002)
+            self.assertEqual(counts["ALPN"], 1001)
+            self.assertEqual(counts["LN6"], 1)
 
     def test_invalid_month_filter_raises_clear_error(self) -> None:
         """Confirm impossible month filters fail before SQL execution.
@@ -282,6 +397,95 @@ class DatabaseQueryTest(unittest.TestCase):
                         1
                     )
                 """,
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def _write_large_clark_style_log(self, path: Path) -> None:
+        """Create a Clark-style DB with enough rows to exercise search limits.
+
+        Args:
+            path: SQLite database path to create.
+
+        Returns:
+            None. The function writes 1001 ALPN rows followed by one LN6 row.
+        """
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE fly (
+                    flyId INTEGER PRIMARY KEY,
+                    genotype TEXT,
+                    cellType TEXT,
+                    fluorescentProtein TEXT,
+                    eye TEXT,
+                    surgeon TEXT
+                )
+                """,
+            )
+            connection.execute(
+                """
+                CREATE TABLE stimulusPresentation (
+                    stimulusPresentationId INTEGER PRIMARY KEY,
+                    fly INT,
+                    relativeDataPath TEXT,
+                    stimulusFunction TEXT,
+                    date TEXT,
+                    dataQuality INT
+                )
+                """,
+            )
+            connection.executemany(
+                """
+                INSERT INTO fly
+                    (flyId, genotype, cellType, fluorescentProtein, eye, surgeon)
+                VALUES
+                    (?, 'gh146gal4', ?, 'g6f', 'left', 'Gustavo')
+                """,
+                [(1, "ALPN"), (2, "LN6")],
+            )
+            rows: list[tuple[int, int, str, str, str, int]] = []
+            for index in range(1001):
+                hour = index // 3600
+                minute = (index // 60) % 60
+                second = index % 60
+                time_path = f"{hour:02d}_{minute:02d}_{second:02d}"
+                rows.append(
+                    (
+                        index + 1,
+                        1,
+                        f"genotype\\stimulus\\2023\\10_17\\{time_path}",
+                        "combo_stim_singles",
+                        f"2023-10-17 {time_path.replace('_', ':')}",
+                        1,
+                    )
+                )
+            rows.append(
+                (
+                    5000,
+                    2,
+                    "ln6_genotype\\stimulus\\2023\\10_18\\12_00_00",
+                    "ln6_stimulus",
+                    "2023-10-18 12:00:03",
+                    1,
+                )
+            )
+            connection.executemany(
+                """
+                INSERT INTO stimulusPresentation
+                    (
+                        stimulusPresentationId,
+                        fly,
+                        relativeDataPath,
+                        stimulusFunction,
+                        date,
+                        dataQuality
+                    )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                rows,
             )
             connection.commit()
         finally:

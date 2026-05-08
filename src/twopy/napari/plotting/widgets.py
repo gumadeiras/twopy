@@ -18,6 +18,7 @@ from qtpy.QtWidgets import QLayout, QSizePolicy, QWidget
 
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
+DEFAULT_VALUE_BOUNDS = (-1.0, 1.0)
 _LEFT_MARGIN = 88.0
 _TOP_MARGIN = 12.0
 _RIGHT_MARGIN = 18.0
@@ -247,6 +248,8 @@ def clear_layout(layout: QLayout) -> None:
             continue
         widget = item.widget()
         if widget is not None:
+            widget.hide()
+            widget.setParent(None)
             widget.deleteLater()
 
 
@@ -287,23 +290,36 @@ def global_value_bounds(
         ``(min, max)`` bounds expanded by 20 percent and rounded to one decimal.
     """
     epochs = _selected_epochs(data, epoch_indices)
-    selected_roi_indices = roi_indices or tuple(range(len(epochs[0].roi_labels)))
-    lower = np.concatenate(
+    if len(epochs) == 0:
+        return DEFAULT_VALUE_BOUNDS
+    selected_roi_indices = (
+        roi_indices
+        if roi_indices is not None
+        else tuple(range(len(epochs[0].roi_labels)))
+    )
+    if len(selected_roi_indices) == 0:
+        return DEFAULT_VALUE_BOUNDS
+    selected_roi_rows = list(selected_roi_indices)
+    lower_values = np.concatenate(
         tuple(
-            (epoch.mean_values - epoch.sem_values)[list(selected_roi_indices), :]
+            (epoch.mean_values - epoch.sem_values)[selected_roi_rows, :]
             for epoch in epochs
         ),
         axis=None,
     )
-    upper = np.concatenate(
+    upper_values = np.concatenate(
         tuple(
-            (epoch.mean_values + epoch.sem_values)[list(selected_roi_indices), :]
+            (epoch.mean_values + epoch.sem_values)[selected_roi_rows, :]
             for epoch in epochs
         ),
         axis=None,
     )
-    value_min = float(np.nanmin(lower))
-    value_max = float(np.nanmax(upper))
+    finite_lower = lower_values[np.isfinite(lower_values)]
+    finite_upper = upper_values[np.isfinite(upper_values)]
+    if finite_lower.size == 0 or finite_upper.size == 0:
+        return DEFAULT_VALUE_BOUNDS
+    value_min = float(np.min(finite_lower))
+    value_max = float(np.max(finite_upper))
     if value_min == value_max:
         return value_min - 1.0, value_max + 1.0
     lower_bound = value_min * 1.2 if value_min < 0 else value_min * 0.8

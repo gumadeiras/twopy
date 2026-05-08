@@ -11,7 +11,7 @@ must be rebuilt when plot data, axis defaults, or visibility rows change.
 from collections.abc import Callable
 
 from qtpy.QtGui import QColor
-from qtpy.QtWidgets import QCheckBox, QSpinBox, QVBoxLayout
+from qtpy.QtWidgets import QCheckBox, QPushButton, QSpinBox, QVBoxLayout
 
 from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.plotting.options import (
@@ -69,6 +69,7 @@ def render_dynamic_options(
     on_axis_change: Callable[..., None],
     on_roi_visibility_change: Callable[[object, bool], None],
     on_roi_visibility_batch: Callable[[dict[object, bool]], None],
+    on_remove_selected_rois: Callable[[], None],
     on_epoch_visibility_change: Callable[[object, bool], None],
     on_epoch_visibility_batch: Callable[[dict[object, bool]], None],
 ) -> None:
@@ -96,6 +97,8 @@ def render_dynamic_options(
         on_axis_change: Callback for manual axis-bound edits.
         on_roi_visibility_change: Callback for one ROI checkbox.
         on_roi_visibility_batch: Callback for ROI batch buttons.
+        on_remove_selected_rois: Callback that deletes checked ROI labels from
+            the active Labels layer.
         on_epoch_visibility_change: Callback for one epoch checkbox.
         on_epoch_visibility_batch: Callback for epoch batch buttons.
 
@@ -139,6 +142,9 @@ def render_dynamic_options(
             colors=roi_colors,
         ),
     )
+    remove_button = QPushButton("Remove Selected")
+    remove_button.clicked.connect(on_remove_selected_rois)
+    roi_options_layout.addWidget(remove_button)
     roi_options_layout.addStretch(1)
     epoch_options_layout.addWidget(
         visibility_options_widget(

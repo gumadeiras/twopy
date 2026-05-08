@@ -27,6 +27,7 @@ from twopy.converted import RecordingData
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.plotting.data import (
     ResponsePlotData,
+    filter_response_plot_data_rois,
     load_response_plot_data,
     response_plot_baseline_window_limit_for_recording,
 )
@@ -54,11 +55,13 @@ from twopy.napari.plotting.docks.visibility_state import (
 from twopy.napari.plotting.export_controls import ResponseExportState
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.widgets import (
+    clear_layout,
     opaque_colors,
     resolved_time_bounds,
     resolved_value_bounds,
     roi_colors_from_label_values,
 )
+from twopy.napari.roi import remove_roi_label_values_from_layer
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 
@@ -137,18 +140,7 @@ class _ResponsePlotWidget(QWidget):
         self._delta_f_over_f_options_widget = (
             options_panel.delta_f_over_f_options_widget
         )
-        add_plot_display_options_group(
-            plot_display_options_layout=self._plot_display_options_layout,
-            show_sem=self._show_sem,
-            plot_size=self._plot_size,
-            x_min=0.0,
-            x_max=1.0,
-            y_min=-1.0,
-            y_max=1.0,
-            on_show_sem_change=self._set_show_sem,
-            on_plot_size_change=self._set_plot_size,
-            on_axis_change=self._set_manual_axis_bounds,
-        )
+        self._add_default_plot_display_options()
 
     def options_widget(self) -> object:
         """Return the response-options widget owned by this plot widget.
@@ -255,11 +247,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path_label.setText("Analysis output: default")
         self._roi_save_path_label.setText("ROI output: default")
         self._update_status_label.setText("")
-        clear_dynamic_option_tabs(
-            plot_display_options_layout=self._plot_display_options_layout,
-            roi_options_layout=self._roi_options_layout,
-            epoch_options_layout=self._epoch_options_layout,
-        )
+        self._reset_empty_option_tabs()
         self._set_status("No recording loaded.")
 
     def load_recording(self, recording: RecordingData) -> None:
@@ -379,6 +367,8 @@ class _ResponsePlotWidget(QWidget):
             None.
         """
         self._plot_data = None
+        self._reset_plot_state()
+        self._reset_empty_option_tabs()
         self._set_status(text)
 
     def reload(self) -> None:
@@ -390,11 +380,7 @@ class _ResponsePlotWidget(QWidget):
         if isinstance(result, str):
             self._plot_data = None
             self._reset_plot_state()
-            clear_dynamic_option_tabs(
-                plot_display_options_layout=self._plot_display_options_layout,
-                roi_options_layout=self._roi_options_layout,
-                epoch_options_layout=self._epoch_options_layout,
-            )
+            self._reset_empty_option_tabs()
             self._set_status(result)
             return
         self.set_response_plot_data(result, reset_axes=True)
@@ -489,6 +475,26 @@ class _ResponsePlotWidget(QWidget):
         self._manual_y_min = None
         self._manual_y_max = None
 
+    def _reset_empty_option_tabs(self) -> None:
+        clear_layout(self._plot_display_options_layout)
+        self._add_default_plot_display_options()
+        clear_layout(self._roi_options_layout)
+        clear_layout(self._epoch_options_layout)
+
+    def _add_default_plot_display_options(self) -> None:
+        add_plot_display_options_group(
+            plot_display_options_layout=self._plot_display_options_layout,
+            show_sem=self._show_sem,
+            plot_size=self._plot_size,
+            x_min=0.0,
+            x_max=1.0,
+            y_min=-1.0,
+            y_max=1.0,
+            on_show_sem_change=self._set_show_sem,
+            on_plot_size_change=self._set_plot_size,
+            on_axis_change=self._set_manual_axis_bounds,
+        )
+
     def _render_options(self) -> None:
         render_dynamic_options(
             plot_data=self._plot_data,
@@ -512,9 +518,68 @@ class _ResponsePlotWidget(QWidget):
             on_axis_change=self._set_manual_axis_bounds,
             on_roi_visibility_change=self._set_roi_visibility,
             on_roi_visibility_batch=self._set_roi_visibility_batch,
+            on_remove_selected_rois=self.remove_selected_rois,
             on_epoch_visibility_change=self._set_epoch_visibility,
             on_epoch_visibility_batch=self._set_epoch_visibility_batch,
         )
+
+    def remove_selected_rois(self) -> None:
+        """Delete checked ROI labels from the active Labels layer.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        The ROI checkboxes already define which ROIs are selected for plotting.
+        This action reuses that state and edits only the Labels layer; response
+        recomputation remains owned by the live controller.
+        """
+        label_values = self._roi_label_values()
+        selected_label_values = tuple(
+            label_values[index]
+            for index in self._visible_roi_indices()
+            if index < len(label_values)
+        )
+        removed_count = remove_roi_label_values_from_layer(
+            self._roi_labels_layer,
+            selected_label_values,
+        )
+        if removed_count == 0:
+            self._update_status_label.setText("No selected ROIs to remove.")
+            return
+        self._remove_rois_from_current_plot_data(selected_label_values)
+        noun = "ROI" if removed_count == 1 else "ROIs"
+        self._update_status_label.setText(f"Removed {removed_count} selected {noun}.")
+        self._live_controller.request_update()
+
+    def _remove_rois_from_current_plot_data(
+        self,
+        removed_label_values: tuple[int, ...],
+    ) -> None:
+        """Remove deleted ROI rows from the displayed response state.
+
+        Args:
+            removed_label_values: Napari Labels values that were just erased.
+
+        Returns:
+            None.
+        """
+        if self._plot_data is None:
+            return
+        removed_values = set(removed_label_values)
+        keep_indices = tuple(
+            index
+            for index, label_value in enumerate(self._roi_label_values())
+            if label_value not in removed_values
+        )
+        self._plot_data = filter_response_plot_data_rois(
+            self._plot_data,
+            keep_indices,
+        )
+        self._sync_plot_state(reset_axes=False)
+        self._render_plots()
 
     def _set_manual_axis_bounds(
         self,

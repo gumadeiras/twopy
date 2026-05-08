@@ -98,7 +98,7 @@ class LiveResponseController:
         self,
         plot_widget: ResponsePlotReceiver,
         *,
-        debounce_ms: int = 400,
+        debounce_ms: int = 200,
         run_async: bool = True,
     ) -> None:
         """Create a live updater for one response plot widget.
@@ -130,7 +130,7 @@ class LiveResponseController:
         self._debounce_timer.setSingleShot(True)
         self._debounce_timer.timeout.connect(self._start_latest_job)
         self._poll_timer = QTimer()
-        self._poll_timer.setInterval(75)
+        self._poll_timer.setInterval(30)
         self._poll_timer.timeout.connect(self._collect_finished_job)
         self._debounce_ms = debounce_ms
 

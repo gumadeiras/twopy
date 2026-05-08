@@ -25,6 +25,7 @@ def find_stimulus_presentations(
     date_year: int | None = None,
     date_month: int | None = None,
     date_day: int | None = None,
+    date_contains: str | None = None,
     path_contains: str | None = None,
     stimulus_contains: str | None = None,
     genotype_contains: str | None = None,
@@ -43,6 +44,8 @@ def find_stimulus_presentations(
         date_year: Optional four-digit year matched against experiment date.
         date_month: Optional month number matched against experiment date.
         date_day: Optional day-of-month matched against experiment date.
+        date_contains: Optional substring matched against full experiment date
+            text.
         path_contains: Optional substring matched against ``relativeDataPath``.
         stimulus_contains: Optional substring matched against ``stimulusFunction``.
         genotype_contains: Optional substring matched against fly ``genotype``.
@@ -87,6 +90,7 @@ def find_stimulus_presentations(
                 date_year=date_year,
                 date_month=date_month,
                 date_day=date_day,
+                date_contains=date_contains,
                 path_contains=path_contains,
                 stimulus_contains=stimulus_contains,
                 genotype_contains=genotype_contains,
@@ -195,6 +199,7 @@ def _query_stimulus_presentations(
     date_year: int | None,
     date_month: int | None,
     date_day: int | None,
+    date_contains: str | None,
     path_contains: str | None,
     stimulus_contains: str | None,
     genotype_contains: str | None,
@@ -211,6 +216,7 @@ def _query_stimulus_presentations(
         date_year: Optional experiment year.
         date_month: Optional experiment month.
         date_day: Optional experiment day-of-month.
+        date_contains: Optional substring matched against experiment date.
         path_contains: Optional relative path substring.
         stimulus_contains: Optional stimulus-function substring.
         genotype_contains: Optional genotype substring.
@@ -241,6 +247,7 @@ def _query_stimulus_presentations(
         parameters=parameters,
         filters={
             'CAST(sp."relativeDataPath" AS TEXT) LIKE ?': path_contains,
+            'CAST(sp."date" AS TEXT) LIKE ?': date_contains,
             'CAST(sp."stimulusFunction" AS TEXT) LIKE ?': stimulus_contains,
             'CAST(f."genotype" AS TEXT) LIKE ?': genotype_contains,
             'CAST(f."fluorescentProtein" AS TEXT) LIKE ?': sensor_contains,
