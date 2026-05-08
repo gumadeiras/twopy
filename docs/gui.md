@@ -22,7 +22,7 @@ twopy /path/to/recording_data.h5
 3. Update response plots from the current Labels layer.
 4. Click Save ROIs + analysis when the plots look right.
 
-By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Update, Plot, ROIs, Epochs, and Export. Use `--no-movie` to skip the movie preview, or `--movie-start` and `--movie-end` to choose a preview range.
+By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Update, Plot, ROIs, Epochs, and Export. Recording selections from the Load tab always open the full movie.
 
 ## ROI Editing
 

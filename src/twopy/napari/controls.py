@@ -20,7 +20,6 @@ from qtpy.QtWidgets import QFormLayout, QLabel, QSizePolicy, QVBoxLayout, QWidge
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
 from twopy.napari.loading import resolve_or_convert_recording
-from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import (
     PathInput,
     is_default_path,
@@ -94,8 +93,6 @@ class _LoadRecordingGui(Protocol):
 
     recording_folder: object
     roi_file_to_load: object
-    movie_frame_range: object
-    load_movie: object
 
 
 def add_twopy_magicgui_controls(
@@ -190,24 +187,13 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     """
     from magicgui import magicgui
 
-    default_movie_end_frame = _default_movie_end_frame(state.recording)
-
     @magicgui(
         call_button=False,
         layout="vertical",
-        movie_frame_range={
-            "widget_type": "RangeSlider",
-            "min": 0,
-            "max": max(default_movie_end_frame, 0),
-            "step": 1,
-            "tracking": False,
-        },
     )
     def load_recording(
         recording_folder: Path = Path(DEFAULT_PATH_TEXT),
         roi_file_to_load: Path = Path(DEFAULT_PATH_TEXT),
-        movie_frame_range: tuple[int, int] = (0, default_movie_end_frame),
-        load_movie: bool = True,
     ) -> str:
         """Load a recording into the current napari viewer.
 
@@ -217,11 +203,6 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
                 first when twopy output does not exist yet.
             roi_file_to_load: Optional existing ROI HDF5 file. ``default`` uses
                 ``rois.h5`` in the selected recording folder when it exists.
-            movie_frame_range: First and last movie frames to load. When the
-                empty-launch widget still shows ``(0, 0)``, twopy resolves it
-                to the recording's full frame range after the folder is
-                selected.
-            load_movie: Whether to load movie frames.
 
         Returns:
             Human-readable status for the dock widget.
@@ -243,23 +224,6 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
                 if is_default_path(roi_file_to_load)
                 else _resolve_optional_roi_path(roi_file_to_load)
             )
-            loaded_recording = _load_recording_for_defaults(
-                recording_data_path=paths.recording_data_path,
-                movie_path=paths.movie_path,
-            )
-            movie_range = None
-            if load_movie:
-                start_frame, end_frame = _widget_movie_frame_range_for_load(
-                    movie_frame_range,
-                    frame_count=loaded_recording.movie.shape[0],
-                    preserve_current_range=replace_selected,
-                )
-                movie_range = resolve_movie_frame_range(
-                    start_frame=start_frame,
-                    end_frame=end_frame,
-                    frame_count=loaded_recording.movie.shape[0],
-                    zero_end_means_last=True,
-                )
 
             # Import here to avoid a top-level cycle: viewer creates controls,
             # while controls can load recordings into that same viewer.
@@ -271,7 +235,7 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
                 roi_set=roi_path,
                 roi_save_file=paths.roi_save_file,
                 movie_path=paths.movie_path,
-                movie_frame_range=movie_range,
+                movie_frame_range=(0, None),
                 add_controls=False,
             )
             record_loaded_view(
@@ -286,9 +250,6 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
                     paths.recording_data_path,
                 ),
             )
-            frame_end = _default_movie_end_frame(view.recording)
-            load_recording.movie_frame_range.max = frame_end
-            load_recording.movie_frame_range.value = movie_range or (0, frame_end)
             _set_recording_picker_display_path(
                 cast(FileEdit, load_recording.recording_folder),
                 state,
@@ -307,8 +268,6 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
 
     load_recording.recording_folder.label = "Recording"
     load_recording.roi_file_to_load.label = "ROI file"
-    load_recording.movie_frame_range.label = "Movie frames"
-    load_recording.load_movie.label = "Load movie"
     cast(FileEdit, load_recording.recording_folder).choose_btn.text = "Browse"
     cast(FileEdit, load_recording.roi_file_to_load).choose_btn.text = "Browse"
     _configure_recording_folder_picker(
@@ -333,8 +292,8 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
             return
         load_recording()
 
-    def reload_after_option_change(_value: object) -> None:
-        """Reload the current recording after a non-path option changes.
+    def reload_after_roi_change(_value: object) -> None:
+        """Reload the current recording after the ROI file changes.
 
         Args:
             _value: Ignored widget signal value.
@@ -342,9 +301,8 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         Returns:
             None.
 
-        Secondary controls such as the movie-frame slider should reuse the
-        resolved recording path stored in state. The visible picker text may be
-        shortened for display and is not always a real filesystem path.
+        The visible picker text may be shortened for display and is not always a
+        real filesystem path, so reloads reuse the stored recording path.
         """
         if state.is_loading or not _has_recording_to_load(
             load_recording.recording_folder.value,
@@ -360,9 +318,7 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         )
 
     load_recording.recording_folder.changed.connect(load_after_selection)
-    load_recording.roi_file_to_load.changed.connect(reload_after_option_change)
-    load_recording.movie_frame_range.changed.connect(reload_after_option_change)
-    load_recording.load_movie.changed.connect(reload_after_option_change)
+    load_recording.roi_file_to_load.changed.connect(reload_after_roi_change)
 
     return LoadRecordingPanel(load_recording=load_recording)
 
@@ -413,8 +369,6 @@ class LoadRecordingPanel(QWidget):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.addRow("Recording", _control_native(recording_gui.recording_folder))
         form.addRow("ROI file", _control_native(recording_gui.roi_file_to_load))
-        form.addRow("Frames", _control_native(recording_gui.movie_frame_range))
-        form.addRow("", _control_native(recording_gui.load_movie))
         layout.addLayout(form)
         self.setLayout(layout)
 
@@ -689,75 +643,3 @@ def _resolve_optional_roi_path(path: PathInput) -> Path | None:
         msg = f"ROI file does not exist: {resolved}"
         raise ValueError(msg)
     return resolved.resolve()
-
-
-def _default_movie_end_frame(recording: RecordingData | None) -> int:
-    """Return the default inclusive movie end frame for a loaded recording.
-
-    Args:
-        recording: Optional loaded recording.
-
-    Returns:
-        Last available frame index, or ``0`` before a recording is loaded.
-    """
-    if recording is None:
-        return 0
-    return max(recording.movie.shape[0] - 1, 0)
-
-
-def _widget_movie_frame_range_for_load(
-    movie_frame_range: tuple[int, int],
-    *,
-    frame_count: int,
-    preserve_current_range: bool,
-) -> tuple[int, int]:
-    """Choose a GUI movie preview range for the recording being loaded.
-
-    Args:
-        movie_frame_range: Current range-slider value.
-        frame_count: Number of movie frames in the recording being loaded.
-        preserve_current_range: Whether this is a reload of the selected
-            recording after an option change.
-
-    Returns:
-        Inclusive preview range constrained to the recording length. New
-        recordings default to their full movie, while reloads preserve the
-        visible slider value where possible.
-
-    The frame-range widget keeps its previous value until after a recording
-    loads. That value is meaningful when reloading the same recording after an
-    option change, but stale when choosing a different recording.
-    """
-    last_frame = max(frame_count - 1, 0)
-    if not preserve_current_range:
-        return (0, last_frame)
-
-    start_frame = int(movie_frame_range[0])
-    end_frame = int(movie_frame_range[1])
-    if start_frame > last_frame:
-        start_frame = last_frame
-    if end_frame > last_frame:
-        end_frame = last_frame
-    return (start_frame, end_frame)
-
-
-def _load_recording_for_defaults(
-    *,
-    recording_data_path: Path,
-    movie_path: Path | None,
-) -> RecordingData:
-    """Load recording metadata before resolving frame defaults.
-
-    Args:
-        recording_data_path: Converted ``recording_data.h5`` path.
-        movie_path: Optional explicit converted movie path.
-
-    Returns:
-        Loaded recording object.
-
-    Loading the small manifest lets the empty-launch widget convert its initial
-    ``0`` end frame into the actual final frame before adding the movie layer.
-    """
-    from twopy.converted import load_converted_recording
-
-    return load_converted_recording(recording_data_path, movie_path=movie_path)

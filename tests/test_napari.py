@@ -145,17 +145,11 @@ class _RecordingFolderControl(Protocol):
     line_edit: _LineEditControl
 
 
-class _MovieFrameRangeControl(Protocol):
-    """Small protocol for the movie-frame range slider used in tests."""
-
-    value: tuple[int, int]
-
-
 class _RecordingLoadWidget(Protocol):
     """Small protocol for the magicgui recording-load callable in tests."""
 
     recording_folder: _RecordingFolderControl
-    movie_frame_range: _MovieFrameRangeControl
+    roi_file_to_load: _RecordingFolderControl
 
     def __call__(self, **kwargs: object) -> object:
         """Call the recording loader with optional magicgui keyword values."""
@@ -566,7 +560,6 @@ class NapariAdapterTest(unittest.TestCase):
             load_labels = {label.text() for label in load_panel.findChildren(QLabel)}
             self.assertIn("Recording", load_labels)
             self.assertIn("ROI file", load_labels)
-            self.assertIn("Frames", load_labels)
             browse_buttons = [
                 button
                 for button in load_panel.findChildren(QPushButton)
@@ -1733,9 +1726,9 @@ class NapariAdapterTest(unittest.TestCase):
 
             load_widget.recording_folder.value = root
 
-            self.assertEqual(load_widget.movie_frame_range.value, (0, 2))
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(len(viewer.labels), 1)
+            self.assertEqual(np.asarray(viewer.images[1].data).shape[0], 3)
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
@@ -1891,17 +1884,23 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertTrue(display_text.startswith("..."))
             self.assertTrue(display_text.endswith("/2025/10_03/twopy/"))
 
-    def test_movie_frame_slider_reuses_resolved_recording_path(self) -> None:
-        """Confirm movie range changes work after the path field is shortened.
+    def test_roi_file_change_reuses_resolved_recording_path(self) -> None:
+        """Confirm ROI file changes work after the path field is shortened.
 
-        Inputs: long converted output path loaded through the control widget.
-        Outputs: changing the frame slider reloads without resolving the
-        shortened display text as a filesystem path.
+        Inputs: long converted output path and ROI file loaded through the
+            control widget.
+        Outputs: changing the ROI file reloads without resolving the
+            shortened display text as a filesystem path.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / ("long_" * 20) / "twopy"
             root.mkdir(parents=True)
             _write_converted_recording(root)
+            roi_path = root / "alternate_rois.h5"
+            save_roi_set(
+                make_roi_set(np.array([[[True, False], [False, False]]])),
+                roi_path,
+            )
             viewer = _FakeViewer()
             control_docks = add_twopy_magicgui_controls(
                 viewer,
@@ -1911,45 +1910,13 @@ class NapariAdapterTest(unittest.TestCase):
             load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget(recording_folder=root)
-            load_widget.movie_frame_range.value = (0, 1)
+            load_widget.roi_file_to_load.value = roi_path
 
-            self.assertEqual(load_widget.movie_frame_range.value, (0, 1))
             self.assertEqual(len(viewer.images), 2)
-
-    def test_loading_shorter_recording_clamps_stale_movie_range(self) -> None:
-        """Confirm old movie slider values do not block a shorter recording.
-
-        Inputs: two converted recordings where the first movie is longer.
-        Outputs: the second recording loads and the slider fits its frame count.
-        """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            first = root / "first"
-            second = root / "second"
-            first.mkdir()
-            second.mkdir()
-            _write_converted_recording(
-                first,
-                movie_values=np.arange(20, dtype=np.float64).reshape(5, 2, 2),
+            np.testing.assert_array_equal(
+                np.unique(roi_label_image_from_layer(viewer.labels[0])),
+                np.array([0, 1]),
             )
-            _write_converted_recording(
-                second,
-                movie_values=np.arange(12, dtype=np.float64).reshape(3, 2, 2),
-            )
-            viewer = _FakeViewer()
-            control_docks = add_twopy_magicgui_controls(
-                viewer,
-                roi_labels_layer=None,
-                roi_save_file=Path("unused.h5"),
-            )
-            load_widget = _load_recording_widget(control_docks.load_widget)
-
-            load_widget(recording_folder=first)
-            load_widget.movie_frame_range.value = (3, 4)
-            load_widget(recording_folder=second)
-
-            self.assertEqual(load_widget.movie_frame_range.value, (0, 2))
-            self.assertEqual(len(viewer.images), 4)
 
     def test_recording_path_resolution_reports_available_files(self) -> None:
         """Confirm folder resolution finds optional movie and ROI paths.

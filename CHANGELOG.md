@@ -9,6 +9,7 @@
 - Removed nested scrollbars from napari ROI and Epoch visibility lists so those tabs use the main tab scrollbar.
 - Set a compact 345 px opening height for the top napari response-plot dock.
 - Tightened the napari Load tab with shorter labels and compact Browse buttons.
+- Removed napari Load-tab frame controls; recording selection now always loads the full movie.
 
 ## 0.1.4 - 2026-05-08
 
