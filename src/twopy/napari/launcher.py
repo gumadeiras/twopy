@@ -39,7 +39,8 @@ def launch_napari(
             current directory or ``./twopy`` recording if one exists; otherwise
             it opens an empty viewer with folder-based recording selection.
         roi_file_to_load: Optional saved ROI HDF5 path to reopen.
-        roi_save_file: Optional ROI output path for the Save ROIs button.
+        roi_save_file: Optional ROI output path used when saving ROIs and
+            analysis from the response options.
         movie_start_frame: First movie preview frame.
         movie_end_frame: Last movie frame to load. ``None`` means the final
             movie frame.
@@ -143,7 +144,7 @@ def parse_launch_args(args: Sequence[str] | None = None) -> Namespace:
         dest="roi_save_file",
         type=Path,
         default=None,
-        help="Optional ROI HDF5 output path for the Save ROIs button.",
+        help="Optional ROI HDF5 output path for saved ROIs and analysis.",
     )
     parser.add_argument(
         "--movie-start",

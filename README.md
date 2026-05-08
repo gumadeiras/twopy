@@ -46,9 +46,8 @@ Basic GUI flow:
 
 1. Choose a recording.
 2. Draw or edit ROIs in the `rois` Labels layer.
-3. Click Save ROIs.
-4. Update response plots from the current ROIs.
-5. Save analysis outputs.
+3. Update response plots from the current ROIs.
+4. Click Save ROIs + analysis when the plots look right.
 
 When a source recording has not been converted yet, twopy converts it first. Converted data includes the aligned movie, mean image, stimulus tables, photodiode signals, and recording metadata.
 

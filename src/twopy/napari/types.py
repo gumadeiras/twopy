@@ -31,8 +31,6 @@ class NapariRecordingView:
     controls_dock_widget: object | None
     loaded_recordings_widget: object | None
     loaded_recordings_dock_widget: object | None
-    save_rois_widget: object | None
-    save_rois_dock_widget: object | None
     response_plot_widget: object | None
     response_plot_dock_widget: object | None
     response_options_widget: object | None

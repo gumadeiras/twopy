@@ -458,8 +458,6 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNotNone(opened.controls_dock_widget)
             self.assertIsNotNone(opened.loaded_recordings_widget)
             self.assertIsNotNone(opened.loaded_recordings_dock_widget)
-            self.assertIsNotNone(opened.save_rois_widget)
-            self.assertIsNotNone(opened.save_rois_dock_widget)
             self.assertIsNotNone(opened.response_plot_widget)
             self.assertIsNotNone(opened.response_plot_dock_widget)
             self.assertIsNotNone(opened.response_options_widget)
@@ -472,7 +470,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(viewer.images[0].options["gamma"], 1.3)
             self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
             self.assertEqual(viewer.images[0].contrast_limits_range, (4.0, 7.0))
-            self.assertEqual(len(viewer.window.dock_widgets), 5)
+            self.assertEqual(len(viewer.window.dock_widgets), 4)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
             self.assertEqual(viewer.window.dock_widgets[1].name, "twopy")
@@ -481,13 +479,11 @@ class NapariAdapterTest(unittest.TestCase):
                 "twopy loaded recordings",
             )
             self.assertEqual(viewer.window.dock_widgets[2].area, "right")
-            self.assertEqual(viewer.window.dock_widgets[3].name, "twopy save ROIs")
-            self.assertEqual(viewer.window.dock_widgets[3].area, "left")
             self.assertEqual(
-                viewer.window.dock_widgets[4].name,
+                viewer.window.dock_widgets[3].name,
                 "twopy response options",
             )
-            self.assertEqual(viewer.window.dock_widgets[4].area, "right")
+            self.assertEqual(viewer.window.dock_widgets[3].area, "right")
             options_widget = cast(QTabWidget, opened.response_options_widget)
             self.assertEqual(
                 tuple(
@@ -499,7 +495,7 @@ class NapariAdapterTest(unittest.TestCase):
             update_buttons = {
                 button.text() for button in options_widget.findChildren(QPushButton)
             }
-            self.assertIn("Save analysis + ROIs", update_buttons)
+            self.assertIn("Save ROIs + analysis", update_buttons)
             self.assertIn("Recompute preview now", update_buttons)
             self.assertIn("Reload saved analysis", update_buttons)
             group_titles = {
@@ -582,104 +578,6 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(saved.labels, ("drawn_0001", "drawn_0002"))
             self.assertEqual(loaded.labels, saved.labels)
             np.testing.assert_array_equal(loaded.masks, saved.masks)
-
-    def test_magicgui_save_button_writes_current_labels(self) -> None:
-        """Confirm the dock widget saves the editable Labels layer.
-
-        Inputs: tiny converted recording, fake viewer, and edited label data.
-        Outputs: ROI HDF5 file written by the magicgui function.
-        """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            recording_path = _write_converted_recording(root)
-            roi_save_file = root / "drawn_rois.h5"
-            viewer = _FakeViewer()
-            opened = open_recording_in_napari(
-                recording_path,
-                viewer=viewer,
-                roi_save_file=roi_save_file,
-            )
-
-            viewer.labels[0].data = np.array([[0, 1], [2, 2]])
-            save_widget = cast(Any, opened.save_rois_widget)
-            result = save_widget(roi_save_file=roi_save_file)
-
-            self.assertIn("Saved 2 ROIs", str(result))
-            loaded = load_roi_set(roi_save_file)
-            self.assertEqual(loaded.labels, ("roi_0001", "roi_0002"))
-
-    def test_napari_roi_save_uses_cropped_view_and_full_frame_storage(self) -> None:
-        """Confirm napari saves crop-native labels as full-frame ROI masks.
-
-        Inputs: recording whose valid display crop is smaller than the movie
-        frame, and one drawn ROI in the cropped Labels layer.
-        Outputs: saved ROI masks keep the full movie shape with zeros outside
-        the displayed crop.
-        """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            roi_save_file = root / "rois.h5"
-            recording_path = _write_converted_recording(
-                root,
-                movie_values=np.arange(27, dtype=np.float64).reshape(3, 3, 3),
-                alignment_valid_crop=SpatialCrop(
-                    axis0_start=1,
-                    axis0_stop=3,
-                    axis1_start=0,
-                    axis1_stop=2,
-                    original_shape=(3, 3),
-                    source="alignment_valid_crop",
-                ),
-            )
-            viewer = _FakeViewer()
-            opened = open_recording_in_napari(
-                recording_path,
-                viewer=viewer,
-                roi_save_file=roi_save_file,
-            )
-            viewer.labels[0].data = np.array([[0, 1], [0, 1]], dtype=np.int64)
-            save_widget = cast(Any, opened.save_rois_widget)
-
-            result = save_widget()
-
-            self.assertIn("Saved 1 ROI", str(result))
-            loaded = load_roi_set(roi_save_file)
-            self.assertEqual(loaded.masks.shape, (1, 3, 3))
-            self.assertFalse(np.any(loaded.masks[:, 0, :]))
-            self.assertFalse(np.any(loaded.masks[:, :, 2]))
-            self.assertTrue(np.any(loaded.masks[:, 1:3, 0:2]))
-
-    def test_napari_roi_save_rejects_full_frame_labels_layer(self) -> None:
-        """Confirm Save ROIs fails when the active layer is not crop-native.
-
-        Inputs: cropped recording display plus a stale full-frame Labels image.
-        Outputs: clear status instead of silently saving an invalid GUI mask.
-        """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            recording_path = _write_converted_recording(
-                root,
-                movie_values=np.arange(27, dtype=np.float64).reshape(3, 3, 3),
-                alignment_valid_crop=SpatialCrop(
-                    axis0_start=1,
-                    axis0_stop=3,
-                    axis1_start=0,
-                    axis1_stop=2,
-                    original_shape=(3, 3),
-                    source="alignment_valid_crop",
-                ),
-            )
-            viewer = _FakeViewer()
-            opened = open_recording_in_napari(recording_path, viewer=viewer)
-            viewer.labels[0].data = np.ones((3, 3), dtype=np.int64)
-            save_widget = cast(Any, opened.save_rois_widget)
-
-            result = save_widget()
-
-            self.assertIn(
-                "ROI Labels layer must use the cropped recording view",
-                str(result),
-            )
 
     def test_response_update_rejects_full_frame_labels_layer(self) -> None:
         """Confirm response updates use the same crop-native ROI contract.
@@ -1752,37 +1650,11 @@ class NapariAdapterTest(unittest.TestCase):
                 np.zeros((2, 2), dtype=np.int64),
             )
 
-    def test_loaded_recording_updates_default_roi_save_path(self) -> None:
-        """Confirm loading a recording makes Save ROIs write beside it.
-
-        Inputs: empty viewer, loaded recording, and edited labels.
-        Outputs: ``rois.h5`` beside the loaded ``recording_data.h5``.
-        """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            recording_path = _write_converted_recording(root)
-            viewer = _FakeViewer()
-            control_docks = add_twopy_magicgui_controls(
-                viewer,
-                roi_labels_layer=None,
-                roi_save_file=Path("unused.h5"),
-            )
-            controls = cast(_ControlWidget, control_docks.load_widget)
-            load_widget = cast(Any, controls[1])
-            save_widget = cast(Any, control_docks.save_rois_widget)
-
-            load_widget(recording_folder=recording_path)
-            viewer.labels[0].data = np.array([[1, 0], [0, 0]])
-            result = save_widget()
-
-            self.assertIn("Saved 1 ROI", str(result))
-            self.assertTrue((root / "rois.h5").exists())
-
     def test_loaded_recordings_panel_selects_and_unloads_layers(self) -> None:
-        """Confirm multi-recording selection controls save and layer ownership.
+        """Confirm multi-recording selection controls layer ownership.
 
         Inputs: two converted folders loaded into one fake viewer.
-        Outputs: selected recording controls the ROI save default, and unload
+        Outputs: selected recording controls layer visibility, and unload
         removes only that recording's layers.
         """
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1801,7 +1673,6 @@ class NapariAdapterTest(unittest.TestCase):
             )
             controls = cast(_ControlWidget, control_docks.load_widget)
             load_widget = cast(Any, controls[1])
-            save_widget = cast(Any, control_docks.save_rois_widget)
             panel = cast(QWidget, control_docks.loaded_recordings_widget)
             loaded_list = panel.findChild(QListWidget)
             unload_button = next(
@@ -1831,10 +1702,6 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse(viewer.images[2].visible)
             self.assertFalse(viewer.images[3].visible)
             self.assertFalse(viewer.labels[1].visible)
-            viewer.labels[0].data = np.array([[1, 0], [0, 0]])
-            result = save_widget()
-            self.assertIn("Saved 1 ROI", str(result))
-            self.assertTrue((first / "rois.h5").is_file())
 
             unload_button.click()
 

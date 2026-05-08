@@ -84,8 +84,9 @@ def open_recording_in_napari(
             drawing or editing. When ``roi_set`` is omitted, the layer starts as
             an empty integer image with the movie spatial shape.
         add_controls: Whether to add the small magicgui twopy control panel.
-        roi_save_file: Default ROI HDF5 path used by the Save ROIs button.
-            When omitted, twopy uses ``rois.h5`` beside ``recording_data.h5``.
+        roi_save_file: Default ROI HDF5 path used by the response-options
+            persistence button. When omitted, twopy uses ``rois.h5`` beside
+            ``recording_data.h5``.
 
     Returns:
         ``NapariRecordingView`` with the loaded recording and created layers.
@@ -157,8 +158,6 @@ def open_recording_in_napari(
     controls_dock = None
     loaded_recordings_widget = None
     loaded_recordings_dock = None
-    save_rois_widget = None
-    save_rois_dock = None
     response_plot_widget = None
     response_plot_dock = None
     response_options_widget = None
@@ -188,8 +187,6 @@ def open_recording_in_napari(
         controls_dock = control_docks.load_dock_widget
         loaded_recordings_widget = control_docks.loaded_recordings_widget
         loaded_recordings_dock = control_docks.loaded_recordings_dock_widget
-        save_rois_widget = control_docks.save_rois_widget
-        save_rois_dock = control_docks.save_rois_dock_widget
         response_options_widget, response_options_dock = (
             add_twopy_response_options_widget(
                 resolved_viewer,
@@ -212,8 +209,6 @@ def open_recording_in_napari(
         controls_dock_widget=controls_dock,
         loaded_recordings_widget=loaded_recordings_widget,
         loaded_recordings_dock_widget=loaded_recordings_dock,
-        save_rois_widget=save_rois_widget,
-        save_rois_dock_widget=save_rois_dock,
         response_plot_widget=response_plot_widget,
         response_plot_dock_widget=response_plot_dock,
         response_options_widget=response_options_widget,

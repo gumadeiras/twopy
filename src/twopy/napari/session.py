@@ -4,13 +4,13 @@ Inputs: loaded converted recordings and the napari layers created for them.
 Outputs: a small Qt list panel plus helper functions for selecting and
 unloading recordings.
 
-This module owns GUI session bookkeeping only. It does not load files, compute
-responses, or save ROIs; it records which viewer layers belong to which loaded
-recording so the controls can switch context cleanly.
+This module owns GUI session bookkeeping only. It does not load files or compute
+responses; it records which viewer layers belong to which loaded recording so
+the controls can switch context cleanly.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -36,7 +36,6 @@ __all__ = [
     "select_loaded_recording",
     "set_loaded_recording_visibility",
     "unload_loaded_recording",
-    "update_selected_roi_save_file",
 ]
 
 
@@ -309,28 +308,6 @@ def render_loaded_recordings_panel(state: NapariSessionState) -> None:
     state.loaded_recordings_panel.set_recordings(
         tuple(state.loaded_recordings),
         selected_index=state.selected_recording_index,
-    )
-
-
-def update_selected_roi_save_file(
-    state: NapariSessionState,
-    roi_save_file: Path,
-) -> None:
-    """Store a changed ROI save path on the selected recording.
-
-    Args:
-        state: Mutable napari session state.
-        roi_save_file: New default ROI save file.
-
-    Returns:
-        None.
-    """
-    index = state.selected_recording_index
-    if index is None or index < 0 or index >= len(state.loaded_recordings):
-        return
-    state.loaded_recordings[index] = replace(
-        state.loaded_recordings[index],
-        roi_save_file=roi_save_file,
     )
 
 

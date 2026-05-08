@@ -89,7 +89,7 @@ def create_response_options_panel(
         on_delta_f_over_f_change: Callback for dF/F control edits.
         on_reload_saved: Callback for the reload button.
         on_recompute_preview: Callback for the preview recompute button.
-        on_save_analysis: Callback for the Save Analysis button.
+        on_save_analysis: Callback for the Save ROIs + analysis button.
         export_state: Callback that supplies current export state.
 
     Returns:
@@ -100,7 +100,7 @@ def create_response_options_panel(
     reload_saved_button.clicked.connect(on_reload_saved)
     recompute_preview_button = QPushButton("Recompute preview now")
     recompute_preview_button.clicked.connect(on_recompute_preview)
-    save_analysis_button = QPushButton("Save analysis + ROIs")
+    save_analysis_button = QPushButton("Save ROIs + analysis")
     save_analysis_button.clicked.connect(on_save_analysis)
 
     recording_summary_label = QLabel("No recording loaded.")

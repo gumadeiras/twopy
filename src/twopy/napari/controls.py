@@ -1,39 +1,30 @@
 """Magicgui controls for the twopy napari adapter.
 
 Inputs: napari viewer, current ROI Labels layer, and paths chosen by the user.
-Outputs: small dock widgets for loading converted recordings and saving ROI
-masks.
+Outputs: small dock widgets for loading converted recordings and tracking the
+active loaded recording.
 
-The control panel owns GUI callbacks only. Loading recordings and saving ROIs
-still go through the same typed helpers used by scripts.
+The control panel owns GUI callbacks only. Loading recordings still goes
+through the same typed helpers used by scripts.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast
+from typing import cast
 
-import numpy as np
 from magicgui.widgets import FileEdit
 
 from twopy.converted import RecordingData
 from twopy.napari.constants import DEFAULT_PATH_TEXT
-from twopy.napari.layout import (
-    place_loaded_recordings_dock_after_load,
-    place_save_rois_dock_before_layer_list,
-)
+from twopy.napari.layout import place_loaded_recordings_dock_after_load
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import (
     PathInput,
     is_default_path,
-    resolve_widget_output_path,
 )
 from twopy.napari.protocols import NapariViewer
-from twopy.napari.roi import (
-    roi_label_image_from_layer_for_recording,
-    save_napari_label_rois,
-)
 from twopy.napari.session import (
     LoadedNapariRecording,
     LoadedRecordingsPanel,
@@ -41,32 +32,14 @@ from twopy.napari.session import (
     render_loaded_recordings_panel,
     select_loaded_recording,
     unload_loaded_recording,
-    update_selected_roi_save_file,
 )
 from twopy.napari.state import (
     read_last_recording_folder,
     recording_folder_for_state,
     write_last_recording_folder,
 )
-from twopy.napari.text import counted_noun
 
 __all__ = ["NapariControlDocks", "add_twopy_magicgui_controls"]
-
-
-class _RoiSavePathReceiver(Protocol):
-    """Small protocol for widgets that mirror the selected ROI save path."""
-
-    def set_roi_save_file(self, roi_save_file: Path | None) -> None:
-        """Store the ROI HDF5 path for the selected recording.
-
-        Args:
-            roi_save_file: ROI output path, or ``None`` when no recording is
-                selected.
-
-        Returns:
-            None.
-        """
-        ...
 
 
 @dataclass
@@ -81,8 +54,6 @@ class NapariControlDocks:
     load_dock_widget: object
     loaded_recordings_widget: object
     loaded_recordings_dock_widget: object
-    save_rois_widget: object
-    save_rois_dock_widget: object
 
 
 @dataclass
@@ -142,11 +113,12 @@ def add_twopy_magicgui_controls(
         dock_area: Napari dock area.
 
     Returns:
-        Created load and save-ROI widgets plus their napari dock widgets.
+        Created load and loaded-recordings widgets plus their napari dock
+        widgets.
 
-    The panel is intentionally small. It loads converted recordings and saves
-    the current Labels layer through the same helpers used by scripts, so a
-    future plugin can wrap this without changing ROI semantics.
+    The panel is intentionally small. It loads converted recordings through the
+    same helpers used by scripts, so a future plugin can wrap this without
+    changing recording-load semantics.
     """
     state = NapariControlState(
         viewer=viewer,
@@ -184,20 +156,11 @@ def add_twopy_magicgui_controls(
         load_dock_widget,
         loaded_recordings_dock_widget,
     )
-    save_rois_widget = _make_twopy_save_rois_widget(state)
-    save_rois_dock_widget = viewer.window.add_dock_widget(
-        save_rois_widget,
-        name="twopy save ROIs",
-        area="left",
-    )
-    place_save_rois_dock_before_layer_list(viewer, save_rois_dock_widget)
     return NapariControlDocks(
         load_widget=load_widget,
         load_dock_widget=load_dock_widget,
         loaded_recordings_widget=loaded_recordings_widget,
         loaded_recordings_dock_widget=loaded_recordings_dock_widget,
-        save_rois_widget=save_rois_widget,
-        save_rois_dock_widget=save_rois_dock_widget,
     )
 
 
@@ -411,63 +374,6 @@ def _make_loaded_recordings_widget(state: NapariControlState) -> object:
     state.loaded_recordings_panel = panel
     render_loaded_recordings_panel(state)
     return panel
-
-
-def _make_twopy_save_rois_widget(state: NapariControlState) -> object:
-    """Create the left-side magicgui widget for saving ROI labels.
-
-    Args:
-        state: Mutable napari control state.
-
-    Returns:
-        magicgui widget with one Save ROIs button.
-    """
-    from magicgui import magicgui
-
-    @magicgui(call_button="Save ROIs", layout="vertical")
-    def save_rois(roi_save_file: Path = Path(DEFAULT_PATH_TEXT)) -> str:
-        """Save current napari ROI labels to twopy ROI HDF5.
-
-        Args:
-            roi_save_file: Destination ROI HDF5 path. ``default`` uses the
-                current recording's default ROI output path.
-
-        Returns:
-            Human-readable status for the dock widget.
-        """
-        if state.roi_labels_layer is None:
-            return "No ROI Labels layer is available."
-        if state.recording is None:
-            return "No recording is selected."
-        try:
-            label_image = roi_label_image_from_layer_for_recording(
-                state.roi_labels_layer,
-                state.recording,
-            )
-        except ValueError as error:
-            return str(error)
-        if not np.any(label_image > 0):
-            return "No ROI labels to save."
-
-        resolved_output_path = resolve_widget_output_path(
-            roi_save_file,
-            default=state.roi_save_file,
-        )
-        roi_set = save_napari_label_rois(label_image, resolved_output_path)
-        state.roi_save_file = resolved_output_path
-        update_selected_roi_save_file(state, resolved_output_path)
-        if hasattr(state.response_plot_widget, "set_roi_save_file"):
-            cast(_RoiSavePathReceiver, state.response_plot_widget).set_roi_save_file(
-                resolved_output_path
-            )
-        return (
-            f"Saved {counted_noun(len(roi_set.labels), 'ROI', 'ROIs')} "
-            f"to {resolved_output_path}"
-        )
-
-    save_rois.roi_save_file.mode = "w"
-    save_rois.roi_save_file.label = "ROI save file"
-    return save_rois
 
 
 def _configure_recording_folder_picker(

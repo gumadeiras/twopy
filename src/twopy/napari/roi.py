@@ -189,7 +189,7 @@ def resolve_roi_save_file(
     roi_set: RoiSet | Path | None,
     explicit_roi_save_file: Path | None,
 ) -> Path:
-    """Resolve the default path used by the magicgui Save ROIs button.
+    """Resolve the default path used when persisting napari ROIs.
 
     Args:
         recording_data_path: Converted recording manifest path.
