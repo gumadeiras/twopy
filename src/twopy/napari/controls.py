@@ -309,14 +309,8 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     load_recording.roi_file_to_load.label = "ROI file"
     load_recording.movie_frame_range.label = "Movie frames"
     load_recording.load_movie.label = "Load movie"
-    _set_file_edit_button_text(
-        cast(FileEdit, load_recording.recording_folder),
-        text="Browse",
-    )
-    _set_file_edit_button_text(
-        cast(FileEdit, load_recording.roi_file_to_load),
-        text="Browse",
-    )
+    cast(FileEdit, load_recording.recording_folder).choose_btn.text = "Browse"
+    cast(FileEdit, load_recording.roi_file_to_load).choose_btn.text = "Browse"
     _configure_recording_folder_picker(
         cast(FileEdit, load_recording.recording_folder),
         state,
@@ -439,19 +433,6 @@ def _control_native(widget: object) -> QWidget:
         msg = f"Load control expected a QWidget, got {type(native_widget).__name__}."
         raise TypeError(msg)
     return native_widget
-
-
-def _set_file_edit_button_text(widget: FileEdit, *, text: str) -> None:
-    """Set concise button text on a magicgui file picker.
-
-    Args:
-        widget: File picker control.
-        text: Button label shown beside the path field.
-
-    Returns:
-        None.
-    """
-    widget.choose_btn.text = text
 
 
 def _make_loaded_recordings_widget(state: NapariControlState) -> object:
