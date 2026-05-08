@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.4 - 2026-05-08
+
 ### Features
 
 - Added napari Plot-tab dF/F controls for background subtraction, gray interleave baseline sampling, fit mode, and motion masking.
