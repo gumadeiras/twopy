@@ -683,6 +683,7 @@ class NapariAdapterTest(unittest.TestCase):
                 ),
                 ("Load", "Update", "Plot", "ROIs", "Epochs", "Export"),
             )
+            self.assertIsInstance(options_widget.widget(1), QScrollArea)
             update_buttons = {
                 button.text() for button in options_widget.findChildren(QPushButton)
             }

@@ -69,9 +69,8 @@ def response_update_tab(
         status_label: Label showing the latest save or reload status.
 
     Returns:
-        Qt widget for the Update tab.
+        Scrollable Qt widget for the Update tab.
     """
-    tab = QWidget()
     layout = QVBoxLayout()
     layout.addWidget(save_analysis_button)
     layout.addWidget(recompute_preview_button)
@@ -81,8 +80,7 @@ def response_update_tab(
     layout.addWidget(roi_output_label)
     layout.addWidget(status_label)
     layout.addStretch(1)
-    tab.setLayout(layout)
-    return tab
+    return scrolling_tab(layout)
 
 
 def scrolling_tab(layout: QVBoxLayout) -> QScrollArea:
