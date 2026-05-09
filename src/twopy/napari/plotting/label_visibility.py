@@ -13,6 +13,7 @@ from typing import Protocol, cast
 
 from qtpy.QtGui import QColor
 
+from twopy.roi import roi_label_value_from_label, roi_label_values_from_labels
 from twopy.typing_guards import int_or_none, string_key_mapping_or_none
 
 __all__ = [
@@ -95,43 +96,6 @@ def apply_roi_visibility_to_labels_layer(
         color_dict[label_value] = _qcolor_rgba(color, visibility_lookup.get(key, True))
 
     labels_layer.colormap = direct_colormap(color_dict)
-
-
-def roi_label_value_from_label(label: str, *, fallback: int) -> int:
-    """Return the napari integer label represented by one ROI label.
-
-    Args:
-        label: ROI label from analysis output, usually ``roi_0001``.
-        fallback: One-based ROI position used when the label has no numeric
-            suffix.
-
-    Returns:
-        Positive integer label value for the napari Labels layer.
-
-    napari lets users draw label ``10`` without drawing labels ``1`` through
-    ``9``. ``make_roi_set_from_label_image`` preserves that value in labels like
-    ``roi_0010``, so visibility needs to target label ``10`` instead of the
-    first plotted ROI position.
-    """
-    suffix = label.rsplit("_", maxsplit=1)[-1]
-    if suffix.isdecimal():
-        return int(suffix)
-    return fallback
-
-
-def roi_label_values_from_labels(roi_labels: tuple[str, ...]) -> tuple[int, ...]:
-    """Return napari integer Labels values for plot ROI labels.
-
-    Args:
-        roi_labels: ROI labels in plot order.
-
-    Returns:
-        Integer Labels-layer values in the same order.
-    """
-    return tuple(
-        roi_label_value_from_label(roi_label, fallback=index + 1)
-        for index, roi_label in enumerate(roi_labels)
-    )
 
 
 def _qcolor_rgba(color: QColor, visible: bool) -> tuple[float, float, float, float]:

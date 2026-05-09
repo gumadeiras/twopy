@@ -22,7 +22,11 @@ from twopy import (
 )
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
-from twopy.roi import TraceStatistic
+from twopy.roi import (
+    TraceStatistic,
+    roi_label_value_from_label,
+    roi_label_values_from_labels,
+)
 from twopy.spatial import full_frame_crop
 
 
@@ -167,7 +171,7 @@ class RoiTest(unittest.TestCase):
         """Confirm label images become deterministic ROI masks.
 
         Inputs: one integer label image with background and two ROI labels.
-        Outputs: a ``RoiSet`` plus a one-based label image representation.
+        Outputs: a ``RoiSet`` plus a label image preserving drawn label values.
         """
         roi_set = make_roi_set_from_label_image(
             np.array([[0, 2], [5, 5]]),
@@ -186,7 +190,65 @@ class RoiTest(unittest.TestCase):
         )
         np.testing.assert_array_equal(
             roi_set_to_label_image(roi_set),
-            np.array([[0, 1], [2, 2]]),
+            np.array([[0, 2], [5, 5]]),
+        )
+
+    def test_roi_label_values_parse_suffixes_with_positional_fallback(self) -> None:
+        """Confirm ROI label parsing is shared by core and napari paths.
+
+        Inputs: suffix-coded and custom ROI names.
+        Outputs: numeric suffixes where present and positional fallback values.
+        """
+        self.assertEqual(roi_label_value_from_label("roi_0010", fallback=1), 10)
+        self.assertEqual(roi_label_value_from_label("cell", fallback=2), 2)
+        self.assertEqual(roi_label_value_from_label("roi_0000", fallback=3), 3)
+        self.assertEqual(
+            roi_label_values_from_labels(("roi_0003", "cell", "roi_0005")),
+            (3, 2, 5),
+        )
+
+    def test_roi_set_label_image_preserves_loaded_noncontiguous_roi_numbers(
+        self,
+    ) -> None:
+        """Confirm loaded ROI labels keep their Labels-layer pixel values.
+
+        Inputs: two masks whose saved labels start at ``roi_0003``.
+        Outputs: a label image with pixel values ``3`` and ``4``.
+        """
+        roi_set = make_roi_set(
+            np.array(
+                [
+                    [[True, False], [False, False]],
+                    [[False, False], [False, True]],
+                ],
+            ),
+            labels=("roi_0003", "roi_0004"),
+        )
+
+        np.testing.assert_array_equal(
+            roi_set_to_label_image(roi_set),
+            np.array([[3, 0], [0, 4]]),
+        )
+
+    def test_roi_set_label_image_uses_positions_for_custom_labels(self) -> None:
+        """Confirm custom ROI names still get compact positional label values.
+
+        Inputs: two masks with labels that have no numeric suffixes.
+        Outputs: a label image with positional values ``1`` and ``2``.
+        """
+        roi_set = make_roi_set(
+            np.array(
+                [
+                    [[True, False], [False, False]],
+                    [[False, False], [False, True]],
+                ],
+            ),
+            labels=("top", "corner"),
+        )
+
+        np.testing.assert_array_equal(
+            roi_set_to_label_image(roi_set),
+            np.array([[1, 0], [0, 2]]),
         )
 
     def test_rejects_overlapping_roi_set_for_label_image(self) -> None:

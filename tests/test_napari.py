@@ -718,6 +718,7 @@ class NapariAdapterTest(unittest.TestCase):
                             [[False, False], [False, True]],
                         ],
                     ),
+                    labels=("roi_0003", "roi_0004"),
                 ),
                 roi_path,
             )
@@ -748,7 +749,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.labels), 1)
             np.testing.assert_array_equal(
                 np.unique(np.asarray(viewer.labels[0].data)),
-                np.array([0, 1, 2]),
+                np.array([0, 3, 4]),
             )
 
     def test_saves_napari_label_image_as_roi_file(self) -> None:

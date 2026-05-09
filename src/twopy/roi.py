@@ -27,6 +27,8 @@ __all__ = [
     "load_roi_set",
     "make_roi_set_from_label_image",
     "make_roi_set",
+    "roi_label_value_from_label",
+    "roi_label_values_from_labels",
     "roi_set_to_label_image",
     "save_roi_set",
 ]
@@ -161,7 +163,8 @@ def roi_set_to_label_image(roi_set: RoiSet) -> npt.NDArray[np.int64]:
 
     Returns:
         Two-dimensional integer image where ``0`` is background and each ROI is
-        labeled by its one-based position in ``roi_set``.
+        labeled by its unique positive label suffix when possible, otherwise by
+        its one-based position in ``roi_set``.
 
     Raises:
         ValueError: If ROI masks overlap.
@@ -175,10 +178,52 @@ def roi_set_to_label_image(roi_set: RoiSet) -> npt.NDArray[np.int64]:
         msg = "ROI masks overlap and cannot be represented as one label image"
         raise ValueError(msg)
 
+    label_values = _roi_set_label_values(roi_set.labels)
     label_image = np.zeros(roi_set.masks.shape[1:], dtype=np.int64)
-    for roi_index, mask in enumerate(roi_set.masks, start=1):
-        label_image[mask] = roi_index
+    for label_value, mask in zip(label_values, roi_set.masks, strict=True):
+        label_image[mask] = label_value
     return label_image
+
+
+def roi_label_value_from_label(label: str, *, fallback: int) -> int:
+    """Return the integer Labels value represented by one ROI label.
+
+    Args:
+        label: ROI label from saved masks or analysis output, usually
+            ``roi_0001``.
+        fallback: Positive label value used when the label has no positive
+            numeric suffix.
+
+    Returns:
+        Positive integer label value for a label-image or napari Labels layer.
+
+    twopy preserves label-image values in generated labels such as
+    ``roi_0010``. Using that suffix keeps GUI visibility, colors, deletion, and
+    saved mask conversion aimed at the same ROI pixels even when the first ROI
+    is not label ``1``.
+    """
+    suffix = label.rsplit("_", maxsplit=1)[-1]
+    if suffix.isdecimal():
+        value = int(suffix)
+        if value > 0:
+            return value
+    return fallback
+
+
+def roi_label_values_from_labels(roi_labels: tuple[str, ...]) -> tuple[int, ...]:
+    """Return integer Labels values for ROI labels in order.
+
+    Args:
+        roi_labels: ROI labels in mask, analysis, or plot order.
+
+    Returns:
+        Integer label-image values in the same order, using positional fallback
+        values for labels without positive numeric suffixes.
+    """
+    return tuple(
+        roi_label_value_from_label(roi_label, fallback=index + 1)
+        for index, roi_label in enumerate(roi_labels)
+    )
 
 
 def save_roi_set(roi_set: RoiSet, path: Path) -> None:
@@ -348,6 +393,32 @@ def _positive_label_values(label_image: npt.NDArray[np.int64]) -> tuple[int, ...
     if len(label_values) == 0:
         msg = "ROI label image contains no positive ROI labels"
         raise ValueError(msg)
+    return label_values
+
+
+def _roi_set_label_values(labels: tuple[str, ...]) -> tuple[int, ...]:
+    """Return integer label-image values for one ROI label tuple.
+
+    Args:
+        labels: ROI labels stored beside masks.
+
+    Returns:
+        Unique positive label suffixes when every label has one, otherwise
+        one-based positional label values.
+
+    Napari Labels values are meaningful when ROIs come from an edited label
+    image: users can draw ROI ``3`` as the first visible ROI. Preserving those
+    values keeps reopened ROI files, visibility toggles, colors, and deletion
+    controls aimed at the same pixels.
+    """
+    positional_values = tuple(range(1, len(labels) + 1))
+    label_values = tuple(
+        roi_label_value_from_label(label, fallback=0) for label in labels
+    )
+    if 0 in label_values:
+        return positional_values
+    if len(set(label_values)) != len(label_values):
+        return positional_values
     return label_values
 
 

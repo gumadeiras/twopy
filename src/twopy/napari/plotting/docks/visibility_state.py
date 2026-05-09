@@ -10,7 +10,7 @@ ROI and epoch controls.
 
 from twopy.analysis.trials import is_baseline_epoch_name
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
-from twopy.napari.plotting.label_visibility import roi_label_values_from_labels
+from twopy.roi import roi_label_values_from_labels
 
 
 def row_index_or_none(value: object, row_count: int) -> int | None:

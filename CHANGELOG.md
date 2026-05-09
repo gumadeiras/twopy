@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- Preserved noncontiguous ROI label numbers when reopening ROIs in napari so visibility toggles, colors, and deletion target the correct ROI.
+
 ## 0.1.6 - 2026-05-08
 
 ### Features
