@@ -236,9 +236,9 @@ def _localize_converted_paths_for_cache(
 
     local_recording_path = output_dir / RECORDING_DATA_FILENAME
     local_movie_path = output_dir / ALIGNED_MOVIE_FILENAME
-    if not local_recording_path.is_file():
+    if _source_file_is_newer(paths.recording_data_path, local_recording_path):
         copy_file_atomically(paths.recording_data_path, local_recording_path)
-    if not local_movie_path.is_file():
+    if _source_file_is_newer(paths.movie_path, local_movie_path):
         copy_file_atomically(paths.movie_path, local_movie_path)
     refresh_cached_analysis_outputs(
         source_session_dir=source_dir,
@@ -267,6 +267,21 @@ def _source_is_under_data_path(config: TwopyConfig, source_dir: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _source_file_is_newer(source: Path, target: Path) -> bool:
+    """Return whether ``source`` should replace ``target`` in the cache.
+
+    Args:
+        source: Source file selected by the user.
+        target: Local cache file.
+
+    Returns:
+        ``True`` when the cache file is absent or older than the source file.
+    """
+    if not target.is_file():
+        return True
+    return source.stat().st_mtime_ns > target.stat().st_mtime_ns
 
 
 def resolve_or_convert_launch_recording(

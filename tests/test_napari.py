@@ -2587,6 +2587,54 @@ class NapariAdapterTest(unittest.TestCase):
                 (expected_dir / "aligned_movie.h5").resolve(),
             )
 
+    def test_recording_path_resolution_refreshes_stale_localized_output(
+        self,
+    ) -> None:
+        """Confirm direct converted selections replace older cache copies.
+
+        Inputs: a newer selected converted file and an older local cache copy.
+        Outputs: local cached recording data is refreshed from the selected file.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_root = root / "cache"
+            publish_dir = root / "publish"
+            local_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
+            _write_source_recording_shape(source_dir)
+            publish_dir.mkdir()
+            local_dir.mkdir(parents=True)
+            _write_converted_recording(publish_dir, source_session_dir=source_dir)
+            _write_converted_recording(local_dir, source_session_dir=source_dir)
+            source_recording = publish_dir / "recording_data.h5"
+            local_recording = local_dir / "recording_data.h5"
+            source_recording.touch()
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                f"analysis_output: {publish_dir}\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                resolved = resolve_or_convert_recording(publish_dir)
+            finally:
+                chdir(original_cwd)
+
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                local_recording.resolve(),
+            )
+            self.assertEqual(
+                local_recording.stat().st_mtime_ns,
+                source_recording.stat().st_mtime_ns,
+            )
+
     def test_source_recording_validation_error_is_reported(self) -> None:
         """Confirm malformed source folders do not look like missing HDF5.
 

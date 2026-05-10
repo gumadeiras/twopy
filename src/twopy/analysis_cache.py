@@ -9,6 +9,7 @@ converted movies remain derived local working files by default.
 """
 
 import shutil
+import tempfile
 from concurrent.futures import Executor, Future
 from dataclasses import dataclass
 from pathlib import Path
@@ -234,9 +235,25 @@ def copy_file_atomically(source: Path, target: Path) -> None:
     one filesystem.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = target.with_name(f".{target.name}.tmp")
-    shutil.copy2(source, temp_path)
-    temp_path.replace(target)
+    temp_descriptor, temp_name = tempfile.mkstemp(
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+        dir=target.parent,
+    )
+    temp_path = Path(temp_name)
+    try:
+        with (
+            open(temp_descriptor, "wb") as temp_file,
+            source.open(
+                "rb",
+            ) as source_file,
+        ):
+            shutil.copyfileobj(source_file, temp_file)
+        shutil.copystat(source, temp_path)
+        temp_path.replace(target)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
 
 def _same_path(left: Path, right: Path) -> bool:

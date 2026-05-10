@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+### Features
+
+- Added local analysis caching for napari recording work so converted recordings, ROI edits, and response analysis run from local storage while saved analysis outputs sync back to the configured publish location in the background.
+
 ### Fixes
 
+- Made cached analysis file copies safer and repeatable by using atomic target-file replacement and refreshing stale localized converted files when the selected converted output is newer.
 - Made the napari Update tab scroll so long recording summaries and output paths stay visible when labels wrap.
 - Preserved noncontiguous ROI label numbers when reopening ROIs in napari so visibility toggles, colors, and deletion target the correct ROI.
 
