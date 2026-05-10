@@ -995,6 +995,8 @@ class NapariAdapterTest(unittest.TestCase):
                 return_value=SimpleNamespace(
                     output_path=analysis_path,
                     grouped_responses=_tiny_grouped_responses(),
+                    response_summary_trials_csv_path=None,
+                    response_summary_grouped_csv_path=None,
                 ),
             ) as analyze:
                 response_widget.save_analysis_and_rois()
@@ -1046,6 +1048,77 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Analysis output: ./twopy/analysis_outputs.h5", labels_text)
             self.assertIn("ROI output: ./twopy/rois.h5", labels_text)
             self.assertIn("Saved 1 ROI to ./twopy", labels_text)
+            response_widget.shutdown()
+
+    def test_save_analysis_button_syncs_cached_outputs_in_background(self) -> None:
+        """Confirm cached saves publish changed outputs without blocking save.
+
+        Inputs: local cached recording with a source publish destination.
+        Outputs: background sync copies ROI and analysis files to publish path.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            local_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
+            publish_dir = source_dir / "twopy"
+            local_dir.mkdir(parents=True)
+            _write_source_recording_shape(source_dir)
+            recording_path = _write_converted_recording(
+                local_dir,
+                source_session_dir=source_dir,
+            )
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {root / 'cache'}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            viewer = _FakeViewer()
+            original_cwd = Path.cwd()
+            response_widget: Any | None = None
+            try:
+                chdir(root)
+                opened = open_recording_in_napari(recording_path, viewer=viewer)
+                viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
+                response_widget = cast(Any, opened.response_plot_widget)
+                analysis_path = local_dir / "analysis_outputs.h5"
+
+                def fake_analyze(*_args: object, **_kwargs: object) -> object:
+                    analysis_path.write_text("analysis", encoding="utf-8")
+                    return SimpleNamespace(
+                        output_path=analysis_path,
+                        grouped_responses=_tiny_grouped_responses(),
+                        response_summary_trials_csv_path=None,
+                        response_summary_grouped_csv_path=None,
+                    )
+
+                with patch(
+                    (
+                        "twopy.napari.plotting.docks.save_actions."
+                        "analyze_recording_responses"
+                    ),
+                    side_effect=fake_analyze,
+                ):
+                    response_widget.save_analysis_and_rois()
+
+                future = response_widget._sync_future
+                self.assertIsNotNone(future)
+                future.result(timeout=2)
+                response_widget._collect_finished_sync()
+            finally:
+                chdir(original_cwd)
+                if response_widget is not None:
+                    response_widget.shutdown()
+
+            self.assertTrue((publish_dir / "rois.h5").is_file())
+            self.assertEqual(
+                (publish_dir / "analysis_outputs.h5").read_text(encoding="utf-8"),
+                "analysis",
+            )
 
     def test_processing_option_changes_request_preview_update(self) -> None:
         """Confirm processing controls trigger debounced preview recompute.
@@ -2383,6 +2456,135 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(
                 resolved.paths.movie_path,
                 (source_dir / "twopy" / "aligned_movie.h5").resolve(),
+            )
+
+    def test_recording_path_resolution_uses_local_analysis_cache(self) -> None:
+        """Confirm source loading converts into local cache when enabled.
+
+        Inputs: a source-shaped recording under configured ``data_path``.
+        Outputs: converted paths under ``analysis_cache_dir``.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_root = root / "cache"
+            _write_source_recording_shape(source_dir)
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with patch(
+                    "twopy.napari.loading.convert_recording_to_twopy",
+                    side_effect=_fake_convert_recording,
+                ) as convert:
+                    resolved = resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
+
+            expected_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
+            self.assertTrue(resolved.was_converted)
+            convert.assert_called_once_with(
+                source_dir.resolve(), output_dir=expected_dir
+            )
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (expected_dir / "recording_data.h5").resolve(),
+            )
+            self.assertEqual(
+                resolved.paths.movie_path,
+                (expected_dir / "aligned_movie.h5").resolve(),
+            )
+
+    def test_recording_path_resolution_pulls_published_rois_into_cache(self) -> None:
+        """Confirm cached source loads reuse published ROI files locally.
+
+        Inputs: source recording, cache config, and a published ``rois.h5``.
+        Outputs: resolved ROI file path points at the local cache copy.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_root = root / "cache"
+            publish_dir = source_dir / "twopy"
+            _write_source_recording_shape(source_dir)
+            publish_dir.mkdir()
+            (publish_dir / "rois.h5").write_text("published", encoding="utf-8")
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with patch(
+                    "twopy.napari.loading.convert_recording_to_twopy",
+                    side_effect=_fake_convert_recording,
+                ):
+                    resolved = resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
+
+            expected_roi = cache_root / "fly" / "stim" / "2023" / "10_17" / "rois.h5"
+            self.assertEqual(resolved.paths.roi_file_to_load, expected_roi.resolve())
+            self.assertEqual(expected_roi.read_text(encoding="utf-8"), "published")
+
+    def test_recording_path_resolution_localizes_selected_converted_output(
+        self,
+    ) -> None:
+        """Confirm direct converted selections are copied to cache before use.
+
+        Inputs: a converted folder on a publish path with source metadata.
+        Outputs: resolved paths point at the local analysis cache.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_root = root / "cache"
+            publish_dir = root / "publish"
+            _write_source_recording_shape(source_dir)
+            publish_dir.mkdir()
+            _write_converted_recording(publish_dir, source_session_dir=source_dir)
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                f"analysis_output: {publish_dir}\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                resolved = resolve_or_convert_recording(publish_dir)
+            finally:
+                chdir(original_cwd)
+
+            expected_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
+            self.assertFalse(resolved.was_converted)
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (expected_dir / "recording_data.h5").resolve(),
+            )
+            self.assertEqual(
+                resolved.paths.movie_path,
+                (expected_dir / "aligned_movie.h5").resolve(),
             )
 
     def test_source_recording_validation_error_is_reported(self) -> None:

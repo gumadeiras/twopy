@@ -8,7 +8,7 @@ Two-photon imaging analysis tool for the Clark Lab output format.
 
 twopy lets you open two-photon recordings, draw ROIs, plot responses in real time, process and analyze them, and save them.
 
-When you first load a recording, twopy converts it to a standardized HDF5 format. The converted format includes the aligned movie, mean image, stimulus tables, photodiode signals, and  recording metadata. Analysis and the GUI both work from the converted files, so the original source files remain separate from twopy's outputs.
+When you first load a recording, twopy converts it to a standardized HDF5 format. The converted format includes the aligned movie, mean image, stimulus tables, photodiode signals, and  recording metadata. Analysis and the GUI both work from the converted files, so the original source files remain separate from twopy's outputs. By default, converted recordings and interactive analysis outputs are cached locally under `~/.cache/twopy/recordings` for speed; saving ROIs and analysis publishes the changed output files back to the configured `analysis_output` location in the background.
 
 ## Install
 

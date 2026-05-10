@@ -13,8 +13,15 @@ from pathlib import Path
 
 import h5py
 
+from twopy.analysis_cache import copy_file_atomically, refresh_cached_analysis_outputs
+from twopy.config import (
+    DEFAULT_CONFIG_PATH,
+    TwopyConfig,
+    load_config,
+    resolve_analysis_work_dir,
+)
 from twopy.conversion import convert_recording_to_twopy
-from twopy.napari.constants import RECORDING_DATA_FILENAME
+from twopy.napari.constants import ALIGNED_MOVIE_FILENAME, RECORDING_DATA_FILENAME
 from twopy.napari.paths import NapariRecordingPaths, PathInput, is_default_path
 from twopy.napari.paths import resolve_recording_paths as resolve_converted_paths
 from twopy.session import discover_session_files
@@ -57,10 +64,15 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
     conversion rewrites that same output folder to repair the pair.
     """
     selected = Path.cwd() if is_default_path(path) else Path(path).expanduser()
+    source_dir = _source_recording_dir(selected)
+    if source_dir is not None:
+        cached = _resolve_or_convert_cached_source_recording(source_dir)
+        if cached is not None:
+            return cached
+
     try:
         paths = resolve_converted_paths(selected)
     except ValueError as error:
-        source_dir = _source_recording_dir(selected)
         if source_dir is None:
             raise error
         converted = convert_recording_to_twopy(source_dir)
@@ -68,6 +80,10 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
             paths=resolve_converted_paths(converted.path),
             was_converted=True,
         )
+
+    localized = _localize_converted_paths_for_cache(paths)
+    if localized is not None:
+        return localized
 
     if paths.movie_path is not None:
         return ResolvedNapariRecording(paths=paths, was_converted=False)
@@ -87,6 +103,170 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
         paths=resolve_converted_paths(converted.path),
         was_converted=True,
     )
+
+
+def _resolve_or_convert_cached_source_recording(
+    source_dir: Path,
+) -> ResolvedNapariRecording | None:
+    """Resolve or create local cached output for a source recording.
+
+    Args:
+        source_dir: Valid source microscope recording folder.
+
+    Returns:
+        Cached converted paths, or ``None`` when config is missing or caching is
+        disabled.
+    """
+    try:
+        config = load_config(DEFAULT_CONFIG_PATH)
+    except FileNotFoundError:
+        return None
+    if not config.analysis_caching:
+        return None
+    if not _source_is_under_data_path(config, source_dir):
+        return None
+
+    try:
+        output_dir = resolve_analysis_work_dir(config, source_dir)
+    except ValueError:
+        return None
+    try:
+        paths = resolve_converted_paths(output_dir)
+    except ValueError:
+        return _convert_cached_source_recording(
+            source_dir=source_dir,
+            output_dir=output_dir,
+        )
+
+    if paths.movie_path is None:
+        return _convert_cached_source_recording(
+            source_dir=source_dir,
+            output_dir=output_dir,
+        )
+
+    return _refresh_cached_analysis_outputs(
+        paths=paths,
+        source_dir=source_dir,
+        was_converted=False,
+    )
+
+
+def _convert_cached_source_recording(
+    *,
+    source_dir: Path,
+    output_dir: Path,
+) -> ResolvedNapariRecording:
+    """Convert one source recording into cache and refresh saved outputs.
+
+    Args:
+        source_dir: Valid source microscope recording folder.
+        output_dir: Cache directory that should receive converted files.
+
+    Returns:
+        Resolved cached paths for the converted recording.
+    """
+    converted = convert_recording_to_twopy(source_dir, output_dir=output_dir)
+    return _refresh_cached_analysis_outputs(
+        paths=resolve_converted_paths(converted.path),
+        source_dir=source_dir,
+        was_converted=True,
+    )
+
+
+def _refresh_cached_analysis_outputs(
+    *,
+    paths: NapariRecordingPaths,
+    source_dir: Path,
+    was_converted: bool,
+) -> ResolvedNapariRecording:
+    """Pull published saved outputs into cache and resolve fresh paths.
+
+    Args:
+        paths: Cached converted paths before saved-output refresh.
+        source_dir: Source microscope recording folder.
+        was_converted: Whether conversion ran during this load.
+
+    Returns:
+        Resolved cached paths after optional saved-output refresh.
+    """
+    refresh_cached_analysis_outputs(
+        source_session_dir=source_dir,
+        local_output_dir=paths.recording_data_path.parent,
+    )
+    refreshed_paths = resolve_converted_paths(paths.recording_data_path)
+    return ResolvedNapariRecording(
+        paths=refreshed_paths,
+        was_converted=was_converted,
+    )
+
+
+def _localize_converted_paths_for_cache(
+    paths: NapariRecordingPaths,
+) -> ResolvedNapariRecording | None:
+    """Copy explicitly selected converted files into the local cache when needed.
+
+    Args:
+        paths: Converted paths resolved from the user selection.
+
+    Returns:
+        Localized paths, or ``None`` when caching does not apply.
+    """
+    try:
+        config = load_config(DEFAULT_CONFIG_PATH)
+    except FileNotFoundError:
+        return None
+    if not config.analysis_caching:
+        return None
+    if paths.movie_path is None:
+        return None
+
+    source_dir = _source_dir_from_recording_data(paths.recording_data_path)
+    if source_dir is None:
+        return None
+    if not _source_is_under_data_path(config, source_dir):
+        return None
+    try:
+        output_dir = resolve_analysis_work_dir(config, source_dir)
+    except ValueError:
+        return None
+    if output_dir.resolve(strict=False) == paths.recording_data_path.parent.resolve(
+        strict=False,
+    ):
+        return None
+
+    local_recording_path = output_dir / RECORDING_DATA_FILENAME
+    local_movie_path = output_dir / ALIGNED_MOVIE_FILENAME
+    if not local_recording_path.is_file():
+        copy_file_atomically(paths.recording_data_path, local_recording_path)
+    if not local_movie_path.is_file():
+        copy_file_atomically(paths.movie_path, local_movie_path)
+    refresh_cached_analysis_outputs(
+        source_session_dir=source_dir,
+        local_output_dir=output_dir,
+    )
+    return ResolvedNapariRecording(
+        paths=resolve_converted_paths(local_recording_path),
+        was_converted=False,
+    )
+
+
+def _source_is_under_data_path(config: TwopyConfig, source_dir: Path) -> bool:
+    """Return whether a source folder belongs to the configured data root.
+
+    Args:
+        config: Loaded twopy configuration with a ``data_path`` attribute.
+        source_dir: Source recording folder.
+
+    Returns:
+        ``True`` when source-local GUI loading should use the configured cache.
+    """
+    resolved_data_path = config.data_path.expanduser().resolve(strict=False)
+    resolved_source_dir = source_dir.expanduser().resolve(strict=False)
+    try:
+        resolved_source_dir.relative_to(resolved_data_path)
+    except ValueError:
+        return False
+    return True
 
 
 def resolve_or_convert_launch_recording(
@@ -180,7 +360,7 @@ def _source_dir_from_recording_data(recording_data_path: Path) -> Path | None:
         value = value.decode("utf-8")
     if not isinstance(value, str) or value == "":
         return None
-    return Path(value).expanduser()
+    return Path(value).expanduser().resolve()
 
 
 def _first_source_recording_dir(candidates: tuple[Path | None, ...]) -> Path | None:

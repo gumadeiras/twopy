@@ -1,12 +1,13 @@
 """Load twopy configuration from a small YAML file.
 
-Inputs: a YAML config file with lab paths and database access mode.
+Inputs: a YAML config file with lab paths, cache policy, and database access mode.
 Outputs: a typed ``TwopyConfig`` object with normalized values.
 
 The config layer keeps machine-specific paths out of analysis code and makes the
 GUI easy to point at the right database and recording roots.
 """
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -17,13 +18,17 @@ from twopy.database.types import DatabaseAccess
 
 __all__ = [
     "DEFAULT_CONFIG_PATH",
+    "DEFAULT_ANALYSIS_CACHE_DIR",
     "AnalysisOutputMode",
     "TwopyConfig",
     "load_config",
+    "resolve_analysis_cache_dir",
     "resolve_analysis_output_dir",
+    "resolve_analysis_work_dir",
 ]
 
 DEFAULT_CONFIG_PATH = Path("config.yml")
+DEFAULT_ANALYSIS_CACHE_DIR = Path.home() / ".cache" / "twopy" / "recordings"
 AnalysisOutputMode = Path | Literal["source"]
 
 
@@ -31,7 +36,8 @@ AnalysisOutputMode = Path | Literal["source"]
 class TwopyConfig:
     """Machine-local paths used by twopy.
 
-    Inputs: lab paths, DB access mode, and analysis output from ``config.yml``.
+    Inputs: lab paths, DB access mode, analysis cache settings, and analysis
+        output from ``config.yml``.
     Outputs: immutable config values that GUI and analysis code can pass around.
 
     The paths are not required to exist during parsing so tests and machines
@@ -42,6 +48,8 @@ class TwopyConfig:
     data_path: Path
     database_access: DatabaseAccess
     analysis_output: AnalysisOutputMode
+    analysis_caching: bool = True
+    analysis_cache_dir: Path = DEFAULT_ANALYSIS_CACHE_DIR
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
@@ -79,6 +87,18 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
         data_path=_required_path(raw_config, "data_path", config_path),
         database_access=_database_access(raw_config, config_path),
         analysis_output=_analysis_output(raw_config, config_path),
+        analysis_caching=_optional_bool(
+            raw_config,
+            "analysis_caching",
+            config_path,
+            default=True,
+        ),
+        analysis_cache_dir=_optional_path(
+            raw_config,
+            "analysis_cache_dir",
+            config_path,
+            default=DEFAULT_ANALYSIS_CACHE_DIR,
+        ),
     )
 
 
@@ -117,6 +137,50 @@ def resolve_analysis_output_dir(config: TwopyConfig, recording_dir: Path) -> Pat
     return config.analysis_output / relative_recording
 
 
+def resolve_analysis_cache_dir(config: TwopyConfig, recording_dir: Path) -> Path:
+    """Resolve the local cache directory for one recording.
+
+    Args:
+        config: Loaded twopy configuration.
+        recording_dir: Source recording folder being analyzed.
+
+    Returns:
+        Directory where twopy should keep local working files.
+
+    The cache mirrors the same recording-relative directory shape as
+    ``analysis_output`` for normal lab data. External recordings still get a
+    stable cache path under ``_external`` so local-first conversion does not
+    depend on a perfect ``data_path`` match.
+    """
+    source_dir = recording_dir.expanduser()
+    data_root = config.data_path.expanduser()
+    try:
+        relative_recording = source_dir.relative_to(data_root)
+    except ValueError:
+        return _external_analysis_cache_dir(config, source_dir)
+    return config.analysis_cache_dir / relative_recording
+
+
+def resolve_analysis_work_dir(config: TwopyConfig, recording_dir: Path) -> Path:
+    """Resolve the directory used for interactive analysis work.
+
+    Args:
+        config: Loaded twopy configuration.
+        recording_dir: Source recording folder being analyzed.
+
+    Returns:
+        Local cache directory when ``analysis_caching`` is true; otherwise the
+        configured publish/output directory.
+
+    The work directory is where converted HDF5, ROIs, and analysis outputs are
+    read during normal analysis. ``analysis_output`` remains the publish
+    destination used for sync.
+    """
+    if config.analysis_caching:
+        return resolve_analysis_cache_dir(config, recording_dir)
+    return resolve_analysis_output_dir(config, recording_dir)
+
+
 def _required_path(config: dict[object, object], key: str, config_path: Path) -> Path:
     """Read one required path value from parsed YAML.
 
@@ -139,6 +203,25 @@ def _required_path(config: dict[object, object], key: str, config_path: Path) ->
         raise ValueError(msg)
 
     return Path(value).expanduser()
+
+
+def _external_analysis_cache_dir(
+    config: TwopyConfig,
+    source_dir: Path,
+) -> Path:
+    """Return a stable cache directory for recordings outside ``data_path``.
+
+    Args:
+        config: Loaded twopy configuration.
+        source_dir: Source recording folder.
+
+    Returns:
+        External cache directory path.
+    """
+    source_key = str(source_dir.resolve(strict=False))
+    digest = hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:16]
+    folder_name = source_dir.name or "recording"
+    return config.analysis_cache_dir / "_external" / f"{folder_name}-{digest}"
 
 
 def _database_access(
@@ -197,4 +280,57 @@ def _analysis_output(
     if value == "source":
         return "source"
 
+    return Path(value).expanduser()
+
+
+def _optional_bool(
+    config: dict[object, object],
+    key: str,
+    config_path: Path,
+    *,
+    default: bool,
+) -> bool:
+    """Read an optional boolean config value.
+
+    Args:
+        config: Parsed YAML mapping.
+        key: Optional key to read.
+        config_path: Source config file path, used for clear errors.
+        default: Value returned when the key is absent.
+
+    Returns:
+        Parsed boolean value.
+    """
+    value = config.get(key, default)
+    if isinstance(value, bool):
+        return value
+
+    msg = f"twopy config key {key!r} must be true or false: {config_path}"
+    raise ValueError(msg)
+
+
+def _optional_path(
+    config: dict[object, object],
+    key: str,
+    config_path: Path,
+    *,
+    default: Path,
+) -> Path:
+    """Read an optional path config value.
+
+    Args:
+        config: Parsed YAML mapping.
+        key: Optional key to read.
+        config_path: Source config file path, used for clear errors.
+        default: Value returned when the key is absent.
+
+    Returns:
+        Expanded path value.
+    """
+    value = config.get(key)
+    if value is None:
+        return default.expanduser()
+    if not isinstance(value, str) or value == "":
+        msg = f"twopy config key {key!r} must be a non-empty string: {config_path}"
+        raise ValueError(msg)
     return Path(value).expanduser()

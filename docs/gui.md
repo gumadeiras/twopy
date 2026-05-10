@@ -6,7 +6,7 @@ Use the `twopy` command to open napari with the twopy docks.
 twopy
 ```
 
-Choose a source recording folder or `recording_data.h5` from the `twopy` dock, or use Search Database on the Load tab to find recordings from `config.yml`. If the selected source folder has not been converted yet, twopy converts it first. If no recording is selected, napari still opens.
+Choose a source recording folder or `recording_data.h5` from the `twopy` dock, or use Search Database on the Load tab to find recordings from `config.yml`. With the default `analysis_caching: true`, twopy converts or copies converted files into the local `analysis_cache_dir` first, then all plotting and ROI analysis reads from that local cache. If no recording is selected, napari still opens.
 
 Open a recording directly:
 
@@ -38,13 +38,15 @@ Response options include response-window, dF/F, smoothing, low-pass filtering, a
 
 ## Saved Outputs
 
-Save ROIs + analysis writes `rois.h5` beside the current recording plus:
+Save ROIs + analysis writes `rois.h5` beside the current local recording plus:
 
 - `analysis_outputs.h5`
 - `exports/csvs/response_summary_trials.csv`
 - `exports/csvs/response_summary_grouped.csv`
 
 Export actions write recording views, ROI views, overlays, per-epoch response plots, and paired ROI-overlay/response figures under `exports/`.
+
+When `analysis_caching: true`, Save ROIs + analysis saves locally first and then syncs the changed ROI, analysis HDF5, and response-summary CSV files to the configured `analysis_output` destination in a background worker. The Update tab reports local save, sync success, or sync failure.
 
 ## Architecture Note
 

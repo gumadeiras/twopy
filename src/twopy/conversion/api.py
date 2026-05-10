@@ -9,7 +9,7 @@ Analysis code should operate on the converted HDF5 files.
 
 from pathlib import Path
 
-from twopy.config import DEFAULT_CONFIG_PATH, load_config, resolve_analysis_output_dir
+from twopy.config import DEFAULT_CONFIG_PATH, load_config, resolve_analysis_work_dir
 from twopy.conversion.hdf5_writing import (
     CONVERTED_ALIGNED_MOVIE_FILENAME,
     CONVERTED_RECORDING_FILENAME,
@@ -36,7 +36,7 @@ def convert_recording_to_twopy(
     Args:
         session_dir: Source recording folder.
         output_dir: Optional directory that receives converted twopy HDF5 files.
-            When omitted, twopy uses ``analysis_output`` from config.
+            When omitted, twopy uses the configured analysis work directory.
         mean_start_frame: Optional first frame for the mean image.
         mean_stop_frame: Optional exclusive stop frame for the mean image.
         config_path: YAML config file used when ``output_dir`` is omitted.
@@ -105,10 +105,11 @@ def _resolve_conversion_output_dir(
         Expanded output directory path.
 
     Passing ``output_dir`` is an explicit override. Otherwise conversion follows
-    the same ``analysis_output`` routing that the rest of twopy uses.
+    the same work-directory routing that the rest of twopy uses. With
+    ``analysis_caching: true``, that work directory is local cache storage.
     """
     if output_dir is not None:
         return output_dir.expanduser()
 
     config = load_config(config_path)
-    return resolve_analysis_output_dir(config, session_dir)
+    return resolve_analysis_work_dir(config, session_dir)

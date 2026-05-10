@@ -17,6 +17,7 @@ from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.workflow import analyze_recording_responses
+from twopy.analysis_cache import AnalysisSyncPlan, build_analysis_sync_plan
 from twopy.converted import RecordingData
 from twopy.napari.display_paths import format_output_folder
 from twopy.napari.plotting.data import response_plot_window_seconds_for_recording
@@ -39,6 +40,7 @@ class SaveAnalysisResult:
         roi_output_path: HDF5 path where ROIs were saved.
         analysis_output_path: HDF5 path where response analysis was saved.
         status_text: User-facing Update-tab status text.
+        sync_plan: Optional background publish-sync plan.
 
     Returns:
         Immutable result values needed to refresh the dock after saving.
@@ -47,6 +49,7 @@ class SaveAnalysisResult:
     roi_output_path: Path
     analysis_output_path: Path
     status_text: str
+    sync_plan: AnalysisSyncPlan | None
 
 
 def save_current_roi_analysis(
@@ -120,8 +123,21 @@ def save_current_roi_analysis(
     status_text = (
         f"Saved {counted_noun(len(roi_set.labels), 'ROI', 'ROIs')} to {output_folder}"
     )
+    sync_plan = build_analysis_sync_plan(
+        recording=recording,
+        local_paths=(
+            roi_output_path,
+            run.output_path,
+            run.response_summary_trials_csv_path,
+            run.response_summary_grouped_csv_path,
+        ),
+    )
+    if sync_plan is not None:
+        sync_folder = format_output_folder(sync_plan.publish_root, recording)
+        status_text = f"{status_text}; syncing to {sync_folder}"
     return SaveAnalysisResult(
         roi_output_path=roi_output_path,
         analysis_output_path=run.output_path,
         status_text=status_text,
+        sync_plan=sync_plan,
     )

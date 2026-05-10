@@ -9,9 +9,11 @@ responses from the current Labels layer, this module converts labels to a
 ``RoiSet`` and calls the normal analysis workflow.
 """
 
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from pathlib import Path
 
+from qtpy.QtCore import QTimer
 from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
     QApplication,
@@ -23,6 +25,11 @@ from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.trials import default_baseline_epoch_number
+from twopy.analysis_cache import (
+    AnalysisSyncPlan,
+    AnalysisSyncResult,
+    start_analysis_sync,
+)
 from twopy.converted import RecordingData
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.plotting.data import (
@@ -93,6 +100,14 @@ class _ResponsePlotWidget(QWidget):
         self._response_window_options = ResponseWindowOptions()
         self._response_processing_options = ResponseProcessingOptions()
         self._is_shutdown = False
+        self._sync_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="twopy-analysis-sync",
+        )
+        self._sync_future: Future[AnalysisSyncResult] | None = None
+        self._sync_timer = QTimer()
+        self._sync_timer.setInterval(200)
+        self._sync_timer.timeout.connect(self._collect_finished_sync)
         self._live_controller = LiveResponseController(self)
         self._live_controller.set_delta_f_over_f_options(
             self._delta_f_over_f_options,
@@ -173,6 +188,11 @@ class _ResponsePlotWidget(QWidget):
             with suppress(RuntimeError, TypeError):
                 self._quit_application.aboutToQuit.disconnect(self.shutdown)
             self._quit_application = None
+        self._sync_timer.stop()
+        if self._sync_future is not None:
+            self._sync_future.cancel()
+            self._sync_future = None
+        self._sync_executor.shutdown(wait=True, cancel_futures=True)
         self._live_controller.shutdown()
         self._recording = None
         self._roi_labels_layer = None
@@ -327,6 +347,47 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path = result.analysis_output_path
         self._refresh_update_path_labels()
         self._update_status_label.setText(result.status_text)
+        if result.sync_plan is not None:
+            self._start_sync(result.sync_plan)
+
+    def _start_sync(self, sync_plan: AnalysisSyncPlan) -> None:
+        """Start background sync for just-saved analysis outputs.
+
+        Args:
+            sync_plan: Local files and publish root to copy in the background.
+
+        Returns:
+            None.
+        """
+        if self._is_shutdown:
+            return
+        if self._sync_future is not None and not self._sync_future.done():
+            self._sync_future.cancel()
+        self._sync_future = start_analysis_sync(
+            sync_plan,
+            executor=self._sync_executor,
+        )
+        self._sync_timer.start()
+
+    def _collect_finished_sync(self) -> None:
+        """Update the UI when a background analysis sync finishes."""
+        future = self._sync_future
+        if future is None or not future.done():
+            return
+        self._sync_future = None
+        self._sync_timer.stop()
+        try:
+            result = future.result()
+        except Exception as error:
+            self._update_status_label.setText(f"Saved locally; sync failed: {error}")
+            return
+        if len(result.copied_paths) == 0:
+            self._update_status_label.setText("Saved locally; sync already current")
+            return
+        copied_count = len(result.copied_paths)
+        self._update_status_label.setText(
+            f"Saved locally; synced {copied_count} files to {result.publish_root}",
+        )
 
     def set_response_plot_data(
         self,

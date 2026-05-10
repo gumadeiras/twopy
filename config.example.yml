@@ -23,8 +23,18 @@ data_path: /Volumes/magic/clarklab/2p_microscope_data
 # files directly.
 database_access: copy
 
+# Whether twopy should keep converted recordings and analysis work on local
+# storage while using analysis_output as the publish/sync destination.
+# Use true for normal work with recordings on a network volume.
+analysis_caching: true
+
+# Local folder for cached converted recordings, ROIs, and analysis outputs.
+# twopy mirrors recording paths below data_path under this folder.
+analysis_cache_dir: ~/.cache/twopy/recordings
+
 # Where twopy should write converted data and analysis outputs.
-# Use "source" to write into a twopy folder inside each recording folder.
+# With analysis_caching enabled, this is the publish location used after saving.
+# Use "source" to publish into a twopy folder inside each recording folder.
 # Example: /path/to/recording/twopy
 #
 # Or set this to a folder path. twopy will recreate the matching recording

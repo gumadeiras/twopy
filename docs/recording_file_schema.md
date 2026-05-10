@@ -470,19 +470,24 @@ Raw-data fallback/audit:
 
 ## Analysis Output Routing
 
-`config.yml` contains `analysis_output`.
+`config.yml` contains `analysis_caching`, `analysis_cache_dir`, and `analysis_output`.
 
-- `analysis_output: source` writes twopy outputs into a `twopy/` folder inside the recording folder.
+- `analysis_caching: true` keeps converted recordings and interactive analysis work under `analysis_cache_dir`, mirrored relative to `data_path` for normal lab recordings. Recordings outside `data_path` use a stable `_external` cache folder.
+- `analysis_caching: false` uses `analysis_output` directly as the work directory.
+- `analysis_output: source` publishes saved twopy outputs into a `twopy/` folder inside the recording folder.
 - `analysis_output: /some/output/root` mirrors the recording directory structure relative to `data_path` under that output root.
-- `convert_recording_to_twopy(recording)` uses this configured output routing by default. Passing `output_dir` to that function is an explicit one-call override.
+- `convert_recording_to_twopy(recording)` uses the configured work directory by default. Passing `output_dir` to that function is an explicit one-call override.
 
 Example:
 
 ```text
 data_path: /Volumes/magic/clarklab/2p_microscope_data
+analysis_caching: true
+analysis_cache_dir: ~/.cache/twopy/recordings
 analysis_output: /Volumes/magic/clarklab/twopy_outputs
 recording: /Volumes/magic/clarklab/2p_microscope_data/fly/stim/2023/10_17/10_02_49
-output: /Volumes/magic/clarklab/twopy_outputs/fly/stim/2023/10_17/10_02_49
+work: ~/.cache/twopy/recordings/fly/stim/2023/10_17/10_02_49
+publish: /Volumes/magic/clarklab/twopy_outputs/fly/stim/2023/10_17/10_02_49
 ```
 
 ## Frame Count Audit

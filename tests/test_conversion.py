@@ -400,6 +400,7 @@ class ConversionTest(unittest.TestCase):
                 f"database_path: {root / 'db'}\n"
                 f"data_path: {data_root}\n"
                 "database_access: copy\n"
+                "analysis_caching: false\n"
                 f"analysis_output: {output_root}\n",
                 encoding="utf-8",
             )
@@ -414,6 +415,43 @@ class ConversionTest(unittest.TestCase):
             self.assertEqual(converted.movie_path, expected_dir / "aligned_movie.h5")
             self.assertTrue(converted.path.is_file())
             self.assertTrue(converted.movie_path.is_file())
+
+    def test_conversion_uses_cached_work_dir_when_analysis_caching_enabled(
+        self,
+    ) -> None:
+        """Confirm conversion uses local cache by default when enabled.
+
+        Inputs: a temporary config with cache and publish roots.
+        Outputs: converted files under the cache root, not publish output.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            session_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            output_root = root / "publish"
+            cache_root = root / "cache"
+            config_path = root / "config.yml"
+            self._write_session(session_dir)
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                f"analysis_output: {output_root}\n",
+                encoding="utf-8",
+            )
+
+            converted = convert_recording_to_twopy(
+                session_dir,
+                config_path=config_path,
+            )
+
+            expected_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
+            self.assertEqual(converted.path, expected_dir / "recording_data.h5")
+            self.assertEqual(converted.movie_path, expected_dir / "aligned_movie.h5")
+            self.assertTrue(converted.path.is_file())
+            self.assertFalse((output_root / "fly").exists())
 
     def test_allows_observed_one_frame_acquisition_metadata_offset(self) -> None:
         """Confirm sampled ScanImage frame-count offset is audited, not hidden.
