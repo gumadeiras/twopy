@@ -154,12 +154,7 @@ class LiveResponseAnalysisCache:
                 check_cancelled=check_cancelled,
             )
         self._drop_absent_traces(current.label_values)
-        traces = _combine_cached_traces(
-            tuple(
-                self._traces_by_label_value[value].trace
-                for value in current.label_values
-            )
-        )
+        traces = _combine_cached_traces(self._cached_traces(current))
         computation = compute_recording_responses_from_traces(
             recording,
             current.roi_set,
@@ -184,29 +179,33 @@ class LiveResponseAnalysisCache:
         dff_options: DeltaFOverFOptions,
     ) -> tuple[int, ...]:
         """Return ROI indices whose cached traces are absent or stale."""
-        all_indices = tuple(range(len(current.label_values)))
+        stale_indices = self._stale_trace_indices(current)
         if dff_options.background_method == "roi_y_stripe_percentile":
-            current_signature = tuple(
-                (label_value, signature)
-                for label_value, signature in zip(
-                    current.label_values,
-                    current.signatures,
-                    strict=True,
-                )
-            )
-            cached_signature = tuple(
-                (label_value, self._traces_by_label_value[label_value].signature)
-                for label_value in current.label_values
-                if label_value in self._traces_by_label_value
-            )
-            return () if current_signature == cached_signature else all_indices
+            if len(stale_indices) == 0:
+                return ()
+            return tuple(range(len(current.label_values)))
+        return stale_indices
 
+    def _stale_trace_indices(self, current: _PreparedRoiSet) -> tuple[int, ...]:
+        """Return ROI indices missing from the cache or matching old masks."""
         changed: list[int] = []
-        for index, label_value in enumerate(current.label_values):
+        for index, (label_value, signature) in enumerate(
+            zip(current.label_values, current.signatures, strict=True)
+        ):
             cached = self._traces_by_label_value.get(label_value)
-            if cached is None or cached.signature != current.signatures[index]:
+            if cached is None or cached.signature != signature:
                 changed.append(index)
         return tuple(changed)
+
+    def _cached_traces(
+        self,
+        current: _PreparedRoiSet,
+    ) -> tuple[BackgroundCorrectedRoiTraces, ...]:
+        """Return cached traces in current ROI order."""
+        return tuple(
+            self._traces_by_label_value[label_value].trace
+            for label_value in current.label_values
+        )
 
     def _refresh_traces(
         self,
@@ -261,9 +260,7 @@ def _trace_context_key(
 
 def _prepare_roi_set(label_image: npt.NDArray[np.int64]) -> _PreparedRoiSet:
     """Return current ROI masks and signatures from a full-frame label image."""
-    label_values = tuple(
-        int(value) for value in np.unique(label_image) if int(value) > 0
-    )
+    label_values = tuple(int(value) for value in np.unique(label_image) if value > 0)
     if len(label_values) == 0:
         msg = "No ROI labels to analyze."
         raise ValueError(msg)

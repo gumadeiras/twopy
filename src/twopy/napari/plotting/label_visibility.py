@@ -8,7 +8,7 @@ This module only changes how labels are displayed. It never edits the label
 image, so hiding an ROI in the plot options cannot delete ROI data.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Protocol, cast
 
 from qtpy.QtGui import QColor
@@ -138,10 +138,7 @@ def _visible_label_color_dict(
     cached = _cached_base_label_color_dict(layer, color_count)
     if cached is not None:
         return cached
-    color_dict: dict[int | None, object] = {0: "transparent"}
-    for label_value in range(1, color_count + 1):
-        color_dict[label_value] = _base_label_rgba(layer, label_value)
-    color_dict[None] = color_dict[color_count]
+    color_dict = _base_label_color_dict(layer, color_count)
     layer.metadata[_BASE_LABEL_COLOR_DICT_METADATA_KEY] = {
         "color_count": color_count,
         "colors": color_dict,
@@ -184,23 +181,34 @@ def _max_roi_label_value(roi_labels: tuple[str, ...]) -> int:
     )
 
 
-def _base_label_rgba(
+def _base_label_color_dict(
     layer: _LabelsLayerWithColormap,
-    label_value: int,
-) -> tuple[float, float, float, float]:
-    """Return napari's cyclic label color for one label value.
+    color_count: int,
+) -> dict[int | None, object]:
+    """Return base colors for known and future Labels values."""
+    color_for_label = _base_label_color_sampler(layer)
+    color_dict: dict[int | None, object] = {0: "transparent"}
+    for label_value in range(1, color_count + 1):
+        color_dict[label_value] = color_for_label(label_value)
+    color_dict[None] = color_dict[color_count]
+    return color_dict
+
+
+def _base_label_color_sampler(
+    layer: _LabelsLayerWithColormap,
+) -> Callable[[int], tuple[float, float, float, float]]:
+    """Return napari's cyclic label-color sampler for one Labels layer.
 
     Args:
         layer: napari Labels layer.
-        label_value: Positive integer label value.
 
     Returns:
-        RGBA tuple in ``0`` to ``1`` float range.
+        Callable that maps positive integer label values to normalized RGBA.
     """
     try:
         from napari.utils.colormaps import label_colormap
     except ImportError:
-        return _qcolor_rgba(QColor("#4cc9f0"), True)
+        return lambda _label_value: _qcolor_rgba(QColor("#4cc9f0"), True)
 
     params = _base_label_colormap_params(layer)
     colormap = label_colormap(
@@ -208,13 +216,17 @@ def _base_label_rgba(
         seed=params["seed"],
         background_value=params["background_value"],
     )
-    rgba = colormap.map(label_value)
-    return (
-        float(rgba[0]),
-        float(rgba[1]),
-        float(rgba[2]),
-        float(rgba[3]),
-    )
+
+    def color_for_label(label_value: int) -> tuple[float, float, float, float]:
+        rgba = colormap.map(label_value)
+        return (
+            float(rgba[0]),
+            float(rgba[1]),
+            float(rgba[2]),
+            float(rgba[3]),
+        )
+
+    return color_for_label
 
 
 def _base_label_colormap_params(

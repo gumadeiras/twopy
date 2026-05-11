@@ -78,13 +78,6 @@ class _EventEmitter(Protocol):
 
 
 @dataclass(frozen=True)
-class _ConnectedEmitter:
-    """One napari Labels event connection owned by the controller."""
-
-    emitter: _EventEmitter
-
-
-@dataclass(frozen=True)
 class _LiveResponseJob:
     """One cancellable background response computation."""
 
@@ -134,7 +127,7 @@ class LiveResponseController:
         self._delta_f_over_f_options = DeltaFOverFOptions()
         self._response_window_options = ResponseWindowOptions()
         self._response_processing_options = ResponseProcessingOptions()
-        self._connections: list[_ConnectedEmitter] = []
+        self._connections: list[_EventEmitter] = []
         self._is_shutdown = False
         self._version = 0
         self._active_version: int | None = None
@@ -435,11 +428,11 @@ class LiveResponseController:
                 continue
             connected = cast(_EventEmitter, emitter)
             connected.connect(self.request_update)
-            self._connections.append(_ConnectedEmitter(connected))
+            self._connections.append(connected)
 
     def _disconnect_layer_events(self) -> None:
         """Disconnect all Labels event handlers owned by the controller."""
         for connection in self._connections:
             with suppress(RuntimeError, ValueError):
-                connection.emitter.disconnect(self.request_update)
+                connection.disconnect(self.request_update)
         self._connections.clear()

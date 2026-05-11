@@ -389,8 +389,7 @@ def compute_recording_responses(
         response_post_window_seconds=response_post_window_seconds,
         response_processing_options=response_processing_options,
     )
-    if check_cancelled is not None:
-        check_cancelled()
+    _check_cancelled(check_cancelled)
     traces = extract_background_corrected_roi_traces(
         recording,
         roi_set,
@@ -401,8 +400,7 @@ def compute_recording_responses(
         spatial_domain=spatial_domain,
         check_cancelled=check_cancelled,
     )
-    if check_cancelled is not None:
-        check_cancelled()
+    _check_cancelled(check_cancelled)
     return compute_recording_responses_from_traces(
         recording,
         roi_set,
@@ -446,8 +444,7 @@ def compute_recording_responses_from_traces(
     movie-derived traces when ROI masks have not changed.
     """
     _validate_traces_for_context(traces, roi_set, context)
-    if check_cancelled is not None:
-        check_cancelled()
+    _check_cancelled(check_cancelled)
     return _compute_recording_responses_from_baseline(
         recording,
         roi_set,
@@ -511,8 +508,7 @@ def _compute_recording_responses_from_baseline(
         baseline_sample_seconds=baseline_sample_seconds,
         fit_mode=fit_mode,
     )
-    if check_cancelled is not None:
-        check_cancelled()
+    _check_cancelled(check_cancelled)
     if apply_motion_mask:
         dff = apply_motion_artifact_mask_to_delta_f_over_f(dff, recording)
     if _has_continuous_response_processing(processing_options):
@@ -521,8 +517,7 @@ def _compute_recording_responses_from_baseline(
             options=processing_options,
             data_rate_hz=frame_rate_hz,
         )
-    if check_cancelled is not None:
-        check_cancelled()
+    _check_cancelled(check_cancelled)
 
     grouped_responses = group_delta_f_over_f_by_epoch(
         dff,
@@ -531,8 +526,7 @@ def _compute_recording_responses_from_baseline(
         pre_window_seconds=response_pre_window_seconds,
         post_window_seconds=response_post_window_seconds,
     )
-    if check_cancelled is not None:
-        check_cancelled()
+    _check_cancelled(check_cancelled)
     grouped_responses, normalization_factors = (
         normalize_grouped_roi_responses_by_epoch_peak(
             grouped_responses,
@@ -545,8 +539,7 @@ def _compute_recording_responses_from_baseline(
             options=processing_options,
         )
     )
-    if check_cancelled is not None:
-        check_cancelled()
+    _check_cancelled(check_cancelled)
 
     return AnalysisResponseComputation(
         recording=recording,
@@ -599,6 +592,12 @@ def _validate_traces_for_context(
             f"[{context.trace_start}, {context.trace_stop})."
         )
         raise ValueError(msg)
+
+
+def _check_cancelled(check_cancelled: Callable[[], None] | None) -> None:
+    """Raise through the caller callback when a computation is obsolete."""
+    if check_cancelled is not None:
+        check_cancelled()
 
 
 def _has_continuous_response_processing(options: ResponseProcessingOptions) -> bool:
