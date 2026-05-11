@@ -169,7 +169,7 @@ class LiveResponseController:
         self._cancel_active_job()
         self._recording = recording
         self._roi_labels_layer = roi_labels_layer
-        self._analysis_cache.clear()
+        self._analysis_cache = LiveResponseAnalysisCache()
         self._version += 1
         self._pending_after_active_job = False
         self._connect_layer_events(roi_labels_layer)

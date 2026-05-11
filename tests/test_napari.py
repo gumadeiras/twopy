@@ -1992,6 +1992,64 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(calls, 2)
             controller.shutdown()
 
+    def test_live_response_controller_replaces_cache_on_context_change(self) -> None:
+        """Confirm context changes do not clear a cache still used by a worker.
+
+        Inputs: live controller with an active worker using a blocking fake cache.
+        Outputs: setting a new context swaps in a fresh cache without mutating
+        the cache object captured by the active worker.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            layer = _FakeLayer(
+                name="rois",
+                data=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                options={},
+                events=_FakeLabelEvents(),
+            )
+            controller = LiveResponseController(_FakePlotReceiver(), debounce_ms=0)
+            controller.set_context(recording, layer)
+            started = Event()
+            proceed = Event()
+            testcase = self
+
+            class BlockingCache:
+                def __init__(self) -> None:
+                    self.clear_calls = 0
+
+                def clear(self) -> None:
+                    self.clear_calls += 1
+
+                def compute_response_plot_data(
+                    self,
+                    *args: object,
+                    **kwargs: object,
+                ) -> ResponsePlotData:
+                    del args
+                    started.set()
+                    testcase.assertTrue(proceed.wait(timeout=2.0))
+                    check_cancelled = cast(
+                        Callable[[], None], kwargs["check_cancelled"]
+                    )
+                    check_cancelled()
+                    return _tiny_response_plot_data()
+
+            old_cache = BlockingCache()
+            controller._analysis_cache = cast(Any, old_cache)
+
+            controller.request_update()
+            self.assertTrue(started.wait(timeout=2.0))
+            controller.set_context(recording, layer)
+            self.assertIsNot(controller._analysis_cache, old_cache)
+            self.assertEqual(old_cache.clear_calls, 0)
+
+            proceed.set()
+            _wait_for_live_response_job(controller)
+            controller._collect_finished_job()
+            controller.shutdown()
+
     def test_live_response_cache_reuses_unchanged_roi_traces(self) -> None:
         """Confirm live cache extracts only changed ROI masks.
 
@@ -2063,6 +2121,89 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(
                 extracted,
                 [("roi_0001", "roi_0002"), ("roi_0002",)],
+            )
+
+    def test_live_response_cache_recomputes_roi_y_stripe_after_deletion(self) -> None:
+        """Confirm ROI-y-stripe traces are invalidated when any ROI is deleted.
+
+        Inputs: two ROI labels using per-ROI y-stripe background, then deletion
+        of ROI 2.
+        Outputs: ROI 1 is recomputed because its background excludes all ROIs.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            cache = LiveResponseAnalysisCache()
+            first_labels = np.array([[1, 0], [0, 2]], dtype=np.int64)
+            deleted_labels = np.array([[1, 0], [0, 0]], dtype=np.int64)
+            extracted: list[tuple[str, ...]] = []
+
+            def extract(
+                _recording: object,
+                roi_set: object,
+                **kwargs: object,
+            ) -> BackgroundCorrectedRoiTraces:
+                roi_labels = cast(Any, roi_set).labels
+                extracted.append(roi_labels)
+                start_frame = cast(int, kwargs["start_frame"])
+                stop_frame = cast(int, kwargs["stop_frame"])
+                frame_count = stop_frame - start_frame
+                roi_count = len(roi_labels)
+                values = np.ones((frame_count, roi_count), dtype=np.float64)
+                return BackgroundCorrectedRoiTraces(
+                    raw_values=values,
+                    background_values=np.zeros_like(values),
+                    corrected_values=values,
+                    labels=roi_labels,
+                    start_frame=start_frame,
+                    stop_frame=stop_frame,
+                    statistic="mean",
+                    method="roi_y_stripe_percentile",
+                    metadata={"method": "roi_y_stripe_percentile"},
+                )
+
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                response_processing_options=ResponseProcessingOptions(),
+            )
+            context = SimpleNamespace(trace_start=0, trace_stop=2)
+            options = DeltaFOverFOptions(
+                background_method="roi_y_stripe_percentile",
+            )
+            with (
+                patch(
+                    "twopy.napari.live_analysis.resolve_response_analysis_context",
+                    return_value=context,
+                ),
+                patch(
+                    "twopy.napari.live_analysis."
+                    "extract_background_corrected_roi_traces",
+                    side_effect=extract,
+                ),
+                patch(
+                    "twopy.napari.live_analysis."
+                    "compute_recording_responses_from_traces",
+                    return_value=computation,
+                ),
+                patch(
+                    "twopy.napari.live_analysis.response_plot_data_from_grouped",
+                    return_value=_tiny_response_plot_data(),
+                ),
+            ):
+                cache.compute_response_plot_data(
+                    recording,
+                    first_labels,
+                    delta_f_over_f_options=options,
+                )
+                cache.compute_response_plot_data(
+                    recording,
+                    deleted_labels,
+                    delta_f_over_f_options=options,
+                )
+
+            self.assertEqual(
+                extracted,
+                [("roi_0001", "roi_0002"), ("roi_0001",)],
             )
 
     def test_live_response_controller_shutdown_disconnects_events(self) -> None:

@@ -181,10 +181,16 @@ class LiveResponseAnalysisCache:
         """Return ROI indices whose cached traces are absent or stale."""
         stale_indices = self._stale_trace_indices(current)
         if dff_options.background_method == "roi_y_stripe_percentile":
-            if len(stale_indices) == 0:
+            if len(stale_indices) == 0 and self._cached_label_values() == set(
+                current.label_values
+            ):
                 return ()
             return tuple(range(len(current.label_values)))
         return stale_indices
+
+    def _cached_label_values(self) -> set[int]:
+        """Return the label values represented by cached traces."""
+        return set(self._traces_by_label_value)
 
     def _stale_trace_indices(self, current: _PreparedRoiSet) -> tuple[int, ...]:
         """Return ROI indices missing from the cache or using stale masks."""
