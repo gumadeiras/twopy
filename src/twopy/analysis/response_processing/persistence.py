@@ -1,6 +1,7 @@
 """Persist response-processing settings and QC audit data.
 
-Inputs: typed response-processing options and optional ROI correlation scores.
+Inputs: typed response-processing options plus optional normalization and ROI
+correlation audit data.
 Outputs: one inspectable HDF5 group that analysis persistence can embed.
 
 This module keeps the response-processing audit contract near the processing
@@ -12,12 +13,15 @@ from dataclasses import dataclass
 import h5py
 import numpy as np
 
+from twopy.analysis.response_processing.apply import RoiNormalizationFactors
 from twopy.analysis.response_processing.options import (
     CorrelationFilterOptions,
     CorrelationFilterReference,
     CorrelationWindowSeconds,
     LowPassFilterMethod,
     LowPassFilterOptions,
+    NormalizationMethod,
+    NormalizationOptions,
     ResponseProcessingOptions,
     SmoothingMethod,
     SmoothingOptions,
@@ -41,6 +45,7 @@ _SMOOTHING_METHODS: tuple[SmoothingMethod, ...] = (
     "savgol",
 )
 _LOW_PASS_METHODS: tuple[LowPassFilterMethod, ...] = ("none", "butterworth")
+_NORMALIZATION_METHODS: tuple[NormalizationMethod, ...] = ("none", "epoch_peak")
 _CORRELATION_REFERENCES: tuple[CorrelationFilterReference, ...] = (
     "none",
     "epoch_mean",
@@ -53,10 +58,12 @@ class PersistedResponseProcessing:
     """Response-processing audit data loaded from HDF5.
 
     Inputs: one ``response_processing`` HDF5 group.
-    Outputs: typed options plus optional ROI correlation scores.
+    Outputs: typed options plus optional normalization factors and ROI
+    correlation scores.
     """
 
     options: ResponseProcessingOptions
+    normalization_factors: RoiNormalizationFactors | None
     correlation_scores: RoiCorrelationScores | None
 
 
@@ -64,6 +71,7 @@ def write_response_processing_group(
     group: h5py.Group,
     *,
     options: ResponseProcessingOptions,
+    normalization_factors: RoiNormalizationFactors | None = None,
     correlation_scores: RoiCorrelationScores | None = None,
 ) -> None:
     """Write response-processing settings and optional QC scores.
@@ -71,6 +79,8 @@ def write_response_processing_group(
     Args:
         group: Destination ``response_processing`` HDF5 group.
         options: Processing options used for the saved analysis output.
+        normalization_factors: Optional per-ROI normalization factors used for
+            epoch-peak normalization.
         correlation_scores: Optional ROI-level correlation QC result.
 
     Returns:
@@ -85,6 +95,24 @@ def write_response_processing_group(
     low_pass.attrs["method"] = options.low_pass.method
     low_pass.attrs["cutoff_hz"] = _optional_float_attr(options.low_pass.cutoff_hz)
     low_pass.attrs["order"] = options.low_pass.order
+
+    normalization = group.create_group("normalization")
+    normalization.attrs["method"] = options.normalization.method
+    normalization.attrs["epoch_number"] = _optional_int_attr(
+        options.normalization.epoch_number,
+    )
+    normalization.attrs["epoch_name"] = _optional_text_attr(
+        options.normalization.epoch_name,
+    )
+    if normalization_factors is not None:
+        normalization.create_dataset(
+            "roi_labels",
+            data=np.asarray(
+                normalization_factors.roi_labels,
+                dtype=h5py.string_dtype("utf-8"),
+            ),
+        )
+        normalization.create_dataset("factors", data=normalization_factors.factors)
 
     correlation = group.create_group("correlation_filter")
     correlation.attrs["reference"] = options.correlation_filter.reference
@@ -136,12 +164,25 @@ def read_response_processing_group(group: h5py.Group) -> PersistedResponseProces
     options = ResponseProcessingOptions(
         smoothing=_read_smoothing_options(group["smoothing"]),
         low_pass=_read_low_pass_options(group["low_pass"]),
+        normalization=(
+            _read_normalization_options(group["normalization"])
+            if "normalization" in group
+            else NormalizationOptions()
+        ),
         correlation_filter=_read_correlation_filter_options(
             group["correlation_filter"],
         ),
     )
     return PersistedResponseProcessing(
         options=options,
+        normalization_factors=(
+            _read_normalization_factors(
+                group["normalization"],
+                options=options.normalization,
+            )
+            if "normalization" in group and "factors" in group["normalization"]
+            else None
+        ),
         correlation_scores=(
             _read_correlation_scores(group["correlation_scores"])
             if "correlation_scores" in group
@@ -176,6 +217,19 @@ def _read_low_pass_options(group: h5py.Group) -> LowPassFilterOptions:
     )
 
 
+def _read_normalization_options(group: h5py.Group) -> NormalizationOptions:
+    """Read normalization settings from one HDF5 group."""
+    return NormalizationOptions(
+        method=require_string_choice(
+            _plain_attr_value(group.attrs["method"]),
+            name="response_processing normalization method",
+            allowed=_NORMALIZATION_METHODS,
+        ),
+        epoch_number=_optional_int_from_attr(group.attrs["epoch_number"]),
+        epoch_name=_optional_text_from_attr(group.attrs["epoch_name"]),
+    )
+
+
 def _read_correlation_filter_options(group: h5py.Group) -> CorrelationFilterOptions:
     """Read correlation-filter settings from one HDF5 group."""
     return CorrelationFilterOptions(
@@ -186,6 +240,24 @@ def _read_correlation_filter_options(group: h5py.Group) -> CorrelationFilterOpti
         ),
         minimum_correlation=float(group.attrs["minimum_correlation"]),
         window_seconds=_window_seconds_from_attrs(group),
+    )
+
+
+def _read_normalization_factors(
+    group: h5py.Group,
+    *,
+    options: NormalizationOptions,
+) -> RoiNormalizationFactors:
+    """Read persisted epoch-peak normalization factors."""
+    return RoiNormalizationFactors(
+        roi_labels=_read_string_dataset(group, "roi_labels"),
+        factors=require_float64_array(
+            group["factors"][()],
+            name="response_processing/normalization/factors",
+            ndim=1,
+        ),
+        epoch_number=int(options.epoch_number or 0),
+        epoch_name=options.epoch_name,
     )
 
 
@@ -226,12 +298,38 @@ def _optional_float_attr(value: float | None) -> str | float:
     return "none" if value is None else float(value)
 
 
+def _optional_int_attr(value: int | None) -> str | int:
+    """Return an HDF5-friendly optional integer attribute value."""
+    return "none" if value is None else int(value)
+
+
+def _optional_text_attr(value: str | None) -> str:
+    """Return an HDF5-friendly optional text attribute value."""
+    return "none" if value is None else value
+
+
 def _optional_float_from_attr(value: object) -> float | None:
     """Read an optional float value written by ``_optional_float_attr``."""
     plain_value = _plain_attr_value(value)
     if plain_value == "none":
         return None
     return float(plain_value)
+
+
+def _optional_int_from_attr(value: object) -> int | None:
+    """Read an optional integer value written by ``_optional_int_attr``."""
+    plain_value = _plain_attr_value(value)
+    if plain_value == "none":
+        return None
+    return int(plain_value)
+
+
+def _optional_text_from_attr(value: object) -> str | None:
+    """Read an optional text value written by ``_optional_text_attr``."""
+    plain_value = _plain_attr_value(value)
+    if plain_value == "none":
+        return None
+    return str(plain_value)
 
 
 def _read_string_dataset(group: h5py.Group, name: str) -> tuple[str, ...]:

@@ -23,8 +23,10 @@ from twopy.analysis.persistence import (
 from twopy.analysis.response_processing import (
     CorrelationFilterOptions,
     LowPassFilterOptions,
+    NormalizationOptions,
     ResponseProcessingOptions,
     RoiCorrelationScores,
+    RoiNormalizationFactors,
     SmoothingOptions,
 )
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
@@ -73,6 +75,11 @@ class PersistenceTest(unittest.TestCase):
                     cutoff_hz=0.5,
                     order=2,
                 ),
+                normalization=NormalizationOptions(
+                    method="epoch_peak",
+                    epoch_number=1,
+                    epoch_name="Gray",
+                ),
                 correlation_filter=CorrelationFilterOptions(
                     reference="epoch_mean",
                     minimum_correlation=0.4,
@@ -87,6 +94,12 @@ class PersistenceTest(unittest.TestCase):
                 reference="epoch_mean",
                 window_seconds=(0.0, 2.0),
             )
+            normalization_factors = RoiNormalizationFactors(
+                roi_labels=("roi_1", "roi_2"),
+                factors=np.array([2.0, 4.0], dtype=np.float64),
+                epoch_number=1,
+                epoch_name="Gray",
+            )
 
             save_analysis_outputs(
                 h5_path,
@@ -97,6 +110,7 @@ class PersistenceTest(unittest.TestCase):
                 baseline_windows=(windows[0].window,),
                 grouped_responses=grouped,
                 response_processing_options=processing_options,
+                normalization_factors=normalization_factors,
                 correlation_scores=correlation_scores,
                 response_summary_trials_csv=trials_csv_path,
                 response_summary_grouped_csv=grouped_csv_path,
@@ -123,6 +137,14 @@ class PersistenceTest(unittest.TestCase):
                 self.assertEqual(
                     h5_file["response_processing/low_pass"].attrs["cutoff_hz"],
                     0.5,
+                )
+                self.assertEqual(
+                    h5_file["response_processing/normalization"].attrs["method"],
+                    "epoch_peak",
+                )
+                np.testing.assert_allclose(
+                    h5_file["response_processing/normalization/factors"][()],
+                    np.array([2.0, 4.0], dtype=np.float64),
                 )
                 np.testing.assert_array_equal(
                     h5_file["response_processing/correlation_scores/included_mask"][()],
@@ -171,6 +193,7 @@ class PersistenceTest(unittest.TestCase):
             self.assertIsNotNone(loaded.dff)
             self.assertIsNotNone(loaded.grouped_responses)
             self.assertIsNotNone(loaded.response_processing_options)
+            self.assertIsNotNone(loaded.normalization_factors)
             self.assertIsNotNone(loaded.correlation_scores)
             self.assertEqual(len(loaded.epoch_windows), 1)
             self.assertEqual(loaded.baseline_windows, (windows[0].window,))
@@ -195,8 +218,17 @@ class PersistenceTest(unittest.TestCase):
                     0.5,
                 )
                 self.assertEqual(
+                    loaded.response_processing_options.normalization.epoch_name,
+                    "Gray",
+                )
+                self.assertEqual(
                     loaded.response_processing_options.correlation_filter.window_seconds,
                     (0.0, 2.0),
+                )
+            if loaded.normalization_factors is not None:
+                np.testing.assert_allclose(
+                    loaded.normalization_factors.factors,
+                    np.array([2.0, 4.0], dtype=np.float64),
                 )
             if loaded.correlation_scores is not None:
                 np.testing.assert_array_equal(

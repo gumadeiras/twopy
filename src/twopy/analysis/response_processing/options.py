@@ -19,6 +19,8 @@ __all__ = [
     "CorrelationWindowSeconds",
     "LowPassFilterMethod",
     "LowPassFilterOptions",
+    "NormalizationMethod",
+    "NormalizationOptions",
     "ResponseProcessingOptions",
     "SmoothingMethod",
     "SmoothingOptions",
@@ -27,6 +29,7 @@ __all__ = [
 
 SmoothingMethod = Literal["none", "moving_average", "savgol"]
 LowPassFilterMethod = Literal["none", "butterworth"]
+NormalizationMethod = Literal["none", "epoch_peak"]
 CorrelationFilterReference = Literal["none", "epoch_mean", "epoch_peak"]
 CorrelationWindowSeconds = tuple[float | None, float | None]
 
@@ -67,6 +70,24 @@ class LowPassFilterOptions:
 
 
 @dataclass(frozen=True)
+class NormalizationOptions:
+    """Epoch-peak normalization settings for grouped ROI responses.
+
+    Inputs: a normalization method and the stimulus epoch used as the scale
+    reference.
+    Outputs: a typed contract consumed after trial grouping.
+
+    ``method="none"`` leaves grouped responses unchanged. ``method="epoch_peak"``
+    divides every response for each ROI by that ROI's mean-response peak in the
+    selected epoch, so the selected epoch's plotted peak becomes one.
+    """
+
+    method: NormalizationMethod = "none"
+    epoch_number: int | None = None
+    epoch_name: str | None = None
+
+
+@dataclass(frozen=True)
 class CorrelationFilterOptions:
     """Correlation-based response quality-control settings.
 
@@ -91,13 +112,15 @@ class CorrelationFilterOptions:
 class ResponseProcessingOptions:
     """Complete response post-processing configuration.
 
-    Inputs: optional smoothing, low-pass filtering, and correlation QC settings.
+    Inputs: optional smoothing, low-pass filtering, epoch-peak normalization,
+    and correlation QC settings.
     Outputs: one immutable object passed through workflow, plotting, and future
     persistence boundaries.
     """
 
     smoothing: SmoothingOptions = field(default_factory=SmoothingOptions)
     low_pass: LowPassFilterOptions = field(default_factory=LowPassFilterOptions)
+    normalization: NormalizationOptions = field(default_factory=NormalizationOptions)
     correlation_filter: CorrelationFilterOptions = field(
         default_factory=CorrelationFilterOptions
     )
@@ -123,6 +146,7 @@ def validate_response_processing_options(
     """
     _validate_smoothing_options(options.smoothing)
     _validate_low_pass_options(options.low_pass, data_rate_hz=data_rate_hz)
+    _validate_normalization_options(options.normalization)
     _validate_correlation_options(options.correlation_filter)
 
 
@@ -184,6 +208,19 @@ def _validate_low_pass_options(
                 f"got {options.cutoff_hz} Hz for {data_rate_hz} Hz data"
             )
             raise ValueError(msg)
+
+
+def _validate_normalization_options(options: NormalizationOptions) -> None:
+    """Validate epoch-peak normalization options."""
+    if options.method not in {"none", "epoch_peak"}:
+        msg = f"Unknown normalization method {options.method!r}"
+        raise ValueError(msg)
+    if options.epoch_number is not None and options.epoch_number < 1:
+        msg = f"normalization epoch_number must be positive; got {options.epoch_number}"
+        raise ValueError(msg)
+    if options.method == "epoch_peak" and options.epoch_number is None:
+        msg = "epoch-peak normalization requires an epoch_number"
+        raise ValueError(msg)
 
 
 def _validate_correlation_options(options: CorrelationFilterOptions) -> None:

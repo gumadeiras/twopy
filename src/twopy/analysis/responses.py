@@ -20,11 +20,13 @@ from twopy.analysis.trials import EpochFrameWindow
 __all__ = [
     "GroupedRoiResponseSummary",
     "GroupedRoiResponses",
+    "RoiResponseTraceSummary",
     "RoiResponseSummary",
     "RoiResponseTrial",
     "group_delta_f_over_f_by_epoch",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
+    "summarize_roi_response_trials",
     "validate_grouped_roi_responses",
 ]
 
@@ -69,6 +71,22 @@ class GroupedRoiResponses:
     pre_window_seconds: float | None = None
     post_window_seconds: float | None = None
     response_window_auto: bool | None = None
+
+
+@dataclass(frozen=True)
+class RoiResponseTraceSummary:
+    """Mean and SEM traces for repeated ROI response trials.
+
+    Inputs: grouped response trials from one stimulus epoch.
+    Outputs: ROI-by-frame mean and SEM arrays on a shared relative time axis.
+
+    The summary aligns trials by epoch-relative seconds before averaging so
+    responses with slightly different frame coverage do not shift peaks.
+    """
+
+    time_seconds: npt.NDArray[np.float64]
+    mean_values: npt.NDArray[np.float64]
+    sem_values: npt.NDArray[np.float64]
 
 
 @dataclass(frozen=True)
@@ -279,6 +297,72 @@ def summarize_epoch_roi_responses(
     return tuple(rows)
 
 
+def summarize_roi_response_trials(
+    trials: Sequence[RoiResponseTrial],
+    *,
+    roi_labels: tuple[str, ...],
+    data_rate_hz: float,
+) -> RoiResponseTraceSummary:
+    """Summarize repeated response trials into ROI mean and SEM traces.
+
+    Args:
+        trials: Response trials from one stimulus epoch.
+        roi_labels: ROI labels defining the expected response width.
+        data_rate_hz: Imaging frame rate in hertz.
+
+    Returns:
+        Shared time axis plus ROI-by-frame mean and SEM arrays.
+
+    Raises:
+        ValueError: If no trials are provided or trial axes are malformed.
+    """
+    if len(trials) == 0:
+        msg = "At least one trial is required for response trace summary"
+        raise ValueError(msg)
+    for trial in trials:
+        _validate_grouped_response_trial(trial, roi_labels)
+    if data_rate_hz <= 0:
+        msg = f"data_rate_hz must be positive; got {data_rate_hz}"
+        raise ValueError(msg)
+
+    trial_tuple = tuple(trials)
+    time_seconds = _shared_trial_time_axis(trial_tuple, data_rate_hz)
+    first_time = float(time_seconds[0])
+    max_frames = len(time_seconds)
+    roi_count = len(roi_labels)
+    sums = np.zeros((roi_count, max_frames), dtype=np.float64)
+    squared_sums = np.zeros((roi_count, max_frames), dtype=np.float64)
+    valid_counts = np.zeros((roi_count, max_frames), dtype=np.int64)
+    for trial in trial_tuple:
+        offsets = np.rint((trial.time_seconds - first_time) * data_rate_hz).astype(
+            np.int64,
+            copy=False,
+        )
+        values_by_roi = trial.values.T
+        finite = np.isfinite(values_by_roi)
+        finite_values = np.where(finite, values_by_roi, 0.0)
+        sums[:, offsets] += finite_values
+        squared_sums[:, offsets] += finite_values * finite_values
+        valid_counts[:, offsets] += finite
+
+    mean_values = np.full((roi_count, max_frames), np.nan, dtype=np.float64)
+    valid_mask = valid_counts > 0
+    mean_values[valid_mask] = sums[valid_mask] / valid_counts[valid_mask]
+    sem_values = np.zeros((roi_count, max_frames), dtype=np.float64)
+    variable_mask = valid_counts > 1
+    if np.any(variable_mask):
+        counts = valid_counts[variable_mask].astype(np.float64)
+        variance = squared_sums[variable_mask] - (sums[variable_mask] ** 2 / counts)
+        variance /= counts - 1.0
+        variance = np.maximum(variance, 0.0)
+        sem_values[variable_mask] = np.sqrt(variance) / np.sqrt(counts)
+    return RoiResponseTraceSummary(
+        time_seconds=time_seconds,
+        mean_values=mean_values,
+        sem_values=sem_values,
+    )
+
+
 def validate_grouped_roi_responses(grouped: GroupedRoiResponses) -> None:
     """Validate the shared grouped-response data contract.
 
@@ -432,3 +516,14 @@ def _validate_grouping_inputs(
                 "positive duration"
             )
             raise ValueError(msg)
+
+
+def _shared_trial_time_axis(
+    trials: tuple[RoiResponseTrial, ...],
+    data_rate_hz: float,
+) -> npt.NDArray[np.float64]:
+    """Return one relative time axis that covers all supplied trials."""
+    first_time = min(float(trial.time_seconds[0]) for trial in trials)
+    last_time = max(float(trial.time_seconds[-1]) for trial in trials)
+    frame_count = int(round((last_time - first_time) * data_rate_hz)) + 1
+    return first_time + (np.arange(frame_count, dtype=np.float64) / data_rate_hz)

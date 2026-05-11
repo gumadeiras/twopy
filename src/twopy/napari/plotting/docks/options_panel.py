@@ -15,13 +15,17 @@ from dataclasses import dataclass
 from qtpy.QtWidgets import QLabel, QPushButton, QTabWidget, QVBoxLayout, QWidget
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
-from twopy.analysis.response_processing import ResponseProcessingOptions
+from twopy.analysis.response_processing import (
+    NormalizationOptions,
+    ResponseProcessingOptions,
+)
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
 from twopy.napari.plotting.export_controls import (
     ResponseExportState,
     create_response_export_tab,
 )
+from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
 from twopy.napari.plotting.panels import response_update_tab, scrolling_tab
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
@@ -46,6 +50,7 @@ class ResponseOptionsPanel:
         processing_options_widget: Plot-tab response processing controls.
         response_window_options_widget: Plot-tab response-window controls.
         delta_f_over_f_options_widget: Plot-tab dF/F controls.
+        normalization_options_widget: Plot-tab normalization controls.
 
     Returns:
         Immutable container for widgets and layouts owned by the options panel.
@@ -63,6 +68,7 @@ class ResponseOptionsPanel:
     processing_options_widget: ResponseProcessingOptionsWidget
     response_window_options_widget: ResponseWindowOptionsWidget
     delta_f_over_f_options_widget: DeltaFOverFOptionsWidget
+    normalization_options_widget: NormalizationOptionsWidget
 
 
 def create_response_options_panel(
@@ -73,6 +79,7 @@ def create_response_options_panel(
     on_response_processing_change: Callable[[ResponseProcessingOptions], None],
     on_response_window_change: Callable[[ResponseWindowOptions], None],
     on_delta_f_over_f_change: Callable[[DeltaFOverFOptions], None],
+    on_normalization_change: Callable[[NormalizationOptions], None],
     on_reload_saved: Callable[[], None],
     on_recompute_preview: Callable[[], None],
     on_save_analysis: Callable[[], None],
@@ -87,6 +94,7 @@ def create_response_options_panel(
         on_response_processing_change: Callback for processing control edits.
         on_response_window_change: Callback for response-window control edits.
         on_delta_f_over_f_change: Callback for dF/F control edits.
+        on_normalization_change: Callback for normalization control edits.
         on_reload_saved: Callback for the reload button.
         on_recompute_preview: Callback for the preview recompute button.
         on_save_analysis: Callback for the Save ROIs + analysis button.
@@ -131,9 +139,14 @@ def create_response_options_panel(
         delta_f_over_f_options,
         on_change=on_delta_f_over_f_change,
     )
+    normalization_options_widget = NormalizationOptionsWidget(
+        response_processing_options.normalization,
+        on_change=on_normalization_change,
+    )
     plot_options_layout.addWidget(plot_display_options_widget)
     plot_options_layout.addWidget(response_window_options_widget)
     plot_options_layout.addWidget(delta_f_over_f_options_widget)
+    plot_options_layout.addWidget(normalization_options_widget)
     plot_options_layout.addWidget(processing_options_widget)
     plot_options_layout.addStretch(1)
 
@@ -169,4 +182,5 @@ def create_response_options_panel(
         processing_options_widget=processing_options_widget,
         response_window_options_widget=response_window_options_widget,
         delta_f_over_f_options_widget=delta_f_over_f_options_widget,
+        normalization_options_widget=normalization_options_widget,
     )

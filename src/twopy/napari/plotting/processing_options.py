@@ -25,6 +25,7 @@ from twopy.analysis.response_processing import (
     CorrelationFilterReference,
     LowPassFilterMethod,
     LowPassFilterOptions,
+    NormalizationOptions,
     ResponseProcessingOptions,
     SmoothingMethod,
     SmoothingOptions,
@@ -85,6 +86,7 @@ class ResponseProcessingOptionsWidget(QWidget):
         """
         super().__init__()
         self._on_change = on_change
+        self._normalization_options = options.normalization
         self._smoothing_method = _combo_box(_SMOOTHING_METHOD_LABELS)
         self._smoothing_window_frames = _spin_box(
             minimum=1,
@@ -182,6 +184,7 @@ class ResponseProcessingOptionsWidget(QWidget):
                 ),
                 order=self._low_pass_order.value(),
             ),
+            normalization=self._normalization_options,
             correlation_filter=CorrelationFilterOptions(
                 reference=require_string_choice(
                     str(self._correlation_reference.currentData()),
@@ -224,6 +227,7 @@ class ResponseProcessingOptionsWidget(QWidget):
             QSignalBlocker(self._correlation_window_stop),
             QSignalBlocker(self._correlation_window_has_stop),
         ]
+        self._normalization_options = options.normalization
         self._set_combo_data(self._smoothing_method, options.smoothing.method)
         self._smoothing_window_frames.setValue(options.smoothing.window_frames)
         self._smoothing_polynomial_order.setValue(
@@ -249,6 +253,18 @@ class ResponseProcessingOptionsWidget(QWidget):
             self._correlation_window_stop.setValue(stop_seconds)
         del blockers
         self._refresh_enabled_state()
+
+    def set_normalization_options(self, options: NormalizationOptions) -> None:
+        """Store normalization settings controlled by the separate subsection.
+
+        Args:
+            options: ``NormalizationOptions`` carried by the parent response
+                processing object.
+
+        Returns:
+            None.
+        """
+        self._normalization_options = options
 
     def _smoothing_group(self) -> QGroupBox:
         """Create the smoothing control group."""

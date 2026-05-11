@@ -13,13 +13,16 @@ from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.response_processing import (
     CorrelationFilterOptions,
     LowPassFilterOptions,
+    NormalizationOptions,
     ResponseProcessingOptions,
     SmoothingOptions,
     mask_grouped_roi_responses_by_included_rois,
     nan_aware_moving_average,
     nan_aware_savgol_filter,
+    normalize_grouped_roi_responses_by_epoch_peak,
     process_grouped_roi_responses,
     process_roi_delta_f_over_f,
+    validate_response_processing_options,
 )
 from twopy.analysis.responses import GroupedRoiResponses, RoiResponseTrial
 
@@ -142,6 +145,23 @@ class ResponseProcessingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "below Nyquist"):
             process_roi_delta_f_over_f(dff, options=options, data_rate_hz=2.0)
 
+    def test_low_pass_options_accept_valid_cutoff_below_nyquist(self) -> None:
+        """Confirm valid low-pass settings do not raise during validation.
+
+        Inputs: Butterworth options with cutoff below the Nyquist frequency.
+        Outputs: validation accepts the enabled filter.
+        """
+        validate_response_processing_options(
+            ResponseProcessingOptions(
+                low_pass=LowPassFilterOptions(
+                    method="butterworth",
+                    cutoff_hz=0.5,
+                    order=2,
+                ),
+            ),
+            data_rate_hz=4.0,
+        )
+
     def test_correlation_filter_scores_and_masks_inconsistent_roi(self) -> None:
         """Confirm correlation QC masks ROIs without removing columns.
 
@@ -174,6 +194,84 @@ class ResponseProcessingTest(unittest.TestCase):
         for trial in result.grouped_responses.trials:
             self.assertTrue(np.all(np.isnan(trial.values[:, 1])))
             self.assertTrue(np.all(np.isfinite(trial.values[:, 0])))
+
+    def test_epoch_peak_normalization_scales_each_roi(self) -> None:
+        """Confirm selected-epoch mean peaks become one for every ROI.
+
+        Inputs: repeated grouped responses with different ROI amplitudes.
+        Outputs: all trials divided by each ROI's selected-epoch peak.
+        """
+        grouped = _grouped_responses(
+            trial_values=(
+                np.array([[0.0, 0.0], [2.0, 4.0]], dtype=np.float64),
+                np.array([[0.0, 0.0], [4.0, 8.0]], dtype=np.float64),
+            ),
+        )
+
+        normalized, factors = normalize_grouped_roi_responses_by_epoch_peak(
+            grouped,
+            options=NormalizationOptions(method="epoch_peak", epoch_number=2),
+        )
+
+        self.assertIsNotNone(factors)
+        if factors is None:
+            raise AssertionError("normalization factors should be present")
+        np.testing.assert_allclose(factors.factors, np.array([3.0, 6.0]))
+        np.testing.assert_allclose(
+            normalized.trials[0].values,
+            np.array([[0.0, 0.0], [2.0 / 3.0, 4.0 / 6.0]], dtype=np.float64),
+        )
+
+    def test_grouped_processing_normalizes_before_correlation_qc(self) -> None:
+        """Confirm normalization is part of the grouped processing path.
+
+        Inputs: grouped responses with epoch-peak normalization enabled.
+        Outputs: processed grouped responses and persisted normalization factors.
+        """
+        grouped = _grouped_responses(
+            trial_values=(
+                np.array([[0.0, 0.0], [2.0, 4.0]], dtype=np.float64),
+                np.array([[0.0, 0.0], [4.0, 8.0]], dtype=np.float64),
+            ),
+        )
+        options = ResponseProcessingOptions(
+            normalization=NormalizationOptions(method="epoch_peak", epoch_number=2),
+        )
+
+        result = process_grouped_roi_responses(grouped, options=options)
+
+        self.assertIsNotNone(result.normalization_factors)
+        if result.normalization_factors is None:
+            raise AssertionError("normalization factors should be present")
+        np.testing.assert_allclose(
+            result.normalization_factors.factors,
+            np.array([3.0, 6.0]),
+        )
+        selected_trials = result.grouped_responses.trials
+        mean_peak = np.nanmax(
+            np.nanmean(
+                np.stack([trial.values for trial in selected_trials]),
+                axis=0,
+            ),
+            axis=0,
+        )
+        np.testing.assert_allclose(mean_peak, np.array([1.0, 1.0]))
+
+    def test_epoch_peak_normalization_rejects_zero_peaks(self) -> None:
+        """Confirm normalization fails loudly when scale factors are invalid.
+
+        Inputs: grouped responses with no positive selected-epoch peak.
+        Outputs: a clear validation error naming the invalid ROI labels.
+        """
+        grouped = _grouped_responses(
+            trial_values=(np.array([[0.0, 0.0], [0.0, 2.0]], dtype=np.float64),),
+        )
+
+        with self.assertRaisesRegex(ValueError, "roi_1"):
+            normalize_grouped_roi_responses_by_epoch_peak(
+                grouped,
+                options=NormalizationOptions(method="epoch_peak", epoch_number=2),
+            )
 
     def test_correlation_filter_can_use_epoch_peak_reference(self) -> None:
         """Confirm peak-reference QC scores trials against the peak trial.

@@ -26,6 +26,7 @@ from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     RoiCorrelationScores,
+    RoiNormalizationFactors,
 )
 from twopy.analysis.response_processing.persistence import (
     read_response_processing_group,
@@ -99,6 +100,7 @@ class LoadedAnalysisOutputs:
     baseline_windows: tuple[FrameWindow, ...]
     grouped_responses: GroupedRoiResponses | None
     response_processing_options: ResponseProcessingOptions | None
+    normalization_factors: RoiNormalizationFactors | None
     correlation_scores: RoiCorrelationScores | None
 
 
@@ -112,6 +114,7 @@ def save_analysis_outputs(
     baseline_windows: Sequence[FrameWindow] = (),
     grouped_responses: GroupedRoiResponses | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
+    normalization_factors: RoiNormalizationFactors | None = None,
     correlation_scores: RoiCorrelationScores | None = None,
     response_summary_trials_csv: Path | None = None,
     response_summary_grouped_csv: Path | None = None,
@@ -128,6 +131,8 @@ def save_analysis_outputs(
         grouped_responses: Optional grouped trial responses.
         response_processing_options: Optional smoothing, low-pass, and
             correlation-QC settings used for these outputs.
+        normalization_factors: Optional per-ROI factors used for epoch-peak
+            normalization.
         correlation_scores: Optional ROI-level correlation QC scores.
         response_summary_trials_csv: Optional CSV path for one row per trial
             and ROI, with one column per relative response timepoint.
@@ -149,8 +154,10 @@ def save_analysis_outputs(
     if any(path is not None for path in summary_outputs) and grouped_responses is None:
         msg = "response summary CSV outputs require grouped_responses"
         raise ValueError(msg)
-    if correlation_scores is not None and response_processing_options is None:
-        msg = "correlation_scores require response_processing_options"
+    if (
+        correlation_scores is not None or normalization_factors is not None
+    ) and response_processing_options is None:
+        msg = "response-processing audit outputs require response_processing_options"
         raise ValueError(msg)
     if grouped_responses is not None:
         validate_grouped_roi_responses(grouped_responses)
@@ -181,6 +188,7 @@ def save_analysis_outputs(
             write_response_processing_group(
                 h5_file.create_group("response_processing"),
                 options=response_processing_options,
+                normalization_factors=normalization_factors,
                 correlation_scores=correlation_scores,
             )
 
@@ -248,6 +256,11 @@ def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
             ),
             response_processing_options=(
                 response_processing.options if response_processing is not None else None
+            ),
+            normalization_factors=(
+                response_processing.normalization_factors
+                if response_processing is not None
+                else None
             ),
             correlation_scores=(
                 response_processing.correlation_scores

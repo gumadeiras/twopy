@@ -59,6 +59,7 @@ from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.persistence import save_analysis_outputs
 from twopy.analysis.response_processing import (
+    NormalizationOptions,
     ResponseProcessingOptions,
     SmoothingOptions,
 )
@@ -113,6 +114,7 @@ from twopy.napari.plotting.form_controls import (
     PLOT_DROPDOWN_WIDTH,
 )
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
+from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
 from twopy.napari.plotting.options import (
     plot_display_options_group,
     visibility_options_widget,
@@ -1148,6 +1150,38 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertEqual(requests, ["requested"])
 
+    def test_normalization_option_changes_request_preview_update(self) -> None:
+        """Confirm normalization controls update the shared processing options.
+
+        Inputs: loaded recording, active ROI Labels layer, and normalization
+        settings.
+        Outputs: the live response controller receives one update request and
+        processing controls preserve the selected normalization.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            requests: list[str] = []
+            response_widget._live_controller.request_update = lambda: requests.append(
+                "requested"
+            )
+            options = NormalizationOptions(method="epoch_peak", epoch_number=1)
+
+            response_widget._set_normalization_options(options)
+
+            self.assertEqual(requests, ["requested"])
+            self.assertEqual(
+                response_widget._response_processing_options.normalization,
+                options,
+            )
+            self.assertEqual(
+                response_widget._processing_options_widget.options().normalization,
+                options,
+            )
+
     def test_delta_f_over_f_option_changes_request_preview_update(self) -> None:
         """Confirm dF/F controls trigger debounced preview recompute.
 
@@ -1177,12 +1211,12 @@ class NapariAdapterTest(unittest.TestCase):
 
             self.assertEqual(requests, ["requested"])
 
-    def test_plot_tab_shows_response_window_before_delta_f_over_f(self) -> None:
-        """Confirm the Plot tab presents response window before dF/F.
+    def test_plot_tab_option_sections_have_expected_order(self) -> None:
+        """Confirm the Plot tab presents response options in workflow order.
 
         Inputs: a newly created response widget.
-        Outputs: the Plot tab orders Plot, Response window, dF/F, then
-        processing controls.
+        Outputs: the Plot tab orders Plot, Response window, dF/F,
+        Normalization, then processing controls.
         """
         _ = QApplication.instance() or QApplication([])
         response_widget = cast(Any, create_response_plot_widget(None))
@@ -1195,6 +1229,10 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget._delta_f_over_f_options_widget,
             DeltaFOverFOptionsWidget,
         )
+        self.assertIsInstance(
+            response_widget._normalization_options_widget,
+            NormalizationOptionsWidget,
+        )
         self.assertLess(
             response_widget._plot_options_layout.indexOf(
                 response_widget._response_window_options_widget,
@@ -1206,6 +1244,14 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertLess(
             response_widget._plot_options_layout.indexOf(
                 response_widget._delta_f_over_f_options_widget,
+            ),
+            response_widget._plot_options_layout.indexOf(
+                response_widget._normalization_options_widget,
+            ),
+        )
+        self.assertLess(
+            response_widget._plot_options_layout.indexOf(
+                response_widget._normalization_options_widget,
             ),
             response_widget._plot_options_layout.indexOf(
                 response_widget._processing_options_widget,
@@ -1382,7 +1428,7 @@ class NapariAdapterTest(unittest.TestCase):
     def test_plot_tab_option_controls_use_shared_widths(self) -> None:
         """Confirm Plot-tab fields use shared widths by control type.
 
-        Inputs: response-window, dF/F, and processing option widgets.
+        Inputs: response-window, dF/F, normalization, and processing widgets.
         Outputs: dropdowns and checkboxes use the wider width, while spin boxes
         use the compact control width.
         """
@@ -1392,11 +1438,22 @@ class NapariAdapterTest(unittest.TestCase):
             ResponseWindowOptionsWidget(ResponseWindowOptions()),
         )
         dff_widget = cast(Any, DeltaFOverFOptionsWidget(DeltaFOverFOptions()))
+        normalization_widget = cast(
+            Any,
+            NormalizationOptionsWidget(
+                NormalizationOptions(method="epoch_peak", epoch_number=2),
+            ),
+        )
         processing_widget = cast(
             Any,
             ResponseProcessingOptionsWidget(ResponseProcessingOptions()),
         )
-        for widget in (response_window_widget, dff_widget, processing_widget):
+        for widget in (
+            response_window_widget,
+            dff_widget,
+            normalization_widget,
+            processing_widget,
+        ):
             widget.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
             widget.ensurePolished()
             widget.adjustSize()
@@ -1410,6 +1467,8 @@ class NapariAdapterTest(unittest.TestCase):
             dff_widget._use_full_baseline,
             dff_widget._fit_mode,
             dff_widget._apply_motion_mask,
+            normalization_widget._normalize_to_epoch_peak,
+            normalization_widget._epoch,
             processing_widget._smoothing_method,
             processing_widget._low_pass_method,
             processing_widget._correlation_reference,
@@ -1419,6 +1478,7 @@ class NapariAdapterTest(unittest.TestCase):
             dff_widget._background_method,
             dff_widget._baseline_epoch,
             dff_widget._fit_mode,
+            normalization_widget._epoch,
             processing_widget._smoothing_method,
             processing_widget._low_pass_method,
             processing_widget._correlation_reference,
@@ -1570,6 +1630,32 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(options.baseline_epoch_number, 2)
             self.assertEqual(options.baseline_epoch_name, "Baseline Interleave")
 
+    def test_normalization_epoch_defaults_to_first_response_epoch(self) -> None:
+        """Confirm normalization defaults to a non-baseline epoch when present.
+
+        Inputs: converted recording with a gray baseline followed by odor.
+        Outputs: normalization is disabled by default but points at the odor
+        epoch when enabled.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName": "Gray Interleave"}, {"epochName": "Odor A"}]'
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            normalization_widget = response_widget._normalization_options_widget
+
+            self.assertFalse(normalization_widget._normalize_to_epoch_peak.isChecked())
+            self.assertFalse(normalization_widget._epoch.isEnabled())
+            self.assertEqual(normalization_widget.options().method, "none")
+            self.assertEqual(normalization_widget.options().epoch_number, 2)
+            self.assertEqual(normalization_widget.options().epoch_name, "Odor A")
+
     def test_saved_processing_options_update_plot_tab_controls(self) -> None:
         """Confirm saved analysis settings hydrate Plot-tab controls.
 
@@ -1584,6 +1670,11 @@ class NapariAdapterTest(unittest.TestCase):
                 window_frames=11,
                 polynomial_order=3,
             ),
+            normalization=NormalizationOptions(
+                method="epoch_peak",
+                epoch_number=2,
+                epoch_name="Odor A",
+            ),
         )
         plot_data = ResponsePlotData(
             source_path=None,
@@ -1596,6 +1687,10 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(
             response_widget._processing_options_widget.options().smoothing,
             options.smoothing,
+        )
+        self.assertEqual(
+            response_widget._normalization_options_widget.options(),
+            options.normalization,
         )
         self.assertEqual(response_widget._response_processing_options, options)
 

@@ -15,6 +15,7 @@ import numpy.typing as npt
 
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.response_processing.options import (
+    NormalizationOptions,
     ResponseProcessingOptions,
     validate_response_processing_options,
 )
@@ -30,16 +31,35 @@ from twopy.analysis.response_processing.signals import (
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseTrial,
+    summarize_roi_response_trials,
     validate_grouped_roi_responses,
 )
 
 __all__ = [
     "apply_correlation_filter_to_grouped_roi_responses",
+    "normalize_grouped_roi_responses_by_epoch_peak",
     "mask_grouped_roi_responses_by_included_rois",
+    "RoiNormalizationFactors",
     "ResponseProcessingResult",
     "process_grouped_roi_responses",
     "process_roi_delta_f_over_f",
 ]
+
+_NORMALIZATION_MIN_PEAK = 1e-12
+
+
+@dataclass(frozen=True)
+class RoiNormalizationFactors:
+    """Per-ROI factors used for epoch-peak response normalization.
+
+    Inputs: grouped response trials and one enabled normalization option.
+    Outputs: the positive peak factor for each ROI in the selected epoch.
+    """
+
+    roi_labels: tuple[str, ...]
+    factors: npt.NDArray[np.float64]
+    epoch_number: int
+    epoch_name: str | None
 
 
 @dataclass(frozen=True)
@@ -53,6 +73,7 @@ class ResponseProcessingResult:
 
     grouped_responses: GroupedRoiResponses
     options: ResponseProcessingOptions
+    normalization_factors: RoiNormalizationFactors | None
     correlation_scores: RoiCorrelationScores | None
 
 
@@ -66,8 +87,8 @@ def process_roi_delta_f_over_f(
 
     Args:
         dff: Continuous ROI dF/F result.
-        options: Processing options. Correlation filtering is ignored here
-            because it needs grouped repeated-trial responses.
+        options: Processing options. Normalization and correlation filtering
+            are ignored here because they need grouped repeated-trial responses.
         data_rate_hz: Sampling rate in hertz.
 
     Returns:
@@ -129,6 +150,10 @@ def process_grouped_roi_responses(
     validate_response_processing_options(options, data_rate_hz=grouped.data_rate_hz)
     validate_grouped_roi_responses(grouped)
     processed = _copy_grouped_with_processed_values(grouped, options=options)
+    processed, normalization_factors = normalize_grouped_roi_responses_by_epoch_peak(
+        processed,
+        options=options.normalization,
+    )
     processed, correlation_scores = apply_correlation_filter_to_grouped_roi_responses(
         processed,
         options=options,
@@ -136,7 +161,54 @@ def process_grouped_roi_responses(
     return ResponseProcessingResult(
         grouped_responses=processed,
         options=options,
+        normalization_factors=normalization_factors,
         correlation_scores=correlation_scores,
+    )
+
+
+def normalize_grouped_roi_responses_by_epoch_peak(
+    grouped: GroupedRoiResponses,
+    *,
+    options: NormalizationOptions,
+) -> tuple[GroupedRoiResponses, RoiNormalizationFactors | None]:
+    """Normalize grouped responses by each ROI's selected-epoch peak.
+
+    Args:
+        grouped: Grouped ROI responses to normalize.
+        options: Normalization settings.
+
+    Returns:
+        ``(grouped_responses, factors)``. ``factors`` is ``None`` when
+        normalization is disabled.
+
+    Raises:
+        ValueError: If the selected epoch is absent or any ROI lacks a positive
+        finite peak in that epoch.
+    """
+    validate_grouped_roi_responses(grouped)
+    if options.method not in {"none", "epoch_peak"}:
+        msg = f"Unknown normalization method {options.method!r}"
+        raise ValueError(msg)
+    if options.method == "none":
+        return grouped, None
+    if options.epoch_number is None:
+        msg = "epoch-peak normalization requires an epoch_number"
+        raise ValueError(msg)
+    factors = _normalization_factors(grouped, options=options)
+    trials = tuple(
+        _copy_trial_with_values(trial, trial.values / factors.factors)
+        for trial in grouped.trials
+    )
+    return (
+        GroupedRoiResponses(
+            roi_labels=grouped.roi_labels,
+            data_rate_hz=grouped.data_rate_hz,
+            trials=trials,
+            pre_window_seconds=grouped.pre_window_seconds,
+            post_window_seconds=grouped.post_window_seconds,
+            response_window_auto=grouped.response_window_auto,
+        ),
+        factors,
     )
 
 
@@ -259,6 +331,52 @@ def _copy_grouped_with_processed_values(
     )
 
 
+def _normalization_factors(
+    grouped: GroupedRoiResponses,
+    *,
+    options: NormalizationOptions,
+) -> RoiNormalizationFactors:
+    """Return per-ROI selected-epoch peak factors."""
+    selected_trials = tuple(
+        trial
+        for trial in grouped.trials
+        if trial.epoch_number == options.epoch_number
+        and (options.epoch_name is None or trial.epoch_name == options.epoch_name)
+    )
+    if len(selected_trials) == 0:
+        label = (
+            f"{options.epoch_number}: {options.epoch_name}"
+            if options.epoch_name is not None
+            else str(options.epoch_number)
+        )
+        msg = f"No trials matched normalization epoch {label}"
+        raise ValueError(msg)
+    summary = summarize_roi_response_trials(
+        selected_trials,
+        roi_labels=grouped.roi_labels,
+        data_rate_hz=grouped.data_rate_hz,
+    )
+    factors = np.nanmax(summary.mean_values, axis=1)
+    bad_indices = tuple(
+        index
+        for index, factor in enumerate(factors)
+        if not np.isfinite(factor) or factor <= _NORMALIZATION_MIN_PEAK
+    )
+    if len(bad_indices) > 0:
+        bad_labels = ", ".join(grouped.roi_labels[index] for index in bad_indices)
+        msg = (
+            "Normalization epoch peak must be positive for every ROI; "
+            f"invalid ROI labels: {bad_labels}"
+        )
+        raise ValueError(msg)
+    return RoiNormalizationFactors(
+        roi_labels=grouped.roi_labels,
+        factors=factors.astype(np.float64, copy=False),
+        epoch_number=int(options.epoch_number or 0),
+        epoch_name=options.epoch_name,
+    )
+
+
 def _mask_excluded_rois(
     grouped: GroupedRoiResponses,
     *,
@@ -334,6 +452,17 @@ def _processing_metadata(
             else float(options.low_pass.cutoff_hz)
         ),
         "response_processing_low_pass_order": options.low_pass.order,
+        "response_processing_normalization_method": options.normalization.method,
+        "response_processing_normalization_epoch_number": (
+            "none"
+            if options.normalization.epoch_number is None
+            else int(options.normalization.epoch_number)
+        ),
+        "response_processing_normalization_epoch_name": (
+            "none"
+            if options.normalization.epoch_name is None
+            else options.normalization.epoch_name
+        ),
         "response_processing_correlation_reference": (
             options.correlation_filter.reference
         ),

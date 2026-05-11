@@ -33,6 +33,7 @@ from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseTrial,
     group_delta_f_over_f_by_epoch,
+    summarize_roi_response_trials,
 )
 from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData, recording_frame_rate_hz
@@ -510,58 +511,19 @@ def _epoch_plot_data(
     Returns:
         Mean and SEM traces with shape ``(rois, frames)``.
     """
-    time_seconds = _shared_time_axis(trials, data_rate_hz)
-    first_time = float(time_seconds[0])
-    max_frames = len(time_seconds)
-    trial_count = len(trials)
-    roi_count = len(roi_labels)
-    values = np.full((trial_count, max_frames, roi_count), np.nan, dtype=np.float64)
-    for trial_index, trial in enumerate(trials):
-        offsets = np.rint((trial.time_seconds - first_time) * data_rate_hz).astype(
-            np.int64,
-            copy=False,
-        )
-        values[trial_index, offsets, :] = trial.values
-
-    valid_counts = np.sum(~np.isnan(values), axis=0).T
-    value_sums = np.nansum(values, axis=0).T
-    mean_values = np.full((roi_count, max_frames), np.nan, dtype=np.float64)
-    valid_mask = valid_counts > 0
-    mean_values[valid_mask] = value_sums[valid_mask] / valid_counts[valid_mask]
-    sem_values = np.zeros((roi_count, max_frames), dtype=np.float64)
-    variable_mask = valid_counts > 1
-    if np.any(variable_mask):
-        values_by_roi_frame = np.moveaxis(values, 0, -1).transpose(1, 0, 2)
-        std_values = np.nanstd(values_by_roi_frame[variable_mask], axis=1, ddof=1)
-        sem_values[variable_mask] = std_values / np.sqrt(valid_counts[variable_mask])
+    summary = summarize_roi_response_trials(
+        trials,
+        roi_labels=roi_labels,
+        data_rate_hz=data_rate_hz,
+    )
     return EpochResponsePlotData(
         epoch_name=epoch_name,
         epoch_number=epoch_number,
         roi_labels=roi_labels,
-        time_seconds=time_seconds,
-        mean_values=mean_values,
-        sem_values=sem_values,
+        time_seconds=summary.time_seconds,
+        mean_values=summary.mean_values,
+        sem_values=summary.sem_values,
     )
-
-
-def _shared_time_axis(
-    trials: tuple[RoiResponseTrial, ...],
-    data_rate_hz: float,
-) -> npt.NDArray[np.float64]:
-    """Return one relative time axis that covers all trials in an epoch.
-
-    Args:
-        trials: Trial responses for one epoch type.
-        data_rate_hz: Imaging frame rate in hertz.
-
-    Returns:
-        Relative time in seconds, usually starting before stimulus onset and
-        ending after stimulus offset when surrounding gray frames are available.
-    """
-    first_time = min(float(trial.time_seconds[0]) for trial in trials)
-    last_time = max(float(trial.time_seconds[-1]) for trial in trials)
-    frame_count = int(round((last_time - first_time) * data_rate_hz)) + 1
-    return first_time + (np.arange(frame_count, dtype=np.float64) / data_rate_hz)
 
 
 def _analysis_output_data_rate_hz(

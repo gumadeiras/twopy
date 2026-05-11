@@ -11,6 +11,7 @@ responses from the current Labels layer, this module converts labels to a
 
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
+from dataclasses import replace
 from pathlib import Path
 
 from qtpy.QtCore import QTimer
@@ -22,7 +23,10 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
-from twopy.analysis.response_processing import ResponseProcessingOptions
+from twopy.analysis.response_processing import (
+    NormalizationOptions,
+    ResponseProcessingOptions,
+)
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.trials import default_baseline_epoch_number
 from twopy.analysis_cache import (
@@ -134,6 +138,7 @@ class _ResponsePlotWidget(QWidget):
             on_response_processing_change=self._set_response_processing_options,
             on_response_window_change=self._set_response_window_options,
             on_delta_f_over_f_change=self._set_delta_f_over_f_options,
+            on_normalization_change=self._set_normalization_options,
             on_reload_saved=self.reload,
             on_recompute_preview=self.update_from_current_rois,
             on_save_analysis=self.save_analysis_and_rois,
@@ -155,6 +160,7 @@ class _ResponsePlotWidget(QWidget):
         self._delta_f_over_f_options_widget = (
             options_panel.delta_f_over_f_options_widget
         )
+        self._normalization_options_widget = options_panel.normalization_options_widget
         self._add_default_plot_display_options()
 
     def options_widget(self) -> object:
@@ -261,6 +267,12 @@ class _ResponsePlotWidget(QWidget):
             {},
             selected_epoch_number=self._delta_f_over_f_options.baseline_epoch_number,
         )
+        self._normalization_options_widget.set_epoch_choices(
+            {},
+            selected_epoch_number=(
+                self._response_processing_options.normalization.epoch_number
+            ),
+        )
         self._response_window_options_widget.set_max_window_seconds(None)
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
@@ -285,6 +297,12 @@ class _ResponsePlotWidget(QWidget):
         self._delta_f_over_f_options_widget.set_epoch_choices(
             epoch_names,
             selected_epoch_number=default_baseline_epoch_number(epoch_names),
+        )
+        self._normalization_options_widget.set_epoch_choices(
+            epoch_names,
+            selected_epoch_number=(
+                self._response_processing_options.normalization.epoch_number
+            ),
         )
         self._response_window_options_widget.set_max_window_seconds(
             response_plot_baseline_window_limit_for_recording(recording),
@@ -466,6 +484,16 @@ class _ResponsePlotWidget(QWidget):
             return
         self._update_status_label.setText("Processing settings updated for next run.")
 
+    def _set_normalization_options(self, options: NormalizationOptions) -> None:
+        self._processing_options_widget.set_normalization_options(options)
+        self._set_response_processing_options(
+            replace(self._response_processing_options, normalization=options),
+        )
+        if options.method == "epoch_peak":
+            self._update_status_label.setText("Normalization settings updated.")
+            return
+        self._update_status_label.setText("Normalization disabled.")
+
     def _set_delta_f_over_f_options(self, options: DeltaFOverFOptions) -> None:
         self._delta_f_over_f_options = options
         self._live_controller.set_delta_f_over_f_options(options)
@@ -490,6 +518,10 @@ class _ResponsePlotWidget(QWidget):
     ) -> None:
         self._response_processing_options = options
         self._processing_options_widget.set_options(options)
+        self._normalization_options_widget.set_options(options.normalization)
+        self._processing_options_widget.set_normalization_options(
+            options.normalization,
+        )
         self._live_controller.set_response_processing_options(options)
 
     def _load_delta_f_over_f_options(self, options: DeltaFOverFOptions) -> None:

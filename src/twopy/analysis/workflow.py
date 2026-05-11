@@ -30,7 +30,9 @@ from twopy.analysis.persistence import save_analysis_outputs
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     RoiCorrelationScores,
+    RoiNormalizationFactors,
     apply_correlation_filter_to_grouped_roi_responses,
+    normalize_grouped_roi_responses_by_epoch_peak,
     process_roi_delta_f_over_f,
     validate_response_processing_options,
 )
@@ -85,6 +87,7 @@ class AnalysisResponseComputation:
     baseline_windows: tuple[FrameWindow, ...]
     grouped_responses: GroupedRoiResponses
     response_processing_options: ResponseProcessingOptions
+    normalization_factors: RoiNormalizationFactors | None
     correlation_scores: RoiCorrelationScores | None
 
 
@@ -267,6 +270,7 @@ def _save_response_analysis_run(
         baseline_windows=computation.baseline_windows,
         grouped_responses=computation.grouped_responses,
         response_processing_options=computation.response_processing_options,
+        normalization_factors=computation.normalization_factors,
         correlation_scores=computation.correlation_scores,
         response_summary_trials_csv=resolved_trials_summary_path,
         response_summary_grouped_csv=resolved_grouped_summary_path,
@@ -282,6 +286,7 @@ def _save_response_analysis_run(
         baseline_windows=computation.baseline_windows,
         grouped_responses=computation.grouped_responses,
         response_processing_options=computation.response_processing_options,
+        normalization_factors=computation.normalization_factors,
         correlation_scores=computation.correlation_scores,
         output_path=resolved_output_path,
         response_summary_trials_csv_path=resolved_trials_summary_path,
@@ -493,6 +498,12 @@ def _compute_recording_responses_from_baseline(
         pre_window_seconds=response_pre_window_seconds,
         post_window_seconds=response_post_window_seconds,
     )
+    grouped_responses, normalization_factors = (
+        normalize_grouped_roi_responses_by_epoch_peak(
+            grouped_responses,
+            options=processing_options.normalization,
+        )
+    )
     grouped_responses, correlation_scores = (
         apply_correlation_filter_to_grouped_roi_responses(
             grouped_responses,
@@ -510,6 +521,7 @@ def _compute_recording_responses_from_baseline(
         baseline_windows=baseline_windows,
         grouped_responses=grouped_responses,
         response_processing_options=processing_options,
+        normalization_factors=normalization_factors,
         correlation_scores=correlation_scores,
     )
 
