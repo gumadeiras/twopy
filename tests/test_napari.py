@@ -2012,17 +2012,18 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_set: object,
                 **kwargs: object,
             ) -> BackgroundCorrectedRoiTraces:
-                extracted.append(cast(Any, roi_set).labels)
+                roi_labels = cast(Any, roi_set).labels
+                extracted.append(roi_labels)
                 start_frame = cast(int, kwargs["start_frame"])
                 stop_frame = cast(int, kwargs["stop_frame"])
                 frame_count = stop_frame - start_frame
-                roi_count = len(cast(Any, roi_set).labels)
+                roi_count = len(roi_labels)
                 values = np.ones((frame_count, roi_count), dtype=np.float64)
                 return BackgroundCorrectedRoiTraces(
                     raw_values=values,
                     background_values=np.zeros_like(values),
                     corrected_values=values,
-                    labels=cast(Any, roi_set).labels,
+                    labels=roi_labels,
                     start_frame=start_frame,
                     stop_frame=stop_frame,
                     statistic="mean",

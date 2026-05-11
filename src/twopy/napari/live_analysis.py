@@ -187,7 +187,7 @@ class LiveResponseAnalysisCache:
         return stale_indices
 
     def _stale_trace_indices(self, current: _PreparedRoiSet) -> tuple[int, ...]:
-        """Return ROI indices missing from the cache or matching old masks."""
+        """Return ROI indices missing from the cache or using stale masks."""
         changed: list[int] = []
         for index, (label_value, signature) in enumerate(
             zip(current.label_values, current.signatures, strict=True)
@@ -333,15 +333,19 @@ def _combine_cached_traces(
         if trace.method != first.method or trace.statistic != first.statistic:
             msg = "Cached traces must share one extraction method and statistic."
             raise ValueError(msg)
+    raw_values = np.column_stack(tuple(trace.raw_values[:, 0] for trace in traces))
+    background_values = np.column_stack(
+        tuple(trace.background_values[:, 0] for trace in traces)
+    )
+    corrected_values = np.column_stack(
+        tuple(trace.corrected_values[:, 0] for trace in traces)
+    )
+    labels = tuple(label for trace in traces for label in trace.labels)
     return BackgroundCorrectedRoiTraces(
-        raw_values=np.column_stack(tuple(trace.raw_values[:, 0] for trace in traces)),
-        background_values=np.column_stack(
-            tuple(trace.background_values[:, 0] for trace in traces)
-        ),
-        corrected_values=np.column_stack(
-            tuple(trace.corrected_values[:, 0] for trace in traces)
-        ),
-        labels=tuple(label for trace in traces for label in trace.labels),
+        raw_values=raw_values,
+        background_values=background_values,
+        corrected_values=corrected_values,
+        labels=labels,
         start_frame=first.start_frame,
         stop_frame=first.stop_frame,
         statistic=first.statistic,
