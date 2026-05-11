@@ -104,6 +104,10 @@ from twopy.napari.plotting.export import (
     labels_for_recording_image,
     roi_boundary_segments,
 )
+from twopy.napari.plotting.export_controls import (
+    ResponseExportState,
+    create_response_export_tab,
+)
 from twopy.napari.plotting.form_controls import (
     PLOT_CONTROL_WIDTH,
     PLOT_DROPDOWN_WIDTH,
@@ -3744,6 +3748,70 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual({path.suffix for path in written}, {".pdf", ".png"})
             self.assertEqual({path.parent.name for path in written}, {"plots"})
             self.assertTrue(all(path.is_file() for path in written))
+
+    def test_response_export_tab_syncs_cached_exports_to_publish_root(self) -> None:
+        """Confirm Export-tab files are published when analysis caching is on.
+
+        Inputs: cached converted recording, source publish destination, and the
+        recording-view export button.
+        Outputs: local export files are copied to the source ``twopy`` folder.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            local_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
+            publish_dir = source_dir / "twopy"
+            local_dir.mkdir(parents=True)
+            _write_source_recording_shape(source_dir)
+            recording = load_converted_recording(
+                _write_converted_recording(local_dir, source_session_dir=source_dir),
+            )
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {root / 'cache'}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            state = ResponseExportState(
+                viewer=None,
+                recording=recording,
+                roi_labels_layer=None,
+                plot_data=None,
+                output_dir=local_dir / "exports",
+                roi_label_values=(),
+                roi_colors=(),
+                epoch_indices=(),
+                roi_indices=(),
+                show_sem=True,
+                time_bounds=(0.0, 1.0),
+                value_bounds=(0.0, 1.0),
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                tab = create_response_export_tab(lambda: state)
+                buttons = {
+                    button.text(): button for button in tab.findChildren(QPushButton)
+                }
+                buttons["Save recording view"].click()
+            finally:
+                chdir(original_cwd)
+
+            self.assertTrue(
+                (
+                    publish_dir / "exports" / "recording_view" / "recording_view.pdf"
+                ).is_file(),
+            )
+            self.assertTrue(
+                (
+                    publish_dir / "exports" / "recording_view" / "recording_view.png"
+                ).is_file(),
+            )
 
     def test_export_roi_contours_keep_display_orientation(self) -> None:
         """Confirm exported ROI contours keep the same top-origin view as napari.

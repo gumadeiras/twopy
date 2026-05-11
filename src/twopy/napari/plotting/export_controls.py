@@ -14,6 +14,11 @@ from pathlib import Path
 
 from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
+from twopy.analysis_cache import (
+    AnalysisSyncResult,
+    build_analysis_sync_plan,
+    copy_analysis_sync_plan,
+)
 from twopy.converted import RecordingData
 from twopy.napari.display_paths import format_output_folder
 from twopy.napari.plotting.data import ResponsePlotData
@@ -182,21 +187,48 @@ def _button(
         """Run the export action and show a short status."""
         state = get_state()
         result = callback(state)
-        status_label.setText(_export_status(result, state.recording))
+        sync_result = _sync_exported_paths(result, state.recording)
+        status_label.setText(_export_status(result, state.recording, sync_result))
 
     button.clicked.connect(run_export)
     return button
 
 
+def _sync_exported_paths(
+    result: tuple[Path, ...] | str,
+    recording: RecordingData | None,
+) -> AnalysisSyncResult | str | None:
+    """Copy just-written export files from local cache to publish storage.
+
+    Args:
+        result: Export callback result.
+        recording: Loaded recording that defines local and publish roots.
+
+    Returns:
+        Sync result, error text, or ``None`` when sync does not apply.
+    """
+    if isinstance(result, str) or recording is None:
+        return None
+    sync_plan = build_analysis_sync_plan(recording=recording, local_paths=result)
+    if sync_plan is None:
+        return None
+    try:
+        return copy_analysis_sync_plan(sync_plan)
+    except Exception as error:
+        return f"sync failed: {error}"
+
+
 def _export_status(
     result: tuple[Path, ...] | str,
     recording: RecordingData | None,
+    sync_result: AnalysisSyncResult | str | None = None,
 ) -> str:
     """Return a compact export status message.
 
     Args:
         result: Either an error/status string or written files.
         recording: Optional selected recording for compact folder display.
+        sync_result: Optional publish sync result or sync error text.
 
     Returns:
         User-facing status string.
@@ -206,4 +238,14 @@ def _export_status(
     if len(result) == 0:
         return "No files exported."
     folder = format_output_folder(result[0].parent, recording)
-    return f"Saved {counted_noun(len(result), 'file')} to {folder}"
+    status = f"Saved {counted_noun(len(result), 'file')} to {folder}"
+    if isinstance(sync_result, str):
+        return f"{status}; {sync_result}"
+    if sync_result is None:
+        return status
+    if len(sync_result.copied_paths) == 0:
+        return f"{status}; sync already current"
+    return (
+        f"{status}; synced {counted_noun(len(sync_result.copied_paths), 'file')} "
+        f"to {sync_result.publish_root}"
+    )

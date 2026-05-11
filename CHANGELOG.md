@@ -8,6 +8,7 @@
 
 ### Fixes
 
+- Synced napari Export-tab figure files from the local analysis cache back to the configured publish/source `twopy/exports` folder.
 - Made cached analysis file copies safer and repeatable by using atomic target-file replacement and refreshing stale localized converted files when the selected converted output is newer.
 - Made the napari Update tab scroll so long recording summaries and output paths stay visible when labels wrap.
 - Preserved noncontiguous ROI label numbers when reopening ROIs in napari so visibility toggles, colors, and deletion target the correct ROI.
