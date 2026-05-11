@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.7 - 2026-05-11
+
 ### Features
 
 - Added a Load-tab `unload all` button and renamed the existing unload action to `unload selected`.
