@@ -4,6 +4,7 @@
 
 ### Features
 
+- Added a Load-tab `unload all` button and renamed the existing unload action to `unload selected`.
 - Added a napari Plot-tab Normalization section that can scale all grouped responses by each ROI's selected-epoch peak, persisting the selected epoch and per-ROI scale factors with saved analysis outputs.
 - Added local analysis caching for napari recording work so converted recordings, ROI edits, and response analysis run from local storage while saved analysis outputs sync back to the configured publish location in the background.
 

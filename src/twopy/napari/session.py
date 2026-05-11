@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from qtpy.QtWidgets import (
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QPushButton,
@@ -35,6 +36,7 @@ __all__ = [
     "render_loaded_recordings_panel",
     "select_loaded_recording",
     "set_loaded_recording_visibility",
+    "unload_all_loaded_recordings",
     "unload_loaded_recording",
 ]
 
@@ -101,6 +103,7 @@ class LoadedRecordingsPanel(QWidget):
         *,
         on_select: Callable[[int | None], None],
         on_unload: Callable[[int], None],
+        on_unload_all: Callable[[], None],
     ) -> None:
         """Create an initially empty loaded-recordings panel.
 
@@ -108,19 +111,27 @@ class LoadedRecordingsPanel(QWidget):
             on_select: Callback receiving the selected row, or ``None`` when
                 no recording is selected.
             on_unload: Callback receiving the row to unload.
+            on_unload_all: Callback unloading every loaded recording.
         """
         super().__init__()
         self._on_select = on_select
         self._on_unload = on_unload
+        self._on_unload_all = on_unload_all
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._select_row)
-        unload_button = QPushButton("Unload Recording")
+        unload_button = QPushButton("unload selected")
         unload_button.clicked.connect(self._unload_selected)
+        unload_all_button = QPushButton("unload all")
+        unload_all_button.clicked.connect(self._unload_all)
+
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(unload_button)
+        button_layout.addWidget(unload_all_button)
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Loaded Recordings"))
         layout.addWidget(self._list)
-        layout.addWidget(unload_button)
+        layout.addLayout(button_layout)
         self.setLayout(layout)
 
     def set_recordings(
@@ -171,6 +182,10 @@ class LoadedRecordingsPanel(QWidget):
         selected = self.selected_index()
         if selected is not None:
             self._on_unload(selected)
+
+    def _unload_all(self) -> None:
+        """Ask the controls to unload every currently loaded recording."""
+        self._on_unload_all()
 
 
 def remove_loaded_recording_layers(
@@ -292,6 +307,23 @@ def unload_loaded_recording(state: NapariSessionState, index: int) -> None:
         return
     next_index = min(index, len(state.loaded_recordings) - 1)
     select_loaded_recording(state, next_index)
+
+
+def unload_all_loaded_recordings(state: NapariSessionState) -> None:
+    """Unload every recording and remove all owned layers from napari.
+
+    Args:
+        state: Mutable napari session state.
+
+    Returns:
+        None.
+    """
+    if len(state.loaded_recordings) == 0:
+        return
+    for loaded_recording in state.loaded_recordings:
+        remove_loaded_recording_layers(state.viewer, loaded_recording)
+    state.loaded_recordings.clear()
+    select_loaded_recording(state, None)
 
 
 def render_loaded_recordings_panel(state: NapariSessionState) -> None:

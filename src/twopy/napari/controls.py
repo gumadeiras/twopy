@@ -39,6 +39,7 @@ from twopy.napari.session import (
     record_loaded_view,
     render_loaded_recordings_panel,
     select_loaded_recording,
+    unload_all_loaded_recordings,
     unload_loaded_recording,
 )
 from twopy.napari.sidebar import (
@@ -559,9 +560,15 @@ def _make_loaded_recordings_widget(state: NapariControlState) -> object:
         unload_loaded_recording(state, index)
         _sync_recording_picker_to_selected(state)
 
+    def unload_all_recordings() -> None:
+        """Unload all recordings and reset the Load-tab picker."""
+        unload_all_loaded_recordings(state)
+        _sync_recording_picker_to_selected(state)
+
     panel = LoadedRecordingsPanel(
         on_select=select_recording,
         on_unload=unload_recording,
+        on_unload_all=unload_all_recordings,
     )
     state.loaded_recordings_panel = panel
     render_loaded_recordings_panel(state)

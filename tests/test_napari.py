@@ -2319,11 +2319,11 @@ class NapariAdapterTest(unittest.TestCase):
             load_widget = _load_recording_widget(control_docks.load_widget)
             panel = cast(QWidget, control_docks.loaded_recordings_widget)
             loaded_list = panel.findChild(QListWidget)
-            unload_button = next(
-                button
-                for button in panel.findChildren(QPushButton)
-                if button.text() == "Unload Recording"
-            )
+            unload_buttons = {
+                button.text(): button for button in panel.findChildren(QPushButton)
+            }
+            self.assertIn("unload selected", unload_buttons)
+            self.assertIn("unload all", unload_buttons)
 
             load_widget(recording_folder=first)
             load_widget(recording_folder=second)
@@ -2348,7 +2348,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse(viewer.images[3].visible)
             self.assertFalse(viewer.labels[1].visible)
 
-            unload_button.click()
+            unload_buttons["unload selected"].click()
 
             self.assertEqual(loaded_list.count(), 1)
             self.assertEqual(len(viewer.images), 2)
@@ -2363,9 +2363,16 @@ class NapariAdapterTest(unittest.TestCase):
                 second.name, str(load_widget.recording_folder.line_edit.value)
             )
 
-            unload_button.click()
+            load_widget(recording_folder=first)
+            self.assertEqual(loaded_list.count(), 2)
+            self.assertEqual(len(viewer.images), 4)
+            self.assertEqual(len(viewer.labels), 2)
+
+            unload_buttons["unload all"].click()
 
             self.assertEqual(loaded_list.count(), 0)
+            self.assertEqual(len(viewer.images), 0)
+            self.assertEqual(len(viewer.labels), 0)
             self.assertEqual(load_widget.recording_folder.value, Path("default"))
 
     def test_controls_hide_remembered_recording_folder(self) -> None:
