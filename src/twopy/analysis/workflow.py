@@ -7,7 +7,7 @@ This module wires together existing twopy analysis helpers. It does not read
 source microscope files; callers must convert recordings before using it.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -21,12 +21,13 @@ from twopy.analysis.dff import (
     RoiDeltaFOverF,
     compute_roi_delta_f_over_f,
 )
-from twopy.analysis.epoch_mapping import (
-    InterpolatedEpochMapping,
-    interpolate_stimulus_epochs_to_frame_windows,
-)
+from twopy.analysis.epoch_mapping import InterpolatedEpochMapping
 from twopy.analysis.motion import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.persistence import save_analysis_outputs
+from twopy.analysis.response_context import (
+    ResponseAnalysisContext,
+    resolve_response_analysis_context,
+)
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     RoiCorrelationScores,
@@ -34,7 +35,6 @@ from twopy.analysis.response_processing import (
     apply_correlation_filter_to_grouped_roi_responses,
     normalize_grouped_roi_responses_by_epoch_peak,
     process_roi_delta_f_over_f,
-    validate_response_processing_options,
 )
 from twopy.analysis.response_window_options import (
     DEFAULT_RESPONSE_POST_WINDOW_SECONDS,
@@ -47,12 +47,10 @@ from twopy.analysis.responses import (
 from twopy.analysis.trials import (
     EpochFrameWindow,
     FrameWindow,
-    resolve_baseline_frame_windows,
 )
 from twopy.converted import (
     RecordingData,
     load_converted_recording,
-    recording_frame_rate_hz,
 )
 from twopy.roi import RoiSet, load_roi_set
 from twopy.spatial import SpatialDomain
@@ -63,7 +61,10 @@ __all__ = [
     "DEFAULT_RESPONSE_POST_WINDOW_SECONDS",
     "DEFAULT_RESPONSE_PRE_WINDOW_SECONDS",
     "analyze_recording_responses",
+    "compute_recording_responses_from_traces",
     "compute_recording_responses",
+    "ResponseAnalysisContext",
+    "resolve_response_analysis_context",
 ]
 
 
@@ -336,6 +337,7 @@ def compute_recording_responses(
     response_pre_window_seconds: float = DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
     response_post_window_seconds: float = 0.0,
     response_processing_options: ResponseProcessingOptions | None = None,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> AnalysisResponseComputation:
     """Compute ROI responses from converted data without writing files.
 
@@ -363,6 +365,8 @@ def compute_recording_responses(
             include in grouped responses.
         response_processing_options: Optional smoothing, low-pass, and
             correlation-QC settings to apply after dF/F.
+        check_cancelled: Optional callback that raises when an interactive
+            caller has superseded this computation.
 
     Returns:
         In-memory response-analysis objects.
@@ -374,51 +378,91 @@ def compute_recording_responses(
     plotter. It streams movie frames in chunks and leaves file writing to a
     separate explicit call.
     """
-    frame_rate_hz = (
-        recording_frame_rate_hz(recording)
-        if data_rate_hz is None
-        else float(data_rate_hz)
-    )
-    processing_options = _resolve_response_processing_options(
-        response_processing_options,
-        data_rate_hz=frame_rate_hz,
-    )
-    mapping, resolved_epoch_windows = _resolve_epoch_windows(recording, epoch_windows)
-    trace_start, trace_stop = _frame_range_for_epoch_windows(
-        resolved_epoch_windows,
-        frame_count=recording.movie.shape[0],
-        data_rate_hz=frame_rate_hz,
-        pre_window_seconds=response_pre_window_seconds,
-        post_window_seconds=response_post_window_seconds,
-    )
-    resolved_baseline_windows = resolve_baseline_frame_windows(
-        resolved_epoch_windows,
+    context = resolve_response_analysis_context(
+        recording,
+        epoch_windows=epoch_windows,
         baseline_windows=baseline_windows,
-        epoch_name=baseline_epoch_name,
-        epoch_number=baseline_epoch_number,
+        baseline_epoch_number=baseline_epoch_number,
+        baseline_epoch_name=baseline_epoch_name,
+        data_rate_hz=data_rate_hz,
+        response_pre_window_seconds=response_pre_window_seconds,
+        response_post_window_seconds=response_post_window_seconds,
+        response_processing_options=response_processing_options,
     )
-    if len(resolved_baseline_windows) == 0:
-        msg = "No baseline windows matched the requested selector"
-        raise ValueError(msg)
-
-    return _compute_recording_responses_from_baseline(
+    if check_cancelled is not None:
+        check_cancelled()
+    traces = extract_background_corrected_roi_traces(
         recording,
         roi_set,
-        mapping=mapping,
-        resolved_epoch_windows=resolved_epoch_windows,
-        baseline_windows=resolved_baseline_windows,
-        frame_rate_hz=frame_rate_hz,
-        processing_options=processing_options,
-        background_method=background_method,
+        method=background_method,
+        start_frame=context.trace_start,
+        stop_frame=context.trace_stop,
+        chunk_frames=chunk_frames,
+        spatial_domain=spatial_domain,
+        check_cancelled=check_cancelled,
+    )
+    if check_cancelled is not None:
+        check_cancelled()
+    return compute_recording_responses_from_traces(
+        recording,
+        roi_set,
+        traces,
+        context=context,
         baseline_sample_seconds=baseline_sample_seconds,
         fit_mode=fit_mode,
         apply_motion_mask=apply_motion_mask,
-        chunk_frames=chunk_frames,
-        spatial_domain=spatial_domain,
-        trace_start=trace_start,
-        trace_stop=trace_stop,
-        response_pre_window_seconds=response_pre_window_seconds,
-        response_post_window_seconds=response_post_window_seconds,
+        check_cancelled=check_cancelled,
+    )
+
+
+def compute_recording_responses_from_traces(
+    recording: RecordingData,
+    roi_set: RoiSet,
+    traces: BackgroundCorrectedRoiTraces,
+    *,
+    context: ResponseAnalysisContext,
+    baseline_sample_seconds: float | None = 1.0,
+    fit_mode: DeltaFOverFFitMode = "direct_bounded_tau",
+    apply_motion_mask: bool = True,
+    check_cancelled: Callable[[], None] | None = None,
+) -> AnalysisResponseComputation:
+    """Compute grouped responses from already-extracted ROI traces.
+
+    Args:
+        recording: Loaded converted recording.
+        roi_set: ROI masks represented by ``traces``.
+        traces: Background-corrected traces for the current ROI set.
+        context: Resolved timing and processing context for this recording.
+        baseline_sample_seconds: Optional seconds from each baseline end.
+        fit_mode: dF/F exponential fit mode.
+        apply_motion_mask: Whether to mark converted high-motion frames as NaN.
+        check_cancelled: Optional callback that raises when work is obsolete.
+
+    Returns:
+        In-memory response-analysis objects.
+
+    This helper keeps the scientific math identical to
+    ``compute_recording_responses`` while allowing interactive callers to reuse
+    movie-derived traces when ROI masks have not changed.
+    """
+    _validate_traces_for_context(traces, roi_set, context)
+    if check_cancelled is not None:
+        check_cancelled()
+    return _compute_recording_responses_from_baseline(
+        recording,
+        roi_set,
+        traces=traces,
+        mapping=context.epoch_mapping,
+        resolved_epoch_windows=context.epoch_windows,
+        baseline_windows=context.baseline_windows,
+        frame_rate_hz=context.frame_rate_hz,
+        processing_options=context.processing_options,
+        baseline_sample_seconds=baseline_sample_seconds,
+        fit_mode=fit_mode,
+        apply_motion_mask=apply_motion_mask,
+        response_pre_window_seconds=context.response_pre_window_seconds,
+        response_post_window_seconds=context.response_post_window_seconds,
+        check_cancelled=check_cancelled,
     )
 
 
@@ -426,55 +470,40 @@ def _compute_recording_responses_from_baseline(
     recording: RecordingData,
     roi_set: RoiSet,
     *,
+    traces: BackgroundCorrectedRoiTraces,
     mapping: InterpolatedEpochMapping | None,
     resolved_epoch_windows: Sequence[EpochFrameWindow],
     baseline_windows: tuple[FrameWindow, ...],
     frame_rate_hz: float,
     processing_options: ResponseProcessingOptions,
-    background_method: BackgroundCorrectionMethod,
     baseline_sample_seconds: float | None,
     fit_mode: DeltaFOverFFitMode,
     apply_motion_mask: bool,
-    chunk_frames: int,
-    spatial_domain: SpatialDomain,
-    trace_start: int,
-    trace_stop: int,
     response_pre_window_seconds: float,
     response_post_window_seconds: float,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> AnalysisResponseComputation:
     """Run the shared response computation after baseline windows are selected.
 
     Args:
         recording: Loaded converted recording.
         roi_set: ROI masks to extract from the recording.
+        traces: Background-corrected ROI traces.
         mapping: Optional interpolated epoch mapping provenance.
         resolved_epoch_windows: Stimulus windows used for grouping.
         baseline_windows: Baseline windows used for dF/F fitting.
         frame_rate_hz: Effective analysis frame rate.
         processing_options: Post-dF/F response processing settings.
-        background_method: Background correction method before dF/F.
         baseline_sample_seconds: Optional seconds from each baseline end.
         fit_mode: dF/F exponential fit mode.
         apply_motion_mask: Whether to mark converted high-motion frames as NaN.
-        chunk_frames: Number of movie frames to read per HDF5 chunk.
-        spatial_domain: Spatial domain used for trace extraction.
-        trace_start: First movie frame to extract.
-        trace_stop: Exclusive stop movie frame to extract.
         response_pre_window_seconds: Seconds before each stimulus window.
         response_post_window_seconds: Seconds after each stimulus window.
+        check_cancelled: Optional callback that raises when work is obsolete.
 
     Returns:
         In-memory response-analysis objects.
     """
-    traces = extract_background_corrected_roi_traces(
-        recording,
-        roi_set,
-        method=background_method,
-        start_frame=trace_start,
-        stop_frame=trace_stop,
-        chunk_frames=chunk_frames,
-        spatial_domain=spatial_domain,
-    )
     dff = compute_roi_delta_f_over_f(
         traces,
         baseline_windows,
@@ -482,6 +511,8 @@ def _compute_recording_responses_from_baseline(
         baseline_sample_seconds=baseline_sample_seconds,
         fit_mode=fit_mode,
     )
+    if check_cancelled is not None:
+        check_cancelled()
     if apply_motion_mask:
         dff = apply_motion_artifact_mask_to_delta_f_over_f(dff, recording)
     if _has_continuous_response_processing(processing_options):
@@ -490,6 +521,8 @@ def _compute_recording_responses_from_baseline(
             options=processing_options,
             data_rate_hz=frame_rate_hz,
         )
+    if check_cancelled is not None:
+        check_cancelled()
 
     grouped_responses = group_delta_f_over_f_by_epoch(
         dff,
@@ -498,6 +531,8 @@ def _compute_recording_responses_from_baseline(
         pre_window_seconds=response_pre_window_seconds,
         post_window_seconds=response_post_window_seconds,
     )
+    if check_cancelled is not None:
+        check_cancelled()
     grouped_responses, normalization_factors = (
         normalize_grouped_roi_responses_by_epoch_peak(
             grouped_responses,
@@ -510,6 +545,8 @@ def _compute_recording_responses_from_baseline(
             options=processing_options,
         )
     )
+    if check_cancelled is not None:
+        check_cancelled()
 
     return AnalysisResponseComputation(
         recording=recording,
@@ -526,23 +563,42 @@ def _compute_recording_responses_from_baseline(
     )
 
 
-def _resolve_response_processing_options(
-    options: ResponseProcessingOptions | None,
-    *,
-    data_rate_hz: float,
-) -> ResponseProcessingOptions:
-    """Return validated response-processing options for one run.
-
-    Args:
-        options: Caller-provided options, or ``None`` for defaults.
-        data_rate_hz: Imaging frame rate used for low-pass validation.
-
-    Returns:
-        Validated ``ResponseProcessingOptions``.
-    """
-    resolved = ResponseProcessingOptions() if options is None else options
-    validate_response_processing_options(resolved, data_rate_hz=data_rate_hz)
-    return resolved
+def _validate_traces_for_context(
+    traces: BackgroundCorrectedRoiTraces,
+    roi_set: RoiSet,
+    context: ResponseAnalysisContext,
+) -> None:
+    """Confirm cached traces match the ROI set and resolved frame range."""
+    if traces.labels != roi_set.labels:
+        msg = "Cached trace labels do not match ROI labels."
+        raise ValueError(msg)
+    if traces.corrected_values.ndim != 2:
+        msg = "Cached corrected trace values must have shape (frames, rois)."
+        raise ValueError(msg)
+    expected_frame_count = context.trace_stop - context.trace_start
+    if traces.corrected_values.shape != (expected_frame_count, len(roi_set.labels)):
+        msg = (
+            "Cached trace shape does not match resolved analysis context: "
+            f"{traces.corrected_values.shape} for {expected_frame_count} frames "
+            f"and {len(roi_set.labels)} ROIs."
+        )
+        raise ValueError(msg)
+    if (
+        traces.raw_values.shape != traces.corrected_values.shape
+        or traces.background_values.shape != traces.corrected_values.shape
+    ):
+        msg = "Cached raw, background, and corrected traces must share one shape."
+        raise ValueError(msg)
+    if (
+        traces.start_frame != context.trace_start
+        or traces.stop_frame != context.trace_stop
+    ):
+        msg = (
+            "Cached trace frame range does not match resolved analysis context: "
+            f"[{traces.start_frame}, {traces.stop_frame}) versus "
+            f"[{context.trace_start}, {context.trace_stop})."
+        )
+        raise ValueError(msg)
 
 
 def _has_continuous_response_processing(options: ResponseProcessingOptions) -> bool:
@@ -562,62 +618,6 @@ def _resolve_roi_set(roi_set: RoiSet | Path) -> RoiSet:
     if isinstance(roi_set, Path):
         return load_roi_set(roi_set)
     return roi_set
-
-
-def _resolve_epoch_windows(
-    recording: RecordingData,
-    epoch_windows: Sequence[EpochFrameWindow] | None,
-) -> tuple[InterpolatedEpochMapping | None, tuple[EpochFrameWindow, ...]]:
-    """Resolve epoch windows from caller input or converted stimulus data.
-
-    Args:
-        recording: Loaded converted recording.
-        epoch_windows: Optional explicit epoch windows.
-
-    Returns:
-        ``(mapping, windows)``. ``mapping`` is ``None`` when windows were passed
-        explicitly.
-    """
-    if epoch_windows is not None:
-        return None, tuple(epoch_windows)
-    mapping = interpolate_stimulus_epochs_to_frame_windows(recording)
-    return mapping, mapping.windows
-
-
-def _frame_range_for_epoch_windows(
-    epoch_windows: Sequence[EpochFrameWindow],
-    *,
-    frame_count: int,
-    data_rate_hz: float,
-    pre_window_seconds: float,
-    post_window_seconds: float,
-) -> tuple[int, int]:
-    """Return the smallest frame range covering all epoch windows.
-
-    Args:
-        epoch_windows: Windows used for response analysis.
-        frame_count: Total aligned-movie frame count.
-        data_rate_hz: Imaging frame rate in hertz.
-        pre_window_seconds: Seconds before each epoch to include.
-        post_window_seconds: Seconds after each epoch to include.
-
-    Returns:
-        ``(start, stop)`` absolute movie-frame range.
-    """
-    if len(epoch_windows) == 0:
-        msg = "At least one epoch window is required for response analysis"
-        raise ValueError(msg)
-    pre_frames = int(round(pre_window_seconds * data_rate_hz))
-    post_frames = int(round(post_window_seconds * data_rate_hz))
-    starts = [
-        max(epoch_window.window.start_frame - pre_frames, 0)
-        for epoch_window in epoch_windows
-    ]
-    stops = [
-        min(epoch_window.window.stop_frame + post_frames, frame_count)
-        for epoch_window in epoch_windows
-    ]
-    return min(starts), max(stops)
 
 
 def _resolve_output_path(recording_data_path: Path, output_path: Path | None) -> Path:

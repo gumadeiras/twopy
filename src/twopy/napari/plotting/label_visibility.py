@@ -24,6 +24,7 @@ __all__ = [
 
 _LABEL_COLOR_LOOKAHEAD = 4096
 _BASE_LABEL_COLORMAP_METADATA_KEY = "twopy_base_label_colormap"
+_BASE_LABEL_COLOR_DICT_METADATA_KEY = "twopy_base_label_color_dict"
 _DESELECTED_ROI_ALPHA = 0.2
 type VisibilityKey = int | str
 type VisibilityState = Mapping[int, bool] | Mapping[str, bool]
@@ -134,11 +135,36 @@ def _visible_label_color_dict(
         _LABEL_COLOR_LOOKAHEAD,
         _max_roi_label_value(roi_labels) + 512,
     )
+    cached = _cached_base_label_color_dict(layer, color_count)
+    if cached is not None:
+        return cached
     color_dict: dict[int | None, object] = {0: "transparent"}
     for label_value in range(1, color_count + 1):
         color_dict[label_value] = _base_label_rgba(layer, label_value)
     color_dict[None] = color_dict[color_count]
-    return color_dict
+    layer.metadata[_BASE_LABEL_COLOR_DICT_METADATA_KEY] = {
+        "color_count": color_count,
+        "colors": color_dict,
+    }
+    return dict(color_dict)
+
+
+def _cached_base_label_color_dict(
+    layer: _LabelsLayerWithColormap,
+    color_count: int,
+) -> dict[int | None, object] | None:
+    """Return cached base label colors when they cover the needed labels."""
+    stored = layer.metadata.get(_BASE_LABEL_COLOR_DICT_METADATA_KEY)
+    if not isinstance(stored, dict):
+        return None
+    stored = cast(dict[str, object], stored)
+    if stored.get("color_count") != color_count:
+        return None
+    colors = stored.get("colors")
+    if not isinstance(colors, dict):
+        return None
+    color_dict = cast(dict[int | None, object], colors)
+    return dict(color_dict)
 
 
 def _max_roi_label_value(roi_labels: tuple[str, ...]) -> int:

@@ -150,6 +150,18 @@ class EpochPlotWidget(QWidget):
         self.updateGeometry()
         self.update()
 
+    def update_data(self, data: EpochResponsePlotData) -> None:
+        """Replace computed response data without rebuilding the widget.
+
+        Args:
+            data: New plot data for the same epoch panel.
+
+        Returns:
+            None.
+        """
+        self._data = data
+        self.update()
+
     def paintEvent(self, a0: QPaintEvent | None) -> None:
         """Draw response traces.
 

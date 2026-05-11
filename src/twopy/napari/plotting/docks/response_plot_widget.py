@@ -423,7 +423,6 @@ class _ResponsePlotWidget(QWidget):
         Returns:
             None.
         """
-        self._plot_area.clear_epoch_cache()
         self._plot_data = plot_data
         if plot_data.response_processing_options is not None:
             self._load_response_processing_options(

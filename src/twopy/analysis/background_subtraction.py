@@ -9,6 +9,7 @@ trace extraction stay in ``twopy.roi``; dF/F and trial analysis can consume the
 auditable outputs produced here.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -75,6 +76,7 @@ def extract_background_corrected_roi_traces(
     local_y_radius: int | None = None,
     local_percentile: float = 20.0,
     spatial_domain: SpatialDomain = "alignment_valid_crop",
+    check_cancelled: Callable[[], None] | None = None,
 ) -> BackgroundCorrectedRoiTraces:
     """Extract ROI traces plus an explicit background correction.
 
@@ -108,6 +110,8 @@ def extract_background_corrected_roi_traces(
             uses the alignment-valid crop saved during conversion, matching the
             crop-domain analysis contract while keeping ROI masks stored in
             full-frame coordinates.
+        check_cancelled: Optional callback that raises ``CancelledError`` when
+            an interactive caller has superseded this computation.
 
     Returns:
         ``BackgroundCorrectedRoiTraces`` with raw, background, and corrected
@@ -124,6 +128,7 @@ def extract_background_corrected_roi_traces(
     _validate_background_method(method)
     validate_trace_statistic(statistic)
     _validate_roi_movie_shape(roi_set, recording)
+    _check_cancelled(check_cancelled)
 
     frame_start, frame_stop = normalize_frame_range(
         frame_count=recording.movie.shape[0],
@@ -144,6 +149,7 @@ def extract_background_corrected_roi_traces(
             frame_stop=frame_stop,
             chunk_frames=chunk_frames,
             spatial_crop=crop,
+            check_cancelled=check_cancelled,
         )
         background_values = np.zeros_like(raw_values)
         corrected_values = raw_values.copy()
@@ -162,6 +168,7 @@ def extract_background_corrected_roi_traces(
                 percentile=global_percentile,
                 spatial_crop=crop,
                 spatial_domain=spatial_domain,
+                check_cancelled=check_cancelled,
             )
         )
     elif method == "movie_y_stripe_percentile":
@@ -176,6 +183,7 @@ def extract_background_corrected_roi_traces(
                 percentile=stripe_percentile,
                 spatial_crop=crop,
                 spatial_domain=spatial_domain,
+                check_cancelled=check_cancelled,
             )
         )
     elif method == "roi_y_stripe_percentile":
@@ -191,6 +199,7 @@ def extract_background_corrected_roi_traces(
                 local_percentile=local_percentile,
                 spatial_crop=crop,
                 spatial_domain=spatial_domain,
+                check_cancelled=check_cancelled,
             )
         )
 
@@ -244,6 +253,7 @@ def _extract_mean_traces_from_indices(
     frame_stop: int,
     chunk_frames: int,
     spatial_crop: SpatialCrop,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> npt.NDArray[np.float64]:
     """Extract mean traces for arbitrary flattened pixel-index groups.
 
@@ -255,6 +265,7 @@ def _extract_mean_traces_from_indices(
         frame_stop: Exclusive stop frame.
         chunk_frames: Maximum number of frames per HDF5 read.
         spatial_crop: Spatial domain read from each movie frame.
+        check_cancelled: Optional callback that raises when work is obsolete.
 
     Returns:
         Array shaped ``(frames, traces)``.
@@ -264,12 +275,14 @@ def _extract_mean_traces_from_indices(
     rather than total recording length.
     """
     traces = np.empty((frame_stop - frame_start, len(pixel_indices_by_trace)))
+    _check_cancelled(check_cancelled)
     for chunk_start, chunk_stop, frames in recording.movie.iter_frame_batches(
         chunk_frames=chunk_frames,
         start=frame_start,
         stop=frame_stop,
         spatial_crop=spatial_crop,
     ):
+        _check_cancelled(check_cancelled)
         chunk_offset = chunk_start - frame_start
         chunk_slice = slice(chunk_offset, chunk_offset + (chunk_stop - chunk_start))
         chunk_flat = frames.reshape(frames.shape[0], -1)
@@ -277,6 +290,7 @@ def _extract_mean_traces_from_indices(
             traces[chunk_slice, trace_index] = chunk_flat[:, pixel_indices].mean(
                 axis=1,
             )
+        _check_cancelled(check_cancelled)
 
     return traces
 
@@ -291,6 +305,7 @@ def _extract_movie_global_percentile_corrected_traces(
     percentile: float,
     spatial_crop: SpatialCrop,
     spatial_domain: SpatialDomain,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> tuple[
     npt.NDArray[np.float64],
     npt.NDArray[np.float64],
@@ -308,6 +323,7 @@ def _extract_movie_global_percentile_corrected_traces(
         percentile: Mean-image percentile used to define background pixels.
         spatial_crop: Spatial domain used for background and ROI pixels.
         spatial_domain: User-facing name of ``spatial_crop``.
+        check_cancelled: Optional callback that raises when work is obsolete.
 
     Returns:
         Raw ROI traces, repeated background traces, corrected ROI traces, and
@@ -317,6 +333,7 @@ def _extract_movie_global_percentile_corrected_traces(
     negatives to zero, and then averages corrected pixels inside each ROI.
     """
     _validate_percentile(percentile)
+    _check_cancelled(check_cancelled)
     mean_image = spatial_crop.crop_image(recording.mean_image)
     background_indices, threshold = _global_background_pixel_indices(
         mean_image,
@@ -334,6 +351,7 @@ def _extract_movie_global_percentile_corrected_traces(
         stop=frame_stop,
         spatial_crop=spatial_crop,
     ):
+        _check_cancelled(check_cancelled)
         chunk_offset = chunk_start - frame_start
         chunk_slice = slice(chunk_offset, chunk_offset + (chunk_stop - chunk_start))
         chunk_flat = frames.reshape(frames.shape[0], -1)
@@ -346,6 +364,7 @@ def _extract_movie_global_percentile_corrected_traces(
             # corrected ROI trace below zero.
             corrected_pixels = np.maximum(roi_pixels - background_trace[:, None], 0.0)
             corrected_values[chunk_slice, roi_index] = corrected_pixels.mean(axis=1)
+        _check_cancelled(check_cancelled)
 
     metadata: dict[str, BackgroundMetadataValue] = {
         "method": "movie_global_percentile",
@@ -369,6 +388,7 @@ def _extract_movie_y_stripe_percentile_corrected_traces(
     percentile: float,
     spatial_crop: SpatialCrop,
     spatial_domain: SpatialDomain,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> tuple[
     npt.NDArray[np.float64],
     npt.NDArray[np.float64],
@@ -388,6 +408,7 @@ def _extract_movie_y_stripe_percentile_corrected_traces(
         percentile: Percentile used inside each frame stripe.
         spatial_crop: Spatial domain used for background and ROI pixels.
         spatial_domain: User-facing name of ``spatial_crop``.
+        check_cancelled: Optional callback that raises when work is obsolete.
 
     Returns:
         Raw ROI traces, stripe-field background traces, corrected traces, and
@@ -404,6 +425,7 @@ def _extract_movie_y_stripe_percentile_corrected_traces(
     near one ROI are safe neuropil reference pixels.
     """
     _validate_percentile(percentile)
+    _check_cancelled(check_cancelled)
     crop_shape = spatial_crop.crop_image(recording.mean_image).shape
     stripe_height = _resolve_stripe_y_height(
         row_count=crop_shape[0],
@@ -425,6 +447,7 @@ def _extract_movie_y_stripe_percentile_corrected_traces(
         stop=frame_stop,
         spatial_crop=spatial_crop,
     ):
+        _check_cancelled(check_cancelled)
         chunk_offset = chunk_start - frame_start
         chunk_slice = slice(chunk_offset, chunk_offset + (chunk_stop - chunk_start))
         background_field = _framewise_y_stripe_background_field(
@@ -443,6 +466,7 @@ def _extract_movie_y_stripe_percentile_corrected_traces(
             )
             corrected_pixels = np.maximum(roi_pixels - roi_background_pixels, 0.0)
             corrected_values[chunk_slice, roi_index] = corrected_pixels.mean(axis=1)
+        _check_cancelled(check_cancelled)
 
     metadata: dict[str, BackgroundMetadataValue] = {
         "method": "movie_y_stripe_percentile",
@@ -467,6 +491,7 @@ def _extract_roi_y_stripe_percentile_corrected_traces(
     local_percentile: float,
     spatial_crop: SpatialCrop,
     spatial_domain: SpatialDomain,
+    check_cancelled: Callable[[], None] | None = None,
 ) -> tuple[
     npt.NDArray[np.float64],
     npt.NDArray[np.float64],
@@ -487,6 +512,7 @@ def _extract_roi_y_stripe_percentile_corrected_traces(
             y-stripe.
         spatial_crop: Spatial domain used for background and ROI pixels.
         spatial_domain: User-facing name of ``spatial_crop``.
+        check_cancelled: Optional callback that raises when work is obsolete.
 
     Returns:
         Raw ROI traces, local background traces, corrected traces, and metadata.
@@ -508,6 +534,7 @@ def _extract_roi_y_stripe_percentile_corrected_traces(
         local_y_radius=local_y_radius,
     )
     _validate_percentile(local_percentile)
+    _check_cancelled(check_cancelled)
     background_indices_by_roi = _roi_y_stripe_background_pixel_indices(
         roi_masks=roi_masks,
         mean_image=spatial_crop.crop_image(recording.mean_image),
@@ -521,6 +548,7 @@ def _extract_roi_y_stripe_percentile_corrected_traces(
         frame_stop=frame_stop,
         chunk_frames=chunk_frames,
         spatial_crop=spatial_crop,
+        check_cancelled=check_cancelled,
     )
     background_values = _extract_mean_traces_from_indices(
         recording=recording,
@@ -529,6 +557,7 @@ def _extract_roi_y_stripe_percentile_corrected_traces(
         frame_stop=frame_stop,
         chunk_frames=chunk_frames,
         spatial_crop=spatial_crop,
+        check_cancelled=check_cancelled,
     )
     corrected_values = raw_values - background_values
     background_counts = tuple(
@@ -559,6 +588,13 @@ def _roi_pixel_indices_from_masks(
     """
     flat_masks = masks.reshape(masks.shape[0], -1)
     return tuple(np.flatnonzero(mask).astype(np.int64) for mask in flat_masks)
+
+
+def _check_cancelled(check_cancelled: Callable[[], None] | None) -> None:
+    """Raise ``CancelledError`` when an interactive caller superseded this work."""
+    if check_cancelled is None:
+        return
+    check_cancelled()
 
 
 def _crop_roi_masks_for_domain(

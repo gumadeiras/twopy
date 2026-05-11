@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- Made napari live ROI plot updates more responsive by cancelling stale background recomputes, reusing unchanged ROI traces, reusing epoch plot widgets, and caching Labels colormap bases for visibility toggles.
+
 ## 0.1.7 - 2026-05-11
 
 ### Features

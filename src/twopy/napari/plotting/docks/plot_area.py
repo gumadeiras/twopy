@@ -11,7 +11,7 @@ analysis state without also managing layout internals.
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget
 
-from twopy.napari.plotting.data import ResponsePlotData
+from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.panels import epoch_plot_panel
 from twopy.napari.plotting.widgets import EpochPlotWidget, clear_layout
 
@@ -31,6 +31,7 @@ class ResponsePlotArea:
         """Create a scrollable plot area with one initial status label."""
         self.epoch_plot_widgets: dict[int, EpochPlotWidget] = {}
         self.epoch_plot_panels: dict[int, QWidget] = {}
+        self._epoch_keys: dict[int, tuple[int, str]] = {}
         self._status_label = QLabel(initial_status)
         self._layout = QHBoxLayout()
         self._layout.addWidget(self._status_label)
@@ -196,12 +197,22 @@ class ResponsePlotArea:
             return
         expected_indices = set(range(len(plot_data.epochs)))
         for epoch_index in tuple(self.epoch_plot_widgets):
-            if epoch_index not in expected_indices:
+            expected_key = (
+                _epoch_key(plot_data.epochs[epoch_index])
+                if epoch_index in expected_indices
+                else None
+            )
+            if (
+                epoch_index not in expected_indices
+                or self._epoch_keys.get(epoch_index) != expected_key
+            ):
                 self.epoch_plot_panels[epoch_index].deleteLater()
                 del self.epoch_plot_panels[epoch_index]
                 del self.epoch_plot_widgets[epoch_index]
+                self._epoch_keys.pop(epoch_index, None)
         for epoch_index, epoch in enumerate(plot_data.epochs):
             if epoch_index in self.epoch_plot_widgets:
+                self.epoch_plot_widgets[epoch_index].update_data(epoch)
                 continue
             plot = EpochPlotWidget(
                 epoch,
@@ -215,6 +226,7 @@ class ResponsePlotArea:
                 plot_size=plot_size,
             )
             self.epoch_plot_widgets[epoch_index] = plot
+            self._epoch_keys[epoch_index] = _epoch_key(epoch)
             panel = epoch_plot_panel(
                 title=f"Epoch {epoch.epoch_number}: {epoch.epoch_name}",
                 plot=plot,
@@ -228,6 +240,7 @@ class ResponsePlotArea:
             panel.deleteLater()
         self.epoch_plot_widgets.clear()
         self.epoch_plot_panels.clear()
+        self._epoch_keys.clear()
 
     def clear_layout_preserving_epoch_cache(self) -> None:
         """Clear the plot strip while keeping cached epoch panels alive."""
@@ -246,3 +259,8 @@ class ResponsePlotArea:
                 widget.hide()
             else:
                 widget.deleteLater()
+
+
+def _epoch_key(epoch: EpochResponsePlotData) -> tuple[int, str]:
+    """Return the stable identity of one epoch plot row."""
+    return (epoch.epoch_number, epoch.epoch_name)

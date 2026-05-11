@@ -10,9 +10,10 @@ analysis helper used by the manual update button.
 """
 
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
+from threading import Event
 from typing import Protocol, cast
 
 import numpy as np
@@ -22,6 +23,7 @@ from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.converted import RecordingData
+from twopy.napari.live_analysis import LiveResponseAnalysisCache
 from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.responses import compute_response_plot_data_from_roi_set
 from twopy.napari.roi import roi_label_image_from_layer_for_recording
@@ -82,6 +84,23 @@ class _ConnectedEmitter:
     emitter: _EventEmitter
 
 
+@dataclass(frozen=True)
+class _LiveResponseJob:
+    """One cancellable background response computation."""
+
+    version: int
+    cancel_event: Event
+
+    def cancel(self) -> None:
+        """Mark this job obsolete."""
+        self.cancel_event.set()
+
+    def check_cancelled(self) -> None:
+        """Raise when this job has been superseded by a newer edit."""
+        if self.cancel_event.is_set():
+            raise CancelledError()
+
+
 class LiveResponseController:
     """Debounced response updater for one active napari Labels layer.
 
@@ -119,8 +138,10 @@ class LiveResponseController:
         self._is_shutdown = False
         self._version = 0
         self._active_version: int | None = None
+        self._active_job: _LiveResponseJob | None = None
         self._pending_after_active_job = False
         self._future: Future[ResponsePlotData] | None = None
+        self._analysis_cache = LiveResponseAnalysisCache()
         self._executor = (
             ThreadPoolExecutor(max_workers=1, thread_name_prefix="twopy-roi-live")
             if run_async
@@ -152,8 +173,10 @@ class LiveResponseController:
         self._disconnect_layer_events()
         if self._is_shutdown:
             return
+        self._cancel_active_job()
         self._recording = recording
         self._roi_labels_layer = roi_labels_layer
+        self._analysis_cache.clear()
         self._version += 1
         self._pending_after_active_job = False
         self._connect_layer_events(roi_labels_layer)
@@ -222,6 +245,7 @@ class LiveResponseController:
         if self._is_shutdown:
             return
         self._version += 1
+        self._cancel_active_job()
         if self._debounce_ms <= 0:
             self._start_latest_job()
             return
@@ -270,6 +294,7 @@ class LiveResponseController:
         future = self._future
         self._future = None
         self._active_version = None
+        self._cancel_active_job()
         if future is not None:
             future.cancel()
         self._disconnect_layer_events()
@@ -291,6 +316,7 @@ class LiveResponseController:
             return
         if self._future is not None:
             self._pending_after_active_job = True
+            self._cancel_active_job()
             return
 
         version = self._version
@@ -306,16 +332,18 @@ class LiveResponseController:
             return
 
         recording = self._require_recording()
-        roi_set = make_roi_set_from_label_image(label_image)
+        job = _LiveResponseJob(version=version, cancel_event=Event())
+        self._active_job = job
         self._active_version = version
         self._future = self._executor.submit(
-            compute_response_plot_data_from_roi_set,
+            self._analysis_cache.compute_response_plot_data,
             recording,
-            roi_set,
+            label_image,
             source_path=None,
             delta_f_over_f_options=self._delta_f_over_f_options,
             response_window_options=self._response_window_options,
             response_processing_options=self._response_processing_options,
+            check_cancelled=job.check_cancelled,
         )
         self._poll_timer.start()
 
@@ -330,9 +358,12 @@ class LiveResponseController:
         version = self._active_version
         self._future = None
         self._active_version = None
+        self._active_job = None
         self._poll_timer.stop()
         try:
             plot_data = future.result()
+        except CancelledError:
+            pass
         except ValueError as error:
             if version == self._version:
                 self._show_response_status(str(error))
@@ -342,7 +373,13 @@ class LiveResponseController:
 
         if self._pending_after_active_job or version != self._version:
             self._pending_after_active_job = False
-            self._start_latest_job()
+            if not self._debounce_timer.isActive():
+                self._start_latest_job()
+
+    def _cancel_active_job(self) -> None:
+        """Ask the current worker job to stop before it finishes stale work."""
+        if self._active_job is not None:
+            self._active_job.cancel()
 
     def _compute_current_plot_data(self) -> ResponsePlotData:
         """Return plot data for the current recording and Labels layer."""

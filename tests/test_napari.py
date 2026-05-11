@@ -9,9 +9,11 @@ import tempfile
 import unittest
 import warnings
 from collections.abc import Callable
+from concurrent.futures import CancelledError
 from dataclasses import dataclass, replace
 from os import chdir, environ
 from pathlib import Path
+from threading import Event
 from time import monotonic, sleep
 from types import SimpleNamespace
 from typing import Any, Protocol, cast
@@ -55,6 +57,7 @@ from twopy import (
     save_roi_set,
 )
 from twopy._version import __version__
+from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.persistence import save_analysis_outputs
@@ -87,6 +90,7 @@ from twopy.napari.display_paths import (
     recording_display_summary,
 )
 from twopy.napari.interactive import LiveResponseController
+from twopy.napari.live_analysis import LiveResponseAnalysisCache
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
@@ -1915,8 +1919,9 @@ class NapariAdapterTest(unittest.TestCase):
                 response_processing_options=ResponseProcessingOptions(),
             )
 
-            with patch(
-                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+            with patch.object(
+                controller._analysis_cache,
+                "compute_response_plot_data",
                 return_value=plot_data,
             ) as compute:
                 controller.request_update()
@@ -1927,6 +1932,137 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIsNone(controller._future)
             compute.assert_called_once()
             controller.shutdown()
+
+    def test_live_response_controller_cancels_stale_worker_job(self) -> None:
+        """Confirm newer ROI edits cancel obsolete background analysis.
+
+        Inputs: async live controller with a deliberately slow first job.
+        Outputs: the first job observes cancellation and the next job publishes
+        the latest plot data.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            layer = _FakeLayer(
+                name="rois",
+                data=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                options={},
+                events=_FakeLabelEvents(),
+            )
+            receiver = _FakePlotReceiver()
+            controller = LiveResponseController(receiver, debounce_ms=0)
+            controller.set_context(recording, layer)
+            first_started = Event()
+            first_cancelled = Event()
+            calls = 0
+            plot_data = _tiny_response_plot_data()
+
+            def compute(*args: object, **kwargs: object) -> ResponsePlotData:
+                del args
+                nonlocal calls
+                calls += 1
+                check_cancelled = cast(Callable[[], None], kwargs["check_cancelled"])
+                if calls == 1:
+                    first_started.set()
+                    while True:
+                        try:
+                            check_cancelled()
+                        except CancelledError:
+                            first_cancelled.set()
+                            raise
+                        sleep(0.01)
+                return plot_data
+
+            with patch.object(
+                controller._analysis_cache,
+                "compute_response_plot_data",
+                side_effect=compute,
+            ):
+                controller.request_update()
+                self.assertTrue(first_started.wait(timeout=2.0))
+                controller.request_update()
+                self.assertTrue(first_cancelled.wait(timeout=2.0))
+                _wait_for_live_response_job(controller)
+                controller._collect_finished_job()
+                _wait_for_live_response_job(controller)
+                controller._collect_finished_job()
+
+            self.assertIs(receiver.plot_data, plot_data)
+            self.assertEqual(calls, 2)
+            controller.shutdown()
+
+    def test_live_response_cache_reuses_unchanged_roi_traces(self) -> None:
+        """Confirm live cache extracts only changed ROI masks.
+
+        Inputs: two ROI labels followed by an edit to only ROI 2.
+        Outputs: first run extracts both traces, second run extracts none, and
+        the edited run extracts only ROI 2.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            cache = LiveResponseAnalysisCache()
+            first_labels = np.array([[1, 0], [0, 2]], dtype=np.int64)
+            edited_labels = np.array([[1, 0], [2, 2]], dtype=np.int64)
+            extracted: list[tuple[str, ...]] = []
+
+            def extract(
+                _recording: object,
+                roi_set: object,
+                **kwargs: object,
+            ) -> BackgroundCorrectedRoiTraces:
+                extracted.append(cast(Any, roi_set).labels)
+                start_frame = cast(int, kwargs["start_frame"])
+                stop_frame = cast(int, kwargs["stop_frame"])
+                frame_count = stop_frame - start_frame
+                roi_count = len(cast(Any, roi_set).labels)
+                values = np.ones((frame_count, roi_count), dtype=np.float64)
+                return BackgroundCorrectedRoiTraces(
+                    raw_values=values,
+                    background_values=np.zeros_like(values),
+                    corrected_values=values,
+                    labels=cast(Any, roi_set).labels,
+                    start_frame=start_frame,
+                    stop_frame=stop_frame,
+                    statistic="mean",
+                    method="movie_global_percentile",
+                    metadata={"method": "movie_global_percentile"},
+                )
+
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                response_processing_options=ResponseProcessingOptions(),
+            )
+            context = SimpleNamespace(trace_start=0, trace_stop=2)
+            with (
+                patch(
+                    "twopy.napari.live_analysis.resolve_response_analysis_context",
+                    return_value=context,
+                ),
+                patch(
+                    "twopy.napari.live_analysis."
+                    "extract_background_corrected_roi_traces",
+                    side_effect=extract,
+                ),
+                patch(
+                    "twopy.napari.live_analysis."
+                    "compute_recording_responses_from_traces",
+                    return_value=computation,
+                ),
+                patch(
+                    "twopy.napari.live_analysis.response_plot_data_from_grouped",
+                    return_value=_tiny_response_plot_data(),
+                ),
+            ):
+                cache.compute_response_plot_data(recording, first_labels)
+                cache.compute_response_plot_data(recording, first_labels)
+                cache.compute_response_plot_data(recording, edited_labels)
+
+            self.assertEqual(
+                extracted,
+                [("roi_0001", "roi_0002"), ("roi_0002",)],
+            )
 
     def test_live_response_controller_shutdown_disconnects_events(self) -> None:
         """Confirm shutdown breaks event callbacks and ignores later updates.
@@ -3159,6 +3295,32 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertAlmostEqual(layer.get_color(1)[3], 0.2)
 
+    def test_roi_visibility_reuses_cached_base_colormap(self) -> None:
+        """Confirm visibility toggles do not rebuild base label colors.
+
+        Inputs: one Labels layer and repeated visibility applications.
+        Outputs: the base color dictionary is cached on the layer metadata and
+        reused on later toggles.
+        """
+        layer = Labels(np.array([[1]], dtype=np.int64))
+
+        apply_roi_visibility_to_labels_layer(
+            layer,
+            roi_labels=("roi_1",),
+            visibility={"roi_1": False},
+            colors=(QColor("#ff0000"),),
+        )
+        cached = layer.metadata["twopy_base_label_color_dict"]
+        apply_roi_visibility_to_labels_layer(
+            layer,
+            roi_labels=("roi_1",),
+            visibility={"roi_1": True},
+            colors=(QColor("#ff0000"),),
+        )
+
+        self.assertIs(layer.metadata["twopy_base_label_color_dict"], cached)
+        self.assertAlmostEqual(layer.get_color(1)[3], 1.0)
+
     def test_display_helpers_transpose_movie_axes_for_napari(self) -> None:
         """Confirm movie axes are transposed only at the napari boundary.
 
@@ -3801,6 +3963,33 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(widget.sizeHint().width(), 320)
         self.assertEqual(widget.sizeHint().height(), 272)
+
+    def test_response_widget_reuses_epoch_plots_for_live_refreshes(self) -> None:
+        """Confirm repeated live results update cached epoch widgets in place.
+
+        Inputs: response widget receiving two plot-data objects with the same
+        epoch identity.
+        Outputs: the existing epoch plot widget is reused with new data.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        first = _tiny_response_plot_data()
+        second = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                replace(
+                    first.epochs[0],
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                ),
+            ),
+        )
+
+        response_widget.set_response_plot_data(first, reset_axes=True)
+        cached_plot = response_widget._plot_area.epoch_plot_widgets[0]
+        response_widget.set_response_plot_data(second, reset_axes=True)
+
+        self.assertIs(response_widget._plot_area.epoch_plot_widgets[0], cached_plot)
+        self.assertIs(cached_plot._data, second.epochs[0])
 
     def test_epoch_plot_panel_centers_title(self) -> None:
         """Confirm epoch titles are centered above live response plots.
