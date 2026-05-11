@@ -49,6 +49,8 @@ class NapariSessionState(Protocol):
     roi_save_file: Path
     recording: RecordingData | None
     response_plot_widget: object | None
+    trial_timeline_controller: object | None
+    defer_timeline_updates: bool
     loaded_recordings: list["LoadedNapariRecording"]
     selected_recording_index: int | None
     loaded_recordings_panel: "LoadedRecordingsPanel | None"
@@ -58,6 +60,18 @@ class _LayerWithVisibility(Protocol):
     """Small protocol for napari layers whose visibility can be toggled."""
 
     visible: bool
+
+
+class _TrialTimelineController(Protocol):
+    """Small protocol for updating the selected recording timeline."""
+
+    def set_context(
+        self,
+        recording: RecordingData | None,
+        movie_layer: object | None,
+    ) -> None:
+        """Set the active recording and movie layer."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -270,6 +284,12 @@ def select_loaded_recording(
             roi_labels_layer=None,
             roi_save_file=None,
         )
+        if not state.defer_timeline_updates:
+            refresh_trial_timeline_controller(
+                state.trial_timeline_controller,
+                recording=None,
+                movie_layer=None,
+            )
         render_loaded_recordings_panel(state)
         return
 
@@ -285,7 +305,34 @@ def select_loaded_recording(
         roi_labels_layer=selected.roi_labels_layer,
         roi_save_file=selected.roi_save_file,
     )
+    if not state.defer_timeline_updates:
+        refresh_trial_timeline_controller(
+            state.trial_timeline_controller,
+            recording=selected.recording,
+            movie_layer=selected.movie_layer,
+        )
     render_loaded_recordings_panel(state)
+
+
+def refresh_trial_timeline_controller(
+    controller: object | None,
+    *,
+    recording: RecordingData | None,
+    movie_layer: object | None,
+) -> None:
+    """Refresh a trial timeline controller when one exists.
+
+    Args:
+        controller: Optional timeline controller.
+        recording: Selected recording, or ``None``.
+        movie_layer: Selected recording's movie layer, or ``None``.
+
+    Returns:
+        None.
+    """
+    if controller is None:
+        return
+    cast(_TrialTimelineController, controller).set_context(recording, movie_layer)
 
 
 def unload_loaded_recording(state: NapariSessionState, index: int) -> None:

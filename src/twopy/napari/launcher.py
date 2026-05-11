@@ -60,6 +60,7 @@ def launch_napari(
             add_twopy_response_plot_widget,
             create_twopy_response_options_widget,
         )
+        from twopy.napari.trial_timeline import TrialTimelineController
 
         response_plot_widget, _response_plot_dock = add_twopy_response_plot_widget(
             viewer,
@@ -68,6 +69,7 @@ def launch_napari(
         response_options_widget = create_twopy_response_options_widget(
             response_plot_widget,
         )
+        trial_timeline_controller = TrialTimelineController(viewer)
         add_twopy_magicgui_controls(
             viewer,
             roi_labels_layer=None,
@@ -78,6 +80,7 @@ def launch_napari(
             ),
             response_plot_widget=response_plot_widget,
             response_options_widget=response_options_widget,
+            trial_timeline_controller=trial_timeline_controller,
         )
         view = None
     else:

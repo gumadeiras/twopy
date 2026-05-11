@@ -28,6 +28,10 @@ from twopy.napari.plotting import (
 )
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import resolve_roi_save_file, roi_label_image_for_display
+from twopy.napari.trial_timeline import (
+    TrialTimelineController,
+    movie_frame_metadata,
+)
 from twopy.napari.types import NapariRecordingView
 from twopy.roi import RoiSet
 from twopy.spatial import SpatialCrop
@@ -136,7 +140,11 @@ def open_recording_in_napari(
                 recording.movie,
                 spatial_crop=display_crop,
             ),
-            metadata=layer_metadata,
+            metadata=layer_metadata
+            | movie_frame_metadata(
+                start_frame=start_frame,
+                stop_frame=end_frame + 1,
+            ),
         )
         set_image_contrast_limits_range(movie_layer, data=movie)
 
@@ -161,7 +169,9 @@ def open_recording_in_napari(
     response_plot_widget = None
     response_plot_dock = None
     response_options_widget = None
+    trial_timeline_controller = None
     if add_controls:
+        trial_timeline_controller = TrialTimelineController(resolved_viewer)
         resolved_roi_save_file = resolve_roi_save_file(
             recording_data_path=recording.path,
             roi_set=roi_set,
@@ -185,11 +195,13 @@ def open_recording_in_napari(
             response_options_widget=response_options_widget,
             mean_image_layer=mean_layer,
             movie_layer=movie_layer,
+            trial_timeline_controller=trial_timeline_controller,
         )
         load_widget = control_docks.load_widget
         loaded_recordings_widget = control_docks.loaded_recordings_widget
         twopy_sidebar_widget = control_docks.sidebar_widget
         twopy_sidebar_dock = control_docks.sidebar_dock_widget
+        trial_timeline_controller.set_context(recording, movie_layer)
 
     return NapariRecordingView(
         viewer=resolved_viewer,
@@ -204,6 +216,7 @@ def open_recording_in_napari(
         response_plot_widget=response_plot_widget,
         response_plot_dock_widget=response_plot_dock,
         response_options_widget=response_options_widget,
+        trial_timeline_controller=trial_timeline_controller,
     )
 
 

@@ -34,3 +34,4 @@ class NapariRecordingView:
     response_plot_widget: object | None
     response_plot_dock_widget: object | None
     response_options_widget: object | None
+    trial_timeline_controller: object | None

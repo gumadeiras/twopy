@@ -22,6 +22,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 
 from twopy.converted import RecordingData
+from twopy.napari.dims import current_step_index
 from twopy.napari.display import display_image_from_movie_image
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
@@ -75,12 +76,6 @@ class _ViewerWithLayers(Protocol):
     """Small protocol for napari viewers that expose a layer list."""
 
     layers: _LayerList
-
-
-class _ViewerWithDims(Protocol):
-    """Small protocol for napari viewers that expose dimension state."""
-
-    dims: object
 
 
 def export_recording_view(
@@ -341,7 +336,7 @@ def current_recording_image(
     if movie_layer is not None:
         data = np.asarray(cast(_LayerWithData, movie_layer).data)
         if data.ndim == 3:
-            index = _current_movie_layer_index(viewer, data.shape[0])
+            index = current_step_index(viewer, step_count=data.shape[0])
             return cast(npt.NDArray[np.float64], data[index, :, :])
         if data.ndim == 2:
             return cast(npt.NDArray[np.float64], data)
@@ -785,19 +780,3 @@ def _layer_by_name(viewer: object | None, name: str) -> object | None:
         if getattr(layer, "name", None) == name:
             return layer
     return None
-
-
-def _current_movie_layer_index(viewer: object | None, frame_count: int) -> int:
-    """Return the current movie-layer frame index from napari dims."""
-    if viewer is None or not hasattr(viewer, "dims"):
-        return 0
-    dims = cast(_ViewerWithDims, viewer).dims
-    for attribute in ("current_step", "point"):
-        value = getattr(dims, attribute, None)
-        if value is None:
-            continue
-        try:
-            return max(0, min(int(value[0]), frame_count - 1))
-        except (IndexError, TypeError, ValueError):
-            continue
-    return 0

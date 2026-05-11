@@ -137,6 +137,15 @@ from twopy.napari.roi import remove_roi_label_values_from_layer
 from twopy.napari.sidebar import TWOPY_SIDEBAR_MINIMUM_WIDTH
 from twopy.napari.state import write_last_recording_folder
 from twopy.napari.text import counted_noun
+from twopy.napari.trial_timeline import (
+    TRIAL_TIMELINE_DOCK_NAME,
+    TrialTimelineController,
+    TrialTimelineData,
+    TrialTimelineWindow,
+    current_trial_text,
+    current_trial_window,
+    resolve_trial_timeline_data,
+)
 from twopy.napari.viewer import (
     APPLICATION_TITLE,
     create_viewer,
@@ -206,6 +215,7 @@ class _FakeLayer:
     brush_size: int | None = None
     contrast_limits_range: tuple[float, float] | None = None
     events: object | None = None
+    metadata: object | None = None
 
 
 @dataclass(frozen=True)
@@ -321,6 +331,8 @@ class _FakeViewer:
         self.images: list[_FakeLayer] = []
         self.labels: list[_FakeLayer] = []
         self.window = _FakeWindow()
+        self.dims = _FakeDims()
+        self.text_overlay = _FakeTextOverlay()
 
     def add_image(self, data: object, *, name: str, **kwargs: object) -> object:
         """Record an image layer request.
@@ -333,7 +345,12 @@ class _FakeViewer:
         Returns:
             Fake image layer.
         """
-        layer = _FakeLayer(name=name, data=data, options=dict(kwargs))
+        layer = _FakeLayer(
+            name=name,
+            data=data,
+            options=dict(kwargs),
+            metadata=kwargs.get("metadata"),
+        )
         self.images.append(layer)
         return layer
 
@@ -348,7 +365,12 @@ class _FakeViewer:
         Returns:
             Fake labels layer.
         """
-        layer = _FakeLayer(name=name, data=data, options=dict(kwargs))
+        layer = _FakeLayer(
+            name=name,
+            data=data,
+            options=dict(kwargs),
+            metadata=kwargs.get("metadata"),
+        )
         self.labels.append(layer)
         return layer
 
@@ -413,6 +435,47 @@ class _FakeLabelEvents:
         self.data = _FakeEmitter()
         self.labels_update = _FakeEmitter()
         self.paint = _FakeEmitter()
+
+
+class _FakeDimsEvents:
+    """Event group with the dims event watched by timeline tools."""
+
+    def __init__(self) -> None:
+        """Create a current-step emitter."""
+        self.current_step = _FakeEmitter()
+
+
+class _FakeDims:
+    """Small napari dims stand-in for current movie-frame tests."""
+
+    def __init__(self) -> None:
+        """Create dims state at frame zero."""
+        self.current_step = (0,)
+        self.point = (0,)
+        self.events = _FakeDimsEvents()
+
+    def set_current_step(self, axis: int, step: int) -> None:
+        """Set one current-step axis and emit a dims-change event."""
+        values = list(self.current_step)
+        while axis >= len(values):
+            values.append(0)
+        values[axis] = step
+        self.current_step = tuple(values)
+        self.point = tuple(values)
+        self.events.current_step.emit()
+
+
+@dataclass
+class _FakeTextOverlay:
+    """Small napari text overlay stand-in."""
+
+    text: str = ""
+    visible: bool = False
+    position: str = "bottom_right"
+    font_size: int = 0
+    color: object | None = None
+    box: bool = False
+    box_color: object | None = None
 
 
 class _FakePlotReceiver:
@@ -762,6 +825,201 @@ class NapariAdapterTest(unittest.TestCase):
                 np.unique(np.asarray(viewer.labels[0].data)),
                 np.array([0, 3, 4]),
             )
+
+    def test_trial_timeline_follows_current_movie_frame(self) -> None:
+        """Confirm the timeline rail and HUD follow napari's frame slider.
+
+        Inputs: a loaded movie and patched photodiode-aligned trial windows.
+        Outputs: a bottom timeline dock, visible HUD text, and click-to-seek
+        updates on the movie dimension.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                movie_values=np.arange(16, dtype=np.float64).reshape(4, 2, 2),
+            )
+            viewer = _FakeViewer()
+            timeline = _two_window_timeline(frame_count=4)
+
+            with patch(
+                "twopy.napari.trial_timeline.resolve_trial_timeline_data",
+                return_value=timeline,
+            ):
+                opened = open_recording_in_napari(
+                    recording_path,
+                    viewer=viewer,
+                    movie_frame_range=(0, None),
+                )
+
+            self.assertEqual(
+                viewer.window.dock_widgets[-1].name,
+                TRIAL_TIMELINE_DOCK_NAME,
+            )
+            self.assertEqual(viewer.window.dock_widgets[-1].area, "bottom")
+            self.assertTrue(viewer.text_overlay.visible)
+            self.assertIn("Trial 1/2", viewer.text_overlay.text)
+            self.assertIn("Epoch 1: Gray", viewer.text_overlay.text)
+
+            viewer.dims.set_current_step(0, 2)
+
+            self.assertIn("Trial 2/2", viewer.text_overlay.text)
+            self.assertIn("Epoch 2: Odor", viewer.text_overlay.text)
+
+            controller = cast(TrialTimelineController, opened.trial_timeline_controller)
+            controller.widget.frame_selected.emit(3)
+
+            self.assertEqual(viewer.dims.current_step[0], 3)
+            self.assertIn("frame 4/4", viewer.text_overlay.text)
+
+    def test_trial_timeline_uses_real_photodiode_epoch_mapping(self) -> None:
+        """Confirm timeline data is built from converted timing evidence.
+
+        Inputs: synthetic high-rate photodiode events and stimulus epoch rows.
+        Outputs: opening the recording creates a timeline whose HUD reports the
+        real epoch names from converted stimulus parameters.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                movie_values=np.arange(48, dtype=np.float64).reshape(12, 2, 2),
+                stimulus_data=np.array(
+                    [
+                        [0.0, 1.0],
+                        [0.3, 1.0],
+                        [0.4, 2.0],
+                        [0.8, 2.0],
+                    ],
+                    dtype=np.float64,
+                ),
+                high_res_pd=_timeline_photodiode(),
+                stimulus_parameters_json=(
+                    '[{"epochName": "Gray"}, {"epochName": "Odor"}]'
+                ),
+            )
+            viewer = _FakeViewer()
+
+            opened = open_recording_in_napari(
+                recording_path,
+                viewer=viewer,
+                movie_frame_range=(0, None),
+            )
+            timeline = resolve_trial_timeline_data(opened.recording)
+
+            self.assertIsNotNone(timeline)
+            assert timeline is not None
+            self.assertEqual(
+                tuple(window.epoch_name for window in timeline.windows),
+                ("Gray", "Odor"),
+            )
+            self.assertIn("Epoch 1: Gray", viewer.text_overlay.text)
+
+    def test_trial_timeline_does_not_seek_outside_loaded_preview(self) -> None:
+        """Confirm full-recording rail clicks cannot jump partial previews.
+
+        Inputs: a timeline for six frames with only frames two through three
+        loaded in the napari movie layer.
+        Outputs: seeking an unloaded frame leaves the displayed stack index
+        unchanged, while seeking a loaded frame updates it.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                movie_values=np.arange(24, dtype=np.float64).reshape(6, 2, 2),
+            )
+            viewer = _FakeViewer()
+            timeline = _two_window_timeline(frame_count=6)
+
+            with patch(
+                "twopy.napari.trial_timeline.resolve_trial_timeline_data",
+                return_value=timeline,
+            ):
+                opened = open_recording_in_napari(
+                    recording_path,
+                    viewer=viewer,
+                    movie_frame_range=(2, 3),
+                )
+            controller = cast(TrialTimelineController, opened.trial_timeline_controller)
+
+            controller.widget.frame_selected.emit(0)
+            self.assertEqual(viewer.dims.current_step[0], 0)
+
+            controller.widget.frame_selected.emit(3)
+            self.assertEqual(viewer.dims.current_step[0], 1)
+
+    def test_trial_timeline_restores_existing_text_overlay(self) -> None:
+        """Confirm timeline HUD does not permanently own napari text overlay.
+
+        Inputs: viewer with an existing text overlay before timeline activation.
+        Outputs: clearing timeline context restores the prior overlay fields.
+        """
+        _ = QApplication.instance() or QApplication([])
+        viewer = _FakeViewer()
+        viewer.text_overlay.text = "existing"
+        viewer.text_overlay.visible = True
+        viewer.text_overlay.position = "top_left"
+        viewer.text_overlay.font_size = 16
+        viewer.text_overlay.color = "yellow"
+        viewer.text_overlay.box = False
+        viewer.text_overlay.box_color = (1.0, 0.0, 0.0, 1.0)
+        controller = TrialTimelineController(viewer)
+        timeline = _two_window_timeline(frame_count=4)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(
+                    Path(temp_dir),
+                    movie_values=np.arange(16, dtype=np.float64).reshape(4, 2, 2),
+                ),
+            )
+            movie_layer = _FakeLayer(
+                name="aligned movie",
+                data=np.zeros((4, 2, 2), dtype=np.float64),
+                options={"metadata": {}},
+            )
+            movie_layer.metadata = {}
+            with patch(
+                "twopy.napari.trial_timeline.resolve_trial_timeline_data",
+                return_value=timeline,
+            ):
+                controller.set_context(recording, movie_layer)
+
+        controller.set_context(None, None)
+
+        self.assertEqual(viewer.text_overlay.text, "existing")
+        self.assertTrue(viewer.text_overlay.visible)
+        self.assertEqual(viewer.text_overlay.position, "top_left")
+        self.assertEqual(viewer.text_overlay.font_size, 16)
+        self.assertEqual(viewer.text_overlay.color, "yellow")
+        self.assertFalse(viewer.text_overlay.box)
+        self.assertEqual(viewer.text_overlay.box_color, (1.0, 0.0, 0.0, 1.0))
+
+    def test_current_trial_lookup_handles_frames_between_windows(self) -> None:
+        """Confirm trial lookup returns concise text inside and outside windows.
+
+        Inputs: two timeline windows and representative frame positions.
+        Outputs: matching windows and HUD text for in-trial and no-trial frames.
+        """
+        timeline = TrialTimelineData(
+            frame_count=8,
+            windows=(
+                TrialTimelineWindow(0, 1, 3, 1, "Gray"),
+                TrialTimelineWindow(1, 5, 7, 2, "Odor"),
+            ),
+            start_frames=(1, 5),
+            stop_frames=(3, 7),
+        )
+
+        self.assertIsNone(current_trial_window(timeline, 0))
+        self.assertEqual(current_trial_window(timeline, 1), timeline.windows[0])
+        self.assertIsNone(current_trial_window(timeline, 4))
+        self.assertEqual(current_trial_window(timeline, 6), timeline.windows[1])
+        self.assertEqual(current_trial_text(timeline, 4), "No trial | frame 5/8")
 
     def test_saves_napari_label_image_as_roi_file(self) -> None:
         """Confirm edited napari labels round-trip through core ROI storage.
@@ -4392,6 +4650,8 @@ def _write_converted_recording(
     movie_values: npt.NDArray[np.float64] | None = None,
     alignment_valid_crop: SpatialCrop | None = None,
     source_session_dir: Path | None = None,
+    stimulus_data: npt.NDArray[np.float64] | None = None,
+    high_res_pd: npt.NDArray[np.float64] | None = None,
     stimulus_parameters_json: str = "[]",
 ) -> Path:
     """Write a tiny converted recording for adapter tests.
@@ -4402,6 +4662,9 @@ def _write_converted_recording(
         alignment_valid_crop: Optional spatial crop metadata.
         source_session_dir: Optional source recording folder stored in the
             converted recording metadata.
+        stimulus_data: Optional stimulus rows shaped ``(rows, 2)`` containing
+            ``time_seconds`` and ``epoch_number``.
+        high_res_pd: Optional high-rate photodiode vector.
         stimulus_parameters_json: JSON list of stimulus epoch parameter
             dictionaries.
 
@@ -4460,7 +4723,14 @@ def _write_converted_recording(
         run_group = h5_file.create_group("run")
         run_group.attrs["rig_name"] = "TestRig"
         stimulus_group = h5_file.create_group("stimulus")
-        stimulus_group.create_dataset("data", data=np.zeros((1, 2), dtype=np.float64))
+        stimulus_group.create_dataset(
+            "data",
+            data=(
+                np.zeros((1, 2), dtype=np.float64)
+                if stimulus_data is None
+                else stimulus_data
+            ),
+        )
         stimulus_group.create_dataset(
             "data_column_names",
             data=np.asarray(
@@ -4478,7 +4748,11 @@ def _write_converted_recording(
         )
         photodiode_group.create_dataset(
             "high_res_pd",
-            data=np.zeros(resolved_movie_values.shape[0], dtype=np.float64),
+            data=(
+                np.zeros(resolved_movie_values.shape[0], dtype=np.float64)
+                if high_res_pd is None
+                else high_res_pd
+            ),
         )
         frame_counts = h5_file.create_group("frame_counts")
         frame_counts.attrs["aligned_movie_frames"] = resolved_movie_values.shape[0]
@@ -4489,6 +4763,35 @@ def _write_converted_recording(
         frame_counts.attrs["imaging_res_pd_minus_movie"] = 0
         frame_counts.attrs["acquisition_minus_movie"] = 0
     return recording_path
+
+
+def _two_window_timeline(*, frame_count: int) -> TrialTimelineData:
+    """Return two simple trial windows for timeline tests.
+
+    Args:
+        frame_count: Movie frame count stored on the timeline.
+
+    Returns:
+        Timeline data with one gray and one odor window.
+    """
+    windows = (
+        TrialTimelineWindow(0, 0, 2, 1, "Gray"),
+        TrialTimelineWindow(1, 2, frame_count, 2, "Odor"),
+    )
+    return TrialTimelineData(
+        frame_count=frame_count,
+        windows=windows,
+        start_frames=tuple(window.start_frame for window in windows),
+        stop_frames=tuple(window.stop_frame for window in windows),
+    )
+
+
+def _timeline_photodiode() -> npt.NDArray[np.float64]:
+    """Return a synthetic photodiode trace with start and long end flashes."""
+    values = np.zeros(120, dtype=np.float64)
+    values[0:2] = 1.0
+    values[80:116] = 1.0
+    return values
 
 
 def _tiny_response_plot_data() -> ResponsePlotData:

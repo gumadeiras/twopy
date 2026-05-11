@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- Added a compact napari trial timeline rail and viewer HUD that follow the movie frame slider using photodiode-aligned stimulus epoch windows.
+
 ### Fixes
 
 - Made napari live ROI plot updates more responsive by cancelling stale background recomputes, reusing unchanged ROI traces, reusing epoch plot widgets, and caching Labels colormap bases for visibility toggles.

@@ -24,6 +24,8 @@ twopy /path/to/recording_data.h5
 
 By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Update, Plot, ROIs, Epochs, and Export. Recording selections from the Load tab always open the full movie. The loaded-recordings list can unload only the selected recording or unload all loaded recordings at once. Search Database opens a separate side-by-side window with user, cell type, sensor, stimulus, and date filters on the left and results on the right. Results browse as user, cell type, sensor, stimulus, date, then source-folder experiment time; loading any hierarchy node loads all recordings under that node, closes the search window, and reports failed paths in a separate scrollable error dialog when needed. Search setup or database-query failures appear in a separate error dialog instead of looking like empty results.
 
+When photodiode-aligned stimulus epochs are available, twopy adds a compact bottom trial timeline beside the movie frame workflow. Colored blocks show epoch windows across the full recording, a thin cursor follows the current movie frame, clicking or dragging the rail seeks the movie stack, and the viewer HUD reports the current trial, epoch, and frame without adding another large panel.
+
 ## ROI Editing
 
 Napari ROI editing is crop-native. twopy displays the alignment-valid crop, then converts drawn Labels ROIs back to full-frame movie coordinates before saving or analysis. Response updates and saved analysis require the active Labels layer to match the displayed crop. The ROIs tab can hide ROIs from plots and remove the currently selected ROI rows from the editable Labels layer.

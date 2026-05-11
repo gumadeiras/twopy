@@ -90,6 +90,7 @@ class NapariControlState:
     roi_save_file: Path
     recording: RecordingData | None
     response_plot_widget: object | None
+    trial_timeline_controller: object | None = None
     loaded_recordings: list[LoadedNapariRecording] = field(default_factory=list)
     selected_recording_index: int | None = None
     loaded_recordings_panel: LoadedRecordingsPanel | None = None
@@ -98,6 +99,7 @@ class NapariControlState:
     recording_picker_widget: FileEdit | None = None
     database_search_dialog: object | None = None
     is_loading: bool = False
+    defer_timeline_updates: bool = False
     replace_selected_on_next_load: bool = False
 
 
@@ -122,6 +124,7 @@ def add_twopy_magicgui_controls(
     response_options_widget: object | None = None,
     mean_image_layer: object | None = None,
     movie_layer: object | None = None,
+    trial_timeline_controller: object | None = None,
     dock_name: str = "twopy",
     dock_area: str = "right",
 ) -> NapariSidebarWidgets:
@@ -142,6 +145,8 @@ def add_twopy_magicgui_controls(
             startup recording.
         movie_layer: Optional movie layer for an already loaded startup
             recording.
+        trial_timeline_controller: Optional timeline controller that follows
+            selected loaded recordings.
         dock_name: Dock widget title.
         dock_area: Napari dock area.
 
@@ -159,6 +164,7 @@ def add_twopy_magicgui_controls(
         roi_save_file=roi_save_file,
         recording=recording,
         response_plot_widget=response_plot_widget,
+        trial_timeline_controller=trial_timeline_controller,
     )
     if recording is not None and mean_image_layer is not None:
         state.loaded_recordings.append(
@@ -510,6 +516,7 @@ def _load_database_recording_paths(
         )
 
     state.is_loading = True
+    state.defer_timeline_updates = True
     loaded_count = 0
     failures: list[ExperimentLoadFailure] = []
     try:
@@ -533,6 +540,9 @@ def _load_database_recording_paths(
                 loaded_count += 1
     finally:
         state.is_loading = False
+        state.defer_timeline_updates = False
+        if state.selected_recording_index is not None:
+            select_loaded_recording(state, state.selected_recording_index)
 
     return ExperimentLoadResult(
         loaded_count=loaded_count,
