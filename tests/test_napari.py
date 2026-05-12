@@ -47,6 +47,7 @@ from qtpy.QtWidgets import (
 )
 
 import twopy.napari.controls as napari_controls
+import twopy.napari.trial_timeline as trial_timeline
 from twopy import (
     add_twopy_magicgui_controls,
     load_roi_set,
@@ -871,7 +872,7 @@ class NapariAdapterTest(unittest.TestCase):
             controller.widget.frame_selected.emit(3)
 
             self.assertEqual(viewer.dims.current_step[0], 3)
-            self.assertIn("frame 4/4", viewer.text_overlay.text)
+            self.assertNotIn("frame", viewer.text_overlay.text)
 
     def test_trial_timeline_uses_real_photodiode_epoch_mapping(self) -> None:
         """Confirm timeline data is built from converted timing evidence.
@@ -1019,7 +1020,24 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(current_trial_window(timeline, 1), timeline.windows[0])
         self.assertIsNone(current_trial_window(timeline, 4))
         self.assertEqual(current_trial_window(timeline, 6), timeline.windows[1])
-        self.assertEqual(current_trial_text(timeline, 4), "No trial | frame 5/8")
+        self.assertEqual(current_trial_text(timeline, 4), "No trial")
+
+    def test_trial_timeline_colors_interleave_epochs_gray(self) -> None:
+        """Confirm baseline-like epochs use neutral gray in the rail.
+
+        Inputs: one interleave timeline window and one odor timeline window.
+        Outputs: interleave uses the neutral baseline color while odor keeps a
+        distinct condition color.
+        """
+        interleave_color = trial_timeline._timeline_window_color(
+            TrialTimelineWindow(0, 0, 2, 2, "Baseline Interleave"),
+        )
+        odor_color = trial_timeline._timeline_window_color(
+            TrialTimelineWindow(1, 2, 4, 2, "Odor"),
+        )
+
+        self.assertEqual(interleave_color.getRgb()[:3], (145, 150, 160))
+        self.assertNotEqual(odor_color.getRgb()[:3], (145, 150, 160))
 
     def test_saves_napari_label_image_as_roi_file(self) -> None:
         """Confirm edited napari labels round-trip through core ROI storage.

@@ -21,7 +21,7 @@ from qtpy.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen
 from qtpy.QtWidgets import QSizePolicy, QWidget
 
 from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
-from twopy.analysis.trials import EpochFrameWindow
+from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData
 from twopy.napari.dims import current_step_index, set_current_step_index
 from twopy.napari.protocols import NapariViewer
@@ -46,8 +46,9 @@ __all__ = [
 TRIAL_TIMELINE_DOCK_NAME = "twopy trial timeline"
 MOVIE_FRAME_START_METADATA_KEY = "twopy_movie_frame_start"
 MOVIE_FRAME_STOP_METADATA_KEY = "twopy_movie_frame_stop"
-_TIMELINE_HEIGHT = 28
+_TIMELINE_HEIGHT = 14
 _MINIMUM_TIMELINE_WIDTH = 360
+_BASELINE_EPOCH_COLOR = QColor(145, 150, 160)
 
 
 class _EventEmitter(Protocol):
@@ -197,12 +198,11 @@ def current_trial_text(timeline: TrialTimelineData, frame: int) -> str:
         Human-readable current trial/epoch text.
     """
     window = current_trial_window(timeline, frame)
-    frame_text = f"frame {frame + 1}/{timeline.frame_count}"
     if window is None:
-        return f"No trial | {frame_text}"
+        return "No trial"
     return (
         f"Trial {window.index + 1}/{len(timeline.windows)} | "
-        f"Epoch {window.epoch_number}: {window.epoch_name} | {frame_text}"
+        f"Epoch {window.epoch_number}: {window.epoch_name}"
     )
 
 
@@ -363,7 +363,7 @@ class TrialTimelineWidget(QWidget):
                 max(1.0, float(stop_x - start_x)),
                 float(height),
             )
-            painter.fillRect(rect, _epoch_color(window.epoch_number))
+            painter.fillRect(rect, _timeline_window_color(window))
 
     def _paint_cursor(self, painter: QPainter, timeline: TrialTimelineData) -> None:
         """Paint the current-frame cursor above the trial blocks."""
@@ -651,8 +651,15 @@ def _timeline_window(index: int, epoch_window: EpochFrameWindow) -> TrialTimelin
     )
 
 
-def _epoch_color(epoch_number: int) -> QColor:
-    """Return a stable high-contrast color for one epoch number."""
+def _timeline_window_color(window: TrialTimelineWindow) -> QColor:
+    """Return the rail color for one timeline window."""
+    if is_baseline_epoch_name(window.epoch_name):
+        return QColor(_BASELINE_EPOCH_COLOR)
+    return _condition_epoch_color(window.epoch_number)
+
+
+def _condition_epoch_color(epoch_number: int) -> QColor:
+    """Return a stable high-contrast color for one non-baseline epoch number."""
     palette = (
         QColor(80, 170, 220),
         QColor(238, 169, 73),

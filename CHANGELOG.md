@@ -6,6 +6,10 @@
 
 - Added a compact napari trial timeline rail and viewer HUD that follow the movie frame slider using photodiode-aligned stimulus epoch windows.
 
+### Changes
+
+- Rendered gray, grey, and interleave epochs as neutral gray in the napari trial timeline.
+
 ### Fixes
 
 - Made napari live ROI plot updates more responsive by cancelling stale background recomputes, reusing unchanged ROI traces, reusing epoch plot widgets, and caching Labels colormap bases for visibility toggles.
