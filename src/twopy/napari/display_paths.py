@@ -10,6 +10,7 @@ using full ``Path`` objects.
 
 import re
 from dataclasses import dataclass
+from numbers import Real
 from pathlib import Path
 
 from twopy.config import DEFAULT_CONFIG_PATH, load_config
@@ -19,6 +20,7 @@ __all__ = [
     "RecordingDisplaySummary",
     "format_output_folder",
     "format_twopy_h5_output",
+    "microscope_display_lines",
     "recording_display_summary",
 ]
 
@@ -92,6 +94,29 @@ def recording_display_summary(recording: RecordingData) -> RecordingDisplaySumma
     )
 
 
+def microscope_display_lines(recording: RecordingData) -> tuple[str, ...]:
+    """Return compact microscope metadata lines for the Metadata tab.
+
+    Args:
+        recording: Loaded converted recording.
+
+    Returns:
+        User-facing microscope, scan, and timing fields.
+    """
+    acquisition = recording.acquisition_metadata
+    run = recording.run_metadata
+    return (
+        f"Rig: {_metadata_text(run, 'rig_name')}",
+        f"Config: {_metadata_text(acquisition, 'configName')}",
+        f"Zoom: {_metadata_text(acquisition, 'acq.zoomFactor')}",
+        f"Frame rate: {_metadata_number(acquisition, 'acq.frameRate', ' Hz')}",
+        "Frame shape: "
+        f"{_metadata_text(acquisition, 'acq.pixelsPerLine')} x "
+        f"{_metadata_text(acquisition, 'acq.linesPerFrame')}",
+        f"Frames: {_metadata_text(acquisition, 'acq.numberOfFrames')}",
+    )
+
+
 def format_twopy_h5_output(path: Path) -> str:
     """Return the compact display form for twopy HDF5 outputs.
 
@@ -102,6 +127,22 @@ def format_twopy_h5_output(path: Path) -> str:
         ``./twopy/<filename>.h5`` style string.
     """
     return f"./twopy/{path.name}"
+
+
+def _metadata_text(metadata: dict[str, object], key: str) -> str:
+    """Return a display string for one metadata field."""
+    value = metadata.get(key)
+    if value is None or value == "":
+        return "unknown"
+    return str(value)
+
+
+def _metadata_number(metadata: dict[str, object], key: str, suffix: str) -> str:
+    """Return a compact numeric metadata string."""
+    value = metadata.get(key)
+    if isinstance(value, Real) and not isinstance(value, bool):
+        return f"{value:g}{suffix}"
+    return _metadata_text(metadata, key)
 
 
 def format_output_folder(path: Path, recording: RecordingData | None) -> str:

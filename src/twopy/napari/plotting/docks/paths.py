@@ -16,6 +16,7 @@ from twopy.converted import RecordingData
 from twopy.filenames import ANALYSIS_OUTPUT_FILENAME, ROI_FILENAME
 from twopy.napari.display_paths import (
     format_twopy_h5_output,
+    microscope_display_lines,
     recording_display_summary,
 )
 from twopy.napari.paths import DEFAULT_PATH_TEXT
@@ -68,6 +69,7 @@ def refresh_update_path_labels(
     analysis_path: Path | None,
     roi_save_file: Path | None,
     recording_summary_label: QLabel,
+    microscope_summary_label: QLabel,
     analysis_path_label: QLabel,
     roi_save_path_label: QLabel,
 ) -> None:
@@ -78,6 +80,7 @@ def refresh_update_path_labels(
         analysis_path: Explicit analysis output path, if one is loaded.
         roi_save_file: Explicit ROI output path, if one is loaded.
         recording_summary_label: Label showing the selected recording summary.
+        microscope_summary_label: Label showing selected microscope metadata.
         analysis_path_label: Label showing the analysis output path.
         roi_save_path_label: Label showing the ROI output path.
 
@@ -86,12 +89,14 @@ def refresh_update_path_labels(
     """
     if recording is None:
         recording_summary_label.setText("No recording loaded.")
+        microscope_summary_label.setText("No microscope metadata.")
         analysis_path_label.setText(f"Analysis output: {DEFAULT_PATH_TEXT}")
         roi_save_path_label.setText(f"ROI output: {DEFAULT_PATH_TEXT}")
         return
 
     summary = recording_display_summary(recording)
     recording_summary_label.setText("\n\n".join(summary.lines()))
+    microscope_summary_label.setText("\n\n".join(microscope_display_lines(recording)))
     analysis_path_label.setText(
         "Analysis output: "
         f"{format_twopy_h5_output(resolved_analysis_path(analysis_path, recording))}"

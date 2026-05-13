@@ -17,13 +17,14 @@
 - Rendered gray, grey, and interleave epochs as neutral gray in the napari trial timeline.
 - Simplified ROIs-tab grid controls so pixel and micron settings show only for the selected unit, extrapolation is enabled by default, calibration modes include known ScanImage config names, and micron-grid status reports only the estimated pixel size.
 - Made response-watershed ROI masks split disconnected score islands, fill component holes by default, and expose an opt-in closing radius for tiny same-basin gaps.
-- Renamed the napari Update tab to Metadata, made Search Database and Load manually the first Load-tab actions, moved Reload saved analysis to Load, moved Save ROIs + analysis to Export, and removed the Recompute preview button.
+- Renamed the napari Update tab to Metadata, grouped Metadata into Recording, Microscope, and Outputs sections, made Search Database and Load manually the first Load-tab actions, moved Reload saved analysis to Load, moved Save ROIs + analysis to Export, and removed the Recompute preview button.
 
 ### Fixes
 
 - Kept unresolved ROIs-tab calibration fields on explicit selection placeholders instead of silently using the first dropdown option.
 - Made napari live ROI plot updates more responsive by cancelling stale background recomputes, reusing unchanged ROI traces, reusing epoch plot widgets, and caching Labels colormap bases for visibility toggles.
 - Made napari correlation filtering uncheck and dim ROIs that do not pass QC in the ROIs tab and Labels layer.
+- Made Reload saved analysis restore the saved ROI file into the editable Labels layer.
 
 ## 0.1.7 - 2026-05-11
 

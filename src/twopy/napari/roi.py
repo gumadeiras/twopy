@@ -33,6 +33,7 @@ from twopy.roi import (
 from twopy.spatial import SpatialCrop, full_frame_crop
 
 __all__ = [
+    "load_roi_file_on_layer",
     "remove_roi_label_values_from_layer",
     "roi_label_image_from_layer",
     "roi_label_image_from_layer_for_recording",
@@ -125,6 +126,35 @@ def set_roi_label_image_on_layer(
     refresh = getattr(layer, "refresh", None)
     if callable(refresh):
         refresh()
+
+
+def load_roi_file_on_layer(
+    path: Path,
+    layer: object,
+    recording: RecordingData,
+) -> None:
+    """Load one saved ROI HDF5 file into a napari Labels layer.
+
+    Args:
+        path: ROI HDF5 file to load.
+        layer: Active napari Labels layer, or a test layer with settable data.
+        recording: Loaded converted recording that defines valid ROI shape and
+            displayed crop.
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: If the ROI file does not match the recording shape.
+        OSError: If the ROI HDF5 file cannot be read.
+    """
+    roi_set = load_roi_set(path)
+    validate_roi_shape(roi_set, recording)
+    set_roi_label_image_on_layer(
+        layer,
+        recording,
+        roi_set_to_label_image(roi_set),
+    )
 
 
 def roi_label_image_from_layer_for_recording(

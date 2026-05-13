@@ -45,6 +45,7 @@ class ResponseOptionsPanel:
     Args:
         tabs: Root tab widget docked as the response options panel.
         recording_summary_label: Metadata-tab label showing the loaded recording.
+        microscope_summary_label: Metadata-tab label showing microscope metadata.
         analysis_path_label: Metadata-tab label showing the analysis output path.
         roi_save_path_label: Metadata-tab label showing the ROI output path.
         update_status_label: Metadata-tab label showing save or processing status.
@@ -68,6 +69,7 @@ class ResponseOptionsPanel:
 
     tabs: QTabWidget
     recording_summary_label: QLabel
+    microscope_summary_label: QLabel
     analysis_path_label: QLabel
     roi_save_path_label: QLabel
     update_status_label: QLabel
@@ -128,6 +130,8 @@ def create_response_options_panel(
 
     recording_summary_label = QLabel("No recording loaded.")
     recording_summary_label.setWordWrap(True)
+    microscope_summary_label = QLabel("No microscope metadata.")
+    microscope_summary_label.setWordWrap(True)
     analysis_path_label = QLabel(f"Analysis output: {DEFAULT_PATH_TEXT}")
     analysis_path_label.setWordWrap(True)
     roi_save_path_label = QLabel(f"ROI output: {DEFAULT_PATH_TEXT}")
@@ -178,9 +182,9 @@ def create_response_options_panel(
     tabs.addTab(
         response_metadata_tab(
             recording_summary_label=recording_summary_label,
+            microscope_summary_label=microscope_summary_label,
             analysis_output_label=analysis_path_label,
             roi_output_label=roi_save_path_label,
-            status_label=update_status_label,
         ),
         "Metadata",
     )
@@ -198,6 +202,7 @@ def create_response_options_panel(
     return ResponseOptionsPanel(
         tabs=tabs,
         recording_summary_label=recording_summary_label,
+        microscope_summary_label=microscope_summary_label,
         analysis_path_label=analysis_path_label,
         roi_save_path_label=roi_save_path_label,
         update_status_label=update_status_label,

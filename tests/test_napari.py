@@ -795,6 +795,10 @@ class NapariAdapterTest(unittest.TestCase):
             group_titles = {
                 group.title() for group in options_widget.findChildren(QGroupBox)
             }
+            self.assertIn("Recording", group_titles)
+            self.assertIn("Microscope", group_titles)
+            self.assertIn("Outputs", group_titles)
+            self.assertNotIn("Status", group_titles)
             self.assertIn("Plot", group_titles)
             self.assertIn("Smoothing", group_titles)
             np.testing.assert_array_equal(
@@ -1362,6 +1366,9 @@ class NapariAdapterTest(unittest.TestCase):
 
             recording_summary_text = response_widget._recording_summary_label.text()
             self.assertEqual(len(recording_summary_text.split("\n\n")), 4)
+            microscope_summary_text = response_widget._microscope_summary_label.text()
+            self.assertIn("Rig: TestRig", microscope_summary_text)
+            self.assertIn("Frame rate: 10 Hz", microscope_summary_text)
             labels_text = "\n".join(
                 (
                     response_widget._analysis_path_label.text(),
@@ -1443,6 +1450,40 @@ class NapariAdapterTest(unittest.TestCase):
                 (publish_dir / "analysis_outputs.h5").read_text(encoding="utf-8"),
                 "analysis",
             )
+
+    def test_reload_saved_analysis_reloads_saved_rois(self) -> None:
+        """Confirm Reload saved analysis replaces the editable ROI Labels layer.
+
+        Inputs: saved analysis output, saved ROI HDF5, and edited in-memory
+        Labels pixels.
+        Outputs: reloading restores the saved ROI labels from disk.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            save_analysis_outputs(
+                root / "analysis_outputs.h5",
+                grouped_responses=_tiny_grouped_responses(),
+            )
+            save_roi_set(
+                make_roi_set(
+                    np.array([[[True, False], [False, False]]], dtype=np.bool_),
+                    labels=("roi_0001",),
+                ),
+                root / "rois.h5",
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.array([[0, 0], [0, 2]], dtype=np.int64)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            response_widget.reload()
+
+            np.testing.assert_array_equal(
+                roi_label_image_from_layer(viewer.labels[0]),
+                np.array([[1, 0], [0, 0]], dtype=np.int64),
+            )
+            response_widget.shutdown()
 
     def test_processing_option_changes_request_preview_update(self) -> None:
         """Confirm processing controls trigger debounced preview recompute.

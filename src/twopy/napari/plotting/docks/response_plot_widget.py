@@ -54,6 +54,7 @@ from twopy.napari.plotting.docks.options_panel import create_response_options_pa
 from twopy.napari.plotting.docks.paths import (
     refresh_update_path_labels,
     resolved_analysis_path,
+    resolved_roi_save_file,
 )
 from twopy.napari.plotting.docks.plot_area import ResponsePlotArea
 from twopy.napari.plotting.docks.save_actions import save_current_roi_analysis
@@ -80,6 +81,7 @@ from twopy.napari.plotting.widgets import (
     roi_colors_from_label_values,
 )
 from twopy.napari.roi import (
+    load_roi_file_on_layer,
     remove_roi_label_values_from_layer,
     set_roi_label_image_on_layer,
 )
@@ -173,6 +175,7 @@ class _ResponsePlotWidget(QWidget):
         )
         self._options_tabs = options_panel.tabs
         self._recording_summary_label = options_panel.recording_summary_label
+        self._microscope_summary_label = options_panel.microscope_summary_label
         self._analysis_path_label = options_panel.analysis_path_label
         self._roi_save_path_label = options_panel.roi_save_path_label
         self._update_status_label = options_panel.update_status_label
@@ -317,6 +320,7 @@ class _ResponsePlotWidget(QWidget):
         self._response_window_options_widget.set_max_window_seconds(None)
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
+        self._microscope_summary_label.setText("No microscope metadata.")
         self._analysis_path_label.setText(f"Analysis output: {DEFAULT_PATH_TEXT}")
         self._roi_save_path_label.setText(f"ROI output: {DEFAULT_PATH_TEXT}")
         self._update_status_label.setText("")
@@ -530,7 +534,7 @@ class _ResponsePlotWidget(QWidget):
         self._set_status(text)
 
     def reload(self) -> None:
-        """Reload response plots from the current analysis output file."""
+        """Reload response plots and saved ROIs from disk."""
         if self._analysis_path is None:
             self._set_status("No recording loaded.")
             return
@@ -541,7 +545,26 @@ class _ResponsePlotWidget(QWidget):
             self._reset_empty_option_tabs()
             self._set_status(result)
             return
+        roi_error = self._reload_saved_rois()
         self.set_response_plot_data(result, reset_axes=True)
+        if roi_error is not None:
+            self._set_status(f"Reloaded saved analysis; {roi_error}")
+
+    def _reload_saved_rois(self) -> str | None:
+        """Replace the active Labels layer with the saved ROI HDF5 file."""
+        if self._recording is None or self._roi_labels_layer is None:
+            return "no ROI Labels layer is available."
+        roi_path = resolved_roi_save_file(self._roi_save_file, self._recording)
+        try:
+            self._live_controller.set_context(self._recording, None)
+            load_roi_file_on_layer(roi_path, self._roi_labels_layer, self._recording)
+        except (FileNotFoundError, OSError, ValueError) as error:
+            return f"ROI reload failed: {error}"
+        finally:
+            self._live_controller.set_context(self._recording, self._roi_labels_layer)
+        self._roi_save_file = roi_path
+        self._refresh_update_path_labels()
+        return None
 
     def _set_show_sem(self, state: int) -> None:
         self._show_sem = state != 0
@@ -821,6 +844,7 @@ class _ResponsePlotWidget(QWidget):
             analysis_path=self._analysis_path,
             roi_save_file=self._roi_save_file,
             recording_summary_label=self._recording_summary_label,
+            microscope_summary_label=self._microscope_summary_label,
             analysis_path_label=self._analysis_path_label,
             roi_save_path_label=self._roi_save_path_label,
         )
