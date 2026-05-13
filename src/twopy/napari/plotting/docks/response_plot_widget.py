@@ -68,8 +68,10 @@ from twopy.napari.plotting.docks.visibility_state import (
 )
 from twopy.napari.plotting.export_controls import ResponseExportState
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
-from twopy.napari.plotting.roi_generation_actions import generate_grid_roi_labels
-from twopy.napari.plotting.roi_generation_options import RoiGenerationOptions
+from twopy.napari.plotting.roi_generation import (
+    RoiGenerationOptions,
+    generate_roi_labels,
+)
 from twopy.napari.plotting.widgets import (
     clear_layout,
     opaque_colors,
@@ -156,7 +158,7 @@ class _ResponsePlotWidget(QWidget):
             on_reload_saved=self.reload,
             on_recompute_preview=self.update_from_current_rois,
             on_save_analysis=self.save_analysis_and_rois,
-            on_generate_grid_rois=self.generate_grid_rois,
+            on_create_generated_rois=self.create_generated_rois,
             export_state=self._export_state,
             pixel_calibrations=self._pixel_calibrations,
         )
@@ -352,11 +354,11 @@ class _ResponsePlotWidget(QWidget):
         """
         self._live_controller.update_now()
 
-    def generate_grid_rois(self, options: RoiGenerationOptions) -> None:
-        """Replace the active Labels layer with generated grid ROIs.
+    def create_generated_rois(self, options: RoiGenerationOptions) -> None:
+        """Replace the active Labels layer with generated ROIs.
 
         Args:
-            options: Grid-generation options from the ROIs tab.
+            options: ROI generation options from the ROIs tab.
 
         Returns:
             None.
@@ -372,7 +374,7 @@ class _ResponsePlotWidget(QWidget):
             return
 
         try:
-            generated = generate_grid_roi_labels(
+            generated = generate_roi_labels(
                 self._recording,
                 options,
                 self._pixel_calibrations,

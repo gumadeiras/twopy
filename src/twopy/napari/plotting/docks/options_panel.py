@@ -30,8 +30,10 @@ from twopy.napari.plotting.normalization_options import NormalizationOptionsWidg
 from twopy.napari.plotting.panels import response_update_tab, scrolling_tab
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
-from twopy.napari.plotting.roi_generation import RoiGenerationControls
-from twopy.napari.plotting.roi_generation_options import RoiGenerationOptions
+from twopy.napari.plotting.roi_generation import (
+    RoiGenerationControls,
+    RoiGenerationOptions,
+)
 from twopy.pixel_calibration import PixelCalibrationRow
 
 
@@ -50,8 +52,7 @@ class ResponseOptionsPanel:
         plot_display_options_layout: Plot-tab layout rebuilt when axis defaults
             change.
         roi_options_layout: ROIs-tab layout rebuilt from loaded plot data.
-        roi_generation_widget: ROIs-tab widget for creating generated grid
-            labels.
+        roi_generation_widget: ROIs-tab widget for manual/generated ROI modes.
         epoch_options_layout: Epochs-tab layout rebuilt from loaded plot data.
         processing_options_widget: Plot-tab response processing controls.
         response_window_options_widget: Plot-tab response-window controls.
@@ -90,7 +91,7 @@ def create_response_options_panel(
     on_reload_saved: Callable[[], None],
     on_recompute_preview: Callable[[], None],
     on_save_analysis: Callable[[], None],
-    on_generate_grid_rois: Callable[[RoiGenerationOptions], None],
+    on_create_generated_rois: Callable[[RoiGenerationOptions], None],
     export_state: Callable[[], ResponseExportState],
     pixel_calibrations: tuple[PixelCalibrationRow, ...],
 ) -> ResponseOptionsPanel:
@@ -107,7 +108,7 @@ def create_response_options_panel(
         on_reload_saved: Callback for the reload button.
         on_recompute_preview: Callback for the preview recompute button.
         on_save_analysis: Callback for the Save ROIs + analysis button.
-        on_generate_grid_rois: Callback for the ROIs-tab Create grid button.
+        on_create_generated_rois: Callback for generated-ROI actions.
         export_state: Callback that supplies current export state.
         pixel_calibrations: Calibration rows for micron-sized grid controls.
 
@@ -164,7 +165,7 @@ def create_response_options_panel(
     roi_tab_layout = QVBoxLayout()
     roi_generation_widget = RoiGenerationControls(
         pixel_calibrations,
-        on_generate=on_generate_grid_rois,
+        on_generate=on_create_generated_rois,
     )
     roi_options_layout = QVBoxLayout()
     roi_tab_layout.addWidget(roi_generation_widget)

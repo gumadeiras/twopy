@@ -3491,6 +3491,7 @@ class NapariAdapterTest(unittest.TestCase):
             )
             response_widget.load_recording(recording)
             response_widget.set_roi_labels_layer(layer)
+            response_widget._roi_generation_widget._roi_mode.setCurrentIndex(1)
             response_widget._roi_generation_widget._pixel_grid_size.setValue(1)
             response_widget._roi_generation_widget._create_button.click()
 
@@ -3519,6 +3520,57 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget.load_recording(recording)
 
         self.assertEqual(response_widget._roi_generation_widget._zoom.value(), 2.0)
+
+    def test_roi_tab_generation_defaults_to_manual_mode(self) -> None:
+        """Confirm the ROIs tab starts in manual Labels-editing mode.
+
+        Inputs: a newly created response plot widget.
+        Outputs: manual mode is selected and generated-ROI controls are idle.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        roi_widget = response_widget._roi_generation_widget
+
+        self.assertEqual(roi_widget._roi_mode.currentData(), "manual")
+        self.assertFalse(roi_widget._create_button.isEnabled())
+        self.assertIn("No recording loaded", roi_widget._status.text())
+
+    def test_roi_tab_create_watershed_replaces_labels_layer(self) -> None:
+        """Confirm the ROIs tab can create watershed ROI labels.
+
+        Inputs: a loaded recording, empty Labels layer, and watershed mode.
+        Outputs: the Labels layer is replaced and live recomputation is
+        requested.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            layer = _FakeLayer(
+                name="rois",
+                data=np.zeros((2, 2), dtype=np.int64),
+                options={},
+            )
+            requests: list[str] = []
+            response_widget = cast(Any, create_response_plot_widget(None))
+            response_widget._live_controller.request_update = lambda: requests.append(
+                "update",
+            )
+            response_widget.load_recording(recording)
+            response_widget.set_roi_labels_layer(layer)
+            response_widget._roi_generation_widget._roi_mode.setCurrentIndex(2)
+            response_widget._roi_generation_widget._create_button.click()
+
+        np.testing.assert_array_equal(
+            layer.data,
+            np.ones((2, 2), dtype=np.int64),
+        )
+        self.assertEqual(requests, ["update"])
+        self.assertIn(
+            "Created watershed ROIs",
+            response_widget._update_status_label.text(),
+        )
 
     def test_roi_generation_controls_filter_calibration_choices(self) -> None:
         """Confirm calibration dropdowns expose only valid measured groups.

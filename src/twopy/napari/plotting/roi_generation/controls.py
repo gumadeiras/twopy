@@ -1,6 +1,6 @@
 """ROI generation controls for the twopy napari ROIs tab.
 
-Inputs: loaded recording metadata, calibration rows, and user grid settings.
+Inputs: loaded recording metadata, calibration rows, and user ROI mode settings.
 Outputs: small Qt controls that report requested generated ROI templates.
 
 This module owns only option-panel widgets. Core ROI creation and calibration
@@ -19,10 +19,12 @@ from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
     QSpinBox,
+    QWidget,
 )
 
 from twopy.converted import RecordingData
-from twopy.napari.plotting.roi_generation_options import (
+from twopy.napari.plotting.roi_generation.options import (
+    RoiGenerationMode,
     RoiGenerationOptions,
     RoiGenerationUnits,
 )
@@ -30,22 +32,24 @@ from twopy.pixel_calibration import PixelCalibrationRow
 
 __all__ = [
     "RoiGenerationControls",
+    "RoiGenerationMode",
     "RoiGenerationOptions",
     "RoiGenerationUnits",
 ]
 
 
 class RoiGenerationControls(QGroupBox):
-    """Create ROIs-tab controls for generated grid templates.
+    """Create ROIs-tab controls for manual and generated ROI modes.
 
     Args:
         calibrations: Calibration rows used to populate rig/mode/scanner
             choices.
-        on_generate: Callback invoked when the user clicks Create grid.
+        on_generate: Callback invoked when the user clicks a generated-ROI
+            action.
 
-    The widget auto-fills zoom from converted acquisition metadata, but
-    calibration rig/mode/scanner remain explicit choices because converted
-    files do not yet persist those keys as typed calibration fields.
+    Manual mode is the default and leaves napari Labels editing unchanged.
+    Generated modes collect only typed options and delegate creation to the
+    owner callback.
     """
 
     def __init__(
@@ -54,7 +58,7 @@ class RoiGenerationControls(QGroupBox):
         *,
         on_generate: Callable[[RoiGenerationOptions], None],
     ) -> None:
-        """Create the grid-generation control group.
+        """Create the ROI mode control group.
 
         Args:
             calibrations: Calibration rows used to populate dropdowns.
@@ -63,10 +67,16 @@ class RoiGenerationControls(QGroupBox):
         Returns:
             None.
         """
-        super().__init__("Create grid ROIs")
+        super().__init__("ROI mode")
         self._calibrations = calibrations
         self._on_generate = on_generate
+        self._recording_loaded = False
+        self._loaded_zoom: float | None = None
 
+        self._roi_mode = QComboBox()
+        self._roi_mode.addItem("manual", "manual")
+        self._roi_mode.addItem("grid", "grid")
+        self._roi_mode.addItem("watershed", "watershed")
         self._units = QComboBox()
         self._units.addItem("pixels", "pixels")
         self._units.addItem("microns", "microns")
@@ -84,29 +94,40 @@ class RoiGenerationControls(QGroupBox):
         self._zoom.setRange(0.001, 10000.0)
         self._zoom.setDecimals(3)
         self._allow_extrapolation = QCheckBox("Allow extrapolation")
+        self._watershed_min_pixels = QSpinBox()
+        self._watershed_min_pixels.setRange(1, 1_000_000)
+        self._watershed_min_pixels.setValue(1)
+        self._watershed_smoothing_sigma = QDoubleSpinBox()
+        self._watershed_smoothing_sigma.setRange(0.0, 100.0)
+        self._watershed_smoothing_sigma.setDecimals(3)
+        self._watershed_smoothing_sigma.setValue(0.0)
         self._status = QLabel("No recording loaded.")
         self._status.setWordWrap(True)
-        self._create_button = QPushButton("Create grid")
+        self._create_button = QPushButton("Create ROIs")
 
         self._populate_calibration_choices()
+        self._roi_mode.currentIndexChanged.connect(self._sync_mode)
         self._units.currentIndexChanged.connect(self._sync_units)
         self._rig.currentIndexChanged.connect(self._sync_calibration_mode_choices)
         self._mode.currentIndexChanged.connect(self._sync_calibration_scanner_choices)
         self._create_button.clicked.connect(self._generate)
 
-        layout = QFormLayout()
-        layout.addRow("Units", self._units)
-        layout.addRow("Pixels", self._pixel_grid_size)
-        layout.addRow("Microns", self._micron_grid_size)
-        layout.addRow("Rig", self._rig)
-        layout.addRow("Mode", self._mode)
-        layout.addRow("Scanner", self._scanner)
-        layout.addRow("Zoom", self._zoom)
-        layout.addRow("", self._allow_extrapolation)
-        layout.addRow("", self._create_button)
-        layout.addRow("", self._status)
-        self.setLayout(layout)
-        self._sync_units()
+        self._form_layout = QFormLayout()
+        self._form_layout.addRow("Mode", self._roi_mode)
+        self._form_layout.addRow("Units", self._units)
+        self._form_layout.addRow("Pixels", self._pixel_grid_size)
+        self._form_layout.addRow("Microns", self._micron_grid_size)
+        self._form_layout.addRow("Rig", self._rig)
+        self._form_layout.addRow("Cal mode", self._mode)
+        self._form_layout.addRow("Scanner", self._scanner)
+        self._form_layout.addRow("Zoom", self._zoom)
+        self._form_layout.addRow("", self._allow_extrapolation)
+        self._form_layout.addRow("Min pixels", self._watershed_min_pixels)
+        self._form_layout.addRow("Smoothing", self._watershed_smoothing_sigma)
+        self._form_layout.addRow("", self._create_button)
+        self._form_layout.addRow("", self._status)
+        self.setLayout(self._form_layout)
+        self._sync_mode()
 
     def set_recording(self, recording: RecordingData | None) -> None:
         """Update controls from the selected recording.
@@ -119,30 +140,39 @@ class RoiGenerationControls(QGroupBox):
             None.
         """
         if recording is None:
+            self._recording_loaded = False
+            self._loaded_zoom = None
             self._status.setText("No recording loaded.")
+            self._sync_mode()
             return
+        self._recording_loaded = True
         zoom = _metadata_float(recording.acquisition_metadata, "acq.zoomFactor")
         if zoom is None:
-            self._status.setText("Zoom missing from converted metadata.")
+            self._loaded_zoom = None
+            self._sync_mode()
             return
+        self._loaded_zoom = zoom
         self._zoom.setValue(zoom)
-        self._status.setText(f"Zoom from metadata: {zoom:g}")
+        self._sync_mode()
 
     def options(self) -> RoiGenerationOptions:
-        """Return the current grid-generation options.
+        """Return the current ROI-generation options.
 
         Returns:
             Plain generation options.
         """
         return RoiGenerationOptions(
+            roi_mode=_roi_mode_value(self._roi_mode),
             units=_units_value(self._units),
             grid_size_pixels=self._pixel_grid_size.value(),
             micron_grid_size=self._micron_grid_size.value(),
             rig=self._rig.currentText(),
-            mode=int(self._mode.currentData()),
+            calibration_mode=int(self._mode.currentData()),
             scanner=self._scanner.currentText(),
             zoom=self._zoom.value(),
             allow_extrapolation=self._allow_extrapolation.isChecked(),
+            watershed_min_pixels=self._watershed_min_pixels.value(),
+            watershed_smoothing_sigma=self._watershed_smoothing_sigma.value(),
         )
 
     def set_status(self, text: str) -> None:
@@ -196,10 +226,40 @@ class RoiGenerationControls(QGroupBox):
             previous=self._scanner.currentText(),
         )
 
+    def _sync_mode(self) -> None:
+        """Show and enable controls for the selected ROI mode."""
+        roi_mode = _roi_mode_value(self._roi_mode)
+        uses_grid = roi_mode == "grid"
+        uses_watershed = roi_mode == "watershed"
+        for widget in (
+            self._units,
+            self._pixel_grid_size,
+            self._micron_grid_size,
+            self._rig,
+            self._mode,
+            self._scanner,
+            self._zoom,
+            self._allow_extrapolation,
+        ):
+            _set_form_row_visible(self._form_layout, widget, uses_grid)
+        for widget in (self._watershed_min_pixels, self._watershed_smoothing_sigma):
+            _set_form_row_visible(self._form_layout, widget, uses_watershed)
+        self._create_button.setVisible(roi_mode != "manual")
+        self._create_button.setEnabled(roi_mode != "manual")
+        if roi_mode == "grid":
+            self._create_button.setText("Create grid")
+        elif roi_mode == "watershed":
+            self._create_button.setText("Create watershed")
+        else:
+            self._create_button.setText("Create ROIs")
+        self._sync_units()
+        self._set_mode_status()
+
     def _sync_units(self) -> None:
         """Enable inputs that apply to the selected grid-size unit."""
-        uses_microns = _units_value(self._units) == "microns"
-        self._pixel_grid_size.setEnabled(not uses_microns)
+        uses_grid = _roi_mode_value(self._roi_mode) == "grid"
+        uses_microns = uses_grid and _units_value(self._units) == "microns"
+        self._pixel_grid_size.setEnabled(uses_grid and not uses_microns)
         self._micron_grid_size.setEnabled(uses_microns)
         self._rig.setEnabled(uses_microns)
         self._mode.setEnabled(uses_microns)
@@ -207,8 +267,26 @@ class RoiGenerationControls(QGroupBox):
         self._zoom.setEnabled(uses_microns)
         self._allow_extrapolation.setEnabled(uses_microns)
 
+    def _set_mode_status(self) -> None:
+        """Show the default status text for the selected mode."""
+        if not self._recording_loaded:
+            self._status.setText("No recording loaded.")
+            return
+        roi_mode = _roi_mode_value(self._roi_mode)
+        if roi_mode == "manual":
+            self._status.setText("Manual mode: draw or edit Labels ROIs.")
+        elif roi_mode == "grid" and self._loaded_zoom is None:
+            self._status.setText("Zoom missing from converted metadata.")
+        elif roi_mode == "grid":
+            self._status.setText(f"Zoom from metadata: {self._loaded_zoom:g}")
+        else:
+            self._status.setText("Watershed mode uses the converted mean image.")
+
     def _generate(self) -> None:
         """Call the owner with the current generation options."""
+        if _roi_mode_value(self._roi_mode) == "manual":
+            self._set_mode_status()
+            return
         self._on_generate(self.options())
 
 
@@ -245,6 +323,23 @@ def _unique_text(values: Iterable[object]) -> tuple[str, ...]:
     return tuple(sorted({str(value) for value in values}))
 
 
+def _set_form_row_visible(layout: QFormLayout, field: QWidget, visible: bool) -> None:
+    """Set visibility for a form field and its label.
+
+    Args:
+        layout: Form layout containing the field.
+        field: Field widget whose row should be shown or hidden.
+        visible: Desired visibility state.
+
+    Returns:
+        None.
+    """
+    label = layout.labelForField(field)
+    if label is not None:
+        label.setVisible(visible)
+    field.setVisible(visible)
+
+
 def _replace_combo_items(
     combo: QComboBox,
     items: tuple[tuple[str, object], ...],
@@ -273,6 +368,23 @@ def _replace_combo_items(
             combo.setCurrentIndex(selected_index)
     finally:
         del blocker
+
+
+def _roi_mode_value(combo: QComboBox) -> RoiGenerationMode:
+    """Return selected ROI mode data from a combo box.
+
+    Args:
+        combo: ROI mode combo box.
+
+    Returns:
+        Selected ROI mode.
+    """
+    value = combo.currentData()
+    if value == "grid":
+        return "grid"
+    if value == "watershed":
+        return "watershed"
+    return "manual"
 
 
 def _units_value(combo: QComboBox) -> RoiGenerationUnits:
