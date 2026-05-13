@@ -66,6 +66,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Core ROI helpers convert between integer label images and ROI masks, so napari label edits and scripts use the same ROI HDF5 format.
 - GUI-independent native ROI extraction can create deterministic grid ROIs and watershed-style bright-structure ROIs from movie-coordinate images, with optional boolean region masks that keep ROIs by center of mass.
 - Pixel-size calibration is represented as a tracked plain dated CSV registry. Native code resolves exact measured values by rig/mode/scanner/zoom, interpolates within the same group in pixels-per-micron space for missing in-range zooms, and exposes a micron-grid ROI helper without coupling calibration to napari or workflow lifecycle.
+- The napari ROIs tab can create grid ROI labels from pixel sizes or calibrated micron sizes, auto-filling zoom from converted acquisition metadata while keeping rig/mode/scanner as explicit calibration choices.
 - Thin napari adapter loads a converted recording mean image, optional bounded movie preview, editable ROI Labels layer, and saves edited label images through the core ROI module.
 - Initial magicgui dock panel for napari can start from an empty napari window and load a converted recording automatically after folder selection.
 - Napari Load Recording control accepts a converted output folder or source recording folder, auto-detects `recording_data.h5`, `aligned_movie.h5`, and `rois.h5`, and always loads the full movie.

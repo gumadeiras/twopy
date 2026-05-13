@@ -3454,6 +3454,59 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertNotIn("roi_0001", checkbox_texts)
         self.assertIn("roi_0002", checkbox_texts)
 
+    def test_roi_tab_create_grid_replaces_labels_layer(self) -> None:
+        """Confirm the ROIs tab can create editable grid ROI labels.
+
+        Inputs: a loaded recording, empty Labels layer, and one-pixel grid size.
+        Outputs: the Labels layer becomes a deterministic display-coordinate
+        grid and live response recomputation is requested.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            layer = _FakeLayer(
+                name="rois",
+                data=np.zeros((2, 2), dtype=np.int64),
+                options={},
+            )
+            requests: list[str] = []
+            response_widget = cast(Any, create_response_plot_widget(None))
+            response_widget._live_controller.request_update = lambda: requests.append(
+                "update",
+            )
+            response_widget.load_recording(recording)
+            response_widget.set_roi_labels_layer(layer)
+            response_widget._roi_generation_widget._pixel_grid_size.setValue(1)
+            response_widget._roi_generation_widget._create_button.click()
+
+        np.testing.assert_array_equal(
+            layer.data,
+            np.array([[1, 3], [2, 4]], dtype=np.int64),
+        )
+        self.assertEqual(requests, ["update"])
+        self.assertIn(
+            "Created pixel grid ROIs",
+            response_widget._update_status_label.text(),
+        )
+
+    def test_roi_tab_generation_uses_recording_zoom_metadata(self) -> None:
+        """Confirm generated micron grids start from converted zoom metadata.
+
+        Inputs: a converted recording whose acquisition metadata has zoom 2.
+        Outputs: the ROIs-tab zoom control is initialized from metadata.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            response_widget = cast(Any, create_response_plot_widget(None))
+            response_widget.load_recording(recording)
+
+        self.assertEqual(response_widget._roi_generation_widget._zoom.value(), 2.0)
+
     def test_roi_tab_remove_selected_handles_empty_roi_selection(self) -> None:
         """Confirm deleting all selected ROIs leaves a stable empty ROI list.
 

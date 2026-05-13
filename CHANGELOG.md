@@ -8,6 +8,7 @@
 - Added GUI-independent grid and watershed ROI extraction helpers with optional region-mask restriction for script workflows.
 - Added parity-only psycho5 grid and watershed-label helpers for comparing native twopy ROI discovery against historical MATLAB ROI extraction.
 - Added a tracked dated CSV-backed pixel-size calibration resolver and micron-sized grid ROI helper for calibrated physical ROI templates.
+- Added ROIs-tab grid generation controls in napari, including pixel grids and calibrated micron grids.
 
 ### Changes
 

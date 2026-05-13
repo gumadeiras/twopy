@@ -30,6 +30,11 @@ from twopy.napari.plotting.normalization_options import NormalizationOptionsWidg
 from twopy.napari.plotting.panels import response_update_tab, scrolling_tab
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
+from twopy.napari.plotting.roi_generation import (
+    RoiGenerationControls,
+    RoiGenerationOptions,
+)
+from twopy.pixel_calibration import PixelCalibrationRow
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,8 @@ class ResponseOptionsPanel:
         plot_display_options_layout: Plot-tab layout rebuilt when axis defaults
             change.
         roi_options_layout: ROIs-tab layout rebuilt from loaded plot data.
+        roi_generation_widget: ROIs-tab widget for creating generated grid
+            labels.
         epoch_options_layout: Epochs-tab layout rebuilt from loaded plot data.
         processing_options_widget: Plot-tab response processing controls.
         response_window_options_widget: Plot-tab response-window controls.
@@ -65,6 +72,7 @@ class ResponseOptionsPanel:
     plot_options_layout: QVBoxLayout
     plot_display_options_layout: QVBoxLayout
     roi_options_layout: QVBoxLayout
+    roi_generation_widget: RoiGenerationControls
     epoch_options_layout: QVBoxLayout
     processing_options_widget: ResponseProcessingOptionsWidget
     response_window_options_widget: ResponseWindowOptionsWidget
@@ -84,7 +92,9 @@ def create_response_options_panel(
     on_reload_saved: Callable[[], None],
     on_recompute_preview: Callable[[], None],
     on_save_analysis: Callable[[], None],
+    on_generate_grid_rois: Callable[[RoiGenerationOptions], None],
     export_state: Callable[[], ResponseExportState],
+    pixel_calibrations: tuple[PixelCalibrationRow, ...],
 ) -> ResponseOptionsPanel:
     """Create the tabbed response options panel.
 
@@ -99,7 +109,9 @@ def create_response_options_panel(
         on_reload_saved: Callback for the reload button.
         on_recompute_preview: Callback for the preview recompute button.
         on_save_analysis: Callback for the Save ROIs + analysis button.
+        on_generate_grid_rois: Callback for the ROIs-tab Create grid button.
         export_state: Callback that supplies current export state.
+        pixel_calibrations: Calibration rows for micron-sized grid controls.
 
     Returns:
         Options panel with root tabs plus child controls needed by the owner.
@@ -151,7 +163,14 @@ def create_response_options_panel(
     plot_options_layout.addWidget(processing_options_widget)
     plot_options_layout.addStretch(1)
 
+    roi_tab_layout = QVBoxLayout()
+    roi_generation_widget = RoiGenerationControls(
+        pixel_calibrations,
+        on_generate=on_generate_grid_rois,
+    )
     roi_options_layout = QVBoxLayout()
+    roi_tab_layout.addWidget(roi_generation_widget)
+    roi_tab_layout.addLayout(roi_options_layout)
     epoch_options_layout = QVBoxLayout()
     tabs.addTab(
         response_update_tab(
@@ -166,7 +185,7 @@ def create_response_options_panel(
         "Update",
     )
     tabs.addTab(scrolling_tab(plot_options_layout), "Plot")
-    tabs.addTab(scrolling_tab(roi_options_layout), "ROIs")
+    tabs.addTab(scrolling_tab(roi_tab_layout), "ROIs")
     tabs.addTab(scrolling_tab(epoch_options_layout), "Epochs")
     tabs.addTab(create_response_export_tab(export_state), "Export")
 
@@ -179,6 +198,7 @@ def create_response_options_panel(
         plot_options_layout=plot_options_layout,
         plot_display_options_layout=plot_display_options_layout,
         roi_options_layout=roi_options_layout,
+        roi_generation_widget=roi_generation_widget,
         epoch_options_layout=epoch_options_layout,
         processing_options_widget=processing_options_widget,
         response_window_options_widget=response_window_options_widget,

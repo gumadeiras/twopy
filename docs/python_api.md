@@ -155,3 +155,5 @@ roi_set = save_napari_label_rois(label_image, Path("/path/to/rois.h5"))
 ```
 
 Pass `roi_set=Path("/path/to/rois.h5")` to reopen existing ROIs.
+
+The napari ROIs tab can also create editable grid ROIs directly. Pixel grids need only a pixel width. Micron grids use the configured pixel calibration registry, auto-fill zoom from converted `acq.zoomFactor` metadata when present, and ask the user to choose the calibration rig, mode, and scanner explicitly.

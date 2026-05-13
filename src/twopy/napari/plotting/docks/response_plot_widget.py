@@ -13,7 +13,10 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
+import numpy as np
+import numpy.typing as npt
 from qtpy.QtCore import QTimer
 from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
@@ -34,8 +37,10 @@ from twopy.analysis_cache import (
     AnalysisSyncResult,
     start_analysis_sync,
 )
+from twopy.config import load_config
 from twopy.converted import RecordingData
 from twopy.filenames import EXPORTS_DIRNAME
+from twopy.napari.display import display_labels_from_movie_labels
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import (
@@ -67,6 +72,7 @@ from twopy.napari.plotting.docks.visibility_state import (
 )
 from twopy.napari.plotting.export_controls import ResponseExportState
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
+from twopy.napari.plotting.roi_generation import RoiGenerationOptions
 from twopy.napari.plotting.widgets import (
     clear_layout,
     opaque_colors,
@@ -74,7 +80,16 @@ from twopy.napari.plotting.widgets import (
     resolved_value_bounds,
     roi_colors_from_label_values,
 )
+from twopy.napari.protocols import NapariLayerWithData
 from twopy.napari.roi import remove_roi_label_values_from_layer
+from twopy.pixel_calibration import (
+    DEFAULT_PIXEL_CALIBRATION_PATH,
+    PixelCalibrationRow,
+    load_pixel_calibrations,
+    resolve_pixel_size_um,
+)
+from twopy.roi import roi_set_to_label_image
+from twopy.roi_extraction import grid_roi_set, grid_roi_set_microns
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 
@@ -144,7 +159,9 @@ class _ResponsePlotWidget(QWidget):
             on_reload_saved=self.reload,
             on_recompute_preview=self.update_from_current_rois,
             on_save_analysis=self.save_analysis_and_rois,
+            on_generate_grid_rois=self.generate_grid_rois,
             export_state=self._export_state,
+            pixel_calibrations=_load_pixel_calibrations_for_ui(),
         )
         self._options_tabs = options_panel.tabs
         self._recording_summary_label = options_panel.recording_summary_label
@@ -154,6 +171,7 @@ class _ResponsePlotWidget(QWidget):
         self._plot_options_layout = options_panel.plot_options_layout
         self._plot_display_options_layout = options_panel.plot_display_options_layout
         self._roi_options_layout = options_panel.roi_options_layout
+        self._roi_generation_widget = options_panel.roi_generation_widget
         self._epoch_options_layout = options_panel.epoch_options_layout
         self._processing_options_widget = options_panel.processing_options_widget
         self._response_window_options_widget = (
@@ -262,6 +280,7 @@ class _ResponsePlotWidget(QWidget):
             None.
         """
         self._recording = None
+        self._roi_generation_widget.set_recording(None)
         self._analysis_path = None
         self._plot_data = None
         self._live_controller.set_context(None, None)
@@ -294,6 +313,7 @@ class _ResponsePlotWidget(QWidget):
             None.
         """
         self._recording = recording
+        self._roi_generation_widget.set_recording(recording)
         self._analysis_path = resolved_analysis_path(None, recording)
         epoch_names = stimulus_epoch_names_by_number(recording)
         self._delta_f_over_f_options_widget.set_epoch_choices(
@@ -334,6 +354,59 @@ class _ResponsePlotWidget(QWidget):
         files. Explicit analysis saves remain separate from plot previews.
         """
         self._live_controller.update_now()
+
+    def generate_grid_rois(self, options: RoiGenerationOptions) -> None:
+        """Replace the active Labels layer with generated grid ROIs.
+
+        Args:
+            options: Grid-generation options from the ROIs tab.
+
+        Returns:
+            None.
+
+        The generated labels remain editable napari ROI labels. Saving and live
+        response recomputation use the same paths as manually drawn ROIs.
+        """
+        if self._recording is None:
+            self._set_roi_generation_status("Load a recording before creating ROIs.")
+            return
+        if self._roi_labels_layer is None:
+            self._set_roi_generation_status("No ROI Labels layer is available.")
+            return
+
+        try:
+            if options.units == "pixels":
+                roi_set = grid_roi_set(
+                    self._recording.movie.shape[1:],
+                    grid_size_pixels=options.grid_size_pixels,
+                )
+                status = f"Created pixel grid ROIs: {options.grid_size_pixels} px."
+            else:
+                pixel_size = resolve_pixel_size_um(
+                    _load_pixel_calibrations_for_ui(),
+                    rig=options.rig,
+                    mode=options.mode,
+                    scanner=options.scanner,
+                    zoom=options.zoom,
+                    allow_extrapolation=options.allow_extrapolation,
+                )
+                roi_set = grid_roi_set_microns(
+                    self._recording.movie.shape[1:],
+                    micron_grid_size=options.micron_grid_size,
+                    pixel_size_um=pixel_size.pixel_size_um,
+                )
+                status = (
+                    f"Created micron grid ROIs using {pixel_size.method} "
+                    f"calibration: {pixel_size.pixel_size_um:.6g} um/px."
+                )
+            self._set_roi_label_image(roi_set_to_label_image(roi_set))
+        except ValueError as error:
+            self._set_roi_generation_status(str(error))
+            return
+
+        self._set_roi_generation_status(status)
+        self._update_status_label.setText(status)
+        self._live_controller.request_update()
 
     def save_analysis_and_rois(self) -> None:
         """Save current ROI labels plus persisted analysis outputs.
@@ -648,6 +721,37 @@ class _ResponsePlotWidget(QWidget):
         self._update_status_label.setText(f"Removed {removed_count} selected {noun}.")
         self._live_controller.request_update()
 
+    def _set_roi_label_image(self, label_image: npt.NDArray[np.int64]) -> None:
+        """Write a movie-coordinate ROI label image into the active layer.
+
+        Args:
+            label_image: Full-frame movie-coordinate labels.
+
+        Returns:
+            None.
+        """
+        if self._recording is None or self._roi_labels_layer is None:
+            return
+        display_labels = display_labels_from_movie_labels(
+            label_image,
+            self._recording.alignment_valid_crop,
+        )
+        cast(NapariLayerWithData, self._roi_labels_layer).data = display_labels
+        refresh = getattr(self._roi_labels_layer, "refresh", None)
+        if callable(refresh):
+            refresh()
+
+    def _set_roi_generation_status(self, text: str) -> None:
+        """Show ROI-generation status in the ROIs tab.
+
+        Args:
+            text: User-facing status.
+
+        Returns:
+            None.
+        """
+        self._roi_generation_widget.set_status(text)
+
     def _remove_rois_from_current_plot_data(
         self,
         removed_label_values: tuple[int, ...],
@@ -880,3 +984,21 @@ class _ResponsePlotWidget(QWidget):
             colors=self._roi_colors,
             keys=tuple(range(len(self._roi_labels()))),
         )
+
+
+def _load_pixel_calibrations_for_ui() -> tuple[PixelCalibrationRow, ...]:
+    """Load calibration rows for napari ROI generation controls.
+
+    Returns:
+        Calibration rows from ``config.yml`` when available, otherwise twopy's
+        tracked default registry.
+
+    The UI can open a converted recording without a machine-local config file,
+    so the default registry remains available as the fallback. Invalid config
+    files still fail loudly through ``load_config``.
+    """
+    try:
+        calibration_path = load_config().pixel_calibration_path
+    except FileNotFoundError:
+        calibration_path = DEFAULT_PIXEL_CALIBRATION_PATH
+    return load_pixel_calibrations(calibration_path)
