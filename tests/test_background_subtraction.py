@@ -482,6 +482,35 @@ class BackgroundSubtractionTest(unittest.TestCase):
                 np.array([[8.0, 30.0], [9.0, 30.0]]),
             )
 
+    def test_roi_y_stripe_rejects_roi_masks_without_background_pixels(self) -> None:
+        """Confirm ROI y-stripe correction explains dense grid incompatibility.
+
+        Inputs: two non-overlapping ROIs that cover every movie pixel.
+        Outputs: clear guidance that ROI-local subtraction needs unlabeled
+        background pixels instead of a cryptic per-ROI candidate error.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = self._write_recording(Path(temp_dir))
+            roi_set = make_roi_set(
+                np.array(
+                    [
+                        [[True, True], [False, False]],
+                        [[False, False], [True, True]],
+                    ],
+                ),
+                labels=("top", "bottom"),
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "needs unlabeled background pixels outside all ROIs",
+            ):
+                extract_background_corrected_roi_traces(
+                    recording,
+                    roi_set,
+                    method="roi_y_stripe_percentile",
+                )
+
     def _write_recording(
         self,
         root: Path,

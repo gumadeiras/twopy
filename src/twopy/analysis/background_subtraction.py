@@ -806,6 +806,15 @@ def _roi_y_stripe_background_pixel_indices(
     """
     occupied_mask = np.any(roi_masks, axis=0)
     background_mask = ~occupied_mask
+    if not np.any(background_mask):
+        msg = (
+            "ROI y-stripe P% background subtraction needs unlabeled background "
+            "pixels outside all ROIs in the selected spatial domain. The current "
+            "ROI masks cover every pixel, which is common for dense grid ROIs; "
+            "use shared y-stripe P% or leave unlabeled background pixels."
+        )
+        raise ValueError(msg)
+
     row_grid = np.arange(background_mask.shape[0])[:, None]
     background_indices: list[npt.NDArray[np.int64]] = []
 
@@ -818,7 +827,10 @@ def _roi_y_stripe_background_pixel_indices(
         if local_candidate_values.size == 0:
             msg = (
                 f"ROI {roi_index} has no local background candidates within "
-                f"{local_y_radius} rows"
+                f"{local_y_radius} rows. ROI y-stripe P% only uses unlabeled "
+                "pixels outside all ROIs; increase the local y radius, use "
+                "shared y-stripe P%, or leave unlabeled background pixels near "
+                "this ROI."
             )
             raise ValueError(msg)
         local_threshold = float(np.percentile(local_candidate_values, local_percentile))
