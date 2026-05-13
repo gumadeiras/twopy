@@ -31,6 +31,7 @@ from twopy.napari.plotting.roi_generation.options import (
 from twopy.pixel_calibration import PixelCalibrationRow
 from twopy.pixel_calibration_profiles import (
     PixelCalibrationGroup,
+    PixelCalibrationProfile,
     PixelCalibrationProfileMapping,
     resolve_pixel_calibration_profile,
     select_pixel_calibration_group,
@@ -42,6 +43,10 @@ __all__ = [
     "RoiGenerationOptions",
     "RoiGenerationUnits",
 ]
+
+_RIG_PLACEHOLDER = "Select rig"
+_MODE_PLACEHOLDER = "Select mode"
+_SCANNER_PLACEHOLDER = "Select scanner"
 
 
 class RoiGenerationControls(QGroupBox):
@@ -83,6 +88,7 @@ class RoiGenerationControls(QGroupBox):
         self._on_generate = on_generate
         self._recording_loaded = False
         self._loaded_zoom: float | None = None
+        self._active_profile: PixelCalibrationProfile | None = None
 
         self._roi_mode = QComboBox()
         self._roi_mode.addItem("manual", "manual")
@@ -122,6 +128,7 @@ class RoiGenerationControls(QGroupBox):
         self._units.currentIndexChanged.connect(self._sync_units)
         self._rig.currentIndexChanged.connect(self._sync_calibration_mode_choices)
         self._mode.currentIndexChanged.connect(self._sync_calibration_scanner_choices)
+        self._scanner.currentIndexChanged.connect(self._sync_create_button)
         self._create_button.clicked.connect(self._generate)
 
         self._form_layout = QFormLayout()
@@ -155,6 +162,8 @@ class RoiGenerationControls(QGroupBox):
         if recording is None:
             self._recording_loaded = False
             self._loaded_zoom = None
+            self._active_profile = None
+            self._select_no_calibration_group()
             self._clear_status()
             self._sync_mode()
             return
@@ -175,14 +184,23 @@ class RoiGenerationControls(QGroupBox):
         Returns:
             Plain generation options.
         """
+        units = _units_value(self._units)
+        if units == "microns":
+            rig = _required_combo_text(self._rig, "calibration rig")
+            calibration_mode = _required_combo_int(self._mode, "calibration mode")
+            scanner = _required_combo_text(self._scanner, "calibration scanner")
+        else:
+            rig = ""
+            calibration_mode = 0
+            scanner = ""
         return RoiGenerationOptions(
             roi_mode=_roi_mode_value(self._roi_mode),
-            units=_units_value(self._units),
+            units=units,
             grid_size_pixels=self._pixel_grid_size.value(),
             micron_grid_size=self._micron_grid_size.value(),
-            rig=self._rig.currentText(),
-            calibration_mode=int(self._mode.currentData()),
-            scanner=self._scanner.currentText(),
+            rig=rig,
+            calibration_mode=calibration_mode,
+            scanner=scanner,
             zoom=self._zoom.value(),
             allow_extrapolation=self._allow_extrapolation.isChecked(),
             watershed_min_pixels=self._watershed_min_pixels.value(),
@@ -203,29 +221,34 @@ class RoiGenerationControls(QGroupBox):
 
     def _populate_calibration_choices(self) -> None:
         """Populate calibration dropdowns from available rows."""
+        self._rig.addItem(_RIG_PLACEHOLDER, None)
         for rig in _unique_text(row.rig for row in self._calibrations):
-            self._rig.addItem(rig)
+            self._rig.addItem(rig, rig)
         self._sync_calibration_mode_choices()
 
     def _sync_calibration_mode_choices(self) -> None:
         """Keep mode choices valid for the selected calibration rig."""
-        rig = self._rig.currentText()
+        rig = self._rig.currentData()
         modes = tuple(
             (_mode_label(mode, self._mode_labels), mode)
             for mode in sorted(
                 {row.mode for row in self._calibrations if row.rig == rig},
             )
         )
+        previous = self._mode.currentData()
+        if previous is None and self._active_profile is not None:
+            previous = self._active_profile.mode
         _replace_combo_items(
             self._mode,
-            modes,
-            previous=self._mode.currentData(),
+            ((_MODE_PLACEHOLDER, None), *modes),
+            previous=previous,
         )
         self._sync_calibration_scanner_choices()
+        self._sync_create_button()
 
     def _sync_calibration_scanner_choices(self) -> None:
         """Keep scanner choices valid for the selected rig and mode."""
-        rig = self._rig.currentText()
+        rig = self._rig.currentData()
         mode = self._mode.currentData()
         scanners = tuple(
             (scanner, scanner)
@@ -235,11 +258,15 @@ class RoiGenerationControls(QGroupBox):
                 if row.rig == rig and row.mode == mode
             )
         )
+        previous = self._scanner.currentData()
+        if previous is None and self._active_profile is not None:
+            previous = self._active_profile.scanner
         _replace_combo_items(
             self._scanner,
-            scanners,
-            previous=self._scanner.currentText(),
+            ((_SCANNER_PLACEHOLDER, None), *scanners),
+            previous=previous,
         )
+        self._sync_create_button()
 
     def _apply_calibration_profile(self, recording: RecordingData) -> None:
         """Prefill calibration choices when metadata identifies one group.
@@ -255,6 +282,8 @@ class RoiGenerationControls(QGroupBox):
             recording.run_metadata,
             mappings=self._profile_mappings,
         )
+        self._active_profile = profile
+        self._select_no_calibration_group()
         group = select_pixel_calibration_group(profile, self._calibrations)
         if group is not None:
             self._select_calibration_group(group)
@@ -273,6 +302,14 @@ class RoiGenerationControls(QGroupBox):
         if _set_combo_data(self._mode, group.mode):
             self._sync_calibration_scanner_choices()
         _set_combo_text(self._scanner, group.scanner)
+        self._sync_create_button()
+
+    def _select_no_calibration_group(self) -> None:
+        """Reset calibration dropdowns to explicit user-selection placeholders."""
+        if _set_combo_data(self._rig, None):
+            self._sync_calibration_mode_choices()
+        else:
+            self._sync_calibration_mode_choices()
 
     def _sync_mode(self) -> None:
         """Show and enable controls for the selected ROI mode."""
@@ -283,7 +320,6 @@ class RoiGenerationControls(QGroupBox):
         for widget in (self._watershed_min_pixels, self._watershed_smoothing_sigma):
             _set_form_row_visible(self._form_layout, widget, uses_watershed)
         self._create_button.setVisible(roi_mode != "manual")
-        self._create_button.setEnabled(roi_mode != "manual")
         if roi_mode == "grid":
             self._create_button.setText("Create grid")
         elif roi_mode == "watershed":
@@ -291,6 +327,7 @@ class RoiGenerationControls(QGroupBox):
         else:
             self._create_button.setText("Create ROIs")
         self._sync_units()
+        self._sync_create_button()
         self._set_mode_status()
 
     def _sync_units(self) -> None:
@@ -315,6 +352,30 @@ class RoiGenerationControls(QGroupBox):
             self._allow_extrapolation,
         ):
             _set_form_row_visible(self._form_layout, widget, uses_microns)
+        self._sync_create_button()
+
+    def _sync_create_button(self) -> None:
+        """Enable generated-ROI creation only when required options are selected."""
+        self._create_button.setEnabled(self._can_generate())
+
+    def _can_generate(self) -> bool:
+        """Return whether current controls can generate ROIs.
+
+        Returns:
+            ``True`` when the current ROI mode has all required user choices.
+        """
+        roi_mode = _roi_mode_value(self._roi_mode)
+        if roi_mode == "manual":
+            return False
+        if roi_mode == "watershed":
+            return True
+        if _units_value(self._units) == "pixels":
+            return True
+        return (
+            self._rig.currentData() is not None
+            and self._mode.currentData() is not None
+            and self._scanner.currentData() is not None
+        )
 
     def _set_mode_status(self) -> None:
         """Clear passive mode status text."""
@@ -326,7 +387,12 @@ class RoiGenerationControls(QGroupBox):
         if _roi_mode_value(self._roi_mode) == "manual":
             self._set_mode_status()
             return
-        self._on_generate(self.options())
+        try:
+            options = self.options()
+        except ValueError as error:
+            self.set_status(str(error))
+            return
+        self._on_generate(options)
 
     def _clear_status(self) -> None:
         """Hide passive ROI-generation status text."""
@@ -493,6 +559,45 @@ def _set_combo_data(combo: QComboBox, data: object) -> bool:
         return False
     combo.setCurrentIndex(index)
     return True
+
+
+def _required_combo_text(combo: QComboBox, field_name: str) -> str:
+    """Return selected text from a combo box with a placeholder item.
+
+    Args:
+        combo: Combo box to read.
+        field_name: User-facing field name for validation errors.
+
+    Returns:
+        Selected display text.
+
+    Raises:
+        ValueError: If no concrete item is selected.
+    """
+    if combo.currentData() is None:
+        msg = f"Select {field_name}."
+        raise ValueError(msg)
+    return combo.currentText()
+
+
+def _required_combo_int(combo: QComboBox, field_name: str) -> int:
+    """Return selected integer data from a combo box.
+
+    Args:
+        combo: Combo box to read.
+        field_name: User-facing field name for validation errors.
+
+    Returns:
+        Selected integer value.
+
+    Raises:
+        ValueError: If no integer item is selected.
+    """
+    value = combo.currentData()
+    if not isinstance(value, int):
+        msg = f"Select {field_name}."
+        raise ValueError(msg)
+    return value
 
 
 def _roi_mode_value(combo: QComboBox) -> RoiGenerationMode:

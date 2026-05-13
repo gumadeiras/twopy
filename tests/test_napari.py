@@ -3545,6 +3545,9 @@ class NapariAdapterTest(unittest.TestCase):
             roi_widget = response_widget._roi_generation_widget
             roi_widget._roi_mode.setCurrentIndex(1)
             roi_widget._units.setCurrentIndex(1)
+            roi_widget._rig.setCurrentIndex(roi_widget._rig.findText("day"))
+            roi_widget._mode.setCurrentIndex(roi_widget._mode.findData(2))
+            roi_widget._scanner.setCurrentIndex(roi_widget._scanner.findText("galvo"))
             roi_widget._create_button.click()
 
         self.assertIn(
@@ -3579,6 +3582,7 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertTrue(roi_widget._pixel_grid_size.isHidden())
         self.assertFalse(roi_widget._micron_grid_size.isHidden())
         self.assertFalse(roi_widget._rig.isHidden())
+        self.assertEqual(roi_widget._rig.currentText(), "Select rig")
         self.assertFalse(roi_widget._allow_extrapolation.isHidden())
 
     def test_roi_tab_generation_uses_calibration_profile_metadata(self) -> None:
@@ -3640,6 +3644,43 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(roi_widget._rig.currentText(), "night")
         self.assertEqual(roi_widget._mode.currentData(), 2)
         self.assertEqual(roi_widget._scanner.currentText(), "galvo")
+
+    def test_roi_tab_unresolved_rig_does_not_default_to_first_choice(self) -> None:
+        """Confirm incomplete metadata keeps calibration dropdowns unselected.
+
+        Inputs: a recording whose config maps mode/scanner but whose rig name is
+        not mapped to day or night.
+        Outputs: rig remains a placeholder and micron-grid creation is disabled
+        until the user chooses a rig.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording_path = _write_converted_recording(Path(temp_dir))
+            with h5py.File(recording_path, "a") as h5_file:
+                h5_file["metadata"].attrs["configName"] = "128x128_1ms_6.5Hz"
+                h5_file["metadata"].attrs["acq.linesPerFrame"] = 128
+                h5_file["metadata"].attrs["acq.pixelsPerLine"] = 128
+                h5_file["metadata"].attrs["acq.pixelTime"] = 0.0000064
+                h5_file["metadata"].attrs["acq.msPerLine"] = 1.2
+                h5_file["metadata"].attrs["acq.scanAngleMultiplierFast"] = 1
+                h5_file["metadata"].attrs["acq.scanAngleMultiplierSlow"] = 0.57744
+                h5_file["run"].attrs["rig_name"] = "UnknownRig"
+            recording = load_converted_recording(recording_path)
+            response_widget = cast(Any, create_response_plot_widget(None))
+            response_widget.load_recording(recording)
+            roi_widget = response_widget._roi_generation_widget
+            roi_widget._roi_mode.setCurrentIndex(1)
+            roi_widget._units.setCurrentIndex(1)
+
+        self.assertEqual(roi_widget._rig.currentText(), "Select rig")
+        self.assertIsNone(roi_widget._rig.currentData())
+        self.assertFalse(roi_widget._create_button.isEnabled())
+
+        roi_widget._rig.setCurrentIndex(roi_widget._rig.findText("night"))
+
+        self.assertEqual(roi_widget._mode.currentData(), 2)
+        self.assertEqual(roi_widget._scanner.currentText(), "galvo")
+        self.assertTrue(roi_widget._create_button.isEnabled())
 
     def test_roi_tab_generation_defaults_to_manual_mode(self) -> None:
         """Confirm the ROIs tab starts in manual Labels-editing mode.
@@ -3739,16 +3780,24 @@ class NapariAdapterTest(unittest.TestCase):
             on_generate=lambda _options: None,
         )
 
-        self.assertEqual(_combo_texts(widget._rig), ("day", "night"))
-        self.assertEqual(_combo_texts(widget._mode), ("2: 128x128_1ms_6.5Hz", "3"))
-        self.assertEqual(_combo_data(widget._mode), (2, 3))
-        widget._mode.setCurrentIndex(1)
-        self.assertEqual(_combo_texts(widget._scanner), ("res",))
+        self.assertEqual(_combo_texts(widget._rig), ("Select rig", "day", "night"))
+        self.assertEqual(_combo_texts(widget._mode), ("Select mode",))
+        self.assertEqual(_combo_data(widget._mode), (None,))
 
         widget._rig.setCurrentIndex(1)
 
-        self.assertEqual(_combo_data(widget._mode), (5,))
-        self.assertEqual(_combo_texts(widget._scanner), ("galvo",))
+        self.assertEqual(
+            _combo_texts(widget._mode),
+            ("Select mode", "2: 128x128_1ms_6.5Hz", "3"),
+        )
+        self.assertEqual(_combo_data(widget._mode), (None, 2, 3))
+        widget._mode.setCurrentIndex(2)
+        self.assertEqual(_combo_texts(widget._scanner), ("Select scanner", "res"))
+
+        widget._rig.setCurrentIndex(2)
+
+        self.assertEqual(_combo_data(widget._mode), (None, 5))
+        self.assertEqual(_combo_texts(widget._scanner), ("Select scanner",))
 
     def test_roi_tab_remove_selected_handles_empty_roi_selection(self) -> None:
         """Confirm deleting all selected ROIs leaves a stable empty ROI list.

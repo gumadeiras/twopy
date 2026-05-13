@@ -155,12 +155,13 @@ class PixelCalibrationProfileTests(unittest.TestCase):
             self.assertEqual(group.mode, 2)
             self.assertEqual(group.scanner, "galvo")
 
-    def test_selects_unique_group_from_partial_profile(self) -> None:
-        """Confirm measured rows can disambiguate missing rig metadata.
+    def test_partial_profile_does_not_select_unique_measured_group(self) -> None:
+        """Confirm incomplete profiles do not fall back to measured rows.
 
         Inputs: a profile with mode and scanner but no rig plus a calibration
         registry where only one group has that mode/scanner.
-        Outputs: the unique measured group is selected.
+        Outputs: no group is selected because the user must choose the missing
+        rig explicitly.
         """
         group = select_pixel_calibration_group(
             PixelCalibrationProfile(
@@ -184,11 +185,7 @@ class PixelCalibrationProfileTests(unittest.TestCase):
             ),
         )
 
-        self.assertIsNotNone(group)
-        if group is not None:
-            self.assertEqual(group.rig, "day")
-            self.assertEqual(group.mode, 3)
-            self.assertEqual(group.scanner, "res")
+        self.assertIsNone(group)
 
     def test_incomplete_profile_does_not_select_ambiguous_group(self) -> None:
         """Confirm mode/scanner alone do not choose between rigs.

@@ -252,7 +252,7 @@ def select_pixel_calibration_group(
         calibrations: Measured pixel-size calibration rows.
 
     Returns:
-        Unique matching group, or ``None`` when the profile has no evidence, is
+        Unique matching group, or ``None`` when the profile is incomplete,
         ambiguous, or points at a group without measured calibration rows.
 
     This keeps UI automation conservative: dropdowns are only preselected when
@@ -263,7 +263,7 @@ def select_pixel_calibration_group(
         for row in calibrations
         if _profile_matches_row(profile, row)
     }
-    if not _has_calibration_group_evidence(profile):
+    if not _has_complete_calibration_group(profile):
         return None
     if len(groups) == 1:
         return next(iter(groups))
@@ -285,12 +285,12 @@ def _profile_matches_row(
     )
 
 
-def _has_calibration_group_evidence(profile: PixelCalibrationProfile) -> bool:
-    """Return whether a profile contains at least one group selector field."""
+def _has_complete_calibration_group(profile: PixelCalibrationProfile) -> bool:
+    """Return whether a profile contains every calibration group field."""
     return (
         profile.rig is not None
-        or profile.mode is not None
-        or profile.scanner is not None
+        and profile.mode is not None
+        and profile.scanner is not None
     )
 
 
