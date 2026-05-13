@@ -15,6 +15,7 @@ from twopy.config import (
     resolve_analysis_output_dir,
     resolve_analysis_work_dir,
 )
+from twopy.pixel_calibration import DEFAULT_PIXEL_CALIBRATION_PATH
 
 
 class LoadConfigTest(unittest.TestCase):
@@ -49,6 +50,10 @@ class LoadConfigTest(unittest.TestCase):
             self.assertEqual(config.analysis_output, "source")
             self.assertTrue(config.analysis_caching)
             self.assertEqual(config.analysis_cache_dir, DEFAULT_ANALYSIS_CACHE_DIR)
+            self.assertEqual(
+                config.pixel_calibration_path,
+                DEFAULT_PIXEL_CALIBRATION_PATH,
+            )
 
     def test_database_access_defaults_to_copy(self) -> None:
         """Confirm missing DB access uses fast local-copy mode.
@@ -94,6 +99,29 @@ class LoadConfigTest(unittest.TestCase):
 
             self.assertFalse(config.analysis_caching)
             self.assertEqual(config.analysis_cache_dir, cache_dir)
+
+    def test_loads_alternative_pixel_calibration_path(self) -> None:
+        """Confirm config can point at an alternative calibration registry.
+
+        Inputs: a temporary YAML file with ``pixel_calibration_path``.
+        Outputs: loaded override path for scripts that need custom calibration.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "config.yml"
+            calibration_path = root / "calibrations" / "pixel_size.csv"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {root / 'data'}\n"
+                "database_access: copy\n"
+                "analysis_output: source\n"
+                f"pixel_calibration_path: {calibration_path}\n",
+                encoding="utf-8",
+            )
+
+            config = load_config(config_path)
+
+            self.assertEqual(config.pixel_calibration_path, calibration_path)
 
     def test_invalid_analysis_caching_raises_clear_error(self) -> None:
         """Confirm analysis cache policy must be a YAML boolean.

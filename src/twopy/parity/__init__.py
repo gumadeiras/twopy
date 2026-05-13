@@ -19,6 +19,13 @@ from twopy.parity.psycho5 import (
     psycho5_default_interleave_epoch_numbers,
 )
 from twopy.parity.roi import SavedAnalysisRoiSet, roi_set_from_saved_analysis
+from twopy.parity.roi_extraction import (
+    psycho5_grid_pixel_size,
+    psycho5_grid_roi_label_image,
+    psycho5_grid_roi_set,
+    psycho5_watershed_image_from_preseg,
+    psycho5_watershed_roi_set_from_preseg,
+)
 from twopy.parity.saved_analysis import (
     SavedAnalysisLastRoi,
     load_saved_analysis_last_roi,
@@ -32,7 +39,12 @@ __all__ = [
     "compare_saved_analysis_delta_f_over_f",
     "compute_psycho5_default_recording_responses",
     "load_saved_analysis_last_roi",
+    "psycho5_grid_pixel_size",
+    "psycho5_grid_roi_label_image",
+    "psycho5_grid_roi_set",
     "psycho5_default_interleave_epoch_numbers",
+    "psycho5_watershed_image_from_preseg",
+    "psycho5_watershed_roi_set_from_preseg",
     "roi_set_from_saved_analysis",
     "saved_analysis_epoch_windows",
 ]

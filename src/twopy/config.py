@@ -15,6 +15,7 @@ from typing import Literal, cast
 import yaml
 
 from twopy.database.types import DatabaseAccess
+from twopy.pixel_calibration import DEFAULT_PIXEL_CALIBRATION_PATH
 
 __all__ = [
     "DEFAULT_CONFIG_PATH",
@@ -50,6 +51,7 @@ class TwopyConfig:
     analysis_output: AnalysisOutputMode
     analysis_caching: bool = True
     analysis_cache_dir: Path = DEFAULT_ANALYSIS_CACHE_DIR
+    pixel_calibration_path: Path = DEFAULT_PIXEL_CALIBRATION_PATH
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
@@ -98,6 +100,12 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
             "analysis_cache_dir",
             config_path,
             default=DEFAULT_ANALYSIS_CACHE_DIR,
+        ),
+        pixel_calibration_path=_optional_path(
+            raw_config,
+            "pixel_calibration_path",
+            config_path,
+            default=DEFAULT_PIXEL_CALIBRATION_PATH,
         ),
     )
 
@@ -202,7 +210,7 @@ def _required_path(config: dict[object, object], key: str, config_path: Path) ->
         msg = f"twopy config key {key!r} must be a non-empty string: {config_path}"
         raise ValueError(msg)
 
-    return Path(value).expanduser()
+    return _path_from_config_value(value)
 
 
 def _external_analysis_cache_dir(
@@ -280,7 +288,7 @@ def _analysis_output(
     if value == "source":
         return "source"
 
-    return Path(value).expanduser()
+    return _path_from_config_value(value)
 
 
 def _optional_bool(
@@ -330,7 +338,33 @@ def _optional_path(
     value = config.get(key)
     if value is None:
         return default.expanduser()
+    return _optional_path_value(value, key, config_path)
+
+
+def _optional_path_value(value: object, key: str, config_path: Path) -> Path:
+    """Validate and expand one optional path value.
+
+    Args:
+        value: Raw YAML value.
+        key: Config key, used for clear errors.
+        config_path: Source config file path, used for clear errors.
+
+    Returns:
+        Expanded path.
+    """
     if not isinstance(value, str) or value == "":
         msg = f"twopy config key {key!r} must be a non-empty string: {config_path}"
         raise ValueError(msg)
+    return _path_from_config_value(value)
+
+
+def _path_from_config_value(value: str) -> Path:
+    """Expand one validated config path string.
+
+    Args:
+        value: Non-empty path string from YAML.
+
+    Returns:
+        Expanded path.
+    """
     return Path(value).expanduser()

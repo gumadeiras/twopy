@@ -32,6 +32,9 @@ twopy = "twopy.napari:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+twopy = ["calibrations/*.csv"]
+
 [tool.ruff]
 line-length = 88
 src = ["src", "tests"]
