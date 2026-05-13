@@ -37,6 +37,7 @@ from twopy.analysis.responses import (
 )
 from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData, recording_frame_rate_hz
+from twopy.filenames import ANALYSIS_OUTPUT_FILENAME
 from twopy.stimulus import stimulus_epoch_names_by_number
 from twopy.typing_guards import require_string_choice
 
@@ -195,7 +196,7 @@ def default_analysis_output_path(recording: RecordingData) -> Path:
     Returns:
         Path to ``analysis_outputs.h5`` beside ``recording_data.h5``.
     """
-    return recording.path.expanduser().parent / "analysis_outputs.h5"
+    return recording.path.expanduser().parent / ANALYSIS_OUTPUT_FILENAME
 
 
 def response_plot_post_window_seconds(epoch_names: Iterable[str]) -> float:

@@ -16,6 +16,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.converted import RecordingData
+from twopy.filenames import ROI_FILENAME
 from twopy.napari.display import (
     display_image_from_movie_image,
     display_labels_from_movie_labels,
@@ -244,7 +245,7 @@ def resolve_roi_save_file(
         return explicit_roi_save_file.expanduser()
     if isinstance(roi_set, Path):
         return roi_set.expanduser()
-    return recording_data_path.expanduser().parent / "rois.h5"
+    return recording_data_path.expanduser().parent / ROI_FILENAME
 
 
 def resolve_roi_set(roi_set: RoiSet | Path) -> RoiSet:

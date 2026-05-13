@@ -24,17 +24,15 @@ from twopy.conversion.types import (
     StimulusData,
     StimulusParameters,
 )
+from twopy.filenames import ALIGNED_MOVIE_FILENAME
+from twopy.hdf5_utils import write_string_dataset
 
 __all__ = [
     "ALIGNED_MOVIE_DATASET",
-    "CONVERTED_ALIGNED_MOVIE_FILENAME",
-    "CONVERTED_RECORDING_FILENAME",
     "write_aligned_movie_file",
     "write_recording_data_file",
 ]
 
-CONVERTED_RECORDING_FILENAME = "recording_data.h5"
-CONVERTED_ALIGNED_MOVIE_FILENAME = "aligned_movie.h5"
 ALIGNED_MOVIE_DATASET = "movie/aligned"
 IMAGING_RES_PD_SAMPLE_DOMAIN = "one sample per aligned imaging frame"
 HIGH_RES_PD_SAMPLE_DOMAIN = "high-rate photodiode signal for precise event detection"
@@ -146,7 +144,7 @@ def _write_movie_reference_group(
         None. The function writes the ``movie`` group.
     """
     movie_group = h5_file.create_group("movie")
-    movie_group.attrs["aligned_movie_file"] = CONVERTED_ALIGNED_MOVIE_FILENAME
+    movie_group.attrs["aligned_movie_file"] = ALIGNED_MOVIE_FILENAME
     movie_group.attrs["aligned_movie_dataset"] = ALIGNED_MOVIE_DATASET
     movie_group.attrs["aligned_movie_shape"] = movie.shape
     movie_group.attrs["aligned_movie_dtype"] = movie.dtype
@@ -223,9 +221,10 @@ def _write_stimulus_group(
         data=stimulus_data.data,
         compression="gzip",
     )
-    stimulus_group.create_dataset(
+    write_string_dataset(
+        stimulus_group,
         "data_column_names",
-        data=np.asarray(stimulus_data.column_names, dtype=h5py.string_dtype("utf-8")),
+        stimulus_data.column_names,
     )
     stimulus_group.create_dataset(
         "parameters_json",

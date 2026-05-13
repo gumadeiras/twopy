@@ -11,7 +11,6 @@ types while the top-level analysis persistence module decides when to save it.
 from dataclasses import dataclass
 
 import h5py
-import numpy as np
 
 from twopy.analysis.response_processing.apply import RoiNormalizationFactors
 from twopy.analysis.response_processing.options import (
@@ -27,6 +26,13 @@ from twopy.analysis.response_processing.options import (
     SmoothingOptions,
 )
 from twopy.analysis.response_processing.qc import RoiCorrelationScores
+from twopy.hdf5_utils import (
+    plain_hdf5_attr_value,
+    write_string_dataset,
+)
+from twopy.hdf5_utils import (
+    read_string_dataset as _read_string_dataset,
+)
 from twopy.typing_guards import (
     require_bool_array,
     require_float64_array,
@@ -105,12 +111,10 @@ def write_response_processing_group(
         options.normalization.epoch_name,
     )
     if normalization_factors is not None:
-        normalization.create_dataset(
+        write_string_dataset(
+            normalization,
             "roi_labels",
-            data=np.asarray(
-                normalization_factors.roi_labels,
-                dtype=h5py.string_dtype("utf-8"),
-            ),
+            normalization_factors.roi_labels,
         )
         normalization.create_dataset("factors", data=normalization_factors.factors)
 
@@ -138,13 +142,7 @@ def write_response_processing_group(
         scores_group.attrs["window_stop_seconds"] = _optional_float_attr(
             correlation_scores.window_seconds[1],
         )
-        scores_group.create_dataset(
-            "roi_labels",
-            data=np.asarray(
-                correlation_scores.roi_labels,
-                dtype=h5py.string_dtype("utf-8"),
-            ),
-        )
+        write_string_dataset(scores_group, "roi_labels", correlation_scores.roi_labels)
         scores_group.create_dataset("scores", data=correlation_scores.scores)
         scores_group.create_dataset(
             "included_mask",
@@ -195,7 +193,7 @@ def _read_smoothing_options(group: h5py.Group) -> SmoothingOptions:
     """Read smoothing settings from one HDF5 group."""
     return SmoothingOptions(
         method=require_string_choice(
-            _plain_attr_value(group.attrs["method"]),
+            plain_hdf5_attr_value(group.attrs["method"], scalar_only=True),
             name="response_processing smoothing method",
             allowed=_SMOOTHING_METHODS,
         ),
@@ -208,7 +206,7 @@ def _read_low_pass_options(group: h5py.Group) -> LowPassFilterOptions:
     """Read low-pass settings from one HDF5 group."""
     return LowPassFilterOptions(
         method=require_string_choice(
-            _plain_attr_value(group.attrs["method"]),
+            plain_hdf5_attr_value(group.attrs["method"], scalar_only=True),
             name="response_processing low-pass method",
             allowed=_LOW_PASS_METHODS,
         ),
@@ -221,7 +219,7 @@ def _read_normalization_options(group: h5py.Group) -> NormalizationOptions:
     """Read normalization settings from one HDF5 group."""
     return NormalizationOptions(
         method=require_string_choice(
-            _plain_attr_value(group.attrs["method"]),
+            plain_hdf5_attr_value(group.attrs["method"], scalar_only=True),
             name="response_processing normalization method",
             allowed=_NORMALIZATION_METHODS,
         ),
@@ -234,7 +232,7 @@ def _read_correlation_filter_options(group: h5py.Group) -> CorrelationFilterOpti
     """Read correlation-filter settings from one HDF5 group."""
     return CorrelationFilterOptions(
         reference=require_string_choice(
-            _plain_attr_value(group.attrs["reference"]),
+            plain_hdf5_attr_value(group.attrs["reference"], scalar_only=True),
             name="response_processing correlation reference",
             allowed=_CORRELATION_REFERENCES,
         ),
@@ -277,7 +275,7 @@ def _read_correlation_scores(group: h5py.Group) -> RoiCorrelationScores:
         ),
         minimum_correlation=float(group.attrs["minimum_correlation"]),
         reference=require_string_choice(
-            _plain_attr_value(group.attrs["reference"]),
+            plain_hdf5_attr_value(group.attrs["reference"], scalar_only=True),
             name="response_processing correlation scores reference",
             allowed=_CORRELATION_REFERENCES,
         ),
@@ -310,7 +308,7 @@ def _optional_text_attr(value: str | None) -> str:
 
 def _optional_float_from_attr(value: object) -> float | None:
     """Read an optional float value written by ``_optional_float_attr``."""
-    plain_value = _plain_attr_value(value)
+    plain_value = plain_hdf5_attr_value(value, scalar_only=True)
     if plain_value == "none":
         return None
     return float(plain_value)
@@ -318,7 +316,7 @@ def _optional_float_from_attr(value: object) -> float | None:
 
 def _optional_int_from_attr(value: object) -> int | None:
     """Read an optional integer value written by ``_optional_int_attr``."""
-    plain_value = _plain_attr_value(value)
+    plain_value = plain_hdf5_attr_value(value, scalar_only=True)
     if plain_value == "none":
         return None
     return int(plain_value)
@@ -326,34 +324,7 @@ def _optional_int_from_attr(value: object) -> int | None:
 
 def _optional_text_from_attr(value: object) -> str | None:
     """Read an optional text value written by ``_optional_text_attr``."""
-    plain_value = _plain_attr_value(value)
+    plain_value = plain_hdf5_attr_value(value, scalar_only=True)
     if plain_value == "none":
         return None
     return str(plain_value)
-
-
-def _read_string_dataset(group: h5py.Group, name: str) -> tuple[str, ...]:
-    """Read a UTF-8 string dataset from HDF5."""
-    return tuple(_decode_string(value) for value in group[name][()])
-
-
-def _decode_string(value: object) -> str:
-    """Decode one HDF5 string scalar into Python text."""
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    return str(value)
-
-
-def _plain_attr_value(value: object) -> str | int | float | bool:
-    """Convert common HDF5 attribute scalars to plain Python values."""
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    if isinstance(value, np.generic):
-        item = value.item()
-        if isinstance(item, bytes):
-            return item.decode("utf-8")
-        if isinstance(item, str | int | float | bool):
-            return item
-    if isinstance(value, str | int | float | bool):
-        return value
-    return str(value)

@@ -20,6 +20,12 @@ import numpy.typing as npt
 
 from twopy.conversion.types import FrameCountAudit
 from twopy.frame_ranges import normalize_frame_range
+from twopy.hdf5_utils import (
+    plain_hdf5_attr_value,
+)
+from twopy.hdf5_utils import (
+    read_string_dataset as _read_string_dataset,
+)
 from twopy.spatial import SpatialCrop, full_frame_crop
 from twopy.typing_guards import (
     require_bool_array,
@@ -417,7 +423,10 @@ def _read_attrs(group: h5py.Group | h5py.File) -> dict[str, object]:
     Returns:
         Dictionary keyed by attribute name.
     """
-    return {key: _plain_attr_value(value) for key, value in group.attrs.items()}
+    return {
+        key: plain_hdf5_attr_value(value, allow_array=True)
+        for key, value in group.attrs.items()
+    }
 
 
 def _read_str_attrs(group: h5py.Group | h5py.File) -> dict[str, str]:
@@ -429,7 +438,10 @@ def _read_str_attrs(group: h5py.Group | h5py.File) -> dict[str, str]:
     Returns:
         Dictionary of string attributes.
     """
-    return {key: str(_plain_attr_value(value)) for key, value in group.attrs.items()}
+    return {
+        key: str(plain_hdf5_attr_value(value, allow_array=True))
+        for key, value in group.attrs.items()
+    }
 
 
 def _read_str_attr(group: h5py.Group | h5py.File, key: str) -> str:
@@ -445,7 +457,7 @@ def _read_str_attr(group: h5py.Group | h5py.File, key: str) -> str:
     if key not in group.attrs:
         msg = f"Missing required HDF5 attribute {key!r}"
         raise ValueError(msg)
-    value = _plain_attr_value(group.attrs[key])
+    value = plain_hdf5_attr_value(group.attrs[key], allow_array=True)
     return str(value)
 
 
@@ -482,24 +494,6 @@ def _read_int_tuple_attr(group: h5py.Group | h5py.File, key: str) -> tuple[int, 
     if isinstance(value, np.ndarray):
         return tuple(int(item) for item in value.tolist())
     return (int(value),)
-
-
-def _plain_attr_value(value: object) -> object:
-    """Convert a small HDF5 attribute value into plain Python data.
-
-    Args:
-        value: Raw h5py attribute value.
-
-    Returns:
-        Python scalar, string, or list.
-    """
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, np.ndarray):
-        return np.asarray(value, dtype=object).tolist()
-    return value
 
 
 def _read_stimulus_parameters(
@@ -583,34 +577,6 @@ def _read_json_dataset(h5_file: h5py.File, dataset_name: str) -> object:
     else:
         json_text = str(raw_json)
     return json.loads(json_text)
-
-
-def _read_string_dataset(h5_file: h5py.File, dataset_name: str) -> tuple[str, ...]:
-    """Read a one-dimensional HDF5 string dataset.
-
-    Args:
-        h5_file: Open ``recording_data.h5`` file.
-        dataset_name: Dataset path.
-
-    Returns:
-        Tuple of decoded strings.
-    """
-    values = h5_file[dataset_name][()]
-    return tuple(_decode_string_value(value) for value in values)
-
-
-def _decode_string_value(value: object) -> str:
-    """Decode one HDF5 string scalar.
-
-    Args:
-        value: Raw scalar value from h5py.
-
-    Returns:
-        Text value.
-    """
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    return str(value)
 
 
 def _read_frame_counts(h5_file: h5py.File) -> FrameCountAudit:

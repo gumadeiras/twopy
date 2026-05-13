@@ -22,6 +22,13 @@ from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 
 from twopy.converted import RecordingData
+from twopy.filenames import (
+    PLOT_EXPORTS_DIRNAME,
+    PLOT_WITH_ROIS_EXPORTS_DIRNAME,
+    RECORDING_ROI_OVERLAY_EXPORT_STEM,
+    RECORDING_VIEW_EXPORT_STEM,
+    ROI_VIEW_EXPORT_STEM,
+)
 from twopy.napari.dims import current_step_index
 from twopy.napari.display import display_image_from_movie_image
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
@@ -101,7 +108,7 @@ def export_recording_view(
     draw_recording_image(ax, image)
     return save_figure_bundle(
         fig,
-        output_dir / "recording_view" / "recording_view",
+        output_dir / RECORDING_VIEW_EXPORT_STEM / RECORDING_VIEW_EXPORT_STEM,
         formats=formats,
     )
 
@@ -142,7 +149,9 @@ def export_roi_view(
         roi_colors=roi_colors,
     )
     return save_figure_bundle(
-        fig, output_dir / "roi_view" / "roi_view", formats=formats
+        fig,
+        output_dir / ROI_VIEW_EXPORT_STEM / ROI_VIEW_EXPORT_STEM,
+        formats=formats,
     )
 
 
@@ -187,7 +196,9 @@ def export_recording_roi_overlay(
     )
     return save_figure_bundle(
         fig,
-        output_dir / "recording_roi_overlay" / "recording_roi_overlay",
+        output_dir
+        / RECORDING_ROI_OVERLAY_EXPORT_STEM
+        / RECORDING_ROI_OVERLAY_EXPORT_STEM,
         formats=formats,
     )
 
@@ -236,7 +247,7 @@ def export_epoch_plots(
         written.extend(
             save_figure_bundle(
                 fig,
-                output_dir / "plots" / safe_stem(_epoch_title(epoch)),
+                output_dir / PLOT_EXPORTS_DIRNAME / safe_stem(_epoch_title(epoch)),
                 formats=formats,
             )
         )
@@ -311,7 +322,7 @@ def export_epoch_roi_overlay_plots(
             written.extend(
                 save_figure_bundle(
                     fig,
-                    output_dir / "plots_with_rois" / stem,
+                    output_dir / PLOT_WITH_ROIS_EXPORTS_DIRNAME / stem,
                     formats=formats,
                 )
             )

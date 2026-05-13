@@ -17,6 +17,7 @@ import numpy.typing as npt
 
 from twopy.converted import RecordingData
 from twopy.frame_ranges import normalize_frame_range
+from twopy.hdf5_utils import read_string_dataset, write_string_dataset
 from twopy.typing_guards import require_bool_array
 
 __all__ = [
@@ -244,10 +245,7 @@ def save_roi_set(roi_set: RoiSet, path: Path) -> None:
     with h5py.File(output_path, "w") as h5_file:
         h5_file.attrs["twopy_format"] = ROI_FILE_FORMAT
         h5_file.create_dataset("masks", data=roi_set.masks, compression="gzip")
-        h5_file.create_dataset(
-            "labels",
-            data=np.asarray(roi_set.labels, dtype=h5py.string_dtype("utf-8")),
-        )
+        write_string_dataset(h5_file, "labels", roi_set.labels)
 
 
 def load_roi_set(path: Path) -> RoiSet:
@@ -269,9 +267,7 @@ def load_roi_set(path: Path) -> RoiSet:
             msg = f"Expected {ROI_FILE_FORMAT!r} file at {input_path}"
             raise ValueError(msg)
         masks = require_bool_array(h5_file["masks"][()], name="masks", ndim=3)
-        raw_labels = h5_file["labels"][()]
-
-    labels = tuple(_decode_label(label) for label in raw_labels)
+        labels = read_string_dataset(h5_file, "labels")
     return make_roi_set(masks, labels=labels)
 
 
@@ -495,17 +491,3 @@ def _extract_mean_traces_from_indices(
             )
 
     return traces
-
-
-def _decode_label(value: object) -> str:
-    """Decode one HDF5 label value into text.
-
-    Args:
-        value: Raw scalar read from the labels dataset.
-
-    Returns:
-        ROI label as a string.
-    """
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    return str(value)

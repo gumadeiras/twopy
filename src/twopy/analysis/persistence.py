@@ -38,6 +38,15 @@ from twopy.analysis.responses import (
     validate_grouped_roi_responses,
 )
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
+from twopy.hdf5_utils import (
+    plain_hdf5_attr_value,
+)
+from twopy.hdf5_utils import (
+    read_string_dataset as _read_string_dataset,
+)
+from twopy.hdf5_utils import (
+    write_string_dataset as _write_string_dataset,
+)
 from twopy.roi import RoiSet, TraceStatistic, make_roi_set
 from twopy.typing_guards import (
     require_bool_array,
@@ -418,12 +427,12 @@ def _read_background_traces(group: h5py.Group) -> BackgroundCorrectedRoiTraces:
         start_frame=int(group.attrs["start_frame"]),
         stop_frame=int(group.attrs["stop_frame"]),
         statistic=require_string_choice(
-            _plain_attr_value(group.attrs["statistic"]),
+            plain_hdf5_attr_value(group.attrs["statistic"], scalar_only=True),
             name="traces statistic",
             allowed=_TRACE_STATISTICS,
         ),
         method=require_string_choice(
-            _plain_attr_value(group.attrs["method"]),
+            plain_hdf5_attr_value(group.attrs["method"], scalar_only=True),
             name="traces background correction method",
             allowed=_BACKGROUND_CORRECTION_METHODS,
         ),
@@ -704,7 +713,9 @@ def _read_response_trial(group: h5py.Group) -> RoiResponseTrial:
     """
     return RoiResponseTrial(
         epoch_number=int(group.attrs["epoch_number"]),
-        epoch_name=str(_plain_attr_value(group.attrs["epoch_name"])),
+        epoch_name=str(
+            plain_hdf5_attr_value(group.attrs["epoch_name"], scalar_only=True),
+        ),
         trial_index=int(group.attrs["trial_index"]),
         window_index=int(group.attrs["window_index"]),
         start_frame=int(group.attrs["start_frame"]),
@@ -789,41 +800,10 @@ def _read_metadata(group: h5py.Group) -> dict[str, str | int | float | bool]:
     Returns:
         Plain Python metadata dictionary.
     """
-    return {key: _plain_attr_value(value) for key, value in group.attrs.items()}
-
-
-def _write_string_dataset(
-    group: h5py.Group,
-    name: str,
-    values: tuple[str, ...],
-) -> None:
-    """Write a tuple of strings as a UTF-8 HDF5 dataset.
-
-    Args:
-        group: Destination HDF5 group.
-        name: Dataset name.
-        values: String values to write.
-
-    Returns:
-        None.
-    """
-    group.create_dataset(
-        name,
-        data=np.asarray(values, dtype=h5py.string_dtype("utf-8")),
-    )
-
-
-def _read_string_dataset(group: h5py.Group, name: str) -> tuple[str, ...]:
-    """Read a UTF-8 string dataset.
-
-    Args:
-        group: HDF5 group containing the dataset.
-        name: Dataset name.
-
-    Returns:
-        Tuple of decoded strings.
-    """
-    return tuple(_decode_string(value) for value in group[name][()])
+    return {
+        key: plain_hdf5_attr_value(value, scalar_only=True)
+        for key, value in group.attrs.items()
+    }
 
 
 def _time_columns(trials: Sequence[RoiResponseTrial]) -> tuple[str, ...]:
@@ -1045,41 +1025,7 @@ def _require_analysis_format(h5_file: h5py.File, path: Path) -> None:
     Returns:
         None.
     """
-    actual = str(_plain_attr_value(h5_file.attrs.get("twopy_format", "")))
+    actual = str(plain_hdf5_attr_value(h5_file.attrs.get("twopy_format", "")))
     if actual != ANALYSIS_OUTPUT_FILE_FORMAT:
         msg = f"Expected {ANALYSIS_OUTPUT_FILE_FORMAT!r} file at {path}"
         raise ValueError(msg)
-
-
-def _plain_attr_value(value: object) -> str | int | float | bool:
-    """Convert one HDF5 attribute value to a plain Python scalar.
-
-    Args:
-        value: Raw HDF5 attribute value.
-
-    Returns:
-        Plain string, integer, float, or boolean.
-    """
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    if isinstance(value, np.bool_ | bool):
-        return bool(value)
-    if isinstance(value, np.integer | int):
-        return int(value)
-    if isinstance(value, np.floating | float):
-        return float(value)
-    return str(value)
-
-
-def _decode_string(value: object) -> str:
-    """Decode one HDF5 string scalar.
-
-    Args:
-        value: Raw scalar read from a string dataset.
-
-    Returns:
-        Decoded text.
-    """
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    return str(value)

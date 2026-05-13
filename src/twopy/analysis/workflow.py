@@ -52,6 +52,13 @@ from twopy.converted import (
     RecordingData,
     load_converted_recording,
 )
+from twopy.filenames import (
+    ANALYSIS_OUTPUT_FILENAME,
+    CSV_EXPORTS_DIRNAME,
+    EXPORTS_DIRNAME,
+    RESPONSE_SUMMARY_GROUPED_FILENAME,
+    RESPONSE_SUMMARY_TRIALS_FILENAME,
+)
 from twopy.roi import RoiSet, load_roi_set
 from twopy.spatial import SpatialDomain
 
@@ -254,13 +261,13 @@ def _save_response_analysis_run(
         output_path=resolved_output_path,
         requested_path=response_summary_trials_csv_path,
         write_summary_csv=write_summary_csv,
-        filename="response_summary_trials.csv",
+        filename=RESPONSE_SUMMARY_TRIALS_FILENAME,
     )
     resolved_grouped_summary_path = _resolve_summary_csv_path(
         output_path=resolved_output_path,
         requested_path=response_summary_grouped_csv_path,
         write_summary_csv=write_summary_csv,
-        filename="response_summary_grouped.csv",
+        filename=RESPONSE_SUMMARY_GROUPED_FILENAME,
     )
     save_analysis_outputs(
         resolved_output_path,
@@ -631,7 +638,7 @@ def _resolve_output_path(recording_data_path: Path, output_path: Path | None) ->
     """
     if output_path is not None:
         return output_path.expanduser()
-    return recording_data_path.expanduser().parent / "analysis_outputs.h5"
+    return recording_data_path.expanduser().parent / ANALYSIS_OUTPUT_FILENAME
 
 
 def _resolve_summary_csv_path(
@@ -656,4 +663,4 @@ def _resolve_summary_csv_path(
         return None
     if requested_path is not None:
         return requested_path.expanduser()
-    return output_path.parent / "exports" / "csvs" / filename
+    return output_path.parent / EXPORTS_DIRNAME / CSV_EXPORTS_DIRNAME / filename

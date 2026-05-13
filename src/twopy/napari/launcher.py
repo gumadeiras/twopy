@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from twopy._version import __version__
+from twopy.filenames import ROI_FILENAME
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.loading import resolve_or_convert_launch_recording
 from twopy.napari.types import NapariRecordingView
@@ -76,7 +77,7 @@ def launch_napari(
             roi_save_file=(
                 roi_save_file.expanduser()
                 if roi_save_file is not None
-                else Path.cwd() / "rois.h5"
+                else Path.cwd() / ROI_FILENAME
             ),
             response_plot_widget=response_plot_widget,
             response_options_widget=response_options_widget,
