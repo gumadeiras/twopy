@@ -1,0 +1,4 @@
+config_name,mode,scanner,pixels_per_line,lines_per_frame,pixel_time,ms_per_line,scan_angle_multiplier_fast,scan_angle_multiplier_slow
+256x128_0.5ms_fastAcquisition,6,galvo,256,128,0.0000016,0.6,1,0.57744
+128x128_1ms_6.5Hz,2,galvo,128,128,0.0000064,1.2,1,0.57744
+512x512_4ms_zStack,5,galvo,512,512,0.0000064,4.8,1,1
