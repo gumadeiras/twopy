@@ -13,7 +13,7 @@ __all__ = [
     "RoiGenerationUnits",
 ]
 
-RoiGenerationMode = Literal["manual", "grid", "watershed"]
+RoiGenerationMode = Literal["manual", "grid", "watershed", "response_watershed"]
 RoiGenerationUnits = Literal["pixels", "microns"]
 
 
@@ -36,6 +36,9 @@ class RoiGenerationOptions:
         watershed_min_pixels: Minimum watershed ROI size.
         watershed_smoothing_sigma: Optional Gaussian smoothing sigma before
             watershed seeding.
+        response_watershed_min_pixels: Minimum response-watershed ROI size.
+        response_watershed_smoothing_sigma: Optional Gaussian smoothing sigma
+            before response-watershed seeding.
     """
 
     roi_mode: RoiGenerationMode
@@ -49,3 +52,5 @@ class RoiGenerationOptions:
     allow_extrapolation: bool
     watershed_min_pixels: int
     watershed_smoothing_sigma: float
+    response_watershed_min_pixels: int
+    response_watershed_smoothing_sigma: float

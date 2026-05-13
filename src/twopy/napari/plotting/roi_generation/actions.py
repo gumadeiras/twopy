@@ -8,14 +8,18 @@ The response dock owns UI lifecycle; this module owns the generation decision
 tree so it can be tested without napari widgets.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
 
+from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
+from twopy.analysis.trials import EpochFrameWindow
 from twopy.converted import RecordingData
 from twopy.napari.plotting.roi_generation.options import RoiGenerationOptions
 from twopy.pixel_calibration import PixelCalibrationRow, resolve_pixel_size_um
+from twopy.response_roi_extraction import response_watershed_roi_set
 from twopy.roi import roi_set_to_label_image
 from twopy.roi_extraction import grid_roi_set, grid_roi_set_microns, watershed_roi_set
 
@@ -42,6 +46,8 @@ def generate_roi_labels(
     recording: RecordingData,
     options: RoiGenerationOptions,
     calibrations: tuple[PixelCalibrationRow, ...],
+    *,
+    epoch_windows: Sequence[EpochFrameWindow] | None = None,
 ) -> GeneratedRoiLabels:
     """Generate ROI labels for a converted recording.
 
@@ -49,6 +55,9 @@ def generate_roi_labels(
         recording: Loaded converted recording.
         options: ROI generation options from the ROIs tab.
         calibrations: Pixel calibration rows used for micron-sized grid mode.
+        epoch_windows: Optional stimulus windows used by response-watershed
+            generation. When omitted, they are resolved from converted
+            stimulus/photodiode data.
 
     Returns:
         Generated labels in movie coordinates plus status text.
@@ -69,6 +78,25 @@ def generate_roi_labels(
         return GeneratedRoiLabels(
             label_image=roi_set_to_label_image(roi_set),
             status_text=f"Created watershed ROIs: {len(roi_set.labels)} ROIs.",
+        )
+
+    if options.roi_mode == "response_watershed":
+        resolved_epoch_windows = (
+            tuple(epoch_windows)
+            if epoch_windows is not None
+            else interpolate_stimulus_epochs_to_frame_windows(recording).windows
+        )
+        roi_set = response_watershed_roi_set(
+            recording,
+            resolved_epoch_windows,
+            min_pixels=options.response_watershed_min_pixels,
+            score_smoothing_sigma=options.response_watershed_smoothing_sigma,
+        )
+        return GeneratedRoiLabels(
+            label_image=roi_set_to_label_image(roi_set),
+            status_text=(
+                f"Created response watershed ROIs: {len(roi_set.labels)} ROIs."
+            ),
         )
 
     if options.units == "pixels":

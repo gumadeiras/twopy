@@ -94,6 +94,7 @@ class RoiGenerationControls(QGroupBox):
         self._roi_mode.addItem("manual", "manual")
         self._roi_mode.addItem("grid", "grid")
         self._roi_mode.addItem("watershed", "watershed")
+        self._roi_mode.addItem("response watershed", "response_watershed")
         self._units = QComboBox()
         self._units.addItem("pixels", "pixels")
         self._units.addItem("microns", "microns")
@@ -119,6 +120,13 @@ class RoiGenerationControls(QGroupBox):
         self._watershed_smoothing_sigma.setRange(0.0, 100.0)
         self._watershed_smoothing_sigma.setDecimals(3)
         self._watershed_smoothing_sigma.setValue(0.0)
+        self._response_watershed_min_pixels = QSpinBox()
+        self._response_watershed_min_pixels.setRange(1, 1_000_000)
+        self._response_watershed_min_pixels.setValue(5)
+        self._response_watershed_smoothing_sigma = QDoubleSpinBox()
+        self._response_watershed_smoothing_sigma.setRange(0.0, 100.0)
+        self._response_watershed_smoothing_sigma.setDecimals(3)
+        self._response_watershed_smoothing_sigma.setValue(0.0)
         self._status = QLabel("")
         self._status.setWordWrap(True)
         self._create_button = QPushButton("Create ROIs")
@@ -143,6 +151,12 @@ class RoiGenerationControls(QGroupBox):
         self._form_layout.addRow("", self._allow_extrapolation)
         self._form_layout.addRow("Min pixels", self._watershed_min_pixels)
         self._form_layout.addRow("Smoothing", self._watershed_smoothing_sigma)
+        self._form_layout.addRow(
+            "Response min pixels", self._response_watershed_min_pixels
+        )
+        self._form_layout.addRow(
+            "Response smoothing", self._response_watershed_smoothing_sigma
+        )
         self._form_layout.addRow("", self._create_button)
         self._form_layout.addRow("", self._status)
         self.setLayout(self._form_layout)
@@ -205,6 +219,10 @@ class RoiGenerationControls(QGroupBox):
             allow_extrapolation=self._allow_extrapolation.isChecked(),
             watershed_min_pixels=self._watershed_min_pixels.value(),
             watershed_smoothing_sigma=self._watershed_smoothing_sigma.value(),
+            response_watershed_min_pixels=self._response_watershed_min_pixels.value(),
+            response_watershed_smoothing_sigma=(
+                self._response_watershed_smoothing_sigma.value()
+            ),
         )
 
     def set_status(self, text: str) -> None:
@@ -341,14 +359,26 @@ class RoiGenerationControls(QGroupBox):
         roi_mode = _roi_mode_value(self._roi_mode)
         uses_grid = roi_mode == "grid"
         uses_watershed = roi_mode == "watershed"
+        uses_response_watershed = roi_mode == "response_watershed"
         _set_form_row_visible(self._form_layout, self._units, uses_grid)
         for widget in (self._watershed_min_pixels, self._watershed_smoothing_sigma):
             _set_form_row_visible(self._form_layout, widget, uses_watershed)
+        for widget in (
+            self._response_watershed_min_pixels,
+            self._response_watershed_smoothing_sigma,
+        ):
+            _set_form_row_visible(
+                self._form_layout,
+                widget,
+                uses_response_watershed,
+            )
         self._create_button.setVisible(roi_mode != "manual")
         if roi_mode == "grid":
             self._create_button.setText("Create grid")
         elif roi_mode == "watershed":
             self._create_button.setText("Create watershed")
+        elif roi_mode == "response_watershed":
+            self._create_button.setText("Create response watershed")
         else:
             self._create_button.setText("Create ROIs")
         self._sync_units()
@@ -392,7 +422,7 @@ class RoiGenerationControls(QGroupBox):
         roi_mode = _roi_mode_value(self._roi_mode)
         if roi_mode == "manual":
             return False
-        if roi_mode == "watershed":
+        if roi_mode in {"watershed", "response_watershed"}:
             return True
         if _units_value(self._units) == "pixels":
             return True
@@ -639,6 +669,8 @@ def _roi_mode_value(combo: QComboBox) -> RoiGenerationMode:
         return "grid"
     if value == "watershed":
         return "watershed"
+    if value == "response_watershed":
+        return "response_watershed"
     return "manual"
 
 

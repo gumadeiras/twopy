@@ -128,7 +128,11 @@ from twopy.napari.plotting.options import (
 from twopy.napari.plotting.panels import epoch_plot_panel
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
-from twopy.napari.plotting.roi_generation import RoiGenerationControls
+from twopy.napari.plotting.roi_generation import (
+    RoiGenerationControls,
+    RoiGenerationOptions,
+    generate_roi_labels,
+)
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     global_time_bounds,
@@ -3698,6 +3702,94 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertFalse(roi_widget._create_button.isEnabled())
         self.assertEqual(roi_widget._status.text(), "")
         self.assertTrue(roi_widget._status.isHidden())
+
+    def test_roi_tab_response_watershed_mode_is_selectable(self) -> None:
+        """Confirm response watershed appears as a generated ROI mode.
+
+        Inputs: a loaded recording and the ROIs tab controls.
+        Outputs: response-watershed options become active and selectable.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            roi_widget = RoiGenerationControls(
+                (), (), on_generate=lambda _options: None
+            )
+            roi_widget.set_recording(recording)
+            roi_widget._roi_mode.setCurrentIndex(3)
+
+        options = roi_widget.options()
+        self.assertEqual(roi_widget._roi_mode.currentData(), "response_watershed")
+        self.assertEqual(roi_widget._create_button.text(), "Create response watershed")
+        self.assertTrue(roi_widget._create_button.isEnabled())
+        self.assertTrue(roi_widget._watershed_min_pixels.isHidden())
+        self.assertTrue(roi_widget._watershed_smoothing_sigma.isHidden())
+        self.assertFalse(roi_widget._response_watershed_min_pixels.isHidden())
+        self.assertFalse(roi_widget._response_watershed_smoothing_sigma.isHidden())
+        self.assertEqual(options.roi_mode, "response_watershed")
+        self.assertEqual(options.response_watershed_min_pixels, 5)
+        self.assertEqual(options.response_watershed_smoothing_sigma, 0.0)
+
+    def test_response_watershed_generation_action_uses_epoch_windows(self) -> None:
+        """Confirm response watershed delegates to the shared extraction helper.
+
+        Inputs: response-watershed options and an explicit epoch window.
+        Outputs: generated labels come from the response ROI set.
+        """
+        recording = cast(Any, object())
+        epoch_window = EpochFrameWindow(
+            window=FrameWindow(
+                index=0,
+                start_frame=1,
+                stop_frame=3,
+                label="epoch 1",
+            ),
+            epoch_number=1,
+            epoch_name="epoch 1",
+        )
+        options = RoiGenerationOptions(
+            roi_mode="response_watershed",
+            units="pixels",
+            grid_size_pixels=16,
+            micron_grid_size=10.0,
+            rig="",
+            calibration_mode=0,
+            scanner="",
+            zoom=1.0,
+            allow_extrapolation=True,
+            watershed_min_pixels=1,
+            watershed_smoothing_sigma=0.0,
+            response_watershed_min_pixels=7,
+            response_watershed_smoothing_sigma=1.5,
+        )
+        mask = np.array([[[True, False], [False, False]]], dtype=np.bool_)
+
+        with patch(
+            "twopy.napari.plotting.roi_generation.actions.response_watershed_roi_set",
+            return_value=make_roi_set(mask),
+        ) as response_watershed:
+            generated = generate_roi_labels(
+                recording,
+                options,
+                (),
+                epoch_windows=(epoch_window,),
+            )
+
+        np.testing.assert_array_equal(
+            generated.label_image,
+            np.array([[1, 0], [0, 0]], dtype=np.int64),
+        )
+        self.assertEqual(
+            generated.status_text, "Created response watershed ROIs: 1 ROIs."
+        )
+        response_watershed.assert_called_once()
+        args, kwargs = response_watershed.call_args
+        self.assertIs(args[0], recording)
+        self.assertEqual(args[1], (epoch_window,))
+        self.assertEqual(kwargs["min_pixels"], 7)
+        self.assertEqual(kwargs["score_smoothing_sigma"], 1.5)
 
     def test_roi_tab_create_watershed_replaces_labels_layer(self) -> None:
         """Confirm the ROIs tab can create watershed ROI labels.
