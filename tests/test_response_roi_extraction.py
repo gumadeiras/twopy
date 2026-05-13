@@ -7,6 +7,7 @@ Outputs: ROIs generated from repeatable stimulus-locked response score images.
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import h5py
 import numpy as np
@@ -16,6 +17,7 @@ from twopy import (
     EpochFrameWindow,
     FrameWindow,
     extract_response_watershed_rois,
+    make_roi_set,
     response_watershed_roi_set,
     roi_set_to_label_image,
 )
@@ -181,31 +183,106 @@ class ResponseRoiExtractionTest(unittest.TestCase):
         """
         score_image = np.array(
             [
-                [0.0, 0.0, 0.0, 0.0, 0.0],
-                [0.0, 9.0, 8.0, 0.1, 0.0],
-                [0.0, 8.0, 7.0, 0.1, 0.0],
-                [0.0, 0.1, 0.1, 7.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 9.0, 8.0, 0.1, 0.1, 0.0],
+                [0.0, 8.0, 7.0, 0.1, 0.1, 0.0],
+                [0.0, 0.1, 0.1, 0.1, 7.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             ],
             dtype=np.float64,
         )
+        watershed_mask = np.ones((1, *score_image.shape), dtype=np.bool_)
 
-        roi_set = response_roi_extraction._roi_set_from_score_image(
-            score_image,
-            score_smoothing_sigma=0.0,
-            minimum_score_percentile=0.0,
-            within_roi_percentile=50.0,
-            min_pixels=1,
-            max_pixels=None,
-            label_prefix="response_watershed",
-        )
+        with patch.object(
+            response_roi_extraction,
+            "watershed_roi_set",
+            return_value=make_roi_set(watershed_mask),
+        ):
+            roi_set = response_roi_extraction._roi_set_from_score_image(
+                score_image,
+                score_smoothing_sigma=0.0,
+                minimum_score_percentile=0.0,
+                within_roi_percentile=70.0,
+                min_pixels=1,
+                max_pixels=None,
+                fill_holes=False,
+                closing_radius=0,
+                label_prefix="response_watershed",
+            )
 
-        self.assertEqual(roi_set.masks.shape, (2, 5, 5))
+        self.assertEqual(roi_set.masks.shape, (2, 5, 6))
         self.assertEqual(
             tuple(int(np.sum(mask)) for mask in roi_set.masks),
             (4, 1),
         )
         self.assertFalse(np.any(roi_set.masks[0] & roi_set.masks[1]))
+
+    def test_response_watershed_fills_component_holes(self) -> None:
+        """Confirm response ROI cleanup can close interior holes.
+
+        Inputs: one ring-shaped retained component inside a watershed basin.
+        Outputs: default response-watershed cleanup fills the component hole.
+        """
+        score_image = np.zeros((5, 5), dtype=np.float64)
+        score_image[1:4, 1:4] = 10.0
+        score_image[2, 2] = 0.0
+        watershed_mask = np.ones((1, *score_image.shape), dtype=np.bool_)
+
+        with patch.object(
+            response_roi_extraction,
+            "watershed_roi_set",
+            return_value=make_roi_set(watershed_mask),
+        ):
+            roi_set = response_roi_extraction._roi_set_from_score_image(
+                score_image,
+                score_smoothing_sigma=0.0,
+                minimum_score_percentile=0.0,
+                within_roi_percentile=0.0,
+                min_pixels=1,
+                max_pixels=None,
+                fill_holes=True,
+                closing_radius=0,
+                label_prefix="response_watershed",
+            )
+
+        self.assertEqual(roi_set.masks.shape, (1, 5, 5))
+        self.assertTrue(roi_set.masks[0, 2, 2])
+        self.assertEqual(int(np.sum(roi_set.masks[0])), 9)
+
+    def test_response_watershed_closing_connects_tiny_gaps_within_basin(self) -> None:
+        """Confirm conservative closing can connect tiny same-basin gaps.
+
+        Inputs: two retained pixels separated by one low-score pixel in the
+        same watershed basin.
+        Outputs: radius-one closing returns one contiguous three-pixel ROI.
+        """
+        score_image = np.zeros((5, 5), dtype=np.float64)
+        score_image[2, 1] = 10.0
+        score_image[2, 3] = 10.0
+        watershed_mask = np.ones((1, *score_image.shape), dtype=np.bool_)
+
+        with patch.object(
+            response_roi_extraction,
+            "watershed_roi_set",
+            return_value=make_roi_set(watershed_mask),
+        ):
+            roi_set = response_roi_extraction._roi_set_from_score_image(
+                score_image,
+                score_smoothing_sigma=0.0,
+                minimum_score_percentile=0.0,
+                within_roi_percentile=0.0,
+                min_pixels=1,
+                max_pixels=None,
+                fill_holes=False,
+                closing_radius=1,
+                label_prefix="response_watershed",
+            )
+
+        self.assertEqual(roi_set.masks.shape, (1, 5, 5))
+        np.testing.assert_array_equal(
+            np.flatnonzero(roi_set.masks[0, 2]),
+            np.array([1, 2, 3]),
+        )
 
 
 def _alternating_epoch_windows() -> tuple[EpochFrameWindow, ...]:

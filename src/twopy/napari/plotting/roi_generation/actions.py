@@ -91,6 +91,8 @@ def generate_roi_labels(
             resolved_epoch_windows,
             min_pixels=options.response_watershed_min_pixels,
             score_smoothing_sigma=options.response_watershed_smoothing_sigma,
+            fill_holes=options.response_watershed_fill_holes,
+            closing_radius=options.response_watershed_closing_radius,
         )
         return GeneratedRoiLabels(
             label_image=roi_set_to_label_image(roi_set),

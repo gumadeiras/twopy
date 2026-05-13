@@ -127,6 +127,11 @@ class RoiGenerationControls(QGroupBox):
         self._response_watershed_smoothing_sigma.setRange(0.0, 100.0)
         self._response_watershed_smoothing_sigma.setDecimals(3)
         self._response_watershed_smoothing_sigma.setValue(0.0)
+        self._response_watershed_fill_holes = QCheckBox("Fill response holes")
+        self._response_watershed_fill_holes.setChecked(True)
+        self._response_watershed_closing_radius = QSpinBox()
+        self._response_watershed_closing_radius.setRange(0, 100)
+        self._response_watershed_closing_radius.setValue(0)
         self._status = QLabel("")
         self._status.setWordWrap(True)
         self._create_button = QPushButton("Create ROIs")
@@ -156,6 +161,10 @@ class RoiGenerationControls(QGroupBox):
         )
         self._form_layout.addRow(
             "Response smoothing", self._response_watershed_smoothing_sigma
+        )
+        self._form_layout.addRow("", self._response_watershed_fill_holes)
+        self._form_layout.addRow(
+            "Response closing", self._response_watershed_closing_radius
         )
         self._form_layout.addRow("", self._create_button)
         self._form_layout.addRow("", self._status)
@@ -222,6 +231,12 @@ class RoiGenerationControls(QGroupBox):
             response_watershed_min_pixels=self._response_watershed_min_pixels.value(),
             response_watershed_smoothing_sigma=(
                 self._response_watershed_smoothing_sigma.value()
+            ),
+            response_watershed_fill_holes=(
+                self._response_watershed_fill_holes.isChecked()
+            ),
+            response_watershed_closing_radius=(
+                self._response_watershed_closing_radius.value()
             ),
         )
 
@@ -366,6 +381,8 @@ class RoiGenerationControls(QGroupBox):
         for widget in (
             self._response_watershed_min_pixels,
             self._response_watershed_smoothing_sigma,
+            self._response_watershed_fill_holes,
+            self._response_watershed_closing_radius,
         ):
             _set_form_row_visible(
                 self._form_layout,

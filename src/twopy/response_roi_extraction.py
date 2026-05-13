@@ -16,12 +16,12 @@ from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
-from scipy import ndimage
 
 from twopy.analysis.trials import EpochFrameWindow
 from twopy.converted import RecordingData, recording_frame_rate_hz
 from twopy.roi import RoiSet, make_roi_set
 from twopy.roi_extraction import watershed_roi_set
+from twopy.roi_mask_cleanup import cleaned_connected_components
 from twopy.spatial import SpatialCrop, SpatialDomain, full_frame_crop
 
 __all__ = [
@@ -33,12 +33,10 @@ __all__ = [
     "extract_response_watershed_rois",
     "response_watershed_roi_set",
 ]
-
 ResponseNormalization = Literal["baseline_subtracted", "delta_f_over_f"]
 ResponsePolarity = Literal["positive", "negative", "absolute"]
 ResponseStatistic = Literal["mean", "peak"]
 
-_EIGHT_CONNECTED = np.ones((3, 3), dtype=np.bool_)
 _NEIGHBOR_OFFSETS = tuple(
     (axis0_delta, axis1_delta)
     for axis0_delta in (-1, 0, 1)
@@ -107,6 +105,8 @@ def response_watershed_roi_set(
     within_roi_percentile: float = 50.0,
     min_pixels: int = 5,
     max_pixels: int | None = None,
+    fill_holes: bool = True,
+    closing_radius: int = 0,
     apply_motion_mask: bool = True,
     data_rate_hz: float | None = None,
     label_prefix: str = "response_watershed",
@@ -131,6 +131,10 @@ def response_watershed_roi_set(
         within_roi_percentile: Per-basin score percentile retained.
         min_pixels: Minimum accepted ROI size after score trimming.
         max_pixels: Optional maximum accepted ROI size after score trimming.
+        fill_holes: Whether holes inside each connected ROI component are
+            filled after score trimming.
+        closing_radius: Radius for conservative binary closing before final
+            connected-component splitting. ``0`` disables closing.
         apply_motion_mask: Whether converted motion-artifact frames become NaN.
         data_rate_hz: Optional frame rate override. Defaults to recording metadata.
         label_prefix: Prefix for generated ROI labels.
@@ -158,6 +162,8 @@ def response_watershed_roi_set(
         within_roi_percentile=within_roi_percentile,
         min_pixels=min_pixels,
         max_pixels=max_pixels,
+        fill_holes=fill_holes,
+        closing_radius=closing_radius,
         apply_motion_mask=apply_motion_mask,
         data_rate_hz=data_rate_hz,
         label_prefix=label_prefix,
@@ -181,6 +187,8 @@ def extract_response_watershed_rois(
     within_roi_percentile: float = 50.0,
     min_pixels: int = 5,
     max_pixels: int | None = None,
+    fill_holes: bool = True,
+    closing_radius: int = 0,
     apply_motion_mask: bool = True,
     data_rate_hz: float | None = None,
     label_prefix: str = "response_watershed",
@@ -205,6 +213,10 @@ def extract_response_watershed_rois(
         within_roi_percentile: Per-basin score percentile retained.
         min_pixels: Minimum accepted ROI size after score trimming.
         max_pixels: Optional maximum accepted ROI size after score trimming.
+        fill_holes: Whether holes inside each connected ROI component are
+            filled after score trimming.
+        closing_radius: Radius for conservative binary closing before final
+            connected-component splitting. ``0`` disables closing.
         apply_motion_mask: Whether converted motion-artifact frames become NaN.
         data_rate_hz: Optional frame rate override. Defaults to recording metadata.
         label_prefix: Prefix for generated ROI labels.
@@ -230,6 +242,7 @@ def extract_response_watershed_rois(
         within_roi_percentile=within_roi_percentile,
         min_pixels=min_pixels,
         max_pixels=max_pixels,
+        closing_radius=closing_radius,
         response_statistic=response_statistic,
         response_polarity=response_polarity,
         response_normalization=response_normalization,
@@ -263,6 +276,8 @@ def extract_response_watershed_rois(
         within_roi_percentile=within_roi_percentile,
         min_pixels=min_pixels,
         max_pixels=max_pixels,
+        fill_holes=fill_holes,
+        closing_radius=closing_radius,
         label_prefix=label_prefix,
     )
     roi_set = _full_frame_roi_set(cropped_roi_set, crop)
@@ -489,6 +504,8 @@ def _roi_set_from_score_image(
     within_roi_percentile: float,
     min_pixels: int,
     max_pixels: int | None,
+    fill_holes: bool,
+    closing_radius: int,
     label_prefix: str,
 ) -> RoiSet:
     """Create a ROI set by watershedding and trimming a response score image."""
@@ -514,7 +531,13 @@ def _roi_set_from_score_image(
         candidate_scores = score_image[candidate]
         within_threshold = float(np.percentile(candidate_scores, within_roi_percentile))
         trimmed = candidate & (score_image >= within_threshold)
-        for component in _connected_components(trimmed):
+        components = cleaned_connected_components(
+            trimmed,
+            domain_mask=mask,
+            fill_holes=fill_holes,
+            closing_radius=closing_radius,
+        )
+        for component in components:
             pixel_count = int(np.sum(component))
             if pixel_count < min_pixels:
                 continue
@@ -528,14 +551,6 @@ def _roi_set_from_score_image(
         np.stack(masks),
         labels=tuple(f"{label_prefix}_{index + 1:04d}" for index in range(len(masks))),
     )
-
-
-def _connected_components(
-    mask: npt.NDArray[np.bool_],
-) -> tuple[npt.NDArray[np.bool_], ...]:
-    """Return 8-connected components from one candidate ROI mask."""
-    labels, count = ndimage.label(mask, structure=_EIGHT_CONNECTED)
-    return tuple(labels == label for label in range(1, count + 1))
 
 
 def _selected_epoch_windows(
@@ -675,6 +690,7 @@ def _validate_common_options(
     within_roi_percentile: float,
     min_pixels: int,
     max_pixels: int | None,
+    closing_radius: int,
     response_statistic: ResponseStatistic,
     response_polarity: ResponsePolarity,
     response_normalization: ResponseNormalization,
@@ -719,6 +735,9 @@ def _validate_common_options(
         raise ValueError(msg)
     if max_pixels is not None and max_pixels < min_pixels:
         msg = f"max_pixels must be at least min_pixels; got {max_pixels}"
+        raise ValueError(msg)
+    if closing_radius < 0:
+        msg = f"closing_radius cannot be negative; got {closing_radius}"
         raise ValueError(msg)
     if response_statistic not in {"mean", "peak"}:
         msg = f"Unknown response statistic: {response_statistic!r}"

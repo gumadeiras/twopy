@@ -3728,9 +3728,13 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertTrue(roi_widget._watershed_smoothing_sigma.isHidden())
         self.assertFalse(roi_widget._response_watershed_min_pixels.isHidden())
         self.assertFalse(roi_widget._response_watershed_smoothing_sigma.isHidden())
+        self.assertFalse(roi_widget._response_watershed_fill_holes.isHidden())
+        self.assertFalse(roi_widget._response_watershed_closing_radius.isHidden())
         self.assertEqual(options.roi_mode, "response_watershed")
         self.assertEqual(options.response_watershed_min_pixels, 5)
         self.assertEqual(options.response_watershed_smoothing_sigma, 0.0)
+        self.assertTrue(options.response_watershed_fill_holes)
+        self.assertEqual(options.response_watershed_closing_radius, 0)
 
     def test_response_watershed_generation_action_uses_epoch_windows(self) -> None:
         """Confirm response watershed delegates to the shared extraction helper.
@@ -3763,6 +3767,8 @@ class NapariAdapterTest(unittest.TestCase):
             watershed_smoothing_sigma=0.0,
             response_watershed_min_pixels=7,
             response_watershed_smoothing_sigma=1.5,
+            response_watershed_fill_holes=True,
+            response_watershed_closing_radius=2,
         )
         mask = np.array([[[True, False], [False, False]]], dtype=np.bool_)
 
@@ -3790,6 +3796,8 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(args[1], (epoch_window,))
         self.assertEqual(kwargs["min_pixels"], 7)
         self.assertEqual(kwargs["score_smoothing_sigma"], 1.5)
+        self.assertTrue(kwargs["fill_holes"])
+        self.assertEqual(kwargs["closing_radius"], 2)
 
     def test_roi_tab_create_watershed_replaces_labels_layer(self) -> None:
         """Confirm the ROIs tab can create watershed ROI labels.

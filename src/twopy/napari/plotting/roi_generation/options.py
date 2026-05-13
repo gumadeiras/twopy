@@ -39,6 +39,10 @@ class RoiGenerationOptions:
         response_watershed_min_pixels: Minimum response-watershed ROI size.
         response_watershed_smoothing_sigma: Optional Gaussian smoothing sigma
             before response-watershed seeding.
+        response_watershed_fill_holes: Whether response-watershed ROIs fill
+            holes inside each connected component.
+        response_watershed_closing_radius: Conservative binary closing radius
+            before final response-watershed component splitting.
     """
 
     roi_mode: RoiGenerationMode
@@ -52,5 +56,7 @@ class RoiGenerationOptions:
     allow_extrapolation: bool
     watershed_min_pixels: int
     watershed_smoothing_sigma: float
-    response_watershed_min_pixels: int
-    response_watershed_smoothing_sigma: float
+    response_watershed_min_pixels: int = 5
+    response_watershed_smoothing_sigma: float = 0.0
+    response_watershed_fill_holes: bool = True
+    response_watershed_closing_radius: int = 0
