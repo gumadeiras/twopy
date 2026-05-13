@@ -32,6 +32,10 @@ analysis_caching: true
 # twopy mirrors recording paths below data_path under this folder.
 analysis_cache_dir: ~/.cache/twopy/recordings
 
+# Optional alternative dated CSV registry for microscope pixel-size calibration.
+# Omit this to use twopy's tracked default calibration registry.
+# pixel_calibration_path: /path/to/alternative_pixel_size.csv
+
 # Where twopy should write converted data and analysis outputs.
 # With analysis_caching enabled, this is the publish location used after saving.
 # Use "source" to publish into a twopy folder inside each recording folder.

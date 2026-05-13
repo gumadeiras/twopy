@@ -85,6 +85,47 @@ dff = compute_roi_delta_f_over_f(
 
 ROI masks are GUI-independent and full-frame. Trace extraction streams movie chunks and uses the saved alignment-valid crop by default. Pass `spatial_domain="full_frame"` only when you need explicit full-frame extraction. The lower-level `extract_roi_traces` helper is the full-frame raw primitive. For dense axon/dendrite process fields, `method="movie_y_stripe_percentile"` estimates a low-percentile background separately for each frame and y-stripe, then subtracts the stripe background from ROIs by position. `method="roi_y_stripe_percentile"` takes rows near each ROI center, excludes ROI pixels, keeps dim pixels by percentile, averages those pixels over time, and subtracts that trace from that ROI only.
 
+Use native ROI extraction helpers when scripts should create masks from a mean image instead of drawing or loading them:
+
+```python
+from twopy import (
+    grid_roi_set,
+    grid_roi_set_microns,
+    load_pixel_calibrations,
+    resolve_pixel_size_um,
+    watershed_roi_set,
+)
+from twopy.config import load_config
+
+accepted_region = np.zeros(recording.movie.shape[1:], dtype=bool)
+crop = recording.alignment_valid_crop
+accepted_region[crop.axis0_start : crop.axis0_stop, crop.axis1_start : crop.axis1_stop] = True
+grid_rois = grid_roi_set(recording.movie.shape[1:], grid_size_pixels=12)
+config = load_config()
+calibrations = load_pixel_calibrations(config.pixel_calibration_path)
+pixel_size = resolve_pixel_size_um(
+    calibrations,
+    rig="day",
+    mode=2,
+    scanner="galvo",
+    zoom=10,
+)
+physical_grid_rois = grid_roi_set_microns(
+    recording.movie.shape[1:],
+    micron_grid_size=10,
+    pixel_size_um=pixel_size.pixel_size_um,
+)
+watershed_rois = watershed_roi_set(
+    recording.mean_image,
+    region_mask=accepted_region,
+    min_pixels=5,
+)
+```
+
+`grid_roi_set` makes deterministic square template ROIs. `grid_roi_set_microns` uses calibrated microns per pixel and converts a physical grid width with `floor(micron_grid_size / pixel_size_um)`. Pixel-size calibration is loaded from a dated CSV registry and resolved by exact rig/mode/scanner/zoom match when available, interpolation within the same rig/mode/scanner group when the requested zoom is inside the measured range, and extrapolation only when explicitly allowed. `watershed_roi_set` segments bright structures from a two-dimensional summary image. These ROI helpers accept an optional boolean region mask and keep ROIs whose center of mass falls inside that region; UI code may collect that mask, but extraction itself is GUI-independent.
+
+For comparison against historical psycho5 ROI extraction, use `twopy.parity` helpers such as `psycho5_grid_roi_label_image` and `psycho5_watershed_image_from_preseg`. Those helpers preserve psycho5-specific label ordering and watershed border-fill behavior for audits; normal twopy analysis should use the native ROI extraction helpers above.
+
 Stimulus epoch windows come from classified photodiode events, not nominal frame-rate assumptions. `timing.events` keeps the start, transition, and end classifications auditable. ROI dF/F uses corrected fluorescence plus baseline windows to fit one shared exponential tau and one amplitude per ROI. The default dF/F fit mode is `direct_bounded_tau`; use `log_linear` for a log-space linear fit, or `direct_bounded_tau_and_log_amplitude` when both tau and log-amplitude should be bounded.
 
 Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response processing. Smoothing and low-pass filters run on continuous dF/F before trial grouping. Epoch-peak normalization runs after trial grouping and divides every grouped response by each ROI's peak mean response in the selected epoch, with the selected normalization epoch and per-ROI scale factors saved in the analysis HDF5 output. Correlation filtering scores grouped trials and stores the selected settings plus QC scores in the analysis HDF5 output. Use `validate_grouped_roi_responses` when a script constructs grouped response objects directly; processing, persistence, and CSV exports call the same validator before trusting time, frame, and ROI axes.

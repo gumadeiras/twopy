@@ -64,6 +64,8 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Persisted analysis HDF5 files can be reloaded into typed twopy analysis objects.
 - Small committed real-data regression fixture derived from the example converted recording, with loader and response-workflow tests over real pixel values.
 - Core ROI helpers convert between integer label images and ROI masks, so napari label edits and scripts use the same ROI HDF5 format.
+- GUI-independent native ROI extraction can create deterministic grid ROIs and watershed-style bright-structure ROIs from movie-coordinate images, with optional boolean region masks that keep ROIs by center of mass.
+- Pixel-size calibration is represented as a tracked plain dated CSV registry. Native code resolves exact measured values by rig/mode/scanner/zoom, interpolates within the same group in pixels-per-micron space for missing in-range zooms, and exposes a micron-grid ROI helper without coupling calibration to napari or workflow lifecycle.
 - Thin napari adapter loads a converted recording mean image, optional bounded movie preview, editable ROI Labels layer, and saves edited label images through the core ROI module.
 - Initial magicgui dock panel for napari can start from an empty napari window and load a converted recording automatically after folder selection.
 - Napari Load Recording control accepts a converted output folder or source recording folder, auto-detects `recording_data.h5`, `aligned_movie.h5`, and `rois.h5`, and always loads the full movie.
@@ -97,6 +99,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - `movie/mean_image` is stored uncompressed because it is a single small image.
 - Read-only `twopy.parity` loader for selected `savedAnalysis/*.mat` `lastRoi` fields needed by parity checks: ROI masks, epoch lists, epoch windows, and saved ROI traces.
 - Parity adapter converts saved ROI label images into full-frame twopy `RoiSet` objects for audit comparisons.
+- Parity-only psycho5 ROI extraction helpers preserve grid label ordering and watershed border-fill behavior for comparing native twopy ROI discovery against historical MATLAB outputs.
 - Parity dF/F comparator runs the normal twopy analysis path over converted data, using saved ROI masks and saved interleave windows, then reports numeric error against saved trace matrices.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw TIFF shape `(8334, 127, 256)`.
 - Real example recording converted successfully to `twopy/recording_data.h5` and `twopy/aligned_movie.h5`; aligned movie shape `(4168, 256, 127)`, mean image shape `(256, 127)`, stimulus data shape `(18021, 35)`.
@@ -116,7 +119,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Napari no longer has a separate Save ROIs dock; ROI persistence happens through the single Save ROIs + analysis action to avoid duplicate save paths.
 - Napari response options now show recording identity as root, genotype, stimulus, and recording time instead of full raw paths. Analysis, ROI, and export statuses show compact `./twopy/...` output folders.
 - Napari ROI and epoch visibility controls use displayed row indices, so duplicate display names or duplicate epoch metadata cannot toggle, cache, or restore the wrong plotted item.
-- Tests for config loading, MATLAB inspection/loading, recording inspection, database filtering/copy-cache behavior, conversion, converted-recording loading, ROI storage/extraction, photodiode synchronization and classification, response windows, persistence, workflow orchestration, response post-processing, napari loading/plotting/live ROI updates, real-data fixtures, stimulus metadata helpers, valid sessions, optional `savedAnalysis/`, missing files, and ambiguous raw TIFF movies.
+- Tests for config loading, MATLAB inspection/loading, recording inspection, database filtering/copy-cache behavior, conversion, converted-recording loading, ROI storage/extraction/discovery, photodiode synchronization and classification, response windows, persistence, workflow orchestration, response post-processing, napari loading/plotting/live ROI updates, real-data fixtures, stimulus metadata helpers, valid sessions, optional `savedAnalysis/`, missing files, and ambiguous raw TIFF movies.
 
 ## Next
 
