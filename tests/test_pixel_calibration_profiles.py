@@ -140,6 +140,41 @@ class PixelCalibrationProfileTests(unittest.TestCase):
             self.assertEqual(group.mode, 2)
             self.assertEqual(group.scanner, "galvo")
 
+    def test_selects_unique_group_from_partial_profile(self) -> None:
+        """Confirm measured rows can disambiguate missing rig metadata.
+
+        Inputs: a profile with mode and scanner but no rig plus a calibration
+        registry where only one group has that mode/scanner.
+        Outputs: the unique measured group is selected.
+        """
+        group = select_pixel_calibration_group(
+            PixelCalibrationProfile(
+                rig=None,
+                mode=3,
+                scanner="res",
+                config_name=None,
+                source="metadata",
+                evidence=("acq.mode", "SI.hScan2D.scannerType"),
+            ),
+            (
+                *_calibrations(),
+                PixelCalibrationRow(
+                    "day",
+                    3,
+                    "res",
+                    7.0,
+                    0.3,
+                    date(2023, 12, 14),
+                ),
+            ),
+        )
+
+        self.assertIsNotNone(group)
+        if group is not None:
+            self.assertEqual(group.rig, "day")
+            self.assertEqual(group.mode, 3)
+            self.assertEqual(group.scanner, "res")
+
     def test_incomplete_profile_does_not_select_ambiguous_group(self) -> None:
         """Confirm mode/scanner alone do not choose between rigs.
 
@@ -152,7 +187,7 @@ class PixelCalibrationProfileTests(unittest.TestCase):
                 mode=2,
                 scanner="galvo",
                 config_name="128x128_1ms_6_5hz",
-                source="mapping",
+                source="metadata+mapping",
                 evidence=("profile_mapping.config_name",),
             ),
             _calibrations(),

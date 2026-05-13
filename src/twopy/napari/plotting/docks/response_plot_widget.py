@@ -88,6 +88,11 @@ from twopy.pixel_calibration import (
     PixelCalibrationRow,
     load_pixel_calibrations,
 )
+from twopy.pixel_calibration_profiles import (
+    DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
+    PixelCalibrationProfileMapping,
+    load_pixel_calibration_profile_mappings,
+)
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 
@@ -125,6 +130,9 @@ class _ResponsePlotWidget(QWidget):
         )
         self._sync_future: Future[AnalysisSyncResult] | None = None
         self._pixel_calibrations = _load_pixel_calibrations_for_ui()
+        self._pixel_calibration_profile_mappings = (
+            _load_pixel_calibration_profile_mappings_for_ui()
+        )
         self._sync_timer = QTimer()
         self._sync_timer.setInterval(200)
         self._sync_timer.timeout.connect(self._collect_finished_sync)
@@ -161,6 +169,7 @@ class _ResponsePlotWidget(QWidget):
             on_create_generated_rois=self.create_generated_rois,
             export_state=self._export_state,
             pixel_calibrations=self._pixel_calibrations,
+            pixel_calibration_profile_mappings=self._pixel_calibration_profile_mappings,
         )
         self._options_tabs = options_panel.tabs
         self._recording_summary_label = options_panel.recording_summary_label
@@ -966,3 +975,21 @@ def _load_pixel_calibrations_for_ui() -> tuple[PixelCalibrationRow, ...]:
     except FileNotFoundError:
         calibration_path = DEFAULT_PIXEL_CALIBRATION_PATH
     return load_pixel_calibrations(calibration_path)
+
+
+def _load_pixel_calibration_profile_mappings_for_ui() -> tuple[
+    PixelCalibrationProfileMapping,
+    ...,
+]:
+    """Load ScanImage config mappings for napari ROI generation controls.
+
+    Returns:
+        Tracked profile mappings shipped with twopy.
+
+    The mapping file is package data, not machine-local configuration. Loading
+    it here keeps file I/O at the dock construction boundary instead of inside
+    the ROI option widget.
+    """
+    return load_pixel_calibration_profile_mappings(
+        DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
+    )

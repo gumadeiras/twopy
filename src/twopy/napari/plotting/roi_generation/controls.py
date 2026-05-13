@@ -30,10 +30,9 @@ from twopy.napari.plotting.roi_generation.options import (
 )
 from twopy.pixel_calibration import PixelCalibrationRow
 from twopy.pixel_calibration_profiles import (
-    DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
     PixelCalibrationGroup,
     PixelCalibrationProfile,
-    load_pixel_calibration_profile_mappings,
+    PixelCalibrationProfileMapping,
     resolve_pixel_calibration_profile,
     select_pixel_calibration_group,
 )
@@ -63,6 +62,7 @@ class RoiGenerationControls(QGroupBox):
     def __init__(
         self,
         calibrations: tuple[PixelCalibrationRow, ...],
+        profile_mappings: tuple[PixelCalibrationProfileMapping, ...],
         *,
         on_generate: Callable[[RoiGenerationOptions], None],
     ) -> None:
@@ -70,6 +70,8 @@ class RoiGenerationControls(QGroupBox):
 
         Args:
             calibrations: Calibration rows used to populate dropdowns.
+            profile_mappings: ScanImage config mappings used to prefill
+                calibration choices when recording metadata is incomplete.
             on_generate: Callback invoked with current options.
 
         Returns:
@@ -77,9 +79,7 @@ class RoiGenerationControls(QGroupBox):
         """
         super().__init__("ROI mode")
         self._calibrations = calibrations
-        self._profile_mappings = load_pixel_calibration_profile_mappings(
-            DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
-        )
+        self._profile_mappings = profile_mappings
         self._on_generate = on_generate
         self._recording_loaded = False
         self._loaded_zoom: float | None = None

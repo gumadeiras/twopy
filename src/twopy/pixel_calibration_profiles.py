@@ -34,7 +34,6 @@ __all__ = [
 
 PixelCalibrationProfileSource = Literal[
     "metadata",
-    "mapping",
     "metadata+mapping",
     "unresolved",
 ]
@@ -253,7 +252,7 @@ def select_pixel_calibration_group(
         calibrations: Measured pixel-size calibration rows.
 
     Returns:
-        Unique matching group, or ``None`` when the profile is incomplete,
+        Unique matching group, or ``None`` when the profile has no evidence, is
         ambiguous, or points at a group without measured calibration rows.
 
     This keeps UI automation conservative: dropdowns are only preselected when
@@ -264,6 +263,8 @@ def select_pixel_calibration_group(
         for row in calibrations
         if _profile_matches_row(profile, row)
     }
+    if not _has_calibration_group_evidence(profile):
+        return None
     if len(groups) == 1:
         return next(iter(groups))
     return None
@@ -278,15 +279,18 @@ def _profile_matches_row(
         return False
     if profile.mode is not None and row.mode != profile.mode:
         return False
-    if (
+    return not (
         profile.scanner is not None
         and _normalize_scanner(row.scanner) != profile.scanner
-    ):
-        return False
+    )
+
+
+def _has_calibration_group_evidence(profile: PixelCalibrationProfile) -> bool:
+    """Return whether a profile contains at least one group selector field."""
     return (
         profile.rig is not None
-        and profile.mode is not None
-        and profile.scanner is not None
+        or profile.mode is not None
+        or profile.scanner is not None
     )
 
 
@@ -550,6 +554,4 @@ def _profile_source(evidence: tuple[str, ...]) -> PixelCalibrationProfileSource:
         return "metadata+mapping"
     if has_metadata:
         return "metadata"
-    if has_mapping:
-        return "mapping"
     return "unresolved"

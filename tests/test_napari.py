@@ -3637,6 +3637,7 @@ class NapariAdapterTest(unittest.TestCase):
                     date(2023, 12, 14),
                 ),
             ),
+            (),
             on_generate=lambda _options: None,
         )
 

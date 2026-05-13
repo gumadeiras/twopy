@@ -35,6 +35,7 @@ from twopy.napari.plotting.roi_generation import (
     RoiGenerationOptions,
 )
 from twopy.pixel_calibration import PixelCalibrationRow
+from twopy.pixel_calibration_profiles import PixelCalibrationProfileMapping
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,7 @@ def create_response_options_panel(
     on_create_generated_rois: Callable[[RoiGenerationOptions], None],
     export_state: Callable[[], ResponseExportState],
     pixel_calibrations: tuple[PixelCalibrationRow, ...],
+    pixel_calibration_profile_mappings: tuple[PixelCalibrationProfileMapping, ...],
 ) -> ResponseOptionsPanel:
     """Create the tabbed response options panel.
 
@@ -111,6 +113,8 @@ def create_response_options_panel(
         on_create_generated_rois: Callback for generated-ROI actions.
         export_state: Callback that supplies current export state.
         pixel_calibrations: Calibration rows for micron-sized grid controls.
+        pixel_calibration_profile_mappings: ScanImage config mappings used to
+            prefill calibration choices when metadata identifies one group.
 
     Returns:
         Options panel with root tabs plus child controls needed by the owner.
@@ -165,6 +169,7 @@ def create_response_options_panel(
     roi_tab_layout = QVBoxLayout()
     roi_generation_widget = RoiGenerationControls(
         pixel_calibrations,
+        pixel_calibration_profile_mappings,
         on_generate=on_create_generated_rois,
     )
     roi_options_layout = QVBoxLayout()
