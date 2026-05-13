@@ -313,7 +313,13 @@ def _metadata_rig(run_metadata: Mapping[str, object]) -> tuple[str | None, str |
     text = _normalize_text(value)
     if text in {"day", "dayrig", "day_rig"} or "day" in text.split("_"):
         return "day", "run.rig_name"
-    if text in {"night", "nightrig", "night_rig"} or "night" in text.split("_"):
+    if text in {
+        "night",
+        "nightrig",
+        "night_rig",
+        "odorrig",
+        "odor_rig",
+    } or "night" in text.split("_"):
         return "night", "run.rig_name"
     return None, None
 

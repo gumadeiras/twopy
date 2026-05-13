@@ -96,8 +96,5 @@ def generate_roi_labels(
     )
     return GeneratedRoiLabels(
         label_image=roi_set_to_label_image(roi_set),
-        status_text=(
-            f"Created micron grid ROIs using {pixel_size.method} "
-            f"calibration: {pixel_size.pixel_size_um:.6g} um/px."
-        ),
+        status_text=f"Estimated pixel size: {pixel_size.pixel_size_um:.6g} um/px.",
     )

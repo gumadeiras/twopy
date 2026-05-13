@@ -83,7 +83,7 @@ class PixelCalibrationProfileTests(unittest.TestCase):
                 "acq.scanAngleMultiplierFast": 1,
                 "acq.scanAngleMultiplierSlow": 0.57744,
             },
-            {"rig_name": "OdorRig"},
+            {"rig_name": "UnknownRig"},
             mappings=load_pixel_calibration_profile_mappings(
                 DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
             ),
@@ -93,6 +93,21 @@ class PixelCalibrationProfileTests(unittest.TestCase):
         self.assertEqual(profile.mode, 2)
         self.assertEqual(profile.scanner, "galvo")
         self.assertEqual(profile.source, "metadata+mapping")
+
+    def test_odorrig_run_metadata_maps_to_night_rig(self) -> None:
+        """Confirm historical OdorRig metadata selects night calibration.
+
+        Inputs: run metadata from older ScanImage recordings.
+        Outputs: night rig so the UI does not fall back to the first dropdown
+        item.
+        """
+        profile = resolve_pixel_calibration_profile(
+            {"configName": "128x128_1ms_6.5Hz"},
+            {"rig_name": "OdorRig"},
+            mappings=(),
+        )
+
+        self.assertEqual(profile.rig, "night")
 
     def test_direct_scanner_conflict_rejects_config_mapping(self) -> None:
         """Confirm direct scanner metadata prevents stale mapping use.

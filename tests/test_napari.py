@@ -155,6 +155,7 @@ from twopy.napari.viewer import (
     interior_random_frame_indices,
 )
 from twopy.pixel_calibration import PixelCalibrationRow
+from twopy.pixel_calibration_profiles import PixelCalibrationProfileMapping
 from twopy.spatial import SpatialCrop
 
 
@@ -3521,6 +3522,65 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(response_widget._roi_generation_widget._zoom.value(), 2.0)
 
+    def test_roi_tab_create_micron_grid_reports_estimated_pixel_size(self) -> None:
+        """Confirm micron-grid generation reports only the pixel-size estimate.
+
+        Inputs: a loaded recording, empty Labels layer, and micron grid mode.
+        Outputs: generated labels are created and status text reports the
+        estimated microns per pixel without calibration-method prose.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            layer = _FakeLayer(
+                name="rois",
+                data=np.zeros((2, 2), dtype=np.int64),
+                options={},
+            )
+            response_widget = cast(Any, create_response_plot_widget(None))
+            response_widget.load_recording(recording)
+            response_widget.set_roi_labels_layer(layer)
+            roi_widget = response_widget._roi_generation_widget
+            roi_widget._roi_mode.setCurrentIndex(1)
+            roi_widget._units.setCurrentIndex(1)
+            roi_widget._create_button.click()
+
+        self.assertIn(
+            "Estimated pixel size:",
+            response_widget._update_status_label.text(),
+        )
+        self.assertNotIn(
+            "Created micron grid ROIs",
+            response_widget._update_status_label.text(),
+        )
+
+    def test_roi_tab_grid_options_follow_selected_units(self) -> None:
+        """Confirm grid controls hide options for inactive units.
+
+        Inputs: ROIs-tab controls switched between pixel and micron grid units.
+        Outputs: only the active unit's controls are shown, and extrapolation is
+        enabled by default.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        roi_widget = response_widget._roi_generation_widget
+
+        roi_widget._roi_mode.setCurrentIndex(1)
+
+        self.assertFalse(roi_widget._pixel_grid_size.isHidden())
+        self.assertTrue(roi_widget._micron_grid_size.isHidden())
+        self.assertTrue(roi_widget._rig.isHidden())
+        self.assertTrue(roi_widget._allow_extrapolation.isChecked())
+
+        roi_widget._units.setCurrentIndex(1)
+
+        self.assertTrue(roi_widget._pixel_grid_size.isHidden())
+        self.assertFalse(roi_widget._micron_grid_size.isHidden())
+        self.assertFalse(roi_widget._rig.isHidden())
+        self.assertFalse(roi_widget._allow_extrapolation.isHidden())
+
     def test_roi_tab_generation_uses_calibration_profile_metadata(self) -> None:
         """Confirm ROIs tab can preselect an unambiguous calibration group.
 
@@ -3549,7 +3609,37 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(roi_widget._rig.currentText(), "day")
         self.assertEqual(roi_widget._mode.currentData(), 2)
         self.assertEqual(roi_widget._scanner.currentText(), "galvo")
-        self.assertIn("Auto-selected calibration", roi_widget._status.text())
+        self.assertEqual(roi_widget._status.text(), "")
+        self.assertTrue(roi_widget._status.isHidden())
+
+    def test_roi_tab_generation_maps_odorrig_to_night_calibration(self) -> None:
+        """Confirm historical OdorRig recordings preselect night calibration.
+
+        Inputs: converted metadata matching an old OdorRig mode-2 galvo
+        recording.
+        Outputs: the rig dropdown selects ``night`` instead of the first
+        alphabetic item.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording_path = _write_converted_recording(Path(temp_dir))
+            with h5py.File(recording_path, "a") as h5_file:
+                h5_file["metadata"].attrs["configName"] = "128x128_1ms_6.5Hz"
+                h5_file["metadata"].attrs["acq.linesPerFrame"] = 128
+                h5_file["metadata"].attrs["acq.pixelsPerLine"] = 128
+                h5_file["metadata"].attrs["acq.pixelTime"] = 0.0000064
+                h5_file["metadata"].attrs["acq.msPerLine"] = 1.2
+                h5_file["metadata"].attrs["acq.scanAngleMultiplierFast"] = 1
+                h5_file["metadata"].attrs["acq.scanAngleMultiplierSlow"] = 0.57744
+                h5_file["run"].attrs["rig_name"] = "OdorRig"
+            recording = load_converted_recording(recording_path)
+            response_widget = cast(Any, create_response_plot_widget(None))
+            response_widget.load_recording(recording)
+            roi_widget = response_widget._roi_generation_widget
+
+        self.assertEqual(roi_widget._rig.currentText(), "night")
+        self.assertEqual(roi_widget._mode.currentData(), 2)
+        self.assertEqual(roi_widget._scanner.currentText(), "galvo")
 
     def test_roi_tab_generation_defaults_to_manual_mode(self) -> None:
         """Confirm the ROIs tab starts in manual Labels-editing mode.
@@ -3563,7 +3653,8 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(roi_widget._roi_mode.currentData(), "manual")
         self.assertFalse(roi_widget._create_button.isEnabled())
-        self.assertIn("No recording loaded", roi_widget._status.text())
+        self.assertEqual(roi_widget._status.text(), "")
+        self.assertTrue(roi_widget._status.isHidden())
 
     def test_roi_tab_create_watershed_replaces_labels_layer(self) -> None:
         """Confirm the ROIs tab can create watershed ROI labels.
@@ -3637,11 +3728,19 @@ class NapariAdapterTest(unittest.TestCase):
                     date(2023, 12, 14),
                 ),
             ),
-            (),
+            (
+                PixelCalibrationProfileMapping(
+                    "128x128_1ms_6.5Hz",
+                    2,
+                    "galvo",
+                    {},
+                ),
+            ),
             on_generate=lambda _options: None,
         )
 
         self.assertEqual(_combo_texts(widget._rig), ("day", "night"))
+        self.assertEqual(_combo_texts(widget._mode), ("2: 128x128_1ms_6.5Hz", "3"))
         self.assertEqual(_combo_data(widget._mode), (2, 3))
         widget._mode.setCurrentIndex(1)
         self.assertEqual(_combo_texts(widget._scanner), ("res",))

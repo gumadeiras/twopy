@@ -31,7 +31,6 @@ from twopy.napari.plotting.roi_generation.options import (
 from twopy.pixel_calibration import PixelCalibrationRow
 from twopy.pixel_calibration_profiles import (
     PixelCalibrationGroup,
-    PixelCalibrationProfile,
     PixelCalibrationProfileMapping,
     resolve_pixel_calibration_profile,
     select_pixel_calibration_group,
@@ -80,10 +79,10 @@ class RoiGenerationControls(QGroupBox):
         super().__init__("ROI mode")
         self._calibrations = calibrations
         self._profile_mappings = profile_mappings
+        self._mode_labels = _mode_labels_by_mode(profile_mappings)
         self._on_generate = on_generate
         self._recording_loaded = False
         self._loaded_zoom: float | None = None
-        self._calibration_profile_status: str | None = None
 
         self._roi_mode = QComboBox()
         self._roi_mode.addItem("manual", "manual")
@@ -106,6 +105,7 @@ class RoiGenerationControls(QGroupBox):
         self._zoom.setRange(0.001, 10000.0)
         self._zoom.setDecimals(3)
         self._allow_extrapolation = QCheckBox("Allow extrapolation")
+        self._allow_extrapolation.setChecked(True)
         self._watershed_min_pixels = QSpinBox()
         self._watershed_min_pixels.setRange(1, 1_000_000)
         self._watershed_min_pixels.setValue(1)
@@ -113,7 +113,7 @@ class RoiGenerationControls(QGroupBox):
         self._watershed_smoothing_sigma.setRange(0.0, 100.0)
         self._watershed_smoothing_sigma.setDecimals(3)
         self._watershed_smoothing_sigma.setValue(0.0)
-        self._status = QLabel("No recording loaded.")
+        self._status = QLabel("")
         self._status.setWordWrap(True)
         self._create_button = QPushButton("Create ROIs")
 
@@ -130,7 +130,7 @@ class RoiGenerationControls(QGroupBox):
         self._form_layout.addRow("Pixels", self._pixel_grid_size)
         self._form_layout.addRow("Microns", self._micron_grid_size)
         self._form_layout.addRow("Rig", self._rig)
-        self._form_layout.addRow("Cal mode", self._mode)
+        self._form_layout.addRow("Mode", self._mode)
         self._form_layout.addRow("Scanner", self._scanner)
         self._form_layout.addRow("Zoom", self._zoom)
         self._form_layout.addRow("", self._allow_extrapolation)
@@ -139,6 +139,7 @@ class RoiGenerationControls(QGroupBox):
         self._form_layout.addRow("", self._create_button)
         self._form_layout.addRow("", self._status)
         self.setLayout(self._form_layout)
+        _set_form_row_visible(self._form_layout, self._status, False)
         self._sync_mode()
 
     def set_recording(self, recording: RecordingData | None) -> None:
@@ -154,8 +155,7 @@ class RoiGenerationControls(QGroupBox):
         if recording is None:
             self._recording_loaded = False
             self._loaded_zoom = None
-            self._calibration_profile_status = None
-            self._status.setText("No recording loaded.")
+            self._clear_status()
             self._sync_mode()
             return
         self._recording_loaded = True
@@ -199,6 +199,7 @@ class RoiGenerationControls(QGroupBox):
             None.
         """
         self._status.setText(text)
+        _set_form_row_visible(self._form_layout, self._status, text != "")
 
     def _populate_calibration_choices(self) -> None:
         """Populate calibration dropdowns from available rows."""
@@ -210,7 +211,7 @@ class RoiGenerationControls(QGroupBox):
         """Keep mode choices valid for the selected calibration rig."""
         rig = self._rig.currentText()
         modes = tuple(
-            (str(mode), mode)
+            (_mode_label(mode, self._mode_labels), mode)
             for mode in sorted(
                 {row.mode for row in self._calibrations if row.rig == rig},
             )
@@ -257,14 +258,6 @@ class RoiGenerationControls(QGroupBox):
         group = select_pixel_calibration_group(profile, self._calibrations)
         if group is not None:
             self._select_calibration_group(group)
-            self._calibration_profile_status = (
-                "Auto-selected calibration: "
-                f"{group.rig} mode {group.mode} {group.scanner} "
-                f"({_profile_evidence_text(profile)})."
-            )
-            return
-
-        self._calibration_profile_status = _partial_profile_status(profile)
 
     def _select_calibration_group(self, group: PixelCalibrationGroup) -> None:
         """Select one measured calibration group in dependent dropdowns.
@@ -286,17 +279,7 @@ class RoiGenerationControls(QGroupBox):
         roi_mode = _roi_mode_value(self._roi_mode)
         uses_grid = roi_mode == "grid"
         uses_watershed = roi_mode == "watershed"
-        for widget in (
-            self._units,
-            self._pixel_grid_size,
-            self._micron_grid_size,
-            self._rig,
-            self._mode,
-            self._scanner,
-            self._zoom,
-            self._allow_extrapolation,
-        ):
-            _set_form_row_visible(self._form_layout, widget, uses_grid)
+        _set_form_row_visible(self._form_layout, self._units, uses_grid)
         for widget in (self._watershed_min_pixels, self._watershed_smoothing_sigma):
             _set_form_row_visible(self._form_layout, widget, uses_watershed)
         self._create_button.setVisible(roi_mode != "manual")
@@ -313,34 +296,30 @@ class RoiGenerationControls(QGroupBox):
     def _sync_units(self) -> None:
         """Enable inputs that apply to the selected grid-size unit."""
         uses_grid = _roi_mode_value(self._roi_mode) == "grid"
+        uses_pixels = uses_grid and _units_value(self._units) == "pixels"
         uses_microns = uses_grid and _units_value(self._units) == "microns"
-        self._pixel_grid_size.setEnabled(uses_grid and not uses_microns)
+        self._pixel_grid_size.setEnabled(uses_pixels)
         self._micron_grid_size.setEnabled(uses_microns)
         self._rig.setEnabled(uses_microns)
         self._mode.setEnabled(uses_microns)
         self._scanner.setEnabled(uses_microns)
         self._zoom.setEnabled(uses_microns)
         self._allow_extrapolation.setEnabled(uses_microns)
+        _set_form_row_visible(self._form_layout, self._pixel_grid_size, uses_pixels)
+        for widget in (
+            self._micron_grid_size,
+            self._rig,
+            self._mode,
+            self._scanner,
+            self._zoom,
+            self._allow_extrapolation,
+        ):
+            _set_form_row_visible(self._form_layout, widget, uses_microns)
 
     def _set_mode_status(self) -> None:
-        """Show the default status text for the selected mode."""
-        if not self._recording_loaded:
-            self._status.setText("No recording loaded.")
-            return
-        roi_mode = _roi_mode_value(self._roi_mode)
-        if roi_mode == "manual":
-            self._status.setText("Manual mode: draw or edit Labels ROIs.")
-        elif roi_mode == "grid" and self._loaded_zoom is None:
-            self._status.setText("Zoom missing from converted metadata.")
-        elif roi_mode == "grid" and self._calibration_profile_status is not None:
-            self._status.setText(
-                f"Zoom from metadata: {self._loaded_zoom:g}. "
-                f"{self._calibration_profile_status}",
-            )
-        elif roi_mode == "grid":
-            self._status.setText(f"Zoom from metadata: {self._loaded_zoom:g}")
-        else:
-            self._status.setText("Watershed mode uses the converted mean image.")
+        """Clear passive mode status text."""
+        if not self._recording_loaded or _roi_mode_value(self._roi_mode) == "manual":
+            self._clear_status()
 
     def _generate(self) -> None:
         """Call the owner with the current generation options."""
@@ -348,6 +327,10 @@ class RoiGenerationControls(QGroupBox):
             self._set_mode_status()
             return
         self._on_generate(self.options())
+
+    def _clear_status(self) -> None:
+        """Hide passive ROI-generation status text."""
+        self.set_status("")
 
 
 def _metadata_float(metadata: dict[str, object], key: str) -> float | None:
@@ -430,6 +413,54 @@ def _replace_combo_items(
         del blocker
 
 
+def _mode_labels_by_mode(
+    mappings: Iterable[PixelCalibrationProfileMapping],
+) -> dict[int, tuple[str, ...]]:
+    """Return display config names grouped by calibration mode.
+
+    Args:
+        mappings: ScanImage config-to-profile mappings.
+
+    Returns:
+        Mapping from mode number to sorted config display names.
+    """
+    labels: dict[int, set[str]] = {}
+    for mapping in mappings:
+        labels.setdefault(mapping.mode, set()).add(_display_config_name(mapping))
+    return {mode: tuple(sorted(names)) for mode, names in labels.items()}
+
+
+def _mode_label(mode: int, labels_by_mode: dict[int, tuple[str, ...]]) -> str:
+    """Return the calibration mode dropdown label.
+
+    Args:
+        mode: Calibration mode number.
+        labels_by_mode: Display config names keyed by mode.
+
+    Returns:
+        Label including known ScanImage config names when available.
+    """
+    labels = labels_by_mode.get(mode, ())
+    if len(labels) == 0:
+        return str(mode)
+    return f"{mode}: {', '.join(labels)}"
+
+
+def _display_config_name(mapping: PixelCalibrationProfileMapping) -> str:
+    """Return a compact config name for a mode dropdown item.
+
+    Args:
+        mapping: Profile mapping with a ScanImage config name.
+
+    Returns:
+        Config basename without a ``.cfg`` suffix.
+    """
+    name = mapping.config_name.strip().replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+    if name.lower().endswith(".cfg"):
+        return name[:-4]
+    return name
+
+
 def _set_combo_text(combo: QComboBox, text: str) -> bool:
     """Select a combo item by display text.
 
@@ -462,67 +493,6 @@ def _set_combo_data(combo: QComboBox, data: object) -> bool:
         return False
     combo.setCurrentIndex(index)
     return True
-
-
-def _partial_profile_status(profile: PixelCalibrationProfile) -> str | None:
-    """Return status text for profile evidence that cannot select a group.
-
-    Args:
-        profile: Partial calibration profile.
-
-    Returns:
-        User-facing status text, or ``None`` when no profile fields were found.
-    """
-    fields = _profile_fields_text(profile)
-    if fields == "":
-        return None
-    if (
-        profile.rig is not None
-        and profile.mode is not None
-        and profile.scanner is not None
-    ):
-        return (
-            f"Detected calibration profile {fields} "
-            f"({_profile_evidence_text(profile)}), but no measured calibration rows "
-            "match it; choose a measured group manually."
-        )
-    return (
-        f"Detected calibration profile {fields} "
-        f"({_profile_evidence_text(profile)}); choose remaining fields manually."
-    )
-
-
-def _profile_fields_text(profile: PixelCalibrationProfile) -> str:
-    """Format known profile fields for status text.
-
-    Args:
-        profile: Calibration profile.
-
-    Returns:
-        Comma-separated known fields.
-    """
-    fields: list[str] = []
-    if profile.rig is not None:
-        fields.append(f"rig {profile.rig}")
-    if profile.mode is not None:
-        fields.append(f"mode {profile.mode}")
-    if profile.scanner is not None:
-        fields.append(f"scanner {profile.scanner}")
-    return ", ".join(fields)
-
-
-def _profile_evidence_text(profile: PixelCalibrationProfile) -> str:
-    """Format profile evidence for compact UI status.
-
-    Args:
-        profile: Calibration profile.
-
-    Returns:
-        Human-readable evidence summary.
-    """
-    if len(profile.evidence) == 0:
-        return "no metadata evidence"
-    return ", ".join(profile.evidence)
 
 
 def _roi_mode_value(combo: QComboBox) -> RoiGenerationMode:

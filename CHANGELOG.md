@@ -14,6 +14,7 @@
 ### Changes
 
 - Rendered gray, grey, and interleave epochs as neutral gray in the napari trial timeline.
+- Simplified ROIs-tab grid controls so pixel and micron settings show only for the selected unit, extrapolation is enabled by default, calibration modes include known ScanImage config names, and micron-grid status reports only the estimated pixel size.
 
 ### Fixes
 
