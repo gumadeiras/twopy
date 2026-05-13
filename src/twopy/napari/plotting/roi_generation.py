@@ -8,9 +8,8 @@ resolution stay in ``twopy.roi_extraction`` and ``twopy.pixel_calibration``.
 """
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
-from typing import Literal
 
+from qtpy.QtCore import QSignalBlocker
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -23,6 +22,10 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.converted import RecordingData
+from twopy.napari.plotting.roi_generation_options import (
+    RoiGenerationOptions,
+    RoiGenerationUnits,
+)
 from twopy.pixel_calibration import PixelCalibrationRow
 
 __all__ = [
@@ -30,35 +33,6 @@ __all__ = [
     "RoiGenerationOptions",
     "RoiGenerationUnits",
 ]
-
-RoiGenerationUnits = Literal["pixels", "microns"]
-
-
-@dataclass(frozen=True)
-class RoiGenerationOptions:
-    """Requested ROI grid-generation settings from the ROIs tab.
-
-    Args:
-        units: Whether the grid size is specified in pixels or microns.
-        grid_size_pixels: Pixel grid width used when ``units`` is ``pixels``.
-        micron_grid_size: Physical grid width used when ``units`` is
-            ``microns``.
-        rig: Calibration rig key.
-        mode: Calibration scanner mode key.
-        scanner: Calibration scanner family key.
-        zoom: Requested zoom setting.
-        allow_extrapolation: Whether calibration may extrapolate outside the
-            measured zoom range.
-    """
-
-    units: RoiGenerationUnits
-    grid_size_pixels: int
-    micron_grid_size: float
-    rig: str
-    mode: int
-    scanner: str
-    zoom: float
-    allow_extrapolation: bool
 
 
 class RoiGenerationControls(QGroupBox):
@@ -116,6 +90,8 @@ class RoiGenerationControls(QGroupBox):
 
         self._populate_calibration_choices()
         self._units.currentIndexChanged.connect(self._sync_units)
+        self._rig.currentIndexChanged.connect(self._sync_calibration_mode_choices)
+        self._mode.currentIndexChanged.connect(self._sync_calibration_scanner_choices)
         self._create_button.clicked.connect(self._generate)
 
         layout = QFormLayout()
@@ -184,10 +160,41 @@ class RoiGenerationControls(QGroupBox):
         """Populate calibration dropdowns from available rows."""
         for rig in _unique_text(row.rig for row in self._calibrations):
             self._rig.addItem(rig)
-        for mode in sorted({row.mode for row in self._calibrations}):
-            self._mode.addItem(str(mode), mode)
-        for scanner in _unique_text(row.scanner for row in self._calibrations):
-            self._scanner.addItem(scanner)
+        self._sync_calibration_mode_choices()
+
+    def _sync_calibration_mode_choices(self) -> None:
+        """Keep mode choices valid for the selected calibration rig."""
+        rig = self._rig.currentText()
+        modes = tuple(
+            (str(mode), mode)
+            for mode in sorted(
+                {row.mode for row in self._calibrations if row.rig == rig},
+            )
+        )
+        _replace_combo_items(
+            self._mode,
+            modes,
+            previous=self._mode.currentData(),
+        )
+        self._sync_calibration_scanner_choices()
+
+    def _sync_calibration_scanner_choices(self) -> None:
+        """Keep scanner choices valid for the selected rig and mode."""
+        rig = self._rig.currentText()
+        mode = self._mode.currentData()
+        scanners = tuple(
+            (scanner, scanner)
+            for scanner in _unique_text(
+                row.scanner
+                for row in self._calibrations
+                if row.rig == rig and row.mode == mode
+            )
+        )
+        _replace_combo_items(
+            self._scanner,
+            scanners,
+            previous=self._scanner.currentText(),
+        )
 
     def _sync_units(self) -> None:
         """Enable inputs that apply to the selected grid-size unit."""
@@ -236,6 +243,36 @@ def _unique_text(values: Iterable[object]) -> tuple[str, ...]:
         Sorted unique string values.
     """
     return tuple(sorted({str(value) for value in values}))
+
+
+def _replace_combo_items(
+    combo: QComboBox,
+    items: tuple[tuple[str, object], ...],
+    *,
+    previous: object,
+) -> None:
+    """Replace combo items while preserving a still-valid selection.
+
+    Args:
+        combo: Combo box to update.
+        items: ``(label, data)`` pairs to display.
+        previous: Previously selected item data or text.
+
+    Returns:
+        None.
+    """
+    blocker = QSignalBlocker(combo)
+    try:
+        combo.clear()
+        selected_index = 0
+        for index, (label, data) in enumerate(items):
+            combo.addItem(label, data)
+            if data == previous or label == previous:
+                selected_index = index
+        if len(items) > 0:
+            combo.setCurrentIndex(selected_index)
+    finally:
+        del blocker
 
 
 def _units_value(combo: QComboBox) -> RoiGenerationUnits:

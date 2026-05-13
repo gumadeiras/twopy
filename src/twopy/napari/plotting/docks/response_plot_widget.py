@@ -13,10 +13,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
 
-import numpy as np
-import numpy.typing as npt
 from qtpy.QtCore import QTimer
 from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
@@ -40,7 +37,6 @@ from twopy.analysis_cache import (
 from twopy.config import load_config
 from twopy.converted import RecordingData
 from twopy.filenames import EXPORTS_DIRNAME
-from twopy.napari.display import display_labels_from_movie_labels
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import (
@@ -72,7 +68,8 @@ from twopy.napari.plotting.docks.visibility_state import (
 )
 from twopy.napari.plotting.export_controls import ResponseExportState
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
-from twopy.napari.plotting.roi_generation import RoiGenerationOptions
+from twopy.napari.plotting.roi_generation_actions import generate_grid_roi_labels
+from twopy.napari.plotting.roi_generation_options import RoiGenerationOptions
 from twopy.napari.plotting.widgets import (
     clear_layout,
     opaque_colors,
@@ -80,16 +77,15 @@ from twopy.napari.plotting.widgets import (
     resolved_value_bounds,
     roi_colors_from_label_values,
 )
-from twopy.napari.protocols import NapariLayerWithData
-from twopy.napari.roi import remove_roi_label_values_from_layer
+from twopy.napari.roi import (
+    remove_roi_label_values_from_layer,
+    set_roi_label_image_on_layer,
+)
 from twopy.pixel_calibration import (
     DEFAULT_PIXEL_CALIBRATION_PATH,
     PixelCalibrationRow,
     load_pixel_calibrations,
-    resolve_pixel_size_um,
 )
-from twopy.roi import roi_set_to_label_image
-from twopy.roi_extraction import grid_roi_set, grid_roi_set_microns
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 
@@ -126,6 +122,7 @@ class _ResponsePlotWidget(QWidget):
             thread_name_prefix="twopy-analysis-sync",
         )
         self._sync_future: Future[AnalysisSyncResult] | None = None
+        self._pixel_calibrations = _load_pixel_calibrations_for_ui()
         self._sync_timer = QTimer()
         self._sync_timer.setInterval(200)
         self._sync_timer.timeout.connect(self._collect_finished_sync)
@@ -161,7 +158,7 @@ class _ResponsePlotWidget(QWidget):
             on_save_analysis=self.save_analysis_and_rois,
             on_generate_grid_rois=self.generate_grid_rois,
             export_state=self._export_state,
-            pixel_calibrations=_load_pixel_calibrations_for_ui(),
+            pixel_calibrations=self._pixel_calibrations,
         )
         self._options_tabs = options_panel.tabs
         self._recording_summary_label = options_panel.recording_summary_label
@@ -375,37 +372,22 @@ class _ResponsePlotWidget(QWidget):
             return
 
         try:
-            if options.units == "pixels":
-                roi_set = grid_roi_set(
-                    self._recording.movie.shape[1:],
-                    grid_size_pixels=options.grid_size_pixels,
-                )
-                status = f"Created pixel grid ROIs: {options.grid_size_pixels} px."
-            else:
-                pixel_size = resolve_pixel_size_um(
-                    _load_pixel_calibrations_for_ui(),
-                    rig=options.rig,
-                    mode=options.mode,
-                    scanner=options.scanner,
-                    zoom=options.zoom,
-                    allow_extrapolation=options.allow_extrapolation,
-                )
-                roi_set = grid_roi_set_microns(
-                    self._recording.movie.shape[1:],
-                    micron_grid_size=options.micron_grid_size,
-                    pixel_size_um=pixel_size.pixel_size_um,
-                )
-                status = (
-                    f"Created micron grid ROIs using {pixel_size.method} "
-                    f"calibration: {pixel_size.pixel_size_um:.6g} um/px."
-                )
-            self._set_roi_label_image(roi_set_to_label_image(roi_set))
+            generated = generate_grid_roi_labels(
+                self._recording,
+                options,
+                self._pixel_calibrations,
+            )
+            set_roi_label_image_on_layer(
+                self._roi_labels_layer,
+                self._recording,
+                generated.label_image,
+            )
         except ValueError as error:
             self._set_roi_generation_status(str(error))
             return
 
-        self._set_roi_generation_status(status)
-        self._update_status_label.setText(status)
+        self._set_roi_generation_status(generated.status_text)
+        self._update_status_label.setText(generated.status_text)
         self._live_controller.request_update()
 
     def save_analysis_and_rois(self) -> None:
@@ -720,26 +702,6 @@ class _ResponsePlotWidget(QWidget):
         noun = "ROI" if removed_count == 1 else "ROIs"
         self._update_status_label.setText(f"Removed {removed_count} selected {noun}.")
         self._live_controller.request_update()
-
-    def _set_roi_label_image(self, label_image: npt.NDArray[np.int64]) -> None:
-        """Write a movie-coordinate ROI label image into the active layer.
-
-        Args:
-            label_image: Full-frame movie-coordinate labels.
-
-        Returns:
-            None.
-        """
-        if self._recording is None or self._roi_labels_layer is None:
-            return
-        display_labels = display_labels_from_movie_labels(
-            label_image,
-            self._recording.alignment_valid_crop,
-        )
-        cast(NapariLayerWithData, self._roi_labels_layer).data = display_labels
-        refresh = getattr(self._roi_labels_layer, "refresh", None)
-        if callable(refresh):
-            refresh()
 
     def _set_roi_generation_status(self, text: str) -> None:
         """Show ROI-generation status in the ROIs tab.

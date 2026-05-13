@@ -11,6 +11,7 @@ import warnings
 from collections.abc import Callable
 from concurrent.futures import CancelledError
 from dataclasses import dataclass, replace
+from datetime import date
 from os import chdir, environ
 from pathlib import Path
 from threading import Event
@@ -127,6 +128,7 @@ from twopy.napari.plotting.options import (
 from twopy.napari.plotting.panels import epoch_plot_panel
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
+from twopy.napari.plotting.roi_generation import RoiGenerationControls
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     global_time_bounds,
@@ -152,6 +154,7 @@ from twopy.napari.viewer import (
     create_viewer,
     interior_random_frame_indices,
 )
+from twopy.pixel_calibration import PixelCalibrationRow
 from twopy.spatial import SpatialCrop
 
 
@@ -277,6 +280,16 @@ class _FakeQtWindow:
         self.resize_calls.append(
             _FakeResizeCall(docks=docks, sizes=sizes, orientation=orientation)
         )
+
+
+def _combo_texts(combo: QComboBox) -> tuple[str, ...]:
+    """Return all visible combo-box labels."""
+    return tuple(combo.itemText(index) for index in range(combo.count()))
+
+
+def _combo_data(combo: QComboBox) -> tuple[object, ...]:
+    """Return all combo-box item data."""
+    return tuple(combo.itemData(index) for index in range(combo.count()))
 
 
 class _FakeWindow:
@@ -3506,6 +3519,54 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget.load_recording(recording)
 
         self.assertEqual(response_widget._roi_generation_widget._zoom.value(), 2.0)
+
+    def test_roi_generation_controls_filter_calibration_choices(self) -> None:
+        """Confirm calibration dropdowns expose only valid measured groups.
+
+        Inputs: three calibration rows whose rig/mode/scanner combinations do
+        not form a full Cartesian product.
+        Outputs: changing rig and mode narrows dependent dropdown choices.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = RoiGenerationControls(
+            (
+                PixelCalibrationRow(
+                    "day",
+                    2,
+                    "galvo",
+                    1.0,
+                    0.5,
+                    date(2023, 12, 14),
+                ),
+                PixelCalibrationRow(
+                    "day",
+                    3,
+                    "res",
+                    1.0,
+                    0.25,
+                    date(2023, 12, 14),
+                ),
+                PixelCalibrationRow(
+                    "night",
+                    5,
+                    "galvo",
+                    1.0,
+                    0.125,
+                    date(2023, 12, 14),
+                ),
+            ),
+            on_generate=lambda _options: None,
+        )
+
+        self.assertEqual(_combo_texts(widget._rig), ("day", "night"))
+        self.assertEqual(_combo_data(widget._mode), (2, 3))
+        widget._mode.setCurrentIndex(1)
+        self.assertEqual(_combo_texts(widget._scanner), ("res",))
+
+        widget._rig.setCurrentIndex(1)
+
+        self.assertEqual(_combo_data(widget._mode), (5,))
+        self.assertEqual(_combo_texts(widget._scanner), ("galvo",))
 
     def test_roi_tab_remove_selected_handles_empty_roi_selection(self) -> None:
         """Confirm deleting all selected ROIs leaves a stable empty ROI list.

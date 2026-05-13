@@ -30,10 +30,8 @@ from twopy.napari.plotting.normalization_options import NormalizationOptionsWidg
 from twopy.napari.plotting.panels import response_update_tab, scrolling_tab
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
-from twopy.napari.plotting.roi_generation import (
-    RoiGenerationControls,
-    RoiGenerationOptions,
-)
+from twopy.napari.plotting.roi_generation import RoiGenerationControls
+from twopy.napari.plotting.roi_generation_options import RoiGenerationOptions
 from twopy.pixel_calibration import PixelCalibrationRow
 
 

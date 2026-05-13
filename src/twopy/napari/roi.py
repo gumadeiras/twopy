@@ -37,6 +37,7 @@ __all__ = [
     "roi_label_image_from_layer",
     "roi_label_image_from_layer_for_recording",
     "save_napari_label_rois",
+    "set_roi_label_image_on_layer",
     "validate_roi_layer_matches_recording_crop",
 ]
 
@@ -99,6 +100,31 @@ def remove_roi_label_values_from_layer(
     if callable(refresh):
         refresh()
     return removed_count
+
+
+def set_roi_label_image_on_layer(
+    layer: object,
+    recording: RecordingData,
+    label_image: npt.NDArray[np.int64],
+) -> None:
+    """Write a movie-coordinate ROI label image into a napari Labels layer.
+
+    Args:
+        layer: Active napari Labels layer, or a test layer with settable data.
+        recording: Loaded converted recording that defines the displayed crop.
+        label_image: Full-frame movie-coordinate ROI labels.
+
+    Returns:
+        None.
+    """
+    display_labels = display_labels_from_movie_labels(
+        label_image,
+        recording.alignment_valid_crop,
+    )
+    cast(NapariLayerWithData, layer).data = display_labels
+    refresh = getattr(layer, "refresh", None)
+    if callable(refresh):
+        refresh()
 
 
 def roi_label_image_from_layer_for_recording(
