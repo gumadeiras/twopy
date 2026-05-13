@@ -9,6 +9,7 @@
 - Added parity-only psycho5 grid and watershed-label helpers for comparing native twopy ROI discovery against historical MATLAB ROI extraction.
 - Added a tracked dated CSV-backed pixel-size calibration resolver and micron-sized grid ROI helper for calibrated physical ROI templates.
 - Added ROIs-tab ROI mode controls in napari with manual drawing as the default plus generated grid and watershed ROI modes.
+- Added metadata-driven calibration profile preselection for ROIs-tab micron grids, backed by tracked ScanImage config mappings and conservative manual fallback when the profile is incomplete or unmeasured.
 
 ### Changes
 

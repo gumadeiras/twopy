@@ -3521,6 +3521,36 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(response_widget._roi_generation_widget._zoom.value(), 2.0)
 
+    def test_roi_tab_generation_uses_calibration_profile_metadata(self) -> None:
+        """Confirm ROIs tab can preselect an unambiguous calibration group.
+
+        Inputs: converted metadata with a day rig and a mapped ScanImage config.
+        Outputs: rig, mode, and scanner controls are initialized from metadata
+        plus the profile mapping.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording_path = _write_converted_recording(Path(temp_dir))
+            with h5py.File(recording_path, "a") as h5_file:
+                h5_file["metadata"].attrs["configName"] = "128x128_1ms_6.5Hz"
+                h5_file["metadata"].attrs["acq.linesPerFrame"] = 128
+                h5_file["metadata"].attrs["acq.pixelsPerLine"] = 128
+                h5_file["metadata"].attrs["acq.pixelTime"] = 0.0000064
+                h5_file["metadata"].attrs["acq.msPerLine"] = 1.2
+                h5_file["metadata"].attrs["acq.scanAngleMultiplierFast"] = 1
+                h5_file["metadata"].attrs["acq.scanAngleMultiplierSlow"] = 0.57744
+                h5_file["run"].attrs["rig_name"] = "day rig"
+            recording = load_converted_recording(recording_path)
+            response_widget = cast(Any, create_response_plot_widget(None))
+            response_widget.load_recording(recording)
+            roi_widget = response_widget._roi_generation_widget
+            roi_widget._roi_mode.setCurrentIndex(1)
+
+        self.assertEqual(roi_widget._rig.currentText(), "day")
+        self.assertEqual(roi_widget._mode.currentData(), 2)
+        self.assertEqual(roi_widget._scanner.currentText(), "galvo")
+        self.assertIn("Auto-selected calibration", roi_widget._status.text())
+
     def test_roi_tab_generation_defaults_to_manual_mode(self) -> None:
         """Confirm the ROIs tab starts in manual Labels-editing mode.
 

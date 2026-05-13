@@ -156,4 +156,4 @@ roi_set = save_napari_label_rois(label_image, Path("/path/to/rois.h5"))
 
 Pass `roi_set=Path("/path/to/rois.h5")` to reopen existing ROIs.
 
-The napari ROIs tab can also create editable grid ROIs directly. Pixel grids need only a pixel width. Micron grids use the configured pixel calibration registry, auto-fill zoom from converted `acq.zoomFactor` metadata when present, and ask the user to choose the calibration rig, mode, and scanner explicitly.
+The napari ROIs tab can also create editable grid ROIs directly. Pixel grids need only a pixel width. Micron grids use the configured pixel calibration registry, auto-fill zoom from converted `acq.zoomFactor` metadata when present, and auto-select rig/mode/scanner only when converted metadata plus the tracked ScanImage config mapping identify one measured calibration group. If the recording only identifies part of the profile, such as mode/scanner without a clear day/night rig, the tab reports that evidence and leaves the remaining dropdowns manual.

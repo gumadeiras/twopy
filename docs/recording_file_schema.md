@@ -176,7 +176,7 @@ Observed example contents:
   - `motor.absYPosition`: `-4694.3`
   - `motor.absZPosition`: `-8503.4`
 
-Use this as the canonical source for acquisition settings. Values vary with the recording. Physical pixel size is not directly established from the inspected fields; it likely needs scanner/objective calibration.
+Use this as the canonical source for acquisition settings. Values vary with the recording. Physical pixel size is not directly established from the inspected fields; it needs scanner/objective calibration. twopy can use converted fields such as `configName`, `acq.zoomFactor`, scanner labels, timing, and run-level rig names to preselect a pixel-calibration profile when that evidence identifies one measured calibration group; measured pixel size still comes from the tracked calibration registry.
 
 ### `imagingResPd.mat`
 

@@ -29,6 +29,14 @@ from twopy.napari.plotting.roi_generation.options import (
     RoiGenerationUnits,
 )
 from twopy.pixel_calibration import PixelCalibrationRow
+from twopy.pixel_calibration_profiles import (
+    DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
+    PixelCalibrationGroup,
+    PixelCalibrationProfile,
+    load_pixel_calibration_profile_mappings,
+    resolve_pixel_calibration_profile,
+    select_pixel_calibration_group,
+)
 
 __all__ = [
     "RoiGenerationControls",
@@ -69,9 +77,13 @@ class RoiGenerationControls(QGroupBox):
         """
         super().__init__("ROI mode")
         self._calibrations = calibrations
+        self._profile_mappings = load_pixel_calibration_profile_mappings(
+            DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
+        )
         self._on_generate = on_generate
         self._recording_loaded = False
         self._loaded_zoom: float | None = None
+        self._calibration_profile_status: str | None = None
 
         self._roi_mode = QComboBox()
         self._roi_mode.addItem("manual", "manual")
@@ -142,10 +154,12 @@ class RoiGenerationControls(QGroupBox):
         if recording is None:
             self._recording_loaded = False
             self._loaded_zoom = None
+            self._calibration_profile_status = None
             self._status.setText("No recording loaded.")
             self._sync_mode()
             return
         self._recording_loaded = True
+        self._apply_calibration_profile(recording)
         zoom = _metadata_float(recording.acquisition_metadata, "acq.zoomFactor")
         if zoom is None:
             self._loaded_zoom = None
@@ -226,6 +240,47 @@ class RoiGenerationControls(QGroupBox):
             previous=self._scanner.currentText(),
         )
 
+    def _apply_calibration_profile(self, recording: RecordingData) -> None:
+        """Prefill calibration choices when metadata identifies one group.
+
+        Args:
+            recording: Loaded converted recording.
+
+        Returns:
+            None.
+        """
+        profile = resolve_pixel_calibration_profile(
+            recording.acquisition_metadata,
+            recording.run_metadata,
+            mappings=self._profile_mappings,
+        )
+        group = select_pixel_calibration_group(profile, self._calibrations)
+        if group is not None:
+            self._select_calibration_group(group)
+            self._calibration_profile_status = (
+                "Auto-selected calibration: "
+                f"{group.rig} mode {group.mode} {group.scanner} "
+                f"({_profile_evidence_text(profile)})."
+            )
+            return
+
+        self._calibration_profile_status = _partial_profile_status(profile)
+
+    def _select_calibration_group(self, group: PixelCalibrationGroup) -> None:
+        """Select one measured calibration group in dependent dropdowns.
+
+        Args:
+            group: Unique measured calibration group.
+
+        Returns:
+            None.
+        """
+        if _set_combo_text(self._rig, group.rig):
+            self._sync_calibration_mode_choices()
+        if _set_combo_data(self._mode, group.mode):
+            self._sync_calibration_scanner_choices()
+        _set_combo_text(self._scanner, group.scanner)
+
     def _sync_mode(self) -> None:
         """Show and enable controls for the selected ROI mode."""
         roi_mode = _roi_mode_value(self._roi_mode)
@@ -277,6 +332,11 @@ class RoiGenerationControls(QGroupBox):
             self._status.setText("Manual mode: draw or edit Labels ROIs.")
         elif roi_mode == "grid" and self._loaded_zoom is None:
             self._status.setText("Zoom missing from converted metadata.")
+        elif roi_mode == "grid" and self._calibration_profile_status is not None:
+            self._status.setText(
+                f"Zoom from metadata: {self._loaded_zoom:g}. "
+                f"{self._calibration_profile_status}",
+            )
         elif roi_mode == "grid":
             self._status.setText(f"Zoom from metadata: {self._loaded_zoom:g}")
         else:
@@ -368,6 +428,101 @@ def _replace_combo_items(
             combo.setCurrentIndex(selected_index)
     finally:
         del blocker
+
+
+def _set_combo_text(combo: QComboBox, text: str) -> bool:
+    """Select a combo item by display text.
+
+    Args:
+        combo: Combo box to update.
+        text: Desired display text.
+
+    Returns:
+        Whether the selection changed.
+    """
+    index = combo.findText(text)
+    if index < 0 or index == combo.currentIndex():
+        return False
+    combo.setCurrentIndex(index)
+    return True
+
+
+def _set_combo_data(combo: QComboBox, data: object) -> bool:
+    """Select a combo item by user data.
+
+    Args:
+        combo: Combo box to update.
+        data: Desired item data.
+
+    Returns:
+        Whether the selection changed.
+    """
+    index = combo.findData(data)
+    if index < 0 or index == combo.currentIndex():
+        return False
+    combo.setCurrentIndex(index)
+    return True
+
+
+def _partial_profile_status(profile: PixelCalibrationProfile) -> str | None:
+    """Return status text for profile evidence that cannot select a group.
+
+    Args:
+        profile: Partial calibration profile.
+
+    Returns:
+        User-facing status text, or ``None`` when no profile fields were found.
+    """
+    fields = _profile_fields_text(profile)
+    if fields == "":
+        return None
+    if (
+        profile.rig is not None
+        and profile.mode is not None
+        and profile.scanner is not None
+    ):
+        return (
+            f"Detected calibration profile {fields} "
+            f"({_profile_evidence_text(profile)}), but no measured calibration rows "
+            "match it; choose a measured group manually."
+        )
+    return (
+        f"Detected calibration profile {fields} "
+        f"({_profile_evidence_text(profile)}); choose remaining fields manually."
+    )
+
+
+def _profile_fields_text(profile: PixelCalibrationProfile) -> str:
+    """Format known profile fields for status text.
+
+    Args:
+        profile: Calibration profile.
+
+    Returns:
+        Comma-separated known fields.
+    """
+    fields: list[str] = []
+    if profile.rig is not None:
+        fields.append(f"rig {profile.rig}")
+    if profile.mode is not None:
+        fields.append(f"mode {profile.mode}")
+    if profile.scanner is not None:
+        fields.append(f"scanner {profile.scanner}")
+    return ", ".join(fields)
+
+
+def _profile_evidence_text(profile: PixelCalibrationProfile) -> str:
+    """Format profile evidence for compact UI status.
+
+    Args:
+        profile: Calibration profile.
+
+    Returns:
+        Human-readable evidence summary.
+    """
+    if len(profile.evidence) == 0:
+        return "no metadata evidence"
+    return ", ".join(profile.evidence)
 
 
 def _roi_mode_value(combo: QComboBox) -> RoiGenerationMode:
