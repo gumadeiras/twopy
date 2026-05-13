@@ -28,8 +28,10 @@ class PixelCalibrationTest(unittest.TestCase):
         """
         rows = load_pixel_calibrations(DEFAULT_PIXEL_CALIBRATION_PATH)
 
-        self.assertEqual(len(rows), 19)
+        self.assertEqual(len(rows), 20)
         self.assertEqual(rows[0].measured_on, date(2023, 12, 14))
+        self.assertEqual(rows[-1].mode, 6)
+        self.assertEqual(rows[-1].measured_on, date(2023, 12, 14))
 
     def test_loads_csv_registry_rows(self) -> None:
         """Confirm calibration CSV rows become typed values.

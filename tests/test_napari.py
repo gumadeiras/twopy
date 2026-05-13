@@ -3618,13 +3618,13 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(roi_widget._status.text(), "")
         self.assertTrue(roi_widget._status.isHidden())
 
-    def test_roi_tab_generation_keeps_known_rig_for_uncalibrated_mode(self) -> None:
+    def test_roi_tab_generation_selects_odorrig_mode6_calibration(self) -> None:
         """Confirm historical OdorRig recordings preselect night calibration.
 
         Inputs: converted metadata matching an old OdorRig mode-6 galvo
-        recording without measured mode-6 pixel-size rows.
-        Outputs: the rig dropdown selects ``night``, while mode/scanner remain
-        placeholders instead of falling back to a measured mode-2 group.
+        recording with measured mode-6 pixel-size rows.
+        Outputs: the rig dropdown selects ``night`` and mode/scanner select the
+        matching measured calibration group instead of falling back to mode 2.
         """
         _ = QApplication.instance() or QApplication([])
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3644,8 +3644,8 @@ class NapariAdapterTest(unittest.TestCase):
             roi_widget = response_widget._roi_generation_widget
 
         self.assertEqual(roi_widget._rig.currentText(), "night")
-        self.assertIsNone(roi_widget._mode.currentData())
-        self.assertIsNone(roi_widget._scanner.currentData())
+        self.assertEqual(roi_widget._mode.currentData(), 6)
+        self.assertEqual(roi_widget._scanner.currentText(), "galvo")
 
     def test_roi_tab_unresolved_rig_does_not_default_to_first_choice(self) -> None:
         """Confirm incomplete metadata keeps calibration dropdowns unselected.
@@ -3680,9 +3680,9 @@ class NapariAdapterTest(unittest.TestCase):
 
         roi_widget._rig.setCurrentIndex(roi_widget._rig.findText("night"))
 
-        self.assertIsNone(roi_widget._mode.currentData())
-        self.assertIsNone(roi_widget._scanner.currentData())
-        self.assertFalse(roi_widget._create_button.isEnabled())
+        self.assertEqual(roi_widget._mode.currentData(), 6)
+        self.assertEqual(roi_widget._scanner.currentText(), "galvo")
+        self.assertTrue(roi_widget._create_button.isEnabled())
 
     def test_roi_tab_generation_defaults_to_manual_mode(self) -> None:
         """Confirm the ROIs tab starts in manual Labels-editing mode.
