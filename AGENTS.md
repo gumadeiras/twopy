@@ -1,5 +1,9 @@
 # AGENTS.MD
 
+## Git
+
+- Commit with `scripts/committer "<subject>" -- <path>...`; it stages only listed paths. Use `--body` or `--body-file` for commit bodies.
+
 twopy is a two-photon imaging analysis tool.
 
 ## Working Principles
