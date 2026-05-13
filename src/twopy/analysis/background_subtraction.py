@@ -119,7 +119,10 @@ def extract_background_corrected_roi_traces(
 
     Raises:
         ValueError: If masks do not match the movie or a background mask is
-            empty.
+            empty. ROI y-stripe background correction also raises when the
+            selected spatial domain has no unlabeled pixels outside all ROIs,
+            which is expected for dense grid ROIs that cover the whole analysis
+            crop.
 
     The function streams movie chunks from HDF5 and never loads the full movie
     into memory. Each method records enough metadata to audit how the background
