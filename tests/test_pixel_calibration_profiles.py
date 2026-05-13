@@ -33,7 +33,8 @@ class PixelCalibrationProfileTests(unittest.TestCase):
         )
 
         by_config = {mapping.config_name: mapping for mapping in mappings}
-        self.assertEqual(by_config["128x128_1ms_6.5Hz"].mode, 2)
+        self.assertEqual(by_config["128x128_1ms_6.5Hz"].mode, 6)
+        self.assertEqual(by_config["256x128_0.5ms_fastAcquisition"].mode, 2)
         self.assertEqual(by_config["512x512_4ms_zStack"].scanner, "galvo")
         self.assertEqual(
             by_config["256x128_0.5ms_fastAcquisition"].acquisition_fields[
@@ -90,7 +91,7 @@ class PixelCalibrationProfileTests(unittest.TestCase):
         )
 
         self.assertIsNone(profile.rig)
-        self.assertEqual(profile.mode, 2)
+        self.assertEqual(profile.mode, 6)
         self.assertEqual(profile.scanner, "galvo")
         self.assertEqual(profile.source, "metadata+mapping")
 

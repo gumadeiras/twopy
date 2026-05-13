@@ -3596,11 +3596,13 @@ class NapariAdapterTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             recording_path = _write_converted_recording(Path(temp_dir))
             with h5py.File(recording_path, "a") as h5_file:
-                h5_file["metadata"].attrs["configName"] = "128x128_1ms_6.5Hz"
+                h5_file["metadata"].attrs["configName"] = (
+                    "256x128_0.5ms_fastAcquisition"
+                )
                 h5_file["metadata"].attrs["acq.linesPerFrame"] = 128
-                h5_file["metadata"].attrs["acq.pixelsPerLine"] = 128
-                h5_file["metadata"].attrs["acq.pixelTime"] = 0.0000064
-                h5_file["metadata"].attrs["acq.msPerLine"] = 1.2
+                h5_file["metadata"].attrs["acq.pixelsPerLine"] = 256
+                h5_file["metadata"].attrs["acq.pixelTime"] = 0.0000016
+                h5_file["metadata"].attrs["acq.msPerLine"] = 0.6
                 h5_file["metadata"].attrs["acq.scanAngleMultiplierFast"] = 1
                 h5_file["metadata"].attrs["acq.scanAngleMultiplierSlow"] = 0.57744
                 h5_file["run"].attrs["rig_name"] = "day rig"
@@ -3616,13 +3618,13 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(roi_widget._status.text(), "")
         self.assertTrue(roi_widget._status.isHidden())
 
-    def test_roi_tab_generation_maps_odorrig_to_night_calibration(self) -> None:
+    def test_roi_tab_generation_keeps_known_rig_for_uncalibrated_mode(self) -> None:
         """Confirm historical OdorRig recordings preselect night calibration.
 
-        Inputs: converted metadata matching an old OdorRig mode-2 galvo
-        recording.
-        Outputs: the rig dropdown selects ``night`` instead of the first
-        alphabetic item.
+        Inputs: converted metadata matching an old OdorRig mode-6 galvo
+        recording without measured mode-6 pixel-size rows.
+        Outputs: the rig dropdown selects ``night``, while mode/scanner remain
+        placeholders instead of falling back to a measured mode-2 group.
         """
         _ = QApplication.instance() or QApplication([])
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3642,8 +3644,8 @@ class NapariAdapterTest(unittest.TestCase):
             roi_widget = response_widget._roi_generation_widget
 
         self.assertEqual(roi_widget._rig.currentText(), "night")
-        self.assertEqual(roi_widget._mode.currentData(), 2)
-        self.assertEqual(roi_widget._scanner.currentText(), "galvo")
+        self.assertIsNone(roi_widget._mode.currentData())
+        self.assertIsNone(roi_widget._scanner.currentData())
 
     def test_roi_tab_unresolved_rig_does_not_default_to_first_choice(self) -> None:
         """Confirm incomplete metadata keeps calibration dropdowns unselected.
@@ -3678,9 +3680,9 @@ class NapariAdapterTest(unittest.TestCase):
 
         roi_widget._rig.setCurrentIndex(roi_widget._rig.findText("night"))
 
-        self.assertEqual(roi_widget._mode.currentData(), 2)
-        self.assertEqual(roi_widget._scanner.currentText(), "galvo")
-        self.assertTrue(roi_widget._create_button.isEnabled())
+        self.assertIsNone(roi_widget._mode.currentData())
+        self.assertIsNone(roi_widget._scanner.currentData())
+        self.assertFalse(roi_widget._create_button.isEnabled())
 
     def test_roi_tab_generation_defaults_to_manual_mode(self) -> None:
         """Confirm the ROIs tab starts in manual Labels-editing mode.
@@ -3771,7 +3773,7 @@ class NapariAdapterTest(unittest.TestCase):
             ),
             (
                 PixelCalibrationProfileMapping(
-                    "128x128_1ms_6.5Hz",
+                    "256x128_0.5ms_fastAcquisition",
                     2,
                     "galvo",
                     {},
@@ -3788,7 +3790,7 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertEqual(
             _combo_texts(widget._mode),
-            ("Select mode", "2: 128x128_1ms_6.5Hz", "3"),
+            ("Select mode", "2: 256x128_0.5ms_fastAcquisition", "3"),
         )
         self.assertEqual(_combo_data(widget._mode), (None, 2, 3))
         widget._mode.setCurrentIndex(2)

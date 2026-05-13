@@ -287,6 +287,8 @@ class RoiGenerationControls(QGroupBox):
         group = select_pixel_calibration_group(profile, self._calibrations)
         if group is not None:
             self._select_calibration_group(group)
+        else:
+            self._select_available_calibration_profile_fields(profile)
 
     def _select_calibration_group(self, group: PixelCalibrationGroup) -> None:
         """Select one measured calibration group in dependent dropdowns.
@@ -310,6 +312,29 @@ class RoiGenerationControls(QGroupBox):
             self._sync_calibration_mode_choices()
         else:
             self._sync_calibration_mode_choices()
+
+    def _select_available_calibration_profile_fields(
+        self,
+        profile: PixelCalibrationProfile,
+    ) -> None:
+        """Select known profile fields only when the exact option exists.
+
+        Args:
+            profile: Partial metadata-derived calibration profile.
+
+        Returns:
+            None.
+
+        This preserves useful metadata, such as OdorRig -> night, without
+        inventing a measured mode/scanner when calibration rows are absent.
+        """
+        if profile.rig is not None and _set_combo_text(self._rig, profile.rig):
+            self._sync_calibration_mode_choices()
+        if profile.mode is not None and _set_combo_data(self._mode, profile.mode):
+            self._sync_calibration_scanner_choices()
+        if profile.scanner is not None:
+            _set_combo_text(self._scanner, profile.scanner)
+        self._sync_create_button()
 
     def _sync_mode(self) -> None:
         """Show and enable controls for the selected ROI mode."""
