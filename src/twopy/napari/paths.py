@@ -12,14 +12,14 @@ from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 
-from twopy.napari.constants import (
+from twopy.filenames import (
     ALIGNED_MOVIE_FILENAME,
-    DEFAULT_PATH_TEXT,
-    DEFAULT_ROI_FILENAME,
     RECORDING_DATA_FILENAME,
+    ROI_FILENAME,
 )
 
 __all__ = [
+    "DEFAULT_PATH_TEXT",
     "NapariRecordingPaths",
     "PathInput",
     "is_default_path",
@@ -29,6 +29,7 @@ __all__ = [
 ]
 
 PathInput = str | PathLike[str]
+DEFAULT_PATH_TEXT = "default"
 
 
 @dataclass(frozen=True)
@@ -65,12 +66,12 @@ def resolve_recording_paths(path: PathInput) -> NapariRecordingPaths:
     recording_path = _resolve_recording_data_path(selected)
     recording_dir = recording_path.parent
     movie_path = _optional_file(recording_dir / ALIGNED_MOVIE_FILENAME)
-    roi_path = _optional_file(recording_dir / DEFAULT_ROI_FILENAME)
+    roi_path = _optional_file(recording_dir / ROI_FILENAME)
     return NapariRecordingPaths(
         recording_data_path=recording_path,
         movie_path=movie_path,
         roi_file_to_load=roi_path,
-        roi_save_file=roi_path or recording_dir / DEFAULT_ROI_FILENAME,
+        roi_save_file=roi_path or recording_dir / ROI_FILENAME,
     )
 
 

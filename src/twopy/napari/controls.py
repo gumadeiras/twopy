@@ -25,10 +25,10 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.converted import RecordingData
-from twopy.napari.constants import DEFAULT_PATH_TEXT
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.paths import (
+    DEFAULT_PATH_TEXT,
     PathInput,
     is_default_path,
 )

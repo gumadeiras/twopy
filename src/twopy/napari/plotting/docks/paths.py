@@ -13,10 +13,12 @@ from pathlib import Path
 from qtpy.QtWidgets import QLabel
 
 from twopy.converted import RecordingData
+from twopy.filenames import ANALYSIS_OUTPUT_FILENAME, ROI_FILENAME
 from twopy.napari.display_paths import (
     format_twopy_h5_output,
     recording_display_summary,
 )
+from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import default_analysis_output_path
 
 
@@ -37,7 +39,7 @@ def resolved_analysis_path(
         return analysis_path
     if recording is not None:
         return default_analysis_output_path(recording)
-    return Path("analysis_outputs.h5")
+    return Path(ANALYSIS_OUTPUT_FILENAME)
 
 
 def resolved_roi_save_file(
@@ -56,8 +58,8 @@ def resolved_roi_save_file(
     if roi_save_file is not None:
         return roi_save_file
     if recording is not None:
-        return recording.path.parent / "rois.h5"
-    return Path("rois.h5")
+        return recording.path.parent / ROI_FILENAME
+    return Path(ROI_FILENAME)
 
 
 def refresh_update_path_labels(
@@ -84,8 +86,8 @@ def refresh_update_path_labels(
     """
     if recording is None:
         recording_summary_label.setText("No recording loaded.")
-        analysis_path_label.setText("Analysis output: default")
-        roi_save_path_label.setText("ROI output: default")
+        analysis_path_label.setText(f"Analysis output: {DEFAULT_PATH_TEXT}")
+        roi_save_path_label.setText(f"ROI output: {DEFAULT_PATH_TEXT}")
         return
 
     summary = recording_display_summary(recording)

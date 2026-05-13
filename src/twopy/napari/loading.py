@@ -21,7 +21,7 @@ from twopy.config import (
     resolve_analysis_work_dir,
 )
 from twopy.conversion import convert_recording_to_twopy
-from twopy.napari.constants import ALIGNED_MOVIE_FILENAME, RECORDING_DATA_FILENAME
+from twopy.filenames import ALIGNED_MOVIE_FILENAME, RECORDING_DATA_FILENAME
 from twopy.napari.paths import NapariRecordingPaths, PathInput, is_default_path
 from twopy.napari.paths import resolve_recording_paths as resolve_converted_paths
 from twopy.session import discover_session_files

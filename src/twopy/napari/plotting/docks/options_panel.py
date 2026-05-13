@@ -20,6 +20,7 @@ from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
 )
 from twopy.analysis.response_window_options import ResponseWindowOptions
+from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
 from twopy.napari.plotting.export_controls import (
     ResponseExportState,
@@ -113,9 +114,9 @@ def create_response_options_panel(
 
     recording_summary_label = QLabel("No recording loaded.")
     recording_summary_label.setWordWrap(True)
-    analysis_path_label = QLabel("Analysis output: default")
+    analysis_path_label = QLabel(f"Analysis output: {DEFAULT_PATH_TEXT}")
     analysis_path_label.setWordWrap(True)
-    roi_save_path_label = QLabel("ROI output: default")
+    roi_save_path_label = QLabel(f"ROI output: {DEFAULT_PATH_TEXT}")
     roi_save_path_label.setWordWrap(True)
     update_status_label = QLabel("")
     update_status_label.setWordWrap(True)

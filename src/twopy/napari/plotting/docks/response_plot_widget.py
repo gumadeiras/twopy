@@ -35,7 +35,9 @@ from twopy.analysis_cache import (
     start_analysis_sync,
 )
 from twopy.converted import RecordingData
+from twopy.filenames import EXPORTS_DIRNAME
 from twopy.napari.interactive import LiveResponseController
+from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import (
     ResponsePlotData,
     filter_response_plot_data_rois,
@@ -276,8 +278,8 @@ class _ResponsePlotWidget(QWidget):
         self._response_window_options_widget.set_max_window_seconds(None)
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
-        self._analysis_path_label.setText("Analysis output: default")
-        self._roi_save_path_label.setText("ROI output: default")
+        self._analysis_path_label.setText(f"Analysis output: {DEFAULT_PATH_TEXT}")
+        self._roi_save_path_label.setText(f"ROI output: {DEFAULT_PATH_TEXT}")
         self._update_status_label.setText("")
         self._reset_empty_option_tabs()
         self._set_status("No recording loaded.")
@@ -720,8 +722,8 @@ class _ResponsePlotWidget(QWidget):
 
     def _export_output_dir(self) -> Path:
         if self._recording is None:
-            return Path("exports")
-        return self._recording.path.parent / "exports"
+            return Path(EXPORTS_DIRNAME)
+        return self._recording.path.parent / EXPORTS_DIRNAME
 
     def _refresh_update_path_labels(self) -> None:
         refresh_update_path_labels(
