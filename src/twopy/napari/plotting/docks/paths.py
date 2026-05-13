@@ -2,7 +2,7 @@
 
 Inputs: optional recording state, user-selected analysis output, and ROI output
 paths.
-Outputs: concrete paths plus compact Update-tab label text.
+Outputs: concrete paths plus compact Metadata-tab label text.
 
 These helpers keep path fallback policy in one place for preview, save, and
 status display code.
@@ -71,7 +71,7 @@ def refresh_update_path_labels(
     analysis_path_label: QLabel,
     roi_save_path_label: QLabel,
 ) -> None:
-    """Refresh compact recording and output labels in the Update tab.
+    """Refresh compact recording and output labels in the Metadata tab.
 
     Args:
         recording: Optional loaded converted recording.

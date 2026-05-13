@@ -21,6 +21,7 @@ def create_twopy_sidebar_widget(
     *,
     load_widget: object,
     loaded_recordings_widget: object,
+    response_load_button: object | None,
     response_options_widget: object | None,
 ) -> QTabWidget:
     """Create the single tabbed right-side twopy widget.
@@ -28,6 +29,7 @@ def create_twopy_sidebar_widget(
     Args:
         load_widget: Magicgui recording-loader widget.
         loaded_recordings_widget: Qt widget listing loaded recordings.
+        response_load_button: Optional response action button for the Load tab.
         response_options_widget: Optional Qt tab widget for response controls.
 
     Returns:
@@ -44,6 +46,7 @@ def create_twopy_sidebar_widget(
         _load_tab(
             load_widget=load_widget,
             loaded_recordings_widget=loaded_recordings_widget,
+            response_load_button=response_load_button,
         ),
         "Load",
     )
@@ -55,12 +58,14 @@ def _load_tab(
     *,
     load_widget: object,
     loaded_recordings_widget: object,
+    response_load_button: object | None,
 ) -> QScrollArea:
     """Create the scrollable Load tab.
 
     Args:
         load_widget: Magicgui recording-loader widget.
         loaded_recordings_widget: Qt widget listing loaded recordings.
+        response_load_button: Optional response action button for the Load tab.
 
     Returns:
         Scroll area containing recording loading and loaded-recording controls.
@@ -70,6 +75,8 @@ def _load_tab(
     layout.setContentsMargins(8, 8, 8, 8)
     layout.setSpacing(12)
     layout.addWidget(_qt_widget(load_widget))
+    if response_load_button is not None:
+        layout.addWidget(_qt_widget(response_load_button))
     layout.addWidget(_qt_widget(loaded_recordings_widget))
     layout.addStretch(1)
     content.setLayout(layout)

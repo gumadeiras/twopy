@@ -10,7 +10,6 @@ responses, or export figures.
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QLabel,
-    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -20,7 +19,7 @@ from twopy.napari.plotting.widgets import EpochPlotWidget
 
 __all__ = [
     "epoch_plot_panel",
-    "response_update_tab",
+    "response_metadata_tab",
     "scrolling_tab",
 ]
 
@@ -45,23 +44,16 @@ def epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
     return panel
 
 
-def response_update_tab(
+def response_metadata_tab(
     *,
-    reload_saved_button: QPushButton,
-    recompute_preview_button: QPushButton,
-    save_analysis_button: QPushButton,
     recording_summary_label: QLabel,
     analysis_output_label: QLabel,
     roi_output_label: QLabel,
     status_label: QLabel,
 ) -> QWidget:
-    """Create the tab that owns response recompute/reload actions.
+    """Create the tab that shows selected-recording metadata.
 
     Args:
-        reload_saved_button: Button that reloads persisted response outputs.
-        recompute_preview_button: Button that computes responses from current
-            Labels ROIs.
-        save_analysis_button: Button that saves ROIs and persisted analysis.
         recording_summary_label: Label showing root, genotype, stimulus, and
             recording time for the selected recording.
         analysis_output_label: Label showing the analysis output path.
@@ -69,12 +61,9 @@ def response_update_tab(
         status_label: Label showing the latest save or reload status.
 
     Returns:
-        Scrollable Qt widget for the Update tab.
+        Scrollable Qt widget for the Metadata tab.
     """
     layout = QVBoxLayout()
-    layout.addWidget(save_analysis_button)
-    layout.addWidget(recompute_preview_button)
-    layout.addWidget(reload_saved_button)
     layout.addWidget(recording_summary_label)
     layout.addWidget(analysis_output_label)
     layout.addWidget(roi_output_label)

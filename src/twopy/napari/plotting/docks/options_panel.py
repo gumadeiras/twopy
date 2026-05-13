@@ -27,7 +27,7 @@ from twopy.napari.plotting.export_controls import (
     create_response_export_tab,
 )
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
-from twopy.napari.plotting.panels import response_update_tab, scrolling_tab
+from twopy.napari.plotting.panels import response_metadata_tab, scrolling_tab
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
 from twopy.napari.plotting.roi_generation import (
@@ -44,10 +44,12 @@ class ResponseOptionsPanel:
 
     Args:
         tabs: Root tab widget docked as the response options panel.
-        recording_summary_label: Update-tab label showing the loaded recording.
-        analysis_path_label: Update-tab label showing the analysis output path.
-        roi_save_path_label: Update-tab label showing the ROI output path.
-        update_status_label: Update-tab label showing save or processing status.
+        recording_summary_label: Metadata-tab label showing the loaded recording.
+        analysis_path_label: Metadata-tab label showing the analysis output path.
+        roi_save_path_label: Metadata-tab label showing the ROI output path.
+        update_status_label: Metadata-tab label showing save or processing status.
+        reload_saved_button: Load-tab button that reloads persisted response
+            outputs.
         plot_options_layout: Plot-tab layout containing static and dynamic
             processing controls.
         plot_display_options_layout: Plot-tab layout rebuilt when axis defaults
@@ -69,6 +71,7 @@ class ResponseOptionsPanel:
     analysis_path_label: QLabel
     roi_save_path_label: QLabel
     update_status_label: QLabel
+    reload_saved_button: QPushButton
     plot_options_layout: QVBoxLayout
     plot_display_options_layout: QVBoxLayout
     roi_options_layout: QVBoxLayout
@@ -90,7 +93,6 @@ def create_response_options_panel(
     on_delta_f_over_f_change: Callable[[DeltaFOverFOptions], None],
     on_normalization_change: Callable[[NormalizationOptions], None],
     on_reload_saved: Callable[[], None],
-    on_recompute_preview: Callable[[], None],
     on_save_analysis: Callable[[], None],
     on_create_generated_rois: Callable[[RoiGenerationOptions], None],
     export_state: Callable[[], ResponseExportState],
@@ -107,8 +109,7 @@ def create_response_options_panel(
         on_response_window_change: Callback for response-window control edits.
         on_delta_f_over_f_change: Callback for dF/F control edits.
         on_normalization_change: Callback for normalization control edits.
-        on_reload_saved: Callback for the reload button.
-        on_recompute_preview: Callback for the preview recompute button.
+        on_reload_saved: Callback for the Load-tab reload button.
         on_save_analysis: Callback for the Save ROIs + analysis button.
         on_create_generated_rois: Callback for generated-ROI actions.
         export_state: Callback that supplies current export state.
@@ -122,8 +123,6 @@ def create_response_options_panel(
     tabs = QTabWidget()
     reload_saved_button = QPushButton("Reload saved analysis")
     reload_saved_button.clicked.connect(on_reload_saved)
-    recompute_preview_button = QPushButton("Recompute preview now")
-    recompute_preview_button.clicked.connect(on_recompute_preview)
     save_analysis_button = QPushButton("Save ROIs + analysis")
     save_analysis_button.clicked.connect(on_save_analysis)
 
@@ -177,21 +176,24 @@ def create_response_options_panel(
     roi_tab_layout.addLayout(roi_options_layout)
     epoch_options_layout = QVBoxLayout()
     tabs.addTab(
-        response_update_tab(
-            reload_saved_button=reload_saved_button,
-            recompute_preview_button=recompute_preview_button,
-            save_analysis_button=save_analysis_button,
+        response_metadata_tab(
             recording_summary_label=recording_summary_label,
             analysis_output_label=analysis_path_label,
             roi_output_label=roi_save_path_label,
             status_label=update_status_label,
         ),
-        "Update",
+        "Metadata",
     )
     tabs.addTab(scrolling_tab(plot_options_layout), "Plot")
     tabs.addTab(scrolling_tab(roi_tab_layout), "ROIs")
     tabs.addTab(scrolling_tab(epoch_options_layout), "Epochs")
-    tabs.addTab(create_response_export_tab(export_state), "Export")
+    tabs.addTab(
+        create_response_export_tab(
+            export_state,
+            save_analysis_button=save_analysis_button,
+        ),
+        "Export",
+    )
 
     return ResponseOptionsPanel(
         tabs=tabs,
@@ -199,6 +201,7 @@ def create_response_options_panel(
         analysis_path_label=analysis_path_label,
         roi_save_path_label=roi_save_path_label,
         update_status_label=update_status_label,
+        reload_saved_button=reload_saved_button,
         plot_options_layout=plot_options_layout,
         plot_display_options_layout=plot_display_options_layout,
         roi_options_layout=roi_options_layout,

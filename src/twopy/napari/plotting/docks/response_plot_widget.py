@@ -164,7 +164,6 @@ class _ResponsePlotWidget(QWidget):
             on_delta_f_over_f_change=self._set_delta_f_over_f_options,
             on_normalization_change=self._set_normalization_options,
             on_reload_saved=self.reload,
-            on_recompute_preview=self.update_from_current_rois,
             on_save_analysis=self.save_analysis_and_rois,
             on_create_generated_rois=self.create_generated_rois,
             export_state=self._export_state,
@@ -176,6 +175,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path_label = options_panel.analysis_path_label
         self._roi_save_path_label = options_panel.roi_save_path_label
         self._update_status_label = options_panel.update_status_label
+        self._reload_saved_button = options_panel.reload_saved_button
         self._plot_options_layout = options_panel.plot_options_layout
         self._plot_display_options_layout = options_panel.plot_display_options_layout
         self._roi_options_layout = options_panel.roi_options_layout
@@ -201,6 +201,17 @@ class _ResponsePlotWidget(QWidget):
             Tabbed Qt widget with response plot controls.
         """
         return self._options_tabs
+
+    def load_tab_button(self) -> object:
+        """Return the response action button that belongs on the Load tab.
+
+        Args:
+            None.
+
+        Returns:
+            Qt button that reloads persisted analysis outputs.
+        """
+        return self._reload_saved_button
 
     def shutdown(self) -> None:
         """Release worker, layer, and plot state owned by this widget.

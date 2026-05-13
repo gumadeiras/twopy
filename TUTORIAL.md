@@ -46,10 +46,8 @@ You can pass a source recording folder, a converted folder, or a direct `recordi
 
 In the right-side `twopy` panel:
 
-1. Set `recording folder or file` to a source recording folder, converted folder, or `recording_data.h5`.
-2. Leave `ROI file to load` as `default` unless you want to load a specific `rois.h5`.
-3. Adjust `movie frames` if you only want a short preview.
-4. Keep `load movie` checked when you want the aligned movie layer.
+1. Click `Search Database` to find a recording from `config.yml`, or click `Load manually` to choose a source recording folder, converted folder, or `recording_data.h5`.
+2. Use `Reload saved analysis` when you want the current recording's saved `analysis_outputs.h5`.
 
 After loading, twopy adds `mean image`, optional `aligned movie`, and editable `rois` layers.
 
@@ -68,7 +66,7 @@ Open the right-side `twopy response options` dock and choose the `Plot` tab. In 
 1. Set `Method` to `savgol`.
 2. Set `Window` to an odd frame count, such as `7`.
 3. Set `Order` to a smaller polynomial order, such as `2`.
-4. Click `Recompute preview now` on the `Update` tab if you want an immediate plot refresh from the current ROIs.
+4. Live response updates refresh the plots after committed ROI edits.
 
 ![Savitzky-Golay smoothing settings](docs/assets/tutorial/03-savgol-smoothing-settings.png)
 
@@ -80,7 +78,7 @@ If the top `twopy responses` dock is collapsed, click the `...` handle centered 
 
 ## Save Analysis And ROIs
 
-Open the `Update` tab and click `Save analysis + ROIs`.
+Open the `Export` tab and click `Save ROIs + analysis`.
 
 twopy writes outputs beside the converted recording:
 

@@ -14,9 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
 from magicgui.widgets import FileEdit
-from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
-    QFormLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
@@ -183,6 +181,7 @@ def add_twopy_magicgui_controls(
     sidebar_widget = create_twopy_sidebar_widget(
         load_widget=load_widget,
         loaded_recordings_widget=loaded_recordings_widget,
+        response_load_button=_response_load_tab_button(response_plot_widget),
         response_options_widget=response_options_widget,
     )
     sidebar_dock_widget = viewer.window.add_dock_widget(
@@ -258,8 +257,8 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
 
     load_recording.recording_folder.label = "Recording"
     load_recording.roi_file_to_load.label = "ROI file"
-    cast(FileEdit, load_recording.recording_folder).choose_btn.text = "Browse"
-    cast(FileEdit, load_recording.roi_file_to_load).choose_btn.text = "Browse"
+    cast(FileEdit, load_recording.recording_folder).choose_btn.text = "Load manually"
+    cast(FileEdit, load_recording.roi_file_to_load).choose_btn.text = "Load ROI"
     _configure_recording_folder_picker(
         cast(FileEdit, load_recording.recording_folder),
         state,
@@ -316,6 +315,27 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     )
 
 
+def _response_load_tab_button(response_plot_widget: object | None) -> object | None:
+    """Return the response action button that belongs on the Load tab.
+
+    Args:
+        response_plot_widget: Optional response plot widget.
+
+    Returns:
+        Qt button exposed by the response plot widget, or ``None``.
+    """
+    if response_plot_widget is None:
+        return None
+    load_tab_button = getattr(response_plot_widget, "load_tab_button", None)
+    if load_tab_button is None:
+        return None
+    button = load_tab_button()
+    if isinstance(button, QWidget):
+        return button
+    msg = f"Response load action expected a QWidget, got {type(button).__name__}."
+    raise TypeError(msg)
+
+
 class LoadRecordingPanel(QWidget):
     """Compact Qt panel that owns the recording-load controls.
 
@@ -360,35 +380,36 @@ class LoadRecordingPanel(QWidget):
         layout.addWidget(title)
 
         recording_gui = cast(_LoadRecordingGui, load_recording)
-        form = QFormLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(8)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("Recording", _control_native(recording_gui.recording_folder))
-        form.addRow("ROI file", _control_native(recording_gui.roi_file_to_load))
-        layout.addLayout(form)
         search_button = QPushButton("Search Database")
         search_button.clicked.connect(on_search_database)
         layout.addWidget(search_button)
+        load_manually_button = QPushButton("Load manually")
+        load_manually_button.clicked.connect(
+            lambda _checked=False: _click_file_edit_choose_button(
+                cast(FileEdit, recording_gui.recording_folder),
+            ),
+        )
+        layout.addWidget(load_manually_button)
         self.setLayout(layout)
 
 
-def _control_native(widget: object) -> QWidget:
-    """Return the Qt widget wrapped by a magicgui control.
+def _click_file_edit_choose_button(file_edit: FileEdit) -> None:
+    """Open a magicgui file edit through its wrapped Qt choose button.
 
     Args:
-        widget: Magicgui widget or Qt widget.
+        file_edit: Magicgui file chooser widget.
 
     Returns:
-        QWidget that can be inserted into the compact Load form.
+        None.
     """
-    native_widget = getattr(widget, "native", widget)
-    if not isinstance(native_widget, QWidget):
-        msg = f"Load control expected a QWidget, got {type(native_widget).__name__}."
+    native_button = getattr(file_edit.choose_btn, "native", file_edit.choose_btn)
+    if not isinstance(native_button, QPushButton):
+        msg = (
+            "Load manually expected the FileEdit choose button to wrap a "
+            f"QPushButton, got {type(native_button).__name__}."
+        )
         raise TypeError(msg)
-    return native_widget
+    native_button.click()
 
 
 def _load_recording_path(

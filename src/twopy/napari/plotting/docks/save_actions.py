@@ -39,7 +39,7 @@ class SaveAnalysisResult:
     Args:
         roi_output_path: HDF5 path where ROIs were saved.
         analysis_output_path: HDF5 path where response analysis was saved.
-        status_text: User-facing Update-tab status text.
+        status_text: User-facing Metadata-tab status text.
         sync_plan: Optional background publish-sync plan.
 
     Returns:
@@ -74,7 +74,7 @@ def save_current_roi_analysis(
         response_processing_options: Plot-tab processing settings to apply.
 
     Returns:
-        Saved output paths and status text for the Update tab.
+        Saved output paths and status text for the Metadata tab.
 
     Raises:
         ValueError: If recording, ROI layer, ROI labels, or analysis settings are

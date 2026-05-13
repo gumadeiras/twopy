@@ -17,6 +17,7 @@
 - Rendered gray, grey, and interleave epochs as neutral gray in the napari trial timeline.
 - Simplified ROIs-tab grid controls so pixel and micron settings show only for the selected unit, extrapolation is enabled by default, calibration modes include known ScanImage config names, and micron-grid status reports only the estimated pixel size.
 - Made response-watershed ROI masks split disconnected score islands, fill component holes by default, and expose an opt-in closing radius for tiny same-basin gaps.
+- Renamed the napari Update tab to Metadata, made Search Database and Load manually the first Load-tab actions, moved Reload saved analysis to Load, moved Save ROIs + analysis to Export, and removed the Recompute preview button.
 
 ### Fixes
 

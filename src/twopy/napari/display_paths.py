@@ -29,7 +29,7 @@ _TIME_PATTERN = re.compile(r"^\d{2}_\d{2}_\d{2}$")
 
 @dataclass(frozen=True)
 class RecordingDisplaySummary:
-    """Short recording identity shown in the response Update tab.
+    """Short recording identity shown in the response Metadata tab.
 
     Inputs: one converted recording path.
     Outputs: root data path, genotype folder, stimulus folder, and recording

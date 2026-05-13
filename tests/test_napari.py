@@ -752,14 +752,21 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(viewer.window.dock_widgets[1].area, "right")
             load_panel = cast(QWidget, opened.load_widget)
             load_labels = {label.text() for label in load_panel.findChildren(QLabel)}
-            self.assertIn("Recording", load_labels)
-            self.assertIn("ROI file", load_labels)
+            self.assertNotIn("Recording", load_labels)
+            self.assertNotIn("ROI file", load_labels)
             browse_buttons = [
                 button
                 for button in load_panel.findChildren(QPushButton)
                 if button.text() == "Browse"
             ]
-            self.assertEqual(len(browse_buttons), 2)
+            self.assertEqual(len(browse_buttons), 0)
+            load_buttons = [
+                button.text() for button in load_panel.findChildren(QPushButton)
+            ]
+            self.assertEqual(
+                load_buttons,
+                ["Search Database", "Load manually"],
+            )
             sidebar_tabs = cast(QTabWidget, opened.twopy_sidebar_widget)
             self.assertIs(sidebar_tabs, opened.response_options_widget)
             self.assertEqual(
@@ -773,16 +780,17 @@ class NapariAdapterTest(unittest.TestCase):
                     options_widget.tabText(index)
                     for index in range(options_widget.count())
                 ),
-                ("Load", "Update", "Plot", "ROIs", "Epochs", "Export"),
+                ("Load", "Metadata", "Plot", "ROIs", "Epochs", "Export"),
             )
             self.assertIsInstance(options_widget.widget(1), QScrollArea)
-            update_buttons = {
+            options_buttons = {
                 button.text() for button in options_widget.findChildren(QPushButton)
             }
-            self.assertIn("Search Database", update_buttons)
-            self.assertIn("Save ROIs + analysis", update_buttons)
-            self.assertIn("Recompute preview now", update_buttons)
-            self.assertIn("Reload saved analysis", update_buttons)
+            self.assertIn("Search Database", options_buttons)
+            self.assertIn("Load manually", options_buttons)
+            self.assertIn("Save ROIs + analysis", options_buttons)
+            self.assertNotIn("Recompute preview now", options_buttons)
+            self.assertIn("Reload saved analysis", options_buttons)
             group_titles = {
                 group.title() for group in options_widget.findChildren(QGroupBox)
             }
@@ -1267,7 +1275,7 @@ class NapariAdapterTest(unittest.TestCase):
             )
 
     def test_save_analysis_button_writes_roi_and_analysis_outputs(self) -> None:
-        """Confirm the Update tab can persist current ROI analysis.
+        """Confirm the Export tab can persist current ROI analysis.
 
         Inputs: edited Labels layer and a patched analysis workflow.
         Outputs: ROI HDF5 file written beside the recording without replacing
@@ -4950,7 +4958,10 @@ class NapariAdapterTest(unittest.TestCase):
             original_cwd = Path.cwd()
             try:
                 chdir(root)
-                tab = create_response_export_tab(lambda: state)
+                tab = create_response_export_tab(
+                    lambda: state,
+                    save_analysis_button=QPushButton("Save ROIs + analysis"),
+                )
                 buttons = {
                     button.text(): button for button in tab.findChildren(QPushButton)
                 }

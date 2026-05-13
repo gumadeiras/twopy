@@ -6,7 +6,7 @@ Use the `twopy` command to open napari with the twopy docks.
 twopy
 ```
 
-Choose a source recording folder or `recording_data.h5` from the `twopy` dock, or use Search Database on the Load tab to find recordings from `config.yml`. With the default `analysis_caching: true`, twopy converts or copies converted files into the local `analysis_cache_dir` first, then all plotting and ROI analysis reads from that local cache. If no recording is selected, napari still opens.
+Use Search Database on the Load tab to find recordings from `config.yml`, or click Load manually to choose a source recording folder or `recording_data.h5`. With the default `analysis_caching: true`, twopy converts or copies converted files into the local `analysis_cache_dir` first, then all plotting and ROI analysis reads from that local cache. If no recording is selected, napari still opens.
 
 Open a recording directly:
 
@@ -22,7 +22,7 @@ twopy /path/to/recording_data.h5
 3. Update response plots from the current Labels layer.
 4. Click Save ROIs + analysis when the plots look right.
 
-By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Update, Plot, ROIs, Epochs, and Export. Recording selections from the Load tab always open the full movie. The loaded-recordings list can unload only the selected recording or unload all loaded recordings at once. Search Database opens a separate side-by-side window with user, cell type, sensor, stimulus, and date filters on the left and results on the right. Results browse as user, cell type, sensor, stimulus, date, then source-folder experiment time; loading any hierarchy node loads all recordings under that node, closes the search window, and reports failed paths in a separate scrollable error dialog when needed. Search setup or database-query failures appear in a separate error dialog instead of looking like empty results.
+By default the launcher opens the mean image, full movie, editable `rois` Labels layer, a compact top response-plot dock, and one tabbed right-side `twopy` dock. The first tab is Load, followed by Metadata, Plot, ROIs, Epochs, and Export. Recording selections from the Load tab always open the full movie, and the Load tab also exposes Reload saved analysis. The loaded-recordings list can unload only the selected recording or unload all loaded recordings at once. Search Database opens a separate side-by-side window with user, cell type, sensor, stimulus, and date filters on the left and results on the right. Results browse as user, cell type, sensor, stimulus, date, then source-folder experiment time; loading any hierarchy node loads all recordings under that node, closes the search window, and reports failed paths in a separate scrollable error dialog when needed. Search setup or database-query failures appear in a separate error dialog instead of looking like empty results.
 
 When photodiode-aligned stimulus epochs are available, twopy adds a compact bottom trial timeline beside the movie frame workflow. Blocks show epoch windows across the full recording, gray/grey/interleave epochs render as neutral gray, a thin cursor follows the current movie frame, clicking or dragging the rail seeks the movie stack, and the viewer HUD reports the current trial and epoch without adding another large panel.
 
@@ -48,7 +48,7 @@ Save ROIs + analysis writes `rois.h5` beside the current local recording plus:
 
 Export actions write recording views, ROI views, overlays, per-epoch response plots, and paired ROI-overlay/response figures under `exports/`.
 
-When `analysis_caching: true`, Save ROIs + analysis saves locally first and then syncs the changed ROI, analysis HDF5, and response-summary CSV files to the configured `analysis_output` destination in a background worker. The Update tab reports local save, sync success, or sync failure.
+When `analysis_caching: true`, Save ROIs + analysis saves locally first and then syncs the changed ROI, analysis HDF5, and response-summary CSV files to the configured `analysis_output` destination in a background worker. The Metadata tab reports local save, sync success, or sync failure.
 
 ## Architecture Note
 
