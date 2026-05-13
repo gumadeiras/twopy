@@ -171,6 +171,7 @@ class LiveResponseAnalysisCache:
             delta_f_over_f_options=dff_options,
             response_window_options=window_options,
             response_processing_options=computation.response_processing_options,
+            correlation_scores=computation.correlation_scores,
         )
 
     def _changed_trace_indices(

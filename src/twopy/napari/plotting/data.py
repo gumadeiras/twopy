@@ -21,6 +21,7 @@ from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_wi
 from twopy.analysis.persistence import load_analysis_outputs
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
+    RoiCorrelationScores,
     mask_grouped_roi_responses_by_included_rois,
 )
 from twopy.analysis.response_window_options import (
@@ -88,6 +89,7 @@ class ResponsePlotData:
     delta_f_over_f_options: DeltaFOverFOptions | None = None
     response_window_options: ResponseWindowOptions | None = None
     response_processing_options: ResponseProcessingOptions | None = None
+    correlation_scores: RoiCorrelationScores | None = None
 
 
 def response_plot_data_from_grouped(
@@ -97,6 +99,7 @@ def response_plot_data_from_grouped(
     delta_f_over_f_options: DeltaFOverFOptions | None = None,
     response_window_options: ResponseWindowOptions | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
+    correlation_scores: RoiCorrelationScores | None = None,
 ) -> ResponsePlotData:
     """Summarize grouped responses into mean and SEM traces for plotting.
 
@@ -109,6 +112,8 @@ def response_plot_data_from_grouped(
             produce the grouped responses.
         response_processing_options: Optional processing settings used to
             produce the grouped responses.
+        correlation_scores: Optional ROI-level correlation QC scores used to
+            hide excluded ROIs in the napari ROI controls.
 
     Returns:
         Plot-ready data with one item per stimulus epoch type.
@@ -142,6 +147,7 @@ def response_plot_data_from_grouped(
             else _response_window_options_from_grouped(grouped)
         ),
         response_processing_options=response_processing_options,
+        correlation_scores=correlation_scores,
     )
 
 
@@ -184,6 +190,28 @@ def filter_response_plot_data_rois(
         delta_f_over_f_options=plot_data.delta_f_over_f_options,
         response_window_options=plot_data.response_window_options,
         response_processing_options=plot_data.response_processing_options,
+        correlation_scores=_filter_correlation_scores(
+            plot_data.correlation_scores,
+            keep_indices,
+        ),
+    )
+
+
+def _filter_correlation_scores(
+    scores: RoiCorrelationScores | None,
+    keep_indices: tuple[int, ...],
+) -> RoiCorrelationScores | None:
+    """Return correlation scores filtered to the kept ROI rows."""
+    if scores is None:
+        return None
+    keep_rows = list(keep_indices)
+    return RoiCorrelationScores(
+        roi_labels=tuple(scores.roi_labels[index] for index in keep_indices),
+        scores=scores.scores[keep_rows],
+        included_mask=scores.included_mask[keep_rows],
+        minimum_correlation=scores.minimum_correlation,
+        reference=scores.reference,
+        window_seconds=scores.window_seconds,
     )
 
 
@@ -332,6 +360,7 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
             ),
             response_window_options=saved_window_options,
             response_processing_options=outputs.response_processing_options,
+            correlation_scores=outputs.correlation_scores,
         )
     if outputs.dff is not None and len(outputs.epoch_windows) > 0:
         data_rate_hz = _analysis_output_data_rate_hz(
@@ -361,6 +390,7 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
                 ),
                 response_window_options=_response_window_options_from_grouped(grouped),
                 response_processing_options=outputs.response_processing_options,
+                correlation_scores=outputs.correlation_scores,
             )
     if outputs.grouped_responses is None:
         return f"No grouped responses in: {path}"
@@ -375,6 +405,7 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
             outputs.grouped_responses,
         ),
         response_processing_options=outputs.response_processing_options,
+        correlation_scores=outputs.correlation_scores,
     )
 
 

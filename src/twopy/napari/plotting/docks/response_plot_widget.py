@@ -114,6 +114,7 @@ class _ResponsePlotWidget(QWidget):
         self._show_sem = True
         self._plot_size = 300
         self._roi_visibility: dict[int, bool] = {}
+        self._correlation_roi_visibility: dict[int, bool] | None = None
         self._roi_colors: tuple[QColor, ...] = ()
         self._epoch_visibility: dict[int, bool] = {}
         self._manual_x_min: float | None = None
@@ -618,7 +619,7 @@ class _ResponsePlotWidget(QWidget):
             return
 
         roi_labels = self._roi_labels()
-        self._roi_visibility = row_visibility(self._roi_visibility, len(roi_labels))
+        self._sync_roi_visibility_from_plot_data(roi_labels)
         self._roi_colors = opaque_colors(
             roi_colors_from_label_values(
                 self._roi_labels_layer,
@@ -639,6 +640,7 @@ class _ResponsePlotWidget(QWidget):
 
     def _reset_plot_state(self) -> None:
         self._roi_visibility = {}
+        self._correlation_roi_visibility = None
         self._roi_colors = ()
         self._epoch_visibility = {}
         self._manual_x_min = None
@@ -872,6 +874,26 @@ class _ResponsePlotWidget(QWidget):
     def _roi_labels(self) -> tuple[str, ...]:
         return roi_labels_from_plot_data(self._plot_data)
 
+    def _sync_roi_visibility_from_plot_data(self, roi_labels: tuple[str, ...]) -> None:
+        """Update ROI visibility from correlation QC or existing user choices."""
+        correlation_visibility = _correlation_roi_visibility(
+            self._plot_data,
+            roi_labels,
+        )
+        if correlation_visibility is not None:
+            self._roi_visibility = correlation_visibility
+            self._correlation_roi_visibility = dict(correlation_visibility)
+            return
+        existing_visibility = row_visibility(self._roi_visibility, len(roi_labels))
+        if _visibility_matches_previous_correlation_filter(
+            existing_visibility,
+            self._correlation_roi_visibility,
+        ):
+            self._roi_visibility = {index: True for index in range(len(roi_labels))}
+        else:
+            self._roi_visibility = existing_visibility
+        self._correlation_roi_visibility = None
+
     def _epoch_count(self) -> int:
         if self._plot_data is None:
             return 0
@@ -968,6 +990,33 @@ class _ResponsePlotWidget(QWidget):
             colors=self._roi_colors,
             keys=tuple(range(len(self._roi_labels()))),
         )
+
+
+def _correlation_roi_visibility(
+    plot_data: ResponsePlotData | None,
+    roi_labels: tuple[str, ...],
+) -> dict[int, bool] | None:
+    """Return ROI row visibility from correlation QC scores when available."""
+    if plot_data is None or plot_data.correlation_scores is None:
+        return None
+    scores = plot_data.correlation_scores
+    if scores.roi_labels != roi_labels:
+        return None
+    if scores.included_mask.shape != (len(roi_labels),):
+        return None
+    return {
+        index: bool(scores.included_mask[index]) for index in range(len(roi_labels))
+    }
+
+
+def _visibility_matches_previous_correlation_filter(
+    visibility: dict[int, bool],
+    previous_correlation_visibility: dict[int, bool] | None,
+) -> bool:
+    """Return whether current visibility still reflects the previous QC mask."""
+    if previous_correlation_visibility is None:
+        return False
+    return visibility == previous_correlation_visibility
 
 
 def _load_pixel_calibrations_for_ui() -> tuple[PixelCalibrationRow, ...]:

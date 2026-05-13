@@ -23,6 +23,7 @@
 
 - Kept unresolved ROIs-tab calibration fields on explicit selection placeholders instead of silently using the first dropdown option.
 - Made napari live ROI plot updates more responsive by cancelling stale background recomputes, reusing unchanged ROI traces, reusing epoch plot widgets, and caching Labels colormap bases for visibility toggles.
+- Made napari correlation filtering uncheck and dim ROIs that do not pass QC in the ROIs tab and Labels layer.
 
 ## 0.1.7 - 2026-05-11
 

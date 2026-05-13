@@ -131,4 +131,5 @@ def compute_response_plot_data_from_roi_set(
         delta_f_over_f_options=dff_options,
         response_window_options=response_window_options or ResponseWindowOptions(),
         response_processing_options=computation.response_processing_options,
+        correlation_scores=computation.correlation_scores,
     )
