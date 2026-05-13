@@ -93,6 +93,7 @@ from twopy import (
     grid_roi_set_microns,
     load_pixel_calibrations,
     resolve_pixel_size_um,
+    extract_response_watershed_rois,
     watershed_roi_set,
 )
 from twopy.config import load_config
@@ -120,9 +121,15 @@ watershed_rois = watershed_roi_set(
     region_mask=accepted_region,
     min_pixels=5,
 )
+response_watershed = extract_response_watershed_rois(
+    recording,
+    epoch_windows,
+    epoch_numbers=(2, 3),
+    min_pixels=20,
+)
 ```
 
-`grid_roi_set` makes deterministic square template ROIs. `grid_roi_set_microns` uses calibrated microns per pixel and converts a physical grid width with `floor(micron_grid_size / pixel_size_um)`. Pixel-size calibration is loaded from a dated CSV registry and resolved by exact rig/mode/scanner/zoom match when available, interpolation within the same rig/mode/scanner group when the requested zoom is inside the measured range, and extrapolation only when explicitly allowed. `watershed_roi_set` segments bright structures from a two-dimensional summary image. These ROI helpers accept an optional boolean region mask and keep ROIs whose center of mass falls inside that region; UI code may collect that mask, but extraction itself is GUI-independent.
+`grid_roi_set` makes deterministic square template ROIs. `grid_roi_set_microns` uses calibrated microns per pixel and converts a physical grid width with `floor(micron_grid_size / pixel_size_um)`. Pixel-size calibration is loaded from a dated CSV registry and resolved by exact rig/mode/scanner/zoom match when available, interpolation within the same rig/mode/scanner group when the requested zoom is inside the measured range, and extrapolation only when explicitly allowed. `watershed_roi_set` segments bright structures from a two-dimensional summary image. `extract_response_watershed_rois` segments selected stimulus windows instead: it builds per-pixel response-amplitude, local response-coherence, and split-half reliability maps, combines them into a score image, then watersheds and trims that score image into full-frame ROI masks. It returns both the `RoiSet` and audit score images; use `response_watershed_roi_set` when scripts only need the masks. These ROI helpers accept optional spatial or region restrictions depending on the method, but extraction itself is GUI-independent.
 
 For comparison against historical psycho5 ROI extraction, use `twopy.parity` helpers such as `psycho5_grid_roi_label_image` and `psycho5_watershed_image_from_preseg`. Those helpers preserve psycho5-specific label ordering and watershed border-fill behavior for audits; normal twopy analysis should use the native ROI extraction helpers above.
 

@@ -28,7 +28,7 @@ When photodiode-aligned stimulus epochs are available, twopy adds a compact bott
 
 ## ROI Editing
 
-Napari ROI editing is crop-native. twopy displays the alignment-valid crop, then converts drawn Labels ROIs back to full-frame movie coordinates before saving or analysis. Response updates and saved analysis require the active Labels layer to match the displayed crop. The ROIs tab can hide ROIs from plots and remove the currently selected ROI rows from the editable Labels layer. Grid ROIs can be created in pixels or microns; micron mode prefills known calibration fields from converted metadata, but still leaves unavailable measured fields unselected instead of falling back to a different mode.
+Napari ROI editing is crop-native. twopy displays the alignment-valid crop, then converts drawn Labels ROIs back to full-frame movie coordinates before saving or analysis. Response updates and saved analysis require the active Labels layer to match the displayed crop. The ROIs tab can hide ROIs from plots and remove the currently selected ROI rows from the editable Labels layer. Grid ROIs can be created in pixels or microns; micron mode prefills known calibration fields from converted metadata, but still leaves unavailable measured fields unselected instead of falling back to a different mode. Watershed mode segments bright structures from the converted mean image, while response watershed segments repeatable stimulus-locked pixel responses from photodiode-aligned epoch windows.
 
 ROI masks are saved in twopy HDF5 format and stay independent from napari. Existing ROIs reload automatically when `rois.h5` is beside the converted recording.
 
