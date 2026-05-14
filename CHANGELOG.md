@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.8 - 2026-05-14
+
 ### Features
 
 - Added a compact napari trial timeline rail and viewer HUD that follow the movie frame slider using photodiode-aligned stimulus epoch windows.
