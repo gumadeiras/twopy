@@ -46,7 +46,7 @@ You can pass a source recording folder, a converted folder, or a direct `recordi
 
 In the right-side `twopy` panel:
 
-1. Click `Search Database` to find a recording from `config.yml`, or click `Load manually` to choose a source recording folder, converted folder, or `recording_data.h5`.
+1. Click `Search database` to find a recording from `config.yml`, or click `Load manually` to choose a source recording folder, converted folder, or `recording_data.h5`.
 2. Use `Reload saved analysis` when you want the current recording's saved `analysis_outputs.h5`.
 
 After loading, twopy adds `mean image`, optional `aligned movie`, and editable `rois` layers.

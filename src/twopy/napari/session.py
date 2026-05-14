@@ -133,9 +133,9 @@ class LoadedRecordingsPanel(QWidget):
         self._on_unload_all = on_unload_all
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._select_row)
-        unload_button = QPushButton("unload selected")
+        unload_button = QPushButton("Unload selected")
         unload_button.clicked.connect(self._unload_selected)
-        unload_all_button = QPushButton("unload all")
+        unload_all_button = QPushButton("Unload all")
         unload_all_button.clicked.connect(self._unload_all)
 
         button_layout = QHBoxLayout()

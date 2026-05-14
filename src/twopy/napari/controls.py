@@ -380,7 +380,7 @@ class LoadRecordingPanel(QWidget):
         layout.addWidget(title)
 
         recording_gui = cast(_LoadRecordingGui, load_recording)
-        search_button = QPushButton("Search Database")
+        search_button = QPushButton("Search database")
         search_button.clicked.connect(on_search_database)
         layout.addWidget(search_button)
         load_manually_button = QPushButton("Load manually")

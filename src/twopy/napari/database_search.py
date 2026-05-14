@@ -139,7 +139,7 @@ class ExperimentSearchDialog(QDialog):
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.reject)
 
-        self.setWindowTitle("Search Database")
+        self.setWindowTitle("Search database")
         self.resize(1040, 560)
 
         layout = QVBoxLayout()

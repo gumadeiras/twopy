@@ -766,7 +766,7 @@ class NapariAdapterTest(unittest.TestCase):
             ]
             self.assertEqual(
                 load_buttons,
-                ["Search Database", "Load manually"],
+                ["Search database", "Load manually"],
             )
             sidebar_tabs = cast(QTabWidget, opened.twopy_sidebar_widget)
             self.assertIs(sidebar_tabs, opened.response_options_widget)
@@ -787,7 +787,7 @@ class NapariAdapterTest(unittest.TestCase):
             options_buttons = {
                 button.text() for button in options_widget.findChildren(QPushButton)
             }
-            self.assertIn("Search Database", options_buttons)
+            self.assertIn("Search database", options_buttons)
             self.assertIn("Load manually", options_buttons)
             self.assertIn("Save ROIs + analysis", options_buttons)
             self.assertNotIn("Recompute preview now", options_buttons)
@@ -2957,8 +2957,8 @@ class NapariAdapterTest(unittest.TestCase):
             unload_buttons = {
                 button.text(): button for button in panel.findChildren(QPushButton)
             }
-            self.assertIn("unload selected", unload_buttons)
-            self.assertIn("unload all", unload_buttons)
+            self.assertIn("Unload selected", unload_buttons)
+            self.assertIn("Unload all", unload_buttons)
 
             load_widget(recording_folder=first)
             load_widget(recording_folder=second)
@@ -2983,7 +2983,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse(viewer.images[3].visible)
             self.assertFalse(viewer.labels[1].visible)
 
-            unload_buttons["unload selected"].click()
+            unload_buttons["Unload selected"].click()
 
             self.assertEqual(loaded_list.count(), 1)
             self.assertEqual(len(viewer.images), 2)
@@ -3003,7 +3003,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.images), 4)
             self.assertEqual(len(viewer.labels), 2)
 
-            unload_buttons["unload all"].click()
+            unload_buttons["Unload all"].click()
 
             self.assertEqual(loaded_list.count(), 0)
             self.assertEqual(len(viewer.images), 0)
