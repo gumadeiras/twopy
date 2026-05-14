@@ -8,6 +8,7 @@
 - Added GUI-independent grid and watershed ROI extraction helpers with optional region-mask restriction for script workflows.
 - Added response-watershed ROI extraction that segments repeatable stimulus-locked pixel responses using amplitude, local response coherence, and split-half reliability score maps, including selection from the napari ROIs tab.
 - Added a dF/F `no_baseline_epoch` baseline mode for recordings without a distinct baseline epoch, exposed in the napari Plot tab as `no baseline epoch` with a `First epoch` selector.
+- Added parity-only psycho5 `noTrueInterleave` response helpers for future native-to-historical analysis comparisons.
 - Added parity-only psycho5 grid and watershed-label helpers for comparing native twopy ROI discovery against historical MATLAB ROI extraction.
 - Added a tracked dated CSV-backed pixel-size calibration resolver and micron-sized grid ROI helper for calibrated physical ROI templates.
 - Added ROIs-tab ROI mode controls in napari with manual drawing as the default plus generated grid, watershed, and response-watershed ROI modes.

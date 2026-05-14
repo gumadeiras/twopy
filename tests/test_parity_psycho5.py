@@ -96,6 +96,49 @@ class Psycho5ParityTest(unittest.TestCase):
             self.assertEqual(result.dff.metadata["baseline_sample_seconds"], "full")
             self.assertEqual(result.dff.metadata["fit_mode"], "log_linear")
 
+    def test_psycho5_no_true_interleave_parity_uses_continuous_span(
+        self,
+    ) -> None:
+        """Confirm psycho5 ``noTrueInterleave`` parity uses one baseline span."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = self._write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName":"Probe"}, '
+                    '{"epochName":"Stim A"}, '
+                    '{"epochName":"Stim B", "nextEpoch": 2}]'
+                ),
+            )
+            recording = load_converted_recording(recording_path)
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            windows = (
+                EpochFrameWindow(FrameWindow(0, 0, 1, "probe"), 1, "Probe"),
+                EpochFrameWindow(FrameWindow(1, 1, 2, "stim_a"), 2, "Stim A"),
+                EpochFrameWindow(FrameWindow(2, 2, 4, "stim_b"), 3, "Stim B"),
+            )
+
+            result = compute_psycho5_default_recording_responses(
+                recording,
+                roi_set,
+                epoch_windows=windows,
+                no_true_interleave=True,
+                background_method="none",
+                apply_motion_mask=False,
+                chunk_frames=2,
+            )
+
+            self.assertEqual(
+                result.baseline_windows,
+                (FrameWindow(0, 1, 4, "no_baseline_epoch_from_epoch_0002"),),
+            )
+            self.assertEqual(result.dff.metadata["baseline_mode"], "no_baseline_epoch")
+            self.assertEqual(result.dff.metadata["baseline_sample_seconds"], "full")
+            self.assertEqual(result.dff.metadata["fit_mode"], "log_linear")
+
     def _recording(
         self,
         root: Path,

@@ -44,6 +44,8 @@ def compute_psycho5_default_recording_responses(
     roi_set: RoiSet,
     *,
     epoch_windows: Sequence[EpochFrameWindow] | None = None,
+    no_true_interleave: bool = False,
+    interleave_epoch_number: int | None = None,
     background_method: BackgroundCorrectionMethod = "movie_global_percentile",
     apply_motion_mask: bool = True,
     data_rate_hz: float | None = None,
@@ -59,6 +61,10 @@ def compute_psycho5_default_recording_responses(
         recording: Loaded converted recording.
         roi_set: ROI masks to extract from the recording.
         epoch_windows: Optional explicit epoch windows.
+        no_true_interleave: Whether to reproduce psycho5's
+            ``noTrueInterleave`` continuous baseline span.
+        interleave_epoch_number: Optional one-based psycho5 ``interleaveEpoch``
+            override for parity runs.
         background_method: Background correction method before dF/F.
         apply_motion_mask: Whether to mark converted high-motion frames as NaN.
         data_rate_hz: Optional frame rate.
@@ -78,10 +84,32 @@ def compute_psycho5_default_recording_responses(
     from native twopy defaults.
     """
     resolved_epoch_windows = _resolve_epoch_windows(recording, epoch_windows)
+    interleave_epochs = _psycho5_interleave_epoch_numbers(
+        recording,
+        interleave_epoch_number=interleave_epoch_number,
+    )
+    if no_true_interleave:
+        return compute_recording_responses(
+            recording,
+            roi_set,
+            epoch_windows=resolved_epoch_windows,
+            baseline_mode="no_baseline_epoch",
+            baseline_epoch_number=_single_interleave_epoch_number(interleave_epochs),
+            background_method=background_method,
+            baseline_sample_seconds=None,
+            fit_mode="log_linear",
+            apply_motion_mask=apply_motion_mask,
+            data_rate_hz=data_rate_hz,
+            chunk_frames=chunk_frames,
+            spatial_domain=spatial_domain,
+            response_pre_window_seconds=response_pre_window_seconds,
+            response_post_window_seconds=response_post_window_seconds,
+            response_processing_options=response_processing_options,
+        )
     baseline_windows = select_baseline_frame_windows(
         resolved_epoch_windows,
         epoch_number=None,
-        epoch_numbers=psycho5_default_interleave_epoch_numbers(recording),
+        epoch_numbers=interleave_epochs,
     )
     return compute_recording_responses(
         recording,
@@ -110,6 +138,8 @@ def analyze_psycho5_default_recording_responses(
     response_summary_grouped_csv_path: Path | None = None,
     write_summary_csv: bool = True,
     epoch_windows: Sequence[EpochFrameWindow] | None = None,
+    no_true_interleave: bool = False,
+    interleave_epoch_number: int | None = None,
     background_method: BackgroundCorrectionMethod = "movie_global_percentile",
     apply_motion_mask: bool = True,
     data_rate_hz: float | None = None,
@@ -129,6 +159,10 @@ def analyze_psycho5_default_recording_responses(
         response_summary_grouped_csv_path: Optional grouped CSV path.
         write_summary_csv: Whether to write response time-series CSV files.
         epoch_windows: Optional explicit epoch windows.
+        no_true_interleave: Whether to reproduce psycho5's
+            ``noTrueInterleave`` continuous baseline span.
+        interleave_epoch_number: Optional one-based psycho5 ``interleaveEpoch``
+            override for parity runs.
         background_method: Background correction method before dF/F.
         apply_motion_mask: Whether to mark converted high-motion frames as NaN.
         data_rate_hz: Optional frame rate.
@@ -143,10 +177,36 @@ def analyze_psycho5_default_recording_responses(
     """
     recording = load_converted_recording(recording_data_path)
     resolved_epoch_windows = _resolve_epoch_windows(recording, epoch_windows)
+    interleave_epochs = _psycho5_interleave_epoch_numbers(
+        recording,
+        interleave_epoch_number=interleave_epoch_number,
+    )
+    if no_true_interleave:
+        return analyze_recording_responses(
+            recording_data_path,
+            roi_set,
+            output_path=output_path,
+            response_summary_trials_csv_path=response_summary_trials_csv_path,
+            response_summary_grouped_csv_path=response_summary_grouped_csv_path,
+            write_summary_csv=write_summary_csv,
+            epoch_windows=resolved_epoch_windows,
+            baseline_mode="no_baseline_epoch",
+            baseline_epoch_number=_single_interleave_epoch_number(interleave_epochs),
+            background_method=background_method,
+            baseline_sample_seconds=None,
+            fit_mode="log_linear",
+            apply_motion_mask=apply_motion_mask,
+            data_rate_hz=data_rate_hz,
+            chunk_frames=chunk_frames,
+            spatial_domain=spatial_domain,
+            response_pre_window_seconds=response_pre_window_seconds,
+            response_post_window_seconds=response_post_window_seconds,
+            response_processing_options=response_processing_options,
+        )
     baseline_windows = select_baseline_frame_windows(
         resolved_epoch_windows,
         epoch_number=None,
-        epoch_numbers=psycho5_default_interleave_epoch_numbers(recording),
+        epoch_numbers=interleave_epochs,
     )
     return analyze_recording_responses(
         recording_data_path,
@@ -211,6 +271,32 @@ def _resolve_epoch_windows(
     if epoch_windows is not None:
         return tuple(epoch_windows)
     return interpolate_stimulus_epochs_to_frame_windows(recording).windows
+
+
+def _psycho5_interleave_epoch_numbers(
+    recording: RecordingData,
+    *,
+    interleave_epoch_number: int | None,
+) -> tuple[int, ...]:
+    """Return requested or psycho5-default interleave epoch numbers."""
+    if interleave_epoch_number is None:
+        return psycho5_default_interleave_epoch_numbers(recording)
+    if interleave_epoch_number < 1:
+        msg = f"interleave_epoch_number must be positive; got {interleave_epoch_number}"
+        raise ValueError(msg)
+    return (interleave_epoch_number,)
+
+
+def _single_interleave_epoch_number(epoch_numbers: Sequence[int]) -> int:
+    """Return one scalar psycho5 interleave epoch for noTrueInterleave."""
+    resolved = tuple(epoch_numbers)
+    if len(resolved) != 1:
+        msg = (
+            "psycho5 noTrueInterleave parity needs one scalar interleave epoch; "
+            f"got {resolved}"
+        )
+        raise ValueError(msg)
+    return resolved[0]
 
 
 def _epoch_numbers_from_source_value(value: object, *, name: str) -> tuple[int, ...]:
