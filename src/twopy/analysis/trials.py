@@ -30,6 +30,7 @@ __all__ = [
     "is_baseline_epoch_name",
     "make_frame_windows",
     "map_stimulus_epochs_to_frame_windows",
+    "no_baseline_epoch_frame_windows",
     "resolve_baseline_frame_windows",
     "select_baseline_frame_windows",
     "split_traces_by_frame_windows",
@@ -307,6 +308,44 @@ def select_baseline_frame_windows(
             epoch_name=epoch_name,
             epoch_numbers=selected_numbers,
         )
+    )
+
+
+def no_baseline_epoch_frame_windows(
+    epoch_windows: Sequence[EpochFrameWindow],
+    *,
+    start_epoch_number: int,
+) -> tuple[FrameWindow, ...]:
+    """Return one continuous baseline span from a starting epoch onward.
+
+    Args:
+        epoch_windows: Stimulus-labeled frame windows.
+        start_epoch_number: First one-based epoch number included in the span.
+
+    Returns:
+        A single ``FrameWindow`` covering all frames from the earliest selected
+        epoch occurrence through the end of the latest selected occurrence.
+
+    This mode is for stimuli without a distinct baseline epoch. The baseline
+    fit uses a continuous span rather than repeated baseline windows.
+    """
+    selected = tuple(
+        epoch_window
+        for epoch_window in epoch_windows
+        if epoch_window.epoch_number >= start_epoch_number
+    )
+    if len(selected) == 0:
+        return ()
+
+    start_frame = min(epoch_window.window.start_frame for epoch_window in selected)
+    stop_frame = max(epoch_window.window.stop_frame for epoch_window in selected)
+    return (
+        FrameWindow(
+            index=0,
+            start_frame=start_frame,
+            stop_frame=stop_frame,
+            label=f"no_baseline_epoch_from_epoch_{start_epoch_number:04d}",
+        ),
     )
 
 

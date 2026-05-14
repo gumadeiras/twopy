@@ -23,12 +23,12 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.response_context import default_recording_baseline_epoch_number
 from twopy.analysis.response_processing import (
     NormalizationOptions,
     ResponseProcessingOptions,
 )
 from twopy.analysis.response_window_options import ResponseWindowOptions
-from twopy.analysis.trials import default_baseline_epoch_number
 from twopy.analysis_cache import (
     AnalysisSyncPlan,
     AnalysisSyncResult,
@@ -342,7 +342,7 @@ class _ResponsePlotWidget(QWidget):
         epoch_names = stimulus_epoch_names_by_number(recording)
         self._delta_f_over_f_options_widget.set_epoch_choices(
             epoch_names,
-            selected_epoch_number=default_baseline_epoch_number(epoch_names),
+            selected_epoch_number=default_recording_baseline_epoch_number(recording),
         )
         self._normalization_options_widget.set_epoch_choices(
             epoch_names,

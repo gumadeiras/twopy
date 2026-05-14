@@ -16,7 +16,7 @@ import numpy.typing as npt
 
 from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import DeltaFOverFFitMode, RoiDeltaFOverF
-from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.dff_options import DeltaFOverFBaselineMode, DeltaFOverFOptions
 from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
 from twopy.analysis.persistence import load_analysis_outputs
 from twopy.analysis.response_processing import (
@@ -452,6 +452,7 @@ def _delta_f_over_f_options_from_outputs(
         return DeltaFOverFOptions(background_method=background_method)
 
     return DeltaFOverFOptions(
+        baseline_mode=_saved_baseline_mode(dff),
         baseline_epoch_number=_saved_baseline_epoch_number(dff),
         baseline_epoch_name=_saved_baseline_epoch_name(dff),
         background_method=background_method,
@@ -459,6 +460,18 @@ def _delta_f_over_f_options_from_outputs(
         fit_mode=_saved_fit_mode(dff),
         apply_motion_mask="motion_artifact_masked_frame_count" in dff.metadata,
     )
+
+
+def _saved_baseline_mode(dff: RoiDeltaFOverF) -> DeltaFOverFBaselineMode:
+    """Return the saved baseline-selection mode from dF/F metadata."""
+    value = dff.metadata.get("baseline_mode")
+    if isinstance(value, str) and value in {"epoch", "no_baseline_epoch"}:
+        return require_string_choice(
+            value,
+            name="dF/F baseline mode",
+            allowed=("epoch", "no_baseline_epoch"),
+        )
+    return DeltaFOverFOptions().baseline_mode
 
 
 def _saved_baseline_sample_seconds(dff: RoiDeltaFOverF) -> float | None:
@@ -480,7 +493,7 @@ def _saved_baseline_sample_seconds(dff: RoiDeltaFOverF) -> float | None:
     return DeltaFOverFOptions().baseline_sample_seconds
 
 
-def _saved_baseline_epoch_number(dff: RoiDeltaFOverF) -> int:
+def _saved_baseline_epoch_number(dff: RoiDeltaFOverF) -> int | None:
     """Return the saved baseline epoch number selector from dF/F metadata."""
     value = dff.metadata.get("baseline_epoch_number")
     if isinstance(value, int) and not isinstance(value, bool):

@@ -21,6 +21,7 @@ from twopy.analysis.dff import (
     RoiDeltaFOverF,
     compute_roi_delta_f_over_f,
 )
+from twopy.analysis.dff_options import DeltaFOverFBaselineMode
 from twopy.analysis.epoch_mapping import InterpolatedEpochMapping
 from twopy.analysis.motion import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.persistence import save_analysis_outputs
@@ -125,7 +126,8 @@ def analyze_recording_responses(
     write_summary_csv: bool = True,
     epoch_windows: Sequence[EpochFrameWindow] | None = None,
     baseline_windows: Sequence[FrameWindow] | None = None,
-    baseline_epoch_number: int | None = 1,
+    baseline_mode: DeltaFOverFBaselineMode = "epoch",
+    baseline_epoch_number: int | None = None,
     baseline_epoch_name: str | None = None,
     background_method: BackgroundCorrectionMethod = "movie_global_percentile",
     baseline_sample_seconds: float | None = 1.0,
@@ -157,7 +159,11 @@ def analyze_recording_responses(
             interpolates epochs from converted stimulus data.
         baseline_windows: Optional explicit baseline windows. When omitted,
             twopy selects baseline windows from epoch name or number.
-        baseline_epoch_number: Optional baseline epoch number selector.
+        baseline_mode: Baseline selection mode. ``epoch`` uses selected epoch
+            windows, while ``no_baseline_epoch`` uses one continuous span from
+            the selected epoch number onward.
+        baseline_epoch_number: Optional baseline epoch number selector. ``None``
+            uses the shared recording-level default.
         baseline_epoch_name: Optional baseline epoch name selector.
         background_method: Background correction method before dF/F.
         baseline_sample_seconds: Seconds from the end of each baseline window.
@@ -198,6 +204,7 @@ def analyze_recording_responses(
         loaded_roi_set,
         epoch_windows=epoch_windows,
         baseline_windows=baseline_windows,
+        baseline_mode=baseline_mode,
         baseline_epoch_number=baseline_epoch_number,
         baseline_epoch_name=baseline_epoch_name,
         background_method=background_method,
@@ -223,6 +230,7 @@ def analyze_recording_responses(
         computation,
         dff=_dff_with_analysis_options(
             computation.dff,
+            baseline_mode=baseline_mode,
             baseline_epoch_number=baseline_epoch_number,
             baseline_epoch_name=baseline_epoch_name,
         ),
@@ -305,6 +313,7 @@ def _save_response_analysis_run(
 def _dff_with_analysis_options(
     dff: RoiDeltaFOverF,
     *,
+    baseline_mode: DeltaFOverFBaselineMode,
     baseline_epoch_number: int | None,
     baseline_epoch_name: str | None,
 ) -> RoiDeltaFOverF:
@@ -312,6 +321,7 @@ def _dff_with_analysis_options(
 
     Args:
         dff: Computed dF/F output.
+        baseline_mode: Baseline selection mode used by the workflow.
         baseline_epoch_number: Baseline epoch selector used by the workflow.
         baseline_epoch_name: Optional baseline epoch name selector.
 
@@ -319,6 +329,7 @@ def _dff_with_analysis_options(
         dF/F output with metadata needed to hydrate saved GUI controls.
     """
     metadata = dict(dff.metadata)
+    metadata["baseline_mode"] = baseline_mode
     if baseline_epoch_number is not None:
         metadata["baseline_epoch_number"] = int(baseline_epoch_number)
     if baseline_epoch_name is not None:
@@ -332,7 +343,8 @@ def compute_recording_responses(
     *,
     epoch_windows: Sequence[EpochFrameWindow] | None = None,
     baseline_windows: Sequence[FrameWindow] | None = None,
-    baseline_epoch_number: int | None = 1,
+    baseline_mode: DeltaFOverFBaselineMode = "epoch",
+    baseline_epoch_number: int | None = None,
     baseline_epoch_name: str | None = None,
     background_method: BackgroundCorrectionMethod = "movie_global_percentile",
     baseline_sample_seconds: float | None = 1.0,
@@ -355,7 +367,11 @@ def compute_recording_responses(
             interpolates epochs from converted stimulus data.
         baseline_windows: Optional explicit baseline windows. When omitted,
             twopy selects baseline windows from epoch name or number.
-        baseline_epoch_number: Optional baseline epoch number selector.
+        baseline_mode: Baseline selection mode. ``epoch`` uses selected epoch
+            windows, while ``no_baseline_epoch`` uses one continuous span from
+            the selected epoch number onward.
+        baseline_epoch_number: Optional baseline epoch number selector. ``None``
+            uses the shared recording-level default.
         baseline_epoch_name: Optional baseline epoch name selector.
         background_method: Background correction method before dF/F.
         baseline_sample_seconds: Seconds from the end of each baseline window.
@@ -389,6 +405,7 @@ def compute_recording_responses(
         recording,
         epoch_windows=epoch_windows,
         baseline_windows=baseline_windows,
+        baseline_mode=baseline_mode,
         baseline_epoch_number=baseline_epoch_number,
         baseline_epoch_name=baseline_epoch_name,
         data_rate_hz=data_rate_hz,
@@ -452,7 +469,7 @@ def compute_recording_responses_from_traces(
     """
     _validate_traces_for_context(traces, roi_set, context)
     _check_cancelled(check_cancelled)
-    return _compute_recording_responses_from_baseline(
+    computation = _compute_recording_responses_from_baseline(
         recording,
         roi_set,
         traces=traces,
@@ -467,6 +484,15 @@ def compute_recording_responses_from_traces(
         response_pre_window_seconds=context.response_pre_window_seconds,
         response_post_window_seconds=context.response_post_window_seconds,
         check_cancelled=check_cancelled,
+    )
+    return replace(
+        computation,
+        dff=_dff_with_analysis_options(
+            computation.dff,
+            baseline_mode=context.baseline_mode,
+            baseline_epoch_number=context.baseline_epoch_number,
+            baseline_epoch_name=context.baseline_epoch_name,
+        ),
     )
 
 

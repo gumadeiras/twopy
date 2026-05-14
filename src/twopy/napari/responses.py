@@ -115,6 +115,7 @@ def compute_response_plot_data_from_roi_set(
     computation = compute_recording_responses(
         recording,
         roi_set,
+        baseline_mode=dff_options.baseline_mode,
         baseline_epoch_number=dff_options.baseline_epoch_number,
         baseline_epoch_name=dff_options.baseline_epoch_name,
         background_method=dff_options.background_method,

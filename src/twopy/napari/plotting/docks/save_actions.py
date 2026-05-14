@@ -108,6 +108,7 @@ def save_current_roi_analysis(
         recording.path,
         roi_set,
         output_path=analysis_output_path,
+        baseline_mode=delta_f_over_f_options.baseline_mode,
         baseline_epoch_number=delta_f_over_f_options.baseline_epoch_number,
         baseline_epoch_name=delta_f_over_f_options.baseline_epoch_name,
         background_method=delta_f_over_f_options.background_method,

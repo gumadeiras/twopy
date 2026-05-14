@@ -129,6 +129,7 @@ class LiveResponseAnalysisCache:
         )
         context = resolve_response_analysis_context(
             recording,
+            baseline_mode=dff_options.baseline_mode,
             baseline_epoch_number=dff_options.baseline_epoch_number,
             baseline_epoch_name=dff_options.baseline_epoch_name,
             response_pre_window_seconds=pre_window_seconds,

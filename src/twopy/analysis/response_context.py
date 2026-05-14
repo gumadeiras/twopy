@@ -12,6 +12,7 @@ without duplicating workflow timing rules.
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from twopy.analysis.dff_options import DeltaFOverFBaselineMode
 from twopy.analysis.epoch_mapping import (
     InterpolatedEpochMapping,
     interpolate_stimulus_epochs_to_frame_windows,
@@ -26,11 +27,18 @@ from twopy.analysis.response_window_options import (
 from twopy.analysis.trials import (
     EpochFrameWindow,
     FrameWindow,
+    default_baseline_epoch_number,
+    no_baseline_epoch_frame_windows,
     resolve_baseline_frame_windows,
 )
 from twopy.converted import RecordingData, recording_frame_rate_hz
+from twopy.stimulus import stimulus_epoch_names_by_number
 
-__all__ = ["ResponseAnalysisContext", "resolve_response_analysis_context"]
+__all__ = [
+    "ResponseAnalysisContext",
+    "default_recording_baseline_epoch_number",
+    "resolve_response_analysis_context",
+]
 
 
 @dataclass(frozen=True)
@@ -47,6 +55,9 @@ class ResponseAnalysisContext:
     epoch_mapping: InterpolatedEpochMapping | None
     epoch_windows: tuple[EpochFrameWindow, ...]
     baseline_windows: tuple[FrameWindow, ...]
+    baseline_mode: DeltaFOverFBaselineMode
+    baseline_epoch_number: int | None
+    baseline_epoch_name: str | None
     trace_start: int
     trace_stop: int
     response_pre_window_seconds: float
@@ -58,7 +69,8 @@ def resolve_response_analysis_context(
     *,
     epoch_windows: Sequence[EpochFrameWindow] | None = None,
     baseline_windows: Sequence[FrameWindow] | None = None,
-    baseline_epoch_number: int | None = 1,
+    baseline_mode: DeltaFOverFBaselineMode = "epoch",
+    baseline_epoch_number: int | None = None,
     baseline_epoch_name: str | None = None,
     data_rate_hz: float | None = None,
     response_pre_window_seconds: float = DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
@@ -73,7 +85,12 @@ def resolve_response_analysis_context(
             interpolates epochs from converted stimulus data.
         baseline_windows: Optional explicit baseline windows. When omitted,
             twopy selects baseline windows from epoch name or number.
-        baseline_epoch_number: Optional baseline epoch number selector.
+        baseline_mode: Baseline selection mode. ``epoch`` uses selected epoch
+            windows, while ``no_baseline_epoch`` uses one continuous span from
+            the selected epoch number onward.
+        baseline_epoch_number: Optional baseline epoch number selector. ``None``
+            uses the recording-level default when no explicit windows or name
+            selector are supplied.
         baseline_epoch_name: Optional baseline epoch name selector.
         data_rate_hz: Optional frame rate. When omitted, twopy reads converted
             acquisition metadata.
@@ -104,11 +121,18 @@ def resolve_response_analysis_context(
         pre_window_seconds=response_pre_window_seconds,
         post_window_seconds=response_post_window_seconds,
     )
-    resolved_baseline_windows = resolve_baseline_frame_windows(
+    resolved_baseline_epoch_number = _resolve_baseline_epoch_number(
+        recording,
+        baseline_windows=baseline_windows,
+        baseline_epoch_name=baseline_epoch_name,
+        baseline_epoch_number=baseline_epoch_number,
+    )
+    resolved_baseline_windows = _resolve_baseline_frame_windows(
         resolved_epoch_windows,
         baseline_windows=baseline_windows,
+        baseline_mode=baseline_mode,
         epoch_name=baseline_epoch_name,
-        epoch_number=baseline_epoch_number,
+        epoch_number=resolved_baseline_epoch_number,
     )
     if len(resolved_baseline_windows) == 0:
         msg = "No baseline windows matched the requested selector"
@@ -119,11 +143,94 @@ def resolve_response_analysis_context(
         epoch_mapping=mapping,
         epoch_windows=tuple(resolved_epoch_windows),
         baseline_windows=resolved_baseline_windows,
+        baseline_mode=baseline_mode,
+        baseline_epoch_number=resolved_baseline_epoch_number,
+        baseline_epoch_name=baseline_epoch_name,
         trace_start=trace_start,
         trace_stop=trace_stop,
         response_pre_window_seconds=response_pre_window_seconds,
         response_post_window_seconds=response_post_window_seconds,
     )
+
+
+def default_recording_baseline_epoch_number(recording: RecordingData) -> int:
+    """Return the shared default baseline epoch for one recording.
+
+    Args:
+        recording: Loaded converted recording with stimulus parameter metadata.
+
+    Returns:
+        First epoch whose name looks like gray/grey/interleave, otherwise
+        epoch one.
+
+    GUI and script workflows both use this helper so default baseline selection
+    cannot drift between entrypoints.
+    """
+    return default_baseline_epoch_number(stimulus_epoch_names_by_number(recording))
+
+
+def _resolve_baseline_frame_windows(
+    epoch_windows: Sequence[EpochFrameWindow],
+    *,
+    baseline_windows: Sequence[FrameWindow] | None,
+    baseline_mode: DeltaFOverFBaselineMode,
+    epoch_name: str | None,
+    epoch_number: int | None,
+) -> tuple[FrameWindow, ...]:
+    """Return baseline windows for the selected dF/F baseline mode."""
+    if baseline_mode == "epoch":
+        return resolve_baseline_frame_windows(
+            epoch_windows,
+            baseline_windows=baseline_windows,
+            epoch_name=epoch_name,
+            epoch_number=epoch_number,
+        )
+    if baseline_mode == "no_baseline_epoch":
+        if baseline_windows is not None:
+            return tuple(baseline_windows)
+        resolved_epoch_number = (
+            _first_epoch_number_named(epoch_windows, epoch_name)
+            if epoch_name is not None
+            else epoch_number
+        )
+        if resolved_epoch_number is None:
+            msg = "no_baseline_epoch baseline mode requires an epoch selector"
+            raise ValueError(msg)
+        return no_baseline_epoch_frame_windows(
+            epoch_windows,
+            start_epoch_number=resolved_epoch_number,
+        )
+
+    msg = f"Unknown dF/F baseline mode: {baseline_mode!r}"
+    raise ValueError(msg)
+
+
+def _resolve_baseline_epoch_number(
+    recording: RecordingData,
+    *,
+    baseline_windows: Sequence[FrameWindow] | None,
+    baseline_epoch_name: str | None,
+    baseline_epoch_number: int | None,
+) -> int | None:
+    """Return the concrete epoch-number selector for this analysis request."""
+    if baseline_windows is not None:
+        return baseline_epoch_number
+    if baseline_epoch_number is not None:
+        return baseline_epoch_number
+    if baseline_epoch_name is not None:
+        return None
+    return default_recording_baseline_epoch_number(recording)
+
+
+def _first_epoch_number_named(
+    epoch_windows: Sequence[EpochFrameWindow],
+    epoch_name: str,
+) -> int | None:
+    """Return the first epoch number whose name exactly matches."""
+    for epoch_window in epoch_windows:
+        if epoch_window.epoch_name == epoch_name:
+            return epoch_window.epoch_number
+    return None
 
 
 def _resolve_response_processing_options(

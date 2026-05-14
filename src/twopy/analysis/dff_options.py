@@ -7,19 +7,23 @@ without hiding the scientific workflow parameters.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
 from twopy.analysis.background_subtraction import BackgroundCorrectionMethod
 from twopy.analysis.dff import DeltaFOverFFitMode
 
-__all__ = ["DeltaFOverFOptions"]
+__all__ = ["DeltaFOverFBaselineMode", "DeltaFOverFOptions"]
+
+DeltaFOverFBaselineMode = Literal["epoch", "no_baseline_epoch"]
 
 
 @dataclass(frozen=True)
 class DeltaFOverFOptions:
     """Options that control ROI dF/F computation before response grouping.
 
-    Inputs: baseline epoch selection, background correction method, baseline
-    window sampling, dF/F fit mode, and motion-artifact masking choice.
+    Inputs: baseline epoch selection, baseline mode, background correction
+    method, baseline window sampling, dF/F fit mode, and motion-artifact
+    masking choice.
     Outputs: typed parameters that map directly to
     ``compute_recording_responses`` and ``analyze_recording_responses``.
 
@@ -27,8 +31,9 @@ class DeltaFOverFOptions:
     response processing choices such as smoothing and correlation filtering.
     """
 
-    baseline_epoch_number: int = 1
+    baseline_epoch_number: int | None = None
     baseline_epoch_name: str | None = None
+    baseline_mode: DeltaFOverFBaselineMode = "epoch"
     background_method: BackgroundCorrectionMethod = "movie_global_percentile"
     baseline_sample_seconds: float | None = 1.0
     fit_mode: DeltaFOverFFitMode = "direct_bounded_tau"

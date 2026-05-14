@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QGroupBox,
+    QLabel,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
@@ -26,7 +27,7 @@ from qtpy.QtWidgets import (
 
 from twopy.analysis.background_subtraction import BackgroundCorrectionMethod
 from twopy.analysis.dff import DeltaFOverFFitMode
-from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.dff_options import DeltaFOverFBaselineMode, DeltaFOverFOptions
 from twopy.napari.plotting.form_controls import (
     plot_form_layout,
     set_plot_control_width,
@@ -37,6 +38,14 @@ from twopy.typing_guards import require_string_choice
 __all__ = ["DeltaFOverFOptionsWidget"]
 
 _RICH_TEXT_ROLE = int(Qt.ItemDataRole.UserRole) + 1
+_BASELINE_MODE_LABELS: tuple[
+    tuple[str, DeltaFOverFBaselineMode, str | None],
+    ...,
+] = (
+    ("baseline epoch", "epoch", None),
+    ("no baseline epoch", "no_baseline_epoch", None),
+)
+_BASELINE_MODES = tuple(value for _label, value, _rich in _BASELINE_MODE_LABELS)
 _BACKGROUND_METHOD_LABELS: tuple[
     tuple[str, BackgroundCorrectionMethod, str | None],
     ...,
@@ -86,6 +95,8 @@ class DeltaFOverFOptionsWidget(QWidget):
         """
         super().__init__()
         self._on_change = on_change
+        self._baseline_mode = _combo_box(_BASELINE_MODE_LABELS)
+        self._baseline_epoch_label = QLabel("Baseline epoch")
         self._background_method = _combo_box(_BACKGROUND_METHOD_LABELS)
         self._baseline_epoch = QComboBox()
         set_plot_dropdown_width(self._baseline_epoch)
@@ -110,12 +121,14 @@ class DeltaFOverFOptionsWidget(QWidget):
         layout.addWidget(self._dff_group())
         self.setLayout(layout)
 
+        initial_baseline_epoch = options.baseline_epoch_number or 1
         self.set_epoch_choices(
-            {options.baseline_epoch_number: options.baseline_epoch_name}
+            {initial_baseline_epoch: options.baseline_epoch_name}
             if options.baseline_epoch_name is not None
             else {},
-            selected_epoch_number=options.baseline_epoch_number,
+            selected_epoch_number=initial_baseline_epoch,
         )
+        self._set_combo_data(self._baseline_mode, options.baseline_mode)
         self._set_combo_data(self._background_method, options.background_method)
         self._set_combo_data(self._fit_mode, options.fit_mode)
         self._connect_changes()
@@ -132,6 +145,7 @@ class DeltaFOverFOptionsWidget(QWidget):
         """
         baseline_epoch_number = self._selected_baseline_epoch_number()
         return DeltaFOverFOptions(
+            baseline_mode=self._selected_baseline_mode(),
             baseline_epoch_number=baseline_epoch_number,
             baseline_epoch_name=self._baseline_epoch_name_values.get(
                 baseline_epoch_number,
@@ -201,6 +215,7 @@ class DeltaFOverFOptionsWidget(QWidget):
         settings.
         """
         blockers = [
+            QSignalBlocker(self._baseline_mode),
             QSignalBlocker(self._background_method),
             QSignalBlocker(self._baseline_epoch),
             QSignalBlocker(self._baseline_seconds),
@@ -208,16 +223,18 @@ class DeltaFOverFOptionsWidget(QWidget):
             QSignalBlocker(self._fit_mode),
             QSignalBlocker(self._apply_motion_mask),
         ]
+        self._set_combo_data(self._baseline_mode, options.baseline_mode)
         epoch_names = {
             epoch_number: epoch_name
             for epoch_number, epoch_name in self._baseline_epoch_name_values.items()
             if epoch_name is not None
         }
+        baseline_epoch_number = options.baseline_epoch_number or 1
         if options.baseline_epoch_name is not None:
-            epoch_names[options.baseline_epoch_number] = options.baseline_epoch_name
+            epoch_names[baseline_epoch_number] = options.baseline_epoch_name
         self.set_epoch_choices(
             epoch_names,
-            selected_epoch_number=options.baseline_epoch_number,
+            selected_epoch_number=baseline_epoch_number,
         )
         self._set_combo_data(self._background_method, options.background_method)
         if options.baseline_sample_seconds is not None:
@@ -233,7 +250,8 @@ class DeltaFOverFOptionsWidget(QWidget):
         group = QGroupBox("dF/F")
         layout = plot_form_layout()
         layout.addRow("Background", self._background_method)
-        layout.addRow("Baseline epoch", self._baseline_epoch)
+        layout.addRow("Baseline mode", self._baseline_mode)
+        layout.addRow(self._baseline_epoch_label, self._baseline_epoch)
         layout.addRow("Baseline span", self._baseline_seconds)
         layout.addRow("", self._use_full_baseline)
         layout.addRow("Fit mode", self._fit_mode)
@@ -243,7 +261,12 @@ class DeltaFOverFOptionsWidget(QWidget):
 
     def _connect_changes(self) -> None:
         """Connect control changes to state refresh and callback dispatch."""
-        for combo in (self._background_method, self._baseline_epoch, self._fit_mode):
+        for combo in (
+            self._baseline_mode,
+            self._background_method,
+            self._baseline_epoch,
+            self._fit_mode,
+        ):
             combo.currentIndexChanged.connect(self._emit_change)
         self._baseline_seconds.valueChanged.connect(self._emit_change)
         self._use_full_baseline.stateChanged.connect(self._emit_change)
@@ -258,6 +281,18 @@ class DeltaFOverFOptionsWidget(QWidget):
     def _refresh_enabled_state(self) -> None:
         """Enable interleave seconds only when partial-window sampling is used."""
         self._baseline_seconds.setEnabled(not self._use_full_baseline.isChecked())
+        if self._selected_baseline_mode() == "no_baseline_epoch":
+            self._baseline_epoch_label.setText("First epoch")
+        else:
+            self._baseline_epoch_label.setText("Baseline epoch")
+
+    def _selected_baseline_mode(self) -> DeltaFOverFBaselineMode:
+        """Return the selected baseline interpretation mode."""
+        return require_string_choice(
+            str(self._baseline_mode.currentData()),
+            name="dF/F baseline mode",
+            allowed=_BASELINE_MODES,
+        )
 
     def _selected_baseline_epoch_number(self) -> int:
         """Return the selected baseline epoch number."""
@@ -344,7 +379,7 @@ class _RichTextComboDelegate(QStyledItemDelegate):
         )
 
 
-def _combo_box(values: tuple[tuple[str, str, str | None], ...]) -> QComboBox:
+def _combo_box(values: tuple[tuple[str, object, str | None], ...]) -> QComboBox:
     """Create one combo box with fixed text options."""
     combo_box = QComboBox()
     has_rich_text = False

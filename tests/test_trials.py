@@ -16,6 +16,7 @@ from twopy import (
     is_baseline_epoch_name,
     make_frame_windows,
     map_stimulus_epochs_to_frame_windows,
+    no_baseline_epoch_frame_windows,
     select_baseline_frame_windows,
     split_traces_by_frame_windows,
 )
@@ -206,6 +207,25 @@ class ResponsesTest(unittest.TestCase):
         self.assertEqual(
             [(window.start_frame, window.stop_frame) for window in selected],
             [(0, 5), (10, 15)],
+        )
+
+    def test_no_baseline_epoch_uses_continuous_epoch_span(self) -> None:
+        """Confirm no-baseline-epoch windows cover selected epochs."""
+        epoch_windows = (
+            self._epoch_window(1, 0, 5, "Probe"),
+            self._epoch_window(2, 5, 10, "Stim A"),
+            self._epoch_window(1, 10, 15, "Probe"),
+            self._epoch_window(3, 15, 20, "Stim B"),
+        )
+
+        selected = no_baseline_epoch_frame_windows(
+            epoch_windows,
+            start_epoch_number=2,
+        )
+
+        self.assertEqual(
+            [(window.start_frame, window.stop_frame) for window in selected],
+            [(5, 20)],
         )
 
     def test_rejects_epoch_window_count_mismatch(self) -> None:

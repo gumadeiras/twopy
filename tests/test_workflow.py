@@ -140,6 +140,96 @@ class WorkflowTest(unittest.TestCase):
             self.assertFalse((root / "response_summary_grouped.csv").exists())
             self.assertFalse((root / "exports" / "csvs").exists())
 
+    def test_compute_recording_responses_defaults_to_named_baseline_epoch(
+        self,
+    ) -> None:
+        """Confirm script defaults use the shared gray/interleave baseline rule.
+
+        Inputs: a recording whose gray-like epoch is not epoch one.
+        Outputs: baseline windows and metadata select the named baseline epoch.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = self._write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName":"Odor A"}, {"epochName":"Gray Interleave"}]'
+                ),
+            )
+            recording = load_converted_recording(recording_path)
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            windows = (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor A"),
+                EpochFrameWindow(
+                    FrameWindow(1, 2, 4, "gray"),
+                    2,
+                    "Gray Interleave",
+                ),
+            )
+
+            result = compute_recording_responses(
+                recording,
+                roi_set,
+                epoch_windows=windows,
+                background_method="none",
+                baseline_sample_seconds=None,
+                fit_mode="log_linear",
+                apply_motion_mask=False,
+                chunk_frames=2,
+            )
+
+            self.assertEqual(result.baseline_windows, (windows[1].window,))
+            self.assertEqual(result.dff.metadata["baseline_epoch_number"], 2)
+
+    def test_compute_recording_responses_honors_explicit_epoch_one_baseline(
+        self,
+    ) -> None:
+        """Confirm explicit epoch-one selection overrides the shared default.
+
+        Inputs: a recording with epoch two named as gray interleave and an
+        explicit request for baseline epoch one.
+        Outputs: baseline windows come from epoch one.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = self._write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName":"Odor A"}, {"epochName":"Gray Interleave"}]'
+                ),
+            )
+            recording = load_converted_recording(recording_path)
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            windows = (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor A"),
+                EpochFrameWindow(
+                    FrameWindow(1, 2, 4, "gray"),
+                    2,
+                    "Gray Interleave",
+                ),
+            )
+
+            result = compute_recording_responses(
+                recording,
+                roi_set,
+                epoch_windows=windows,
+                baseline_epoch_number=1,
+                background_method="none",
+                baseline_sample_seconds=None,
+                fit_mode="log_linear",
+                apply_motion_mask=False,
+                chunk_frames=2,
+            )
+
+            self.assertEqual(result.baseline_windows, (windows[0].window,))
+            self.assertEqual(result.dff.metadata["baseline_epoch_number"], 1)
+
     def test_compute_recording_responses_accepts_explicit_baseline_windows(
         self,
     ) -> None:
@@ -182,6 +272,54 @@ class WorkflowTest(unittest.TestCase):
             self.assertEqual(result.traces.stop_frame, 4)
             self.assertEqual(result.dff.metadata["baseline_sample_seconds"], "full")
             self.assertEqual(result.dff.metadata["fit_mode"], "log_linear")
+
+    def test_compute_recording_responses_no_baseline_epoch_uses_span(
+        self,
+    ) -> None:
+        """Confirm no-baseline-epoch mode fits over one continuous span.
+
+        Inputs: explicit epoch windows with a selected first stimulus epoch.
+        Outputs: one baseline window spans that epoch and all later epochs.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = self._write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName":"Probe"}, {"epochName":"Stim A"}, '
+                    '{"epochName":"Stim B"}]'
+                ),
+            )
+            recording = load_converted_recording(recording_path)
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            windows = (
+                EpochFrameWindow(FrameWindow(0, 0, 1, "probe"), 1, "Probe"),
+                EpochFrameWindow(FrameWindow(1, 1, 2, "stim_a"), 2, "Stim A"),
+                EpochFrameWindow(FrameWindow(2, 2, 4, "stim_b"), 3, "Stim B"),
+            )
+
+            result = compute_recording_responses(
+                recording,
+                roi_set,
+                epoch_windows=windows,
+                baseline_mode="no_baseline_epoch",
+                baseline_epoch_number=2,
+                background_method="none",
+                baseline_sample_seconds=None,
+                fit_mode="log_linear",
+                apply_motion_mask=False,
+                chunk_frames=2,
+            )
+
+            self.assertEqual(
+                result.baseline_windows,
+                (FrameWindow(0, 1, 4, "no_baseline_epoch_from_epoch_0002"),),
+            )
+            self.assertEqual(result.dff.metadata["baseline_mode"], "no_baseline_epoch")
+            self.assertEqual(result.dff.metadata["baseline_epoch_number"], 2)
 
     def _write_converted_recording(
         self,

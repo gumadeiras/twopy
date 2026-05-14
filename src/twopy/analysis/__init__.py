@@ -18,7 +18,7 @@ from twopy.analysis.dff import (
     RoiDeltaFOverF,
     compute_roi_delta_f_over_f,
 )
-from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.dff_options import DeltaFOverFBaselineMode, DeltaFOverFOptions
 from twopy.analysis.epoch_mapping import (
     InterpolatedEpochMapping,
     interpolate_stimulus_epochs_to_frame_windows,
@@ -32,6 +32,7 @@ from twopy.analysis.persistence import (
     write_response_summary_grouped_csv,
     write_response_summary_trials_csv,
 )
+from twopy.analysis.response_context import default_recording_baseline_epoch_number
 from twopy.analysis.response_processing import (
     CorrelationFilterOptions,
     LowPassFilterOptions,
@@ -58,6 +59,7 @@ from twopy.analysis.trials import (
     is_baseline_epoch_name,
     make_frame_windows,
     map_stimulus_epochs_to_frame_windows,
+    no_baseline_epoch_frame_windows,
     resolve_baseline_frame_windows,
     select_baseline_frame_windows,
     split_traces_by_frame_windows,
@@ -85,6 +87,8 @@ __all__ = [
     "compute_recording_responses",
     "CorrelationFilterOptions",
     "default_baseline_epoch_number",
+    "default_recording_baseline_epoch_number",
+    "DeltaFOverFBaselineMode",
     "DeltaFOverFOptions",
     "DeltaFOverFFitMode",
     "EpochFrameWindow",
@@ -102,6 +106,7 @@ __all__ = [
     "LowPassFilterOptions",
     "make_frame_windows",
     "map_stimulus_epochs_to_frame_windows",
+    "no_baseline_epoch_frame_windows",
     "RoiDeltaFOverF",
     "ResponseProcessingOptions",
     "RoiCorrelationScores",

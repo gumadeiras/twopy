@@ -1661,6 +1661,10 @@ class NapariAdapterTest(unittest.TestCase):
             dff_widget._background_method.itemText(index)
             for index in range(dff_widget._background_method.count())
         )
+        baseline_mode_labels = tuple(
+            dff_widget._baseline_mode.itemText(index)
+            for index in range(dff_widget._baseline_mode.count())
+        )
         fit_labels = tuple(
             dff_widget._fit_mode.itemText(index)
             for index in range(dff_widget._fit_mode.count())
@@ -1678,6 +1682,11 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertIn("shared y-stripe P%", background_labels)
         self.assertIn("ROI y-stripe P%", background_labels)
         self.assertNotIn("roi_y_stripe_percentile", background_labels)
+        self.assertEqual(
+            baseline_mode_labels,
+            ("baseline epoch", "no baseline epoch"),
+        )
+        self.assertNotIn("no_true_interleave", baseline_mode_labels)
         rich_label_role = int(Qt.ItemDataRole.UserRole) + 1
         self.assertEqual(
             dff_widget._background_method.itemData(2, rich_label_role),
@@ -1821,6 +1830,7 @@ class NapariAdapterTest(unittest.TestCase):
 
         wide_controls: list[QWidget] = [
             response_window_widget._auto,
+            dff_widget._baseline_mode,
             dff_widget._background_method,
             dff_widget._baseline_epoch,
             dff_widget._use_full_baseline,
@@ -1834,6 +1844,7 @@ class NapariAdapterTest(unittest.TestCase):
             processing_widget._correlation_window_has_stop,
         ]
         dropdowns: list[QComboBox] = [
+            dff_widget._baseline_mode,
             dff_widget._background_method,
             dff_widget._baseline_epoch,
             dff_widget._fit_mode,
@@ -1912,6 +1923,24 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(processing_widget._minimum_correlation.decimals(), 2)
         self.assertEqual(processing_widget._correlation_window_start.decimals(), 2)
         self.assertEqual(processing_widget._correlation_window_stop.decimals(), 2)
+
+    def test_dff_baseline_mode_switches_epoch_label_and_option(self) -> None:
+        """Confirm no-baseline mode uses native UI wording.
+
+        Inputs: a Plot-tab dF/F widget with default settings.
+        Outputs: the epoch selector is labeled as a baseline selector for
+        normal dF/F and as the first epoch selector for no-baseline analysis.
+        """
+        _ = QApplication.instance() or QApplication([])
+        dff_widget = cast(Any, DeltaFOverFOptionsWidget(DeltaFOverFOptions()))
+
+        self.assertEqual(dff_widget._baseline_epoch_label.text(), "Baseline epoch")
+        dff_widget._baseline_mode.setCurrentIndex(
+            dff_widget._baseline_mode.findData("no_baseline_epoch"),
+        )
+
+        self.assertEqual(dff_widget._baseline_epoch_label.text(), "First epoch")
+        self.assertEqual(dff_widget.options().baseline_mode, "no_baseline_epoch")
 
     def test_baseline_epoch_dropdown_uses_recording_epoch_names(self) -> None:
         """Confirm baseline selection shows actual recording epoch names.
@@ -2062,6 +2091,7 @@ class NapariAdapterTest(unittest.TestCase):
         _ = QApplication.instance() or QApplication([])
         response_widget = cast(Any, create_response_plot_widget(None))
         options = DeltaFOverFOptions(
+            baseline_mode="no_baseline_epoch",
             baseline_epoch_number=3,
             baseline_epoch_name="Manual baseline",
             background_method="roi_y_stripe_percentile",
@@ -2082,6 +2112,10 @@ class NapariAdapterTest(unittest.TestCase):
             options,
         )
         self.assertEqual(response_widget._delta_f_over_f_options, options)
+        self.assertEqual(
+            response_widget._delta_f_over_f_options_widget._baseline_epoch_label.text(),
+            "First epoch",
+        )
 
     def test_savgol_window_control_steps_through_valid_values(self) -> None:
         """Confirm Savitzky-Golay window clicks stay on valid values.
@@ -4585,6 +4619,7 @@ class NapariAdapterTest(unittest.TestCase):
                 dff=_tiny_dff(
                     {
                         "method": "test",
+                        "baseline_mode": "no_baseline_epoch",
                         "baseline_epoch_number": 3,
                         "baseline_epoch_name": "Manual baseline",
                         "baseline_sample_seconds": "full",
@@ -4601,6 +4636,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(
                 result.delta_f_over_f_options,
                 DeltaFOverFOptions(
+                    baseline_mode="no_baseline_epoch",
                     baseline_epoch_number=3,
                     baseline_epoch_name="Manual baseline",
                     baseline_sample_seconds=None,
