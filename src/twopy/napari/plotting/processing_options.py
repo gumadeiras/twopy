@@ -7,6 +7,7 @@ This module owns only GUI controls and value translation. The analysis package
 owns validation, math, and persistence of the selected settings.
 """
 
+import math
 from collections.abc import Callable
 
 from qtpy.QtCore import QSignalBlocker
@@ -265,6 +266,32 @@ class ResponseProcessingOptionsWidget(QWidget):
             None.
         """
         self._normalization_options = options
+
+    def set_correlation_window_stop_default(self, stop_seconds: float | None) -> None:
+        """Set the inactive correlation-window stop value used when enabled.
+
+        Args:
+            stop_seconds: Default stop time in seconds, or ``None`` when no
+                epoch-duration default is available.
+
+        Returns:
+            None.
+
+        The checkbox still owns whether a stop is active. This only changes
+        the latent value shown in the spin box, so enabling the stop starts
+        from the shortest epoch duration instead of the invalid ``0 s`` value.
+        """
+        if self._correlation_window_has_stop.isChecked():
+            return
+        resolved_stop = 0.0 if stop_seconds is None else stop_seconds
+        if not math.isfinite(resolved_stop):
+            return
+        start_seconds = self._correlation_window_start.value()
+        if stop_seconds is not None and resolved_stop <= start_seconds:
+            return
+        blocker = QSignalBlocker(self._correlation_window_stop)
+        self._correlation_window_stop.setValue(resolved_stop)
+        del blocker
 
     def _smoothing_group(self) -> QGroupBox:
         """Create the smoothing control group."""

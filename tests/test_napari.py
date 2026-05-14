@@ -103,6 +103,7 @@ from twopy.napari.plotting.data import (
     filter_response_plot_data_rois,
     load_response_plot_data,
     response_plot_data_from_grouped,
+    response_plot_min_epoch_duration_seconds,
 )
 from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
 from twopy.napari.plotting.docks import create_response_plot_widget
@@ -1176,6 +1177,9 @@ class NapariAdapterTest(unittest.TestCase):
             )
             computation = SimpleNamespace(
                 grouped_responses=_tiny_grouped_responses(),
+                epoch_windows=(
+                    EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),
+                ),
                 response_processing_options=ResponseProcessingOptions(),
                 correlation_scores=RoiCorrelationScores(
                     roi_labels=("roi_1",),
@@ -1226,6 +1230,9 @@ class NapariAdapterTest(unittest.TestCase):
             )
             computation = SimpleNamespace(
                 grouped_responses=_tiny_grouped_responses(),
+                epoch_windows=(
+                    EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),
+                ),
                 response_processing_options=ResponseProcessingOptions(),
                 correlation_scores=None,
             )
@@ -1262,6 +1269,9 @@ class NapariAdapterTest(unittest.TestCase):
             )
             computation = SimpleNamespace(
                 grouped_responses=_tiny_grouped_responses(),
+                epoch_windows=(
+                    EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),
+                ),
                 response_processing_options=ResponseProcessingOptions(),
                 correlation_scores=None,
             )
@@ -1923,6 +1933,58 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(processing_widget._minimum_correlation.decimals(), 2)
         self.assertEqual(processing_widget._correlation_window_start.decimals(), 2)
         self.assertEqual(processing_widget._correlation_window_stop.decimals(), 2)
+
+    def test_correlation_window_stop_defaults_to_shortest_epoch_duration(
+        self,
+    ) -> None:
+        """Confirm correlation stop starts at the shortest epoch duration.
+
+        Inputs: plot data with three-second and two-second stimulus epochs.
+        Outputs: enabling the correlation window stop uses two seconds instead
+        of the invalid zero-second default.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((5, 1), dtype=np.float64),
+            baseline=np.ones((5, 1), dtype=np.float64),
+            values=np.arange(5, dtype=np.float64).reshape(5, 1),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=5,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        epoch_windows = (
+            EpochFrameWindow(FrameWindow(0, 0, 3, "slow"), 1, "Slow"),
+            EpochFrameWindow(FrameWindow(1, 3, 5, "fast"), 2, "Fast"),
+        )
+        plot_data = response_plot_data_from_grouped(
+            group_delta_f_over_f_by_epoch(
+                dff,
+                epoch_windows,
+                data_rate_hz=1.0,
+            ),
+            correlation_window_stop_default_seconds=(
+                response_plot_min_epoch_duration_seconds(
+                    epoch_windows,
+                    data_rate_hz=1.0,
+                )
+            ),
+        )
+
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+        processing_widget = response_widget._processing_options_widget
+        processing_widget._correlation_window_has_stop.setChecked(True)
+
+        self.assertEqual(processing_widget._correlation_window_stop.value(), 2.0)
+        self.assertEqual(
+            processing_widget.options().correlation_filter.window_seconds,
+            (0.0, 2.0),
+        )
 
     def test_dff_baseline_mode_switches_epoch_label_and_option(self) -> None:
         """Confirm no-baseline mode uses native UI wording.

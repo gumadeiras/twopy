@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- Made the napari Plot-tab correlation filter default its window stop to the shortest plotted epoch duration instead of `0 s`.
+
 ## 0.1.8 - 2026-05-14
 
 ### Features

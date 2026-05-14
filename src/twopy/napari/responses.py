@@ -20,6 +20,7 @@ from twopy.converted import RecordingData
 from twopy.napari.plotting.data import (
     ResponsePlotData,
     response_plot_data_from_grouped,
+    response_plot_min_epoch_duration_seconds,
     response_plot_window_seconds_for_recording,
 )
 from twopy.napari.roi import roi_label_image_from_layer_for_recording
@@ -133,4 +134,8 @@ def compute_response_plot_data_from_roi_set(
         response_window_options=response_window_options or ResponseWindowOptions(),
         response_processing_options=computation.response_processing_options,
         correlation_scores=computation.correlation_scores,
+        correlation_window_stop_default_seconds=response_plot_min_epoch_duration_seconds(
+            computation.epoch_windows,
+            data_rate_hz=computation.grouped_responses.data_rate_hz,
+        ),
     )

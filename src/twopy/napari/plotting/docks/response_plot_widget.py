@@ -44,6 +44,7 @@ from twopy.napari.plotting.data import (
     filter_response_plot_data_rois,
     load_response_plot_data,
     response_plot_baseline_window_limit_for_recording,
+    response_plot_min_epoch_duration_for_recording,
 )
 from twopy.napari.plotting.docks.dynamic_options import (
     add_plot_display_options_group,
@@ -318,6 +319,7 @@ class _ResponsePlotWidget(QWidget):
             ),
         )
         self._response_window_options_widget.set_max_window_seconds(None)
+        self._processing_options_widget.set_correlation_window_stop_default(None)
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
         self._microscope_summary_label.setText("No microscope metadata.")
@@ -352,6 +354,9 @@ class _ResponsePlotWidget(QWidget):
         )
         self._response_window_options_widget.set_max_window_seconds(
             response_plot_baseline_window_limit_for_recording(recording),
+        )
+        self._processing_options_widget.set_correlation_window_stop_default(
+            response_plot_min_epoch_duration_for_recording(recording),
         )
         self._delta_f_over_f_options = self._delta_f_over_f_options_widget.options()
         self._live_controller.set_delta_f_over_f_options(
@@ -516,6 +521,9 @@ class _ResponsePlotWidget(QWidget):
             self._load_delta_f_over_f_options(plot_data.delta_f_over_f_options)
         if plot_data.response_window_options is not None:
             self._load_response_window_options(plot_data.response_window_options)
+        self._processing_options_widget.set_correlation_window_stop_default(
+            plot_data.correlation_window_stop_default_seconds,
+        )
         self._sync_plot_state(reset_axes=reset_axes)
         self._render_plots()
 

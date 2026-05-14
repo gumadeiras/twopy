@@ -18,7 +18,7 @@ from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import DeltaFOverFFitMode, RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFBaselineMode, DeltaFOverFOptions
 from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
-from twopy.analysis.persistence import load_analysis_outputs
+from twopy.analysis.persistence import LoadedAnalysisOutputs, load_analysis_outputs
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
     RoiCorrelationScores,
@@ -49,6 +49,8 @@ __all__ = [
     "filter_response_plot_data_rois",
     "load_response_plot_data",
     "response_plot_baseline_window_limit_for_recording",
+    "response_plot_min_epoch_duration_for_recording",
+    "response_plot_min_epoch_duration_seconds",
     "response_plot_post_window_seconds_for_recording",
     "response_plot_post_window_seconds",
     "response_plot_window_seconds_for_recording",
@@ -90,6 +92,7 @@ class ResponsePlotData:
     response_window_options: ResponseWindowOptions | None = None
     response_processing_options: ResponseProcessingOptions | None = None
     correlation_scores: RoiCorrelationScores | None = None
+    correlation_window_stop_default_seconds: float | None = None
 
 
 def response_plot_data_from_grouped(
@@ -100,6 +103,7 @@ def response_plot_data_from_grouped(
     response_window_options: ResponseWindowOptions | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
     correlation_scores: RoiCorrelationScores | None = None,
+    correlation_window_stop_default_seconds: float | None = None,
 ) -> ResponsePlotData:
     """Summarize grouped responses into mean and SEM traces for plotting.
 
@@ -114,6 +118,8 @@ def response_plot_data_from_grouped(
             produce the grouped responses.
         correlation_scores: Optional ROI-level correlation QC scores used to
             hide excluded ROIs in the napari ROI controls.
+        correlation_window_stop_default_seconds: Optional default stop time
+            for enabling Plot-tab correlation QC.
 
     Returns:
         Plot-ready data with one item per stimulus epoch type.
@@ -148,6 +154,7 @@ def response_plot_data_from_grouped(
         ),
         response_processing_options=response_processing_options,
         correlation_scores=correlation_scores,
+        correlation_window_stop_default_seconds=correlation_window_stop_default_seconds,
     )
 
 
@@ -193,6 +200,9 @@ def filter_response_plot_data_rois(
         correlation_scores=_filter_correlation_scores(
             plot_data.correlation_scores,
             keep_indices,
+        ),
+        correlation_window_stop_default_seconds=(
+            plot_data.correlation_window_stop_default_seconds
         ),
     )
 
@@ -307,6 +317,56 @@ def response_plot_baseline_window_limit_for_recording(
         return None
 
 
+def response_plot_min_epoch_duration_for_recording(
+    recording: RecordingData,
+) -> float | None:
+    """Return the shortest stimulus epoch duration for one recording.
+
+    Args:
+        recording: Loaded converted recording with stimulus timing metadata.
+
+    Returns:
+        Shortest positive photodiode-aligned epoch duration in seconds, or
+        ``None`` when timing evidence is unavailable.
+    """
+    try:
+        mapping = interpolate_stimulus_epochs_to_frame_windows(recording)
+        frame_rate_hz = recording_frame_rate_hz(recording)
+    except ValueError:
+        return None
+    durations = tuple(
+        (epoch_window.window.stop_frame - epoch_window.window.start_frame)
+        / frame_rate_hz
+        for epoch_window in mapping.windows
+        if epoch_window.window.stop_frame > epoch_window.window.start_frame
+    )
+    return _minimum_positive_duration(durations)
+
+
+def response_plot_min_epoch_duration_seconds(
+    epoch_windows: Sequence[EpochFrameWindow],
+    *,
+    data_rate_hz: float,
+) -> float | None:
+    """Return the shortest stimulus epoch duration from exact frame windows.
+
+    Args:
+        epoch_windows: Photodiode-aligned stimulus epoch windows.
+        data_rate_hz: Imaging frame rate in hertz.
+
+    Returns:
+        Shortest positive epoch duration in seconds, or ``None`` when no
+        positive duration can be computed.
+    """
+    if not np.isfinite(data_rate_hz) or data_rate_hz <= 0.0:
+        return None
+    return _minimum_positive_duration(
+        (epoch.window.stop_frame - epoch.window.start_frame) / data_rate_hz
+        for epoch in epoch_windows
+        if epoch.window.stop_frame > epoch.window.start_frame
+    )
+
+
 def response_plot_window_seconds_for_recording(
     recording: RecordingData,
     options: ResponseWindowOptions,
@@ -361,6 +421,9 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
             response_window_options=saved_window_options,
             response_processing_options=outputs.response_processing_options,
             correlation_scores=outputs.correlation_scores,
+            correlation_window_stop_default_seconds=(
+                _correlation_stop_default_from_outputs(outputs)
+            ),
         )
     if outputs.dff is not None and len(outputs.epoch_windows) > 0:
         data_rate_hz = _analysis_output_data_rate_hz(
@@ -391,6 +454,9 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
                 response_window_options=_response_window_options_from_grouped(grouped),
                 response_processing_options=outputs.response_processing_options,
                 correlation_scores=outputs.correlation_scores,
+                correlation_window_stop_default_seconds=(
+                    _correlation_stop_default_from_outputs(outputs)
+                ),
             )
     if outputs.grouped_responses is None:
         return f"No grouped responses in: {path}"
@@ -406,6 +472,9 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
         ),
         response_processing_options=outputs.response_processing_options,
         correlation_scores=outputs.correlation_scores,
+        correlation_window_stop_default_seconds=_correlation_stop_default_from_outputs(
+            outputs,
+        ),
     )
 
 
@@ -569,6 +638,30 @@ def _epoch_plot_data(
         mean_values=summary.mean_values,
         sem_values=summary.sem_values,
     )
+
+
+def _correlation_stop_default_from_outputs(
+    outputs: LoadedAnalysisOutputs,
+) -> float | None:
+    """Return the exact saved-analysis correlation stop default."""
+    if outputs.grouped_responses is None or len(outputs.epoch_windows) == 0:
+        return None
+    return response_plot_min_epoch_duration_seconds(
+        outputs.epoch_windows,
+        data_rate_hz=outputs.grouped_responses.data_rate_hz,
+    )
+
+
+def _minimum_positive_duration(durations: Iterable[float]) -> float | None:
+    """Return the smallest finite positive duration from candidates."""
+    positive = tuple(
+        float(duration)
+        for duration in durations
+        if np.isfinite(duration) and duration > 0.0
+    )
+    if len(positive) == 0:
+        return None
+    return min(positive)
 
 
 def _analysis_output_data_rate_hz(
