@@ -370,12 +370,7 @@ class FovAssignmentView(QWidget):
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
         dialog.setDirectory(str(current_path.parent))
         dialog.selectFile(current_path.name)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
-            return None
-        selected_files = dialog.selectedFiles()
-        if len(selected_files) == 0:
-            return None
-        return Path(selected_files[0]).expanduser()
+        return _selected_dialog_path(dialog)
 
     def _choose_fov_group_save_path(self) -> Path | None:
         """Return a user-selected path for saving FOV CSV rows."""
@@ -388,12 +383,7 @@ class FovAssignmentView(QWidget):
         dialog.setOption(QFileDialog.Option.DontConfirmOverwrite, True)
         dialog.setDirectory(str(current_path.parent))
         dialog.selectFile(current_path.name)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
-            return None
-        selected_files = dialog.selectedFiles()
-        if len(selected_files) == 0:
-            return None
-        return Path(selected_files[0]).expanduser()
+        return _selected_dialog_path(dialog)
 
     def _finalize(self) -> None:
         """Call the parent finalize callback."""
@@ -518,3 +508,13 @@ def _shared_note(rows: tuple[object, ...]) -> str:
     """Return the common loaded note when all rows share one note."""
     notes = {getattr(row, "note", "") for row in rows}
     return notes.pop() if len(notes) == 1 else ""
+
+
+def _selected_dialog_path(dialog: QFileDialog) -> Path | None:
+    """Return the accepted file dialog path, or ``None`` when cancelled."""
+    if dialog.exec() != QFileDialog.DialogCode.Accepted:
+        return None
+    selected_files = dialog.selectedFiles()
+    if len(selected_files) == 0:
+        return None
+    return Path(selected_files[0]).expanduser()

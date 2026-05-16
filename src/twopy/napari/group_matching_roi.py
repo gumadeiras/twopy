@@ -132,13 +132,7 @@ class RoiAssignmentView(QWidget):
         self._status_label = QLabel("Choose ROIs in the cards, then save a group.")
         self._response_status = QLabel("Choose ROIs to compare responses.")
         self._response_status.setWordWrap(True)
-        self._normalization_widget = NormalizationOptionsWidget(
-            self._normalization_options,
-            on_change=self._set_normalization_options,
-        )
-        for checkbox in self._normalization_widget.findChildren(QCheckBox):
-            checkbox.setFixedWidth(240)
-            checkbox.setStyleSheet("width: 240px;")
+        self._normalization_widget = self._create_normalization_widget()
         self._legend_widget = QWidget()
         self._legend_layout = QHBoxLayout()
         self._legend_layout.setContentsMargins(0, 0, 0, 0)
@@ -162,36 +156,7 @@ class RoiAssignmentView(QWidget):
         self._grid.setContentsMargins(0, 0, 0, 0)
         self._grid.setSpacing(12)
         self._grid_widget.setLayout(self._grid)
-        self._group_table = QTableWidget(0, 3)
-        self._group_table.setObjectName("roi_match_group_table")
-        self._group_table.setHorizontalHeaderLabels(("Group", "ROIs", "Note"))
-        self._group_table.setMinimumHeight(160)
-        self._group_table.setMaximumHeight(240)
-        vertical_header = self._group_table.verticalHeader()
-        if vertical_header is not None:
-            vertical_header.setVisible(False)
-        self._group_table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows,
-        )
-        self._group_table.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection,
-        )
-        self._group_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        horizontal_header = self._group_table.horizontalHeader()
-        if horizontal_header is not None:
-            horizontal_header.setSectionResizeMode(
-                0,
-                QHeaderView.ResizeMode.ResizeToContents,
-            )
-            horizontal_header.setSectionResizeMode(
-                1,
-                QHeaderView.ResizeMode.Stretch,
-            )
-            horizontal_header.setSectionResizeMode(
-                2,
-                QHeaderView.ResizeMode.ResizeToContents,
-            )
-        self._group_table.itemSelectionChanged.connect(self._restore_selected_group)
+        self._group_table = self._create_group_table()
         load_button = QPushButton("Load ROI CSV")
         load_button.clicked.connect(self.load_match_row_path)
         browse_button = QPushButton("Browse save path")
@@ -254,6 +219,44 @@ class RoiAssignmentView(QWidget):
         layout.addWidget(self._status_label)
         self.setLayout(layout)
         self.refresh_fov_filter()
+
+    def _create_normalization_widget(self) -> NormalizationOptionsWidget:
+        """Return the ROI response normalization controls."""
+        widget = NormalizationOptionsWidget(
+            self._normalization_options,
+            on_change=self._set_normalization_options,
+        )
+        for checkbox in widget.findChildren(QCheckBox):
+            checkbox.setFixedWidth(240)
+            checkbox.setStyleSheet("width: 240px;")
+        return widget
+
+    def _create_group_table(self) -> QTableWidget:
+        """Return the saved ROI group table with selection behavior wired."""
+        table = QTableWidget(0, 3)
+        table.setObjectName("roi_match_group_table")
+        table.setHorizontalHeaderLabels(("Group", "ROIs", "Note"))
+        table.setMinimumHeight(160)
+        table.setMaximumHeight(240)
+        vertical_header = table.verticalHeader()
+        if vertical_header is not None:
+            vertical_header.setVisible(False)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        horizontal_header = table.horizontalHeader()
+        if horizontal_header is not None:
+            horizontal_header.setSectionResizeMode(
+                0,
+                QHeaderView.ResizeMode.ResizeToContents,
+            )
+            horizontal_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            horizontal_header.setSectionResizeMode(
+                2,
+                QHeaderView.ResizeMode.ResizeToContents,
+            )
+        table.itemSelectionChanged.connect(self._restore_selected_group)
+        return table
 
     def refresh_fov_filter(self) -> None:
         """Refresh the FOV filter choices from saved FOV assignments."""
@@ -399,11 +402,7 @@ class RoiAssignmentView(QWidget):
             self._status_label.setText("Select a saved group before removing.")
             return
         self._replace_group_rows(group_cell_id, ())
-        self._group_table.blockSignals(True)
-        try:
-            self._group_table.clearSelection()
-        finally:
-            self._group_table.blockSignals(False)
+        self._clear_group_table_selection()
         self._note_edit.setText("")
         self._status_label.setText(f"Removed group {group_cell_id}.")
         self._refresh_group_table()
@@ -452,11 +451,7 @@ class RoiAssignmentView(QWidget):
 
     def clear_current_group(self) -> None:
         """Clear selected ROIs in the current FOV filter."""
-        self._group_table.blockSignals(True)
-        try:
-            self._group_table.clearSelection()
-        finally:
-            self._group_table.blockSignals(False)
+        self._clear_group_table_selection()
         for card in self._cards:
             card.set_selected_roi("")
             self._current_rois.pop(card.recording_path, None)
@@ -478,12 +473,7 @@ class RoiAssignmentView(QWidget):
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
         dialog.setDirectory(str(current_path.parent))
         dialog.selectFile(current_path.name)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
-            return None
-        selected_files = dialog.selectedFiles()
-        if len(selected_files) == 0:
-            return None
-        return Path(selected_files[0]).expanduser()
+        return _selected_dialog_path(dialog)
 
     def _choose_match_save_path(self) -> Path | None:
         """Return a user-selected path for saving ROI match rows."""
@@ -496,12 +486,7 @@ class RoiAssignmentView(QWidget):
         dialog.setOption(QFileDialog.Option.DontConfirmOverwrite, True)
         dialog.setDirectory(str(current_path.parent))
         dialog.selectFile(current_path.name)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
-            return None
-        selected_files = dialog.selectedFiles()
-        if len(selected_files) == 0:
-            return None
-        return Path(selected_files[0]).expanduser()
+        return _selected_dialog_path(dialog)
 
     def _set_normalization_options(self, options: NormalizationOptions) -> None:
         """Update response normalization options and redraw previews."""
@@ -680,6 +665,14 @@ class RoiAssignmentView(QWidget):
             ):
                 self._group_table.selectRow(row_index)
                 return
+
+    def _clear_group_table_selection(self) -> None:
+        """Clear saved-group table selection without restoring a group."""
+        self._group_table.blockSignals(True)
+        try:
+            self._group_table.clearSelection()
+        finally:
+            self._group_table.blockSignals(False)
 
     def _selected_response_data(self) -> tuple[_SelectedRoiResponse, ...]:
         """Return response data for card ROIs selected in the popup."""
@@ -866,35 +859,44 @@ def _combined_response_plot_data(
     )
     combined_epochs: list[EpochResponsePlotData] = []
     for reference_epoch in reference_epochs:
-        key = (reference_epoch.epoch_number, reference_epoch.epoch_name)
-        mean_rows: list[npt.NDArray[np.float64]] = []
-        sem_rows: list[npt.NDArray[np.float64]] = []
-        for response in selected_responses:
-            epoch = _matching_epoch(response.plot_data, key=key)
-            if epoch is None or not _same_time_axis(
-                reference_epoch.time_seconds,
-                epoch.time_seconds,
-            ):
-                mean_rows.append(
-                    np.full_like(reference_epoch.time_seconds, np.nan),
-                )
-                sem_rows.append(
-                    np.full_like(reference_epoch.time_seconds, np.nan),
-                )
-            else:
-                mean_rows.append(epoch.mean_values[0])
-                sem_rows.append(epoch.sem_values[0])
+        mean_values, sem_values = _combined_epoch_values(
+            reference_epoch,
+            selected_responses,
+        )
         combined_epochs.append(
             EpochResponsePlotData(
                 epoch_name=reference_epoch.epoch_name,
                 epoch_number=reference_epoch.epoch_number,
                 roi_labels=roi_labels,
                 time_seconds=reference_epoch.time_seconds,
-                mean_values=np.vstack(mean_rows),
-                sem_values=np.vstack(sem_rows),
+                mean_values=mean_values,
+                sem_values=sem_values,
             ),
         )
     return ResponsePlotData(source_path=None, epochs=tuple(combined_epochs))
+
+
+def _combined_epoch_values(
+    reference_epoch: EpochResponsePlotData,
+    selected_responses: tuple[_SelectedRoiResponse, ...],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Return stacked mean and SEM rows for one shared comparison epoch."""
+    key = (reference_epoch.epoch_number, reference_epoch.epoch_name)
+    mean_rows: list[npt.NDArray[np.float64]] = []
+    sem_rows: list[npt.NDArray[np.float64]] = []
+    for response in selected_responses:
+        epoch = _matching_epoch(response.plot_data, key=key)
+        if epoch is None or not _same_time_axis(
+            reference_epoch.time_seconds,
+            epoch.time_seconds,
+        ):
+            missing_row = np.full_like(reference_epoch.time_seconds, np.nan)
+            mean_rows.append(missing_row)
+            sem_rows.append(missing_row)
+        else:
+            mean_rows.append(epoch.mean_values[0])
+            sem_rows.append(epoch.sem_values[0])
+    return np.vstack(mean_rows), np.vstack(sem_rows)
 
 
 def _matching_epoch(
@@ -1082,3 +1084,13 @@ def _clear_grid_layout(layout: QGridLayout) -> None:
             widget.hide()
             widget.setParent(None)
             widget.deleteLater()
+
+
+def _selected_dialog_path(dialog: QFileDialog) -> Path | None:
+    """Return the accepted file dialog path, or ``None`` when cancelled."""
+    if dialog.exec() != QFileDialog.DialogCode.Accepted:
+        return None
+    selected_files = dialog.selectedFiles()
+    if len(selected_files) == 0:
+        return None
+    return Path(selected_files[0]).expanduser()
