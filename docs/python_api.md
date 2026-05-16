@@ -135,6 +135,42 @@ response_watershed = extract_response_watershed_rois(
 
 For comparison against historical psycho5 ROI extraction, use `twopy.parity` helpers such as `psycho5_grid_roi_label_image` and `psycho5_watershed_image_from_preseg`. Those helpers preserve psycho5-specific label ordering and watershed border-fill behavior for audits; normal twopy analysis should use the native ROI extraction helpers above.
 
+Movie-level response heatmaps use converted movies directly and do not require ROIs. They use the same photodiode-aligned epoch windows as ROI response analysis, compute local baseline-vs-response dF/F images, and persist normalized signed maps plus the original dF/F divisor for audit:
+
+```python
+from pathlib import Path
+
+from twopy import (
+    ResponseMapOptions,
+    compute_recording_response_maps,
+    load_response_map_data,
+    save_response_map_data,
+)
+
+pixel_maps = compute_recording_response_maps(
+    recording,
+    epoch_windows=epoch_windows,
+    options=ResponseMapOptions(
+        mode="pixel",
+        pixel_smoothing_sigma=2.0,
+    ),
+)
+save_response_map_data(Path("/path/to/response_heatmaps.h5"), pixel_maps)
+reloaded_maps = load_response_map_data(Path("/path/to/response_heatmaps.h5"))
+
+window_maps = compute_recording_response_maps(
+    recording,
+    epoch_windows=epoch_windows,
+    options=ResponseMapOptions(
+        mode="window",
+        window_size_pixels=4,
+        window_stride_pixels=2,
+    ),
+)
+```
+
+In pixel mode, twopy computes signed dF/F at each foreground pixel and optionally applies NaN-aware Gaussian smoothing. In window mode, twopy averages baseline and response intensity inside each square window before dF/F, paints that scalar response back over the covered pixels, and averages overlapping windows. The foreground percentile threshold from the mean image both masks dim background pixels and becomes the denominator floor for dF/F, which prevents near-zero baseline pixels from creating artificial hot spots. Persisted epoch maps are normalized by the largest absolute finite response across all epochs; multiply `epoch.response_values` by `map_data.response_scale` to recover original dF/F units. Napari display and exports apply a separate robust 95th-percentile signed color limit, optionally shared across epochs, without changing the persisted heatmap data.
+
 Stimulus epoch windows come from classified photodiode events, not nominal frame-rate assumptions. `timing.events` keeps the start, transition, and end classifications auditable. ROI dF/F uses corrected fluorescence plus baseline windows to fit one shared exponential tau and one amplitude per ROI. When scripts do not pass explicit baseline windows or a baseline selector, twopy defaults to the first epoch name containing `gray`, `grey`, or `interleave`, then falls back to epoch 1. For stimuli without a distinct baseline epoch, pass `baseline_mode="no_baseline_epoch"` plus the first epoch number to include in the baseline fit; twopy fits over one continuous span from that epoch through later epochs. The default dF/F fit mode is `direct_bounded_tau`; use `log_linear` for a log-space linear fit, or `direct_bounded_tau_and_log_amplitude` when both tau and log-amplitude should be bounded.
 
 Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response processing. Smoothing and low-pass filters run on continuous dF/F before trial grouping. Epoch-peak normalization runs after trial grouping and divides every grouped response by each ROI's peak mean response in the selected epoch, with the selected normalization epoch and per-ROI scale factors saved in the analysis HDF5 output. Correlation filtering scores grouped trials and stores the selected settings plus QC scores in the analysis HDF5 output. Use `validate_grouped_roi_responses` when a script constructs grouped response objects directly; processing, persistence, and CSV exports call the same validator before trusting time, frame, and ROI axes.

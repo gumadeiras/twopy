@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Features
+
+- Added movie-level response heatmaps to the napari response dock, independent of ROI existence, with one signed inhibition-to-activation map per stimulus epoch.
+- Added response heatmap computation options for pixel dF/F maps with Gaussian smoothing and square-window dF/F maps with preset or custom size and stride.
+- Added robust 95th-percentile signed heatmap color limits, shared-limit display control across epochs, blue-black-orange colorbars, and neutral background rendering over the mean image.
+- Added recording-level `response_heatmaps.h5` persistence plus Export-tab PDF and PNG heatmap saving through the existing analysis-cache sync path.
+- Added script-facing response heatmap APIs for computing, saving, and loading `ResponseMapData`.
+
+### Changes
+
+- Documented response heatmap math, pixel/window methods, display scaling, persistence, and Python API usage in the GUI and Python API guides.
+
 ### Fixes
 
 - Made the napari Plot-tab correlation filter default its window stop to the shortest plotted epoch duration instead of `0 s`.
