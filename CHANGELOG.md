@@ -17,6 +17,7 @@
 
 ### Fixes
 
+- Prevented repeated napari loads of the same recording from adding duplicate Loaded Recordings entries.
 - Made response heatmaps reserve colorbar space inside the Plot-tab Size value so heatmap panels scale like response plots.
 - Made the napari Plot-tab correlation filter default its window stop to the shortest plotted epoch duration instead of `0 s`.
 

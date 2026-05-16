@@ -455,6 +455,23 @@ def _load_recording_path(
     """
     resolved_recording = resolve_or_convert_recording(selected_recording_path)
     paths = resolved_recording.paths
+    duplicate_index = _loaded_recording_index_for_path(
+        state,
+        paths.recording_data_path,
+    )
+    is_selected_replacement = (
+        replace_selected and duplicate_index == state.selected_recording_index
+    )
+    if duplicate_index is not None and not is_selected_replacement:
+        select_loaded_recording(state, duplicate_index)
+        _sync_recording_picker_to_selected(state)
+        if remember_selected_folder:
+            _remember_recording_folder(
+                selected_recording_path,
+                paths.recording_data_path,
+            )
+        return f"Already loaded {paths.recording_data_path}"
+
     roi_path = (
         paths.roi_file_to_load
         if is_default_path(roi_file_to_load)
@@ -482,11 +499,9 @@ def _load_recording_path(
     )
     _sync_recording_picker_to_selected(state)
     if remember_selected_folder:
-        write_last_recording_folder(
-            recording_folder_for_state(
-                selected_recording_path,
-                paths.recording_data_path,
-            ),
+        _remember_recording_folder(
+            selected_recording_path,
+            paths.recording_data_path,
         )
     status = "Converted and loaded" if resolved_recording.was_converted else "Loaded"
     return f"{status} {paths.recording_data_path}"
@@ -559,6 +574,7 @@ def _load_database_recording_paths(
     try:
         for path in paths:
             try:
+                previous_loaded_count = len(state.loaded_recordings)
                 _load_recording_path(
                     state,
                     path,
@@ -574,7 +590,8 @@ def _load_database_recording_paths(
                     ),
                 )
             else:
-                loaded_count += 1
+                if len(state.loaded_recordings) > previous_loaded_count:
+                    loaded_count += 1
     finally:
         state.is_loading = False
         state.defer_timeline_updates = False
@@ -620,6 +637,60 @@ def _make_loaded_recordings_widget(state: NapariControlState) -> object:
     state.loaded_recordings_panel = panel
     render_loaded_recordings_panel(state)
     return panel
+
+
+def _loaded_recording_index_for_path(
+    state: NapariControlState,
+    recording_data_path: Path,
+) -> int | None:
+    """Return the loaded-recording row for an already open recording.
+
+    Args:
+        state: Current napari control state.
+        recording_data_path: Resolved ``recording_data.h5`` path requested by
+            the user.
+
+    Returns:
+        Loaded-recording index, or ``None`` when this is a new recording.
+    """
+    requested = _recording_path_key(recording_data_path)
+    for index, loaded in enumerate(state.loaded_recordings):
+        if _recording_path_key(loaded.recording.path) == requested:
+            return index
+    return None
+
+
+def _remember_recording_folder(
+    selected_recording_path: Path,
+    recording_data_path: Path,
+) -> None:
+    """Persist the next starting folder for manual recording selection.
+
+    Args:
+        selected_recording_path: Path chosen by the user.
+        recording_data_path: Resolved converted recording path.
+
+    Returns:
+        None.
+    """
+    write_last_recording_folder(
+        recording_folder_for_state(
+            selected_recording_path,
+            recording_data_path,
+        ),
+    )
+
+
+def _recording_path_key(path: Path) -> Path:
+    """Return a stable comparison key for a converted recording path.
+
+    Args:
+        path: Converted recording-data path.
+
+    Returns:
+        Absolute path with symlinks and ``..`` normalized when possible.
+    """
+    return path.expanduser().resolve(strict=False)
 
 
 def _configure_recording_folder_picker(

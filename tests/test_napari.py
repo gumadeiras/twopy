@@ -3348,6 +3348,48 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.labels), 0)
             self.assertEqual(load_widget.recording_folder.value, Path("default"))
 
+    def test_loading_same_recording_selects_existing_entry(self) -> None:
+        """Confirm repeated loads do not duplicate the same recording.
+
+        Inputs: two converted folders loaded into one fake viewer, then the
+        first folder loaded again.
+        Outputs: the existing row is selected and no extra layers are added.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            recording_path = _write_converted_recording(first)
+            _write_converted_recording(second)
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            load_widget = _load_recording_widget(control_docks.load_widget)
+            panel = cast(QWidget, control_docks.loaded_recordings_widget)
+            loaded_list = panel.findChild(QListWidget)
+
+            load_widget(recording_folder=first)
+            load_widget(recording_folder=second)
+            result = load_widget(recording_folder=first)
+
+            assert loaded_list is not None
+            self.assertIn(f"Already loaded {recording_path.resolve()}", str(result))
+            self.assertEqual(loaded_list.count(), 2)
+            self.assertEqual(loaded_list.currentRow(), 0)
+            self.assertEqual(len(viewer.images), 4)
+            self.assertEqual(len(viewer.labels), 2)
+            self.assertTrue(viewer.images[0].visible)
+            self.assertTrue(viewer.images[1].visible)
+            self.assertTrue(viewer.labels[0].visible)
+            self.assertFalse(viewer.images[2].visible)
+            self.assertFalse(viewer.images[3].visible)
+            self.assertFalse(viewer.labels[1].visible)
+
     def test_controls_hide_remembered_recording_folder(self) -> None:
         """Confirm the Load Recording control keeps long remembered paths hidden.
 
