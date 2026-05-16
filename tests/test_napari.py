@@ -3235,9 +3235,7 @@ class NapariAdapterTest(unittest.TestCase):
             load_widget(recording_folder=first)
             load_widget(recording_folder=second)
             viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
-            viewer.labels[0].selected_label = 1
             viewer.labels[1].data = np.array([[2, 0], [0, 0]], dtype=np.int64)
-            viewer.labels[1].selected_label = 2
 
             self.assertEqual(loaded_list.count(), 2)
             self.assertEqual(loaded_list.currentRow(), 1)
@@ -3294,7 +3292,57 @@ class NapariAdapterTest(unittest.TestCase):
             )
             self.assertEqual({row.fov_group_id for row in fov_rows}, {"fov_1"})
             match_buttons["Save and continue to ROI assignment"].click()
-            match_buttons["Add selected ROI to group"].click()
+
+            fov_filter = group_matching_widget.findChild(QComboBox, "fov_filter")
+            assert fov_filter is not None
+            self.assertEqual(fov_filter.currentText(), "fov_1")
+            self.assertNotIn(
+                "All FOVs",
+                tuple(
+                    fov_filter.itemText(index) for index in range(fov_filter.count())
+                ),
+            )
+            roi_cards = group_matching_widget.findChildren(
+                QWidget,
+                "roi_assignment_card",
+            )
+            self.assertEqual(len(roi_cards), 2)
+            roi_selectors = [
+                combo
+                for combo in group_matching_widget.findChildren(QComboBox)
+                if combo.objectName() == "roi_selector"
+            ]
+            self.assertEqual(len(roi_selectors), 2)
+            for selector in roi_selectors:
+                self.assertEqual(selector.count(), 2)
+                selector.setCurrentIndex(1)
+            self.assertEqual(
+                len(
+                    group_matching_widget.findChildren(
+                        QWidget,
+                        "roi_preview_image",
+                    ),
+                ),
+                2,
+            )
+            self.assertEqual(
+                len(
+                    group_matching_widget.findChildren(
+                        QWidget,
+                        "roi_response_preview",
+                    ),
+                ),
+                2,
+            )
+            add_buttons = [
+                button
+                for card in roi_cards
+                for button in card.findChildren(QPushButton)
+                if button.text() == "Add to group"
+            ]
+            self.assertEqual(len(add_buttons), 2)
+            for button in add_buttons:
+                button.click()
 
             loaded_list.setCurrentRow(0)
             self.assertIn(first.name, str(load_widget.recording_folder.line_edit.value))
@@ -3304,7 +3352,6 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse(viewer.images[2].visible)
             self.assertFalse(viewer.images[3].visible)
             self.assertFalse(viewer.labels[1].visible)
-            match_buttons["Add selected ROI to group"].click()
             match_buttons["Save as same cell"].click()
 
             match_rows = load_manual_roi_match_rows(match_path)

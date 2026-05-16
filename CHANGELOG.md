@@ -13,6 +13,7 @@
 
 ### Changes
 
+- Made the Group Matching ROI assignment view visual and self-contained, with per-recording ROI overlays, response previews, and match actions inside the popup instead of relying on the active main napari selection.
 - Documented response heatmap math, pixel/window methods, display scaling, persistence, and Python API usage in the GUI and Python API guides.
 
 ### Fixes

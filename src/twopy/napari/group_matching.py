@@ -1,7 +1,7 @@
 """Manual group-analysis controls for loaded napari recordings.
 
-Inputs: recordings already loaded in the shared napari viewer and the user's
-current selected ROI label.
+Inputs: recordings already loaded in the shared napari viewer, their mean-image
+layers, and their ROI Labels layers.
 Outputs: plain CSV FOV grouping and ROI match tables that downstream group
 analysis can load without depending on napari.
 
@@ -11,13 +11,10 @@ matching across fields of view should not be the default path.
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
-import numpy as np
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QImage, QPixmap
 from qtpy.QtWidgets import (
-    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -28,22 +25,22 @@ from qtpy.QtWidgets import (
     QSlider,
     QSpinBox,
     QStackedWidget,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from twopy.analysis.group_matching import (
-    ManualRoiMatchRow,
-    ManualRoiMatchStatus,
-    append_manual_roi_match_rows,
     load_manual_fov_group_rows,
-    load_manual_roi_match_rows,
     make_manual_fov_group_rows,
-    make_manual_roi_match_rows,
-    next_group_cell_id,
     save_manual_fov_group_rows,
+)
+from twopy.napari.group_matching_images import (
+    THUMBNAIL_SIZE,
+    mean_image_thumbnail_pixmap,
+)
+from twopy.napari.group_matching_roi import (
+    RoiAssignmentView,
+    roi_labels_from_layer_data,
 )
 from twopy.napari.session import LoadedNapariRecording
 
@@ -53,32 +50,16 @@ __all__ = [
     "GroupMatchingPanel",
     "RoiAssignmentView",
     "mean_image_thumbnail_pixmap",
-    "roi_label_from_selected_layer_value",
+    "roi_labels_from_layer_data",
 ]
 
-MATCH_TABLE_FILENAME = "roi_matches.csv"
 FOV_GROUP_TABLE_FILENAME = "fov_groups.csv"
-THUMBNAIL_SIZE = 180
 
 
 class GroupMatchingState(Protocol):
     """Napari control-state fields needed by the group-matching widget."""
 
     loaded_recordings: list[LoadedNapariRecording]
-    selected_recording_index: int | None
-
-
-class _LayerWithSelectedLabel(Protocol):
-    """Small protocol for napari Labels layers with an active label value."""
-
-    selected_label: int
-    data: object
-
-
-class _LayerWithData(Protocol):
-    """Small protocol for napari layers whose image data can be previewed."""
-
-    data: object
 
 
 class GroupMatchingPanel(QWidget):
@@ -139,10 +120,15 @@ class GroupMatchingPanel(QWidget):
         output_path = self._fov_view.output_path()
         if not output_path.exists():
             return
+        loaded_paths = {
+            recording.display_path.expanduser()
+            for recording in self._state.loaded_recordings
+        }
         self._fov_groups.update(
             {
                 row.recording_path.expanduser(): row.fov_group_id
                 for row in load_manual_fov_group_rows(output_path)
+                if row.recording_path.expanduser() in loaded_paths
             },
         )
 
@@ -285,10 +271,13 @@ class FovAssignmentView(QWidget):
         Returns:
             ``True`` when rows were saved, otherwise ``False``.
         """
-        if len(self._fov_groups) == 0:
+        recording_groups = self._loaded_recording_groups()
+        if len(recording_groups) == 0:
             self._status_label.setText("No FOV assignments to save.")
             return False
-        rows = make_manual_fov_group_rows(self._fov_groups)
+        self._fov_groups.clear()
+        self._fov_groups.update(recording_groups)
+        rows = make_manual_fov_group_rows(recording_groups)
         save_manual_fov_group_rows(rows, self.output_path())
         self._status_label.setText(f"Saved {len(rows)} FOV assignments.")
         return True
@@ -315,6 +304,18 @@ class FovAssignmentView(QWidget):
         if len(used_numbers) == 0:
             return 1
         return max(used_numbers) + 1
+
+    def _loaded_recording_groups(self) -> dict[Path, str]:
+        """Return FOV assignments for currently loaded recordings only."""
+        loaded_paths = {
+            recording.display_path.expanduser()
+            for recording in self._state.loaded_recordings
+        }
+        return {
+            recording_path: fov_group_id
+            for recording_path, fov_group_id in self._fov_groups.items()
+            if recording_path in loaded_paths
+        }
 
 
 class FovRecordingCard(QFrame):
@@ -391,299 +392,6 @@ class FovRecordingCard(QFrame):
         else:
             self._select_button.setText("Select")
             self.setStyleSheet("")
-
-
-class RoiAssignmentView(QWidget):
-    """ROI assignment view filtered by finalized FOV groups."""
-
-    def __init__(
-        self,
-        *,
-        state: GroupMatchingState,
-        fov_groups: dict[Path, str],
-        current_rois: dict[Path, str],
-    ) -> None:
-        """Create the second-stage ROI assignment view."""
-        super().__init__()
-        self._state = state
-        self._fov_groups = fov_groups
-        self._current_rois = current_rois
-        self._status_label = QLabel("Filter by FOV, then add selected ROIs.")
-        self._path_edit = QLineEdit(str(Path.cwd() / MATCH_TABLE_FILENAME))
-        self._path_edit.setObjectName("roi_match_path")
-        self._fov_filter = QComboBox()
-        self._fov_filter.currentIndexChanged.connect(lambda _index: self.refresh())
-        self._roi_table = QTableWidget(0, 3)
-        self._roi_table.setHorizontalHeaderLabels(("Recording", "Current ROI", "Saved"))
-
-        capture_button = QPushButton("Add selected ROI to group")
-        capture_button.clicked.connect(self.capture_active_roi)
-        accept_button = QPushButton("Save as same cell")
-        accept_button.clicked.connect(self.accept_match_group)
-        unmatched_button = QPushButton("Save selected ROI as unmatched")
-        unmatched_button.clicked.connect(self.mark_active_unmatched)
-        clear_button = QPushButton("Clear unsaved ROI group")
-        clear_button.clicked.connect(self.clear_current_group)
-
-        controls = QHBoxLayout()
-        controls.addWidget(QLabel("FOV"))
-        controls.addWidget(self._fov_filter)
-        controls.addWidget(capture_button)
-        controls.addWidget(accept_button)
-        controls.addWidget(unmatched_button)
-        controls.addWidget(clear_button)
-
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("ROI Assignment"))
-        layout.addWidget(self._path_edit)
-        layout.addLayout(controls)
-        layout.addWidget(self._roi_table)
-        layout.addWidget(self._status_label)
-        self.setLayout(layout)
-        self.refresh_fov_filter()
-
-    def refresh_fov_filter(self) -> None:
-        """Refresh the FOV filter choices from saved FOV assignments."""
-        current = self._fov_filter.currentText()
-        choices = ("All FOVs", *tuple(sorted(set(self._fov_groups.values()))))
-        self._fov_filter.blockSignals(True)
-        try:
-            self._fov_filter.clear()
-            self._fov_filter.addItems(choices)
-            if current in choices:
-                self._fov_filter.setCurrentText(current)
-        finally:
-            self._fov_filter.blockSignals(False)
-        self.refresh()
-
-    def refresh(self) -> None:
-        """Refresh the ROI assignment table from current FOV filter state."""
-        recordings = self._filtered_recordings()
-        self._roi_table.setRowCount(len(recordings))
-        saved_counts = self._saved_counts_by_recording()
-        for row, recording in enumerate(recordings):
-            recording_path = recording.display_path.expanduser()
-            self._set_table_item(row, 0, str(recording_path))
-            self._set_table_item(row, 1, self._current_rois.get(recording_path, ""))
-            self._set_table_item(row, 2, str(saved_counts.get(recording_path, 0)))
-
-    def capture_active_roi(self) -> None:
-        """Capture the active Labels selected label for the selected recording."""
-        loaded = self._active_loaded_recording()
-        if loaded is None:
-            self._status_label.setText("Select a loaded recording first.")
-            return
-        recording_path = loaded.display_path.expanduser()
-        if not self._recording_matches_filter(recording_path):
-            self._status_label.setText("Selected recording is outside the FOV filter.")
-            return
-        roi_label = roi_label_from_selected_layer_value(loaded.roi_labels_layer)
-        if roi_label is None:
-            self._status_label.setText("Select a positive ROI label first.")
-            return
-        self._current_rois[recording_path] = roi_label
-        self._status_label.setText(f"Added {roi_label} to the unsaved group.")
-        self.refresh()
-
-    def accept_match_group(self) -> None:
-        """Persist current captured ROIs as one matched cell group."""
-        filtered_rois = self._filtered_current_rois()
-        if len(filtered_rois) < 2:
-            self._status_label.setText("Add ROIs from at least two recordings.")
-            return
-        rows = self._rows_for_recording_rois(filtered_rois, status="matched")
-        self._append_rows(rows)
-        group_cell_id = rows[0].group_cell_id
-        for recording_path in filtered_rois:
-            self._current_rois.pop(recording_path, None)
-        self._status_label.setText(
-            f"Saved group {group_cell_id} with {len(rows)} ROIs.",
-        )
-        self.refresh()
-
-    def mark_active_unmatched(self) -> None:
-        """Persist the active selected ROI as reviewed but unmatched."""
-        loaded = self._active_loaded_recording()
-        if loaded is None:
-            self._status_label.setText("Select a loaded recording first.")
-            return
-        recording_path = loaded.display_path.expanduser()
-        if not self._recording_matches_filter(recording_path):
-            self._status_label.setText("Selected recording is outside the FOV filter.")
-            return
-        roi_label = roi_label_from_selected_layer_value(loaded.roi_labels_layer)
-        if roi_label is None:
-            self._status_label.setText("Select a positive ROI label first.")
-            return
-        rows = self._rows_for_recording_rois(
-            {recording_path: roi_label},
-            status="unmatched",
-        )
-        self._append_rows(rows)
-        self._current_rois.pop(recording_path, None)
-        self._status_label.setText(f"Saved {roi_label} as unmatched.")
-        self.refresh()
-
-    def clear_current_group(self) -> None:
-        """Clear captured unsaved ROI selections in the current FOV filter."""
-        for recording_path in self._filtered_current_rois():
-            self._current_rois.pop(recording_path, None)
-        self._status_label.setText("Cleared unsaved ROI group.")
-        self.refresh()
-
-    def output_path(self) -> Path:
-        """Return the current manual ROI match CSV path."""
-        return Path(self._path_edit.text()).expanduser()
-
-    def _filtered_recordings(self) -> tuple[LoadedNapariRecording, ...]:
-        """Return loaded recordings visible under the current FOV filter."""
-        return tuple(
-            recording
-            for recording in self._state.loaded_recordings
-            if self._recording_matches_filter(recording.display_path.expanduser())
-        )
-
-    def _recording_matches_filter(self, recording_path: Path) -> bool:
-        """Return whether one recording path belongs in the active FOV filter."""
-        selected_fov = self._fov_filter.currentText()
-        if selected_fov in ("", "All FOVs"):
-            return True
-        return self._fov_groups.get(recording_path) == selected_fov
-
-    def _filtered_current_rois(self) -> dict[Path, str]:
-        """Return captured ROIs that belong to the current FOV filter."""
-        return {
-            recording_path: roi_label
-            for recording_path, roi_label in self._current_rois.items()
-            if self._recording_matches_filter(recording_path)
-        }
-
-    def _rows_for_recording_rois(
-        self,
-        recording_rois: dict[Path, str],
-        *,
-        status: ManualRoiMatchStatus,
-    ) -> tuple[ManualRoiMatchRow, ...]:
-        """Build rows for one ROI decision."""
-        existing_rows = self._existing_rows()
-        return make_manual_roi_match_rows(
-            recording_rois,
-            group_cell_id=next_group_cell_id(existing_rows),
-            fov_group_id=self._current_fov_group_id(),
-            status=status,
-        )
-
-    def _current_fov_group_id(self) -> str:
-        """Return the selected FOV group id, or empty text for all FOVs."""
-        selected_fov = self._fov_filter.currentText()
-        return "" if selected_fov == "All FOVs" else selected_fov
-
-    def _append_rows(self, rows: tuple[ManualRoiMatchRow, ...]) -> None:
-        """Append rows to the current output path."""
-        append_manual_roi_match_rows(self.output_path(), rows)
-
-    def _existing_rows(self) -> tuple[ManualRoiMatchRow, ...]:
-        """Load existing saved rows, treating a missing file as empty."""
-        output_path = self.output_path()
-        return load_manual_roi_match_rows(output_path) if output_path.exists() else ()
-
-    def _saved_counts_by_recording(self) -> dict[Path, int]:
-        """Return saved row counts keyed by recording path."""
-        counts: dict[Path, int] = {}
-        for row in self._existing_rows():
-            recording_path = row.recording_path.expanduser()
-            counts[recording_path] = counts.get(recording_path, 0) + 1
-        return counts
-
-    def _active_loaded_recording(self) -> LoadedNapariRecording | None:
-        """Return the selected loaded recording from shared state."""
-        index = self._state.selected_recording_index
-        if index is None or index < 0 or index >= len(self._state.loaded_recordings):
-            return None
-        return self._state.loaded_recordings[index]
-
-    def _set_table_item(self, row: int, column: int, text: str) -> None:
-        """Set one non-editable ROI table cell."""
-        item = QTableWidgetItem(text)
-        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self._roi_table.setItem(row, column, item)
-
-
-def roi_label_from_selected_layer_value(layer: object | None) -> str | None:
-    """Return the twopy ROI label for the active napari Labels value.
-
-    Args:
-        layer: Napari Labels layer or a test double exposing ``selected_label``.
-
-    Returns:
-        ``roi_####`` for a positive selected label, otherwise ``None``.
-    """
-    if layer is None or not hasattr(layer, "selected_label"):
-        return None
-    labels_layer = cast(_LayerWithSelectedLabel, layer)
-    label_value = int(labels_layer.selected_label)
-    if label_value <= 0:
-        return None
-    label_image = np.asarray(labels_layer.data)
-    if not np.any(label_image == label_value):
-        return None
-    return f"roi_{label_value:04d}"
-
-
-def mean_image_thumbnail_pixmap(
-    layer: object,
-    *,
-    contrast_percentile: float,
-) -> QPixmap | None:
-    """Return a Qt pixmap thumbnail for a recording mean-image layer.
-
-    Args:
-        layer: Napari Image layer or test double exposing ``data``.
-        contrast_percentile: Upper percentile used as the white point.
-
-    Returns:
-        ``QPixmap`` containing a grayscale thumbnail, or ``None`` when the
-        layer data cannot be represented as a two-dimensional image.
-    """
-    if not hasattr(layer, "data"):
-        return None
-    image = np.asarray(cast(_LayerWithData, layer).data)
-    if image.ndim != 2:
-        return None
-    thumbnail = _uint8_thumbnail(image, contrast_percentile=contrast_percentile)
-    height, width = thumbnail.shape
-    qimage = QImage(
-        thumbnail.tobytes(),
-        width,
-        height,
-        width,
-        QImage.Format.Format_Grayscale8,
-    ).copy()
-    return QPixmap.fromImage(qimage).scaled(
-        THUMBNAIL_SIZE,
-        THUMBNAIL_SIZE,
-        Qt.AspectRatioMode.KeepAspectRatio,
-        Qt.TransformationMode.SmoothTransformation,
-    )
-
-
-def _uint8_thumbnail(
-    image: np.ndarray,
-    *,
-    contrast_percentile: float,
-) -> np.ndarray:
-    """Normalize one image to a contiguous uint8 grayscale thumbnail array."""
-    values = np.asarray(image, dtype=np.float64)
-    finite_values = values[np.isfinite(values)]
-    if finite_values.size == 0:
-        return np.zeros(values.shape, dtype=np.uint8)
-    minimum = float(np.min(finite_values))
-    clipped_percentile = min(max(contrast_percentile, 1.0), 100.0)
-    maximum = float(np.percentile(finite_values, clipped_percentile))
-    if maximum <= minimum:
-        return np.zeros(values.shape, dtype=np.uint8)
-    scaled = np.clip((values - minimum) / (maximum - minimum), 0.0, 1.0)
-    return np.ascontiguousarray(np.round(scaled * 255.0).astype(np.uint8))
 
 
 def _clear_grid_layout(layout: QGridLayout) -> None:
