@@ -31,6 +31,7 @@ from twopy.napari.plotting.export import (
     export_response_heatmaps,
     export_roi_view,
 )
+from twopy.napari.plotting.panels import scrolling_tab
 from twopy.napari.text import counted_noun
 
 __all__ = ["ResponseExportState", "create_response_export_tab"]
@@ -77,7 +78,6 @@ def create_response_export_tab(
     """
     status_label = QLabel("Exports save beside the recording.")
     status_label.setWordWrap(True)
-    tab = QWidget()
     layout = QVBoxLayout()
     layout.addWidget(save_analysis_button)
     for text, callback in (
@@ -91,8 +91,7 @@ def create_response_export_tab(
         layout.addWidget(_button(text, get_state, status_label, callback))
     layout.addWidget(status_label)
     layout.addStretch(1)
-    tab.setLayout(layout)
-    return tab
+    return scrolling_tab(layout)
 
 
 def _save_recording_view(state: ResponseExportState) -> tuple[Path, ...] | str:

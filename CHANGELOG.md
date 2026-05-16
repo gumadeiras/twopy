@@ -21,6 +21,7 @@
 ### Fixes
 
 - Prevented repeated napari loads of the same recording from adding duplicate Loaded Recordings entries.
+- Made every napari sidebar tab scrollable so the Export tab no longer sets a tall minimum sidebar height.
 - Made the Search database date filter accept `YYYY-MM-DD`-style input with common separator variants and normalize it before querying.
 - Made response heatmaps reserve colorbar space inside the Plot-tab Size value so heatmap panels scale like response plots.
 - Made the napari Plot-tab correlation filter default its window stop to the shortest plotted epoch duration instead of `0 s`.

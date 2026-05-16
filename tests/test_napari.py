@@ -831,7 +831,8 @@ class NapariAdapterTest(unittest.TestCase):
                     "Export",
                 ),
             )
-            self.assertIsInstance(options_widget.widget(1), QScrollArea)
+            for index in range(options_widget.count()):
+                self.assertIsInstance(options_widget.widget(index), QScrollArea)
             options_buttons = {
                 button.text() for button in options_widget.findChildren(QPushButton)
             }
