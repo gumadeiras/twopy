@@ -18,12 +18,18 @@ from qtpy.QtCore import QTimer
 from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
     QApplication,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_context import default_recording_baseline_epoch_number
+from twopy.analysis.response_maps import (
+    ResponseMapData,
+    ResponseMapOptions,
+    compute_recording_response_maps,
+)
 from twopy.analysis.response_processing import (
     NormalizationOptions,
     ResponseProcessingOptions,
@@ -58,6 +64,7 @@ from twopy.napari.plotting.docks.paths import (
     resolved_roi_save_file,
 )
 from twopy.napari.plotting.docks.plot_area import ResponsePlotArea
+from twopy.napari.plotting.docks.response_map_area import ResponseMapArea
 from twopy.napari.plotting.docks.save_actions import save_current_roi_analysis
 from twopy.napari.plotting.docks.visibility_state import (
     epoch_visibility,
@@ -114,6 +121,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path: Path | None = None
         self._roi_save_file: Path | None = None
         self._plot_data: ResponsePlotData | None = None
+        self._response_map_data: ResponseMapData | None = None
         self._show_sem = True
         self._plot_size = 300
         self._roi_visibility: dict[int, bool] = {}
@@ -126,6 +134,8 @@ class _ResponsePlotWidget(QWidget):
         self._manual_y_max: float | None = None
         self._delta_f_over_f_options = DeltaFOverFOptions()
         self._response_window_options = ResponseWindowOptions()
+        self._response_map_options = ResponseMapOptions()
+        self._response_map_shared_limits = True
         self._response_processing_options = ResponseProcessingOptions()
         self._is_shutdown = False
         self._sync_executor = ThreadPoolExecutor(
@@ -154,17 +164,24 @@ class _ResponsePlotWidget(QWidget):
         if self._quit_application is not None:
             self._quit_application.aboutToQuit.connect(self.shutdown)
         self._plot_area = ResponsePlotArea("No recording loaded.")
+        self._response_map_area = ResponseMapArea("No recording loaded.")
+        self._plot_tabs = QTabWidget()
+        self._plot_tabs.addTab(self._plot_area.scroll_area, "Responses")
+        self._plot_tabs.addTab(self._response_map_area.scroll_area, "Heatmaps")
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self._plot_area.scroll_area)
+        layout.addWidget(self._plot_tabs)
         self.setLayout(layout)
 
         options_panel = create_response_options_panel(
             response_processing_options=self._response_processing_options,
             response_window_options=self._response_window_options,
+            response_map_options=self._response_map_options,
             delta_f_over_f_options=self._delta_f_over_f_options,
             on_response_processing_change=self._set_response_processing_options,
             on_response_window_change=self._set_response_window_options,
+            on_response_map_change=self._set_response_map_options,
+            on_response_map_shared_limits_change=(self._set_response_map_shared_limits),
             on_delta_f_over_f_change=self._set_delta_f_over_f_options,
             on_normalization_change=self._set_normalization_options,
             on_reload_saved=self.reload,
@@ -190,6 +207,7 @@ class _ResponsePlotWidget(QWidget):
         self._response_window_options_widget = (
             options_panel.response_window_options_widget
         )
+        self._response_map_options_widget = options_panel.response_map_options_widget
         self._delta_f_over_f_options_widget = (
             options_panel.delta_f_over_f_options_widget
         )
@@ -247,8 +265,10 @@ class _ResponsePlotWidget(QWidget):
         self._recording = None
         self._roi_labels_layer = None
         self._plot_data = None
+        self._response_map_data = None
         self._viewer = None
         self._plot_area.clear_epoch_cache()
+        self._response_map_area.clear_epoch_cache()
         clear_dynamic_option_tabs(
             plot_display_options_layout=self._plot_display_options_layout,
             roi_options_layout=self._roi_options_layout,
@@ -307,6 +327,7 @@ class _ResponsePlotWidget(QWidget):
         self._roi_generation_widget.set_recording(None)
         self._analysis_path = None
         self._plot_data = None
+        self._response_map_data = None
         self._live_controller.set_context(None, None)
         self._delta_f_over_f_options_widget.set_epoch_choices(
             {},
@@ -319,6 +340,7 @@ class _ResponsePlotWidget(QWidget):
             ),
         )
         self._response_window_options_widget.set_max_window_seconds(None)
+        self._response_map_options_widget.set_spatial_shape(None)
         self._processing_options_widget.set_correlation_window_stop_default(None)
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
@@ -338,6 +360,11 @@ class _ResponsePlotWidget(QWidget):
         Returns:
             None.
         """
+        self._recording = None
+        self._response_map_data = None
+        self._response_map_options_widget.set_spatial_shape(
+            recording.alignment_valid_crop.shape,
+        )
         self._recording = recording
         self._roi_generation_widget.set_recording(recording)
         self._analysis_path = resolved_analysis_path(None, recording)
@@ -367,6 +394,8 @@ class _ResponsePlotWidget(QWidget):
             self._response_window_options,
         )
         self._refresh_update_path_labels()
+        self._refresh_response_maps()
+        self._render_response_maps()
         self.reload()
         self._live_controller.set_context(self._recording, self._roi_labels_layer)
 
@@ -445,6 +474,7 @@ class _ResponsePlotWidget(QWidget):
                 delta_f_over_f_options=self._delta_f_over_f_options,
                 response_window_options=self._response_window_options,
                 response_processing_options=self._response_processing_options,
+                response_map_data=self._response_map_data,
             )
         except ValueError as error:
             self._set_status(str(error))
@@ -539,7 +569,8 @@ class _ResponsePlotWidget(QWidget):
         self._plot_data = None
         self._reset_plot_state()
         self._reset_empty_option_tabs()
-        self._set_status(text)
+        self._plot_area.set_status(text)
+        self._render_response_maps()
 
     def reload(self) -> None:
         """Reload response plots and saved ROIs from disk."""
@@ -551,12 +582,13 @@ class _ResponsePlotWidget(QWidget):
             self._plot_data = None
             self._reset_plot_state()
             self._reset_empty_option_tabs()
-            self._set_status(result)
+            self._plot_area.set_status(result)
+            self._render_response_maps()
             return
         roi_error = self._reload_saved_rois()
         self.set_response_plot_data(result, reset_axes=True)
         if roi_error is not None:
-            self._set_status(f"Reloaded saved analysis; {roi_error}")
+            self._update_status_label.setText(f"Reloaded saved analysis; {roi_error}")
 
     def _reload_saved_rois(self) -> str | None:
         """Replace the active Labels layer with the saved ROI HDF5 file."""
@@ -621,6 +653,17 @@ class _ResponsePlotWidget(QWidget):
             self._update_status_label.setText("Response window updated.")
             return
         self._update_status_label.setText("Response window updated for next run.")
+
+    def _set_response_map_options(self, options: ResponseMapOptions) -> None:
+        self._response_map_options = options
+        self._refresh_response_maps()
+        self._render_response_maps()
+        self._update_status_label.setText("Heatmap settings updated.")
+
+    def _set_response_map_shared_limits(self, shared_limits: bool) -> None:
+        self._response_map_shared_limits = shared_limits
+        self._render_response_maps()
+        self._update_status_label.setText("Heatmap display limits updated.")
 
     def _load_response_processing_options(
         self,
@@ -816,6 +859,8 @@ class _ResponsePlotWidget(QWidget):
             recording=self._recording,
             roi_labels_layer=self._roi_labels_layer,
             plot_data=self._plot_data,
+            response_map_data=self._response_map_data,
+            response_map_shared_limits=self._response_map_shared_limits,
             output_dir=self._export_output_dir(),
             roi_label_values=self._roi_label_values(),
             roi_colors=self._roi_color_hex(),
@@ -927,23 +972,31 @@ class _ResponsePlotWidget(QWidget):
         self._correlation_roi_visibility = None
 
     def _epoch_count(self) -> int:
-        if self._plot_data is None:
-            return 0
-        return len(self._plot_data.epochs)
+        if self._plot_data is not None:
+            return len(self._plot_data.epochs)
+        if self._response_map_data is not None:
+            return len(self._response_map_data.epochs)
+        return 0
 
     def _set_status(self, text: str) -> None:
         self._plot_area.set_status(text)
+        self._response_map_area.set_status(text)
 
     def _render_plots(self, *, apply_roi_layer_visibility: bool = True) -> None:
         if self._plot_data is None or len(self._plot_data.epochs) == 0:
-            self._set_status("No responses available.")
+            self._plot_area.set_status("No responses available.")
+            self._render_response_maps()
             return
         if apply_roi_layer_visibility:
             self._apply_roi_layer_visibility()
         roi_indices = self._visible_roi_indices()
         epoch_indices = self._visible_epoch_indices()
-        if len(roi_indices) == 0 or len(epoch_indices) == 0:
+        if len(epoch_indices) == 0:
             self._set_status("No responses selected.")
+            return
+        if len(roi_indices) == 0:
+            self._plot_area.set_status("No ROI responses selected.")
+            self._render_response_maps()
             return
         time_min, time_max = resolved_time_bounds(
             self._plot_data,
@@ -969,6 +1022,38 @@ class _ResponsePlotWidget(QWidget):
             value_min=value_min,
             value_max=value_max,
             plot_size=self._plot_size,
+        )
+        self._render_response_maps()
+
+    def _refresh_response_maps(self) -> None:
+        """Recompute heatmaps for the selected recording and map options."""
+        if self._recording is None:
+            self._response_map_data = None
+            self._response_map_area.set_status("No heatmaps available.")
+            return
+        try:
+            self._response_map_data = compute_recording_response_maps(
+                self._recording,
+                options=self._response_map_options,
+            )
+        except ValueError as error:
+            self._response_map_data = None
+            self._response_map_area.set_status(f"Heatmaps unavailable: {error}")
+
+    def _render_response_maps(self) -> None:
+        """Render heatmaps for the same visible epochs as response plots."""
+        if self._response_map_data is None or len(self._response_map_data.epochs) == 0:
+            self._response_map_area.set_status("No heatmaps available.")
+            return
+        epoch_indices = self._visible_epoch_indices()
+        if len(epoch_indices) == 0:
+            self._response_map_area.set_status("No epochs selected.")
+            return
+        self._response_map_area.render(
+            map_data=self._response_map_data,
+            epoch_indices=epoch_indices,
+            map_size=self._plot_size,
+            shared_limits=self._response_map_shared_limits,
         )
 
     def _update_visible_plot_widgets(
@@ -1013,6 +1098,14 @@ class _ResponsePlotWidget(QWidget):
             value_max=value_max,
             plot_size=self._plot_size,
         )
+        if self._response_map_data is not None:
+            if self._response_map_area.has_epoch_widgets(epoch_indices):
+                self._response_map_area.update_epoch_map_widgets(
+                    epoch_indices=epoch_indices,
+                    map_size=self._plot_size,
+                )
+            else:
+                self._render_response_maps()
 
     def _apply_roi_layer_visibility(self) -> None:
         apply_roi_visibility_to_labels_layer(

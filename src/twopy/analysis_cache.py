@@ -21,7 +21,11 @@ from twopy.config import (
     resolve_analysis_output_dir,
 )
 from twopy.converted import RecordingData
-from twopy.filenames import ANALYSIS_OUTPUT_FILENAME, ROI_FILENAME
+from twopy.filenames import (
+    ANALYSIS_OUTPUT_FILENAME,
+    RESPONSE_HEATMAPS_FILENAME,
+    ROI_FILENAME,
+)
 
 __all__ = [
     "AnalysisSyncPlan",
@@ -33,7 +37,11 @@ __all__ = [
     "start_analysis_sync",
 ]
 
-_CACHE_REFRESH_FILENAMES = (ROI_FILENAME, ANALYSIS_OUTPUT_FILENAME)
+_CACHE_REFRESH_FILENAMES = (
+    ROI_FILENAME,
+    ANALYSIS_OUTPUT_FILENAME,
+    RESPONSE_HEATMAPS_FILENAME,
+)
 
 
 @dataclass(frozen=True)

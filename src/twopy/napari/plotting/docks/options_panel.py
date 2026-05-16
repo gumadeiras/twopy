@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from qtpy.QtWidgets import QLabel, QPushButton, QTabWidget, QVBoxLayout, QWidget
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.response_maps import ResponseMapOptions
 from twopy.analysis.response_processing import (
     NormalizationOptions,
     ResponseProcessingOptions,
@@ -29,6 +30,7 @@ from twopy.napari.plotting.export_controls import (
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
 from twopy.napari.plotting.panels import response_metadata_tab, scrolling_tab
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
+from twopy.napari.plotting.response_map_options import ResponseMapOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
 from twopy.napari.plotting.roi_generation import (
     RoiGenerationControls,
@@ -60,6 +62,7 @@ class ResponseOptionsPanel:
         epoch_options_layout: Epochs-tab layout rebuilt from loaded plot data.
         processing_options_widget: Plot-tab response processing controls.
         response_window_options_widget: Plot-tab response-window controls.
+        response_map_options_widget: Plot-tab response-map controls.
         delta_f_over_f_options_widget: Plot-tab dF/F controls.
         normalization_options_widget: Plot-tab normalization controls.
 
@@ -81,6 +84,7 @@ class ResponseOptionsPanel:
     epoch_options_layout: QVBoxLayout
     processing_options_widget: ResponseProcessingOptionsWidget
     response_window_options_widget: ResponseWindowOptionsWidget
+    response_map_options_widget: ResponseMapOptionsWidget
     delta_f_over_f_options_widget: DeltaFOverFOptionsWidget
     normalization_options_widget: NormalizationOptionsWidget
 
@@ -89,9 +93,12 @@ def create_response_options_panel(
     *,
     response_processing_options: ResponseProcessingOptions,
     response_window_options: ResponseWindowOptions,
+    response_map_options: ResponseMapOptions,
     delta_f_over_f_options: DeltaFOverFOptions,
     on_response_processing_change: Callable[[ResponseProcessingOptions], None],
     on_response_window_change: Callable[[ResponseWindowOptions], None],
+    on_response_map_change: Callable[[ResponseMapOptions], None],
+    on_response_map_shared_limits_change: Callable[[bool], None],
     on_delta_f_over_f_change: Callable[[DeltaFOverFOptions], None],
     on_normalization_change: Callable[[NormalizationOptions], None],
     on_reload_saved: Callable[[], None],
@@ -106,9 +113,13 @@ def create_response_options_panel(
     Args:
         response_processing_options: Initial response processing settings.
         response_window_options: Initial response-window settings.
+        response_map_options: Initial response-map settings.
         delta_f_over_f_options: Initial dF/F settings.
         on_response_processing_change: Callback for processing control edits.
         on_response_window_change: Callback for response-window control edits.
+        on_response_map_change: Callback for response-map control edits.
+        on_response_map_shared_limits_change: Callback for heatmap display
+            scaling edits.
         on_delta_f_over_f_change: Callback for dF/F control edits.
         on_normalization_change: Callback for normalization control edits.
         on_reload_saved: Callback for the Load-tab reload button.
@@ -154,6 +165,11 @@ def create_response_options_panel(
         response_window_options,
         on_change=on_response_window_change,
     )
+    response_map_options_widget = ResponseMapOptionsWidget(
+        response_map_options,
+        on_change=on_response_map_change,
+        on_shared_limits_change=on_response_map_shared_limits_change,
+    )
     delta_f_over_f_options_widget = DeltaFOverFOptionsWidget(
         delta_f_over_f_options,
         on_change=on_delta_f_over_f_change,
@@ -164,6 +180,7 @@ def create_response_options_panel(
     )
     plot_options_layout.addWidget(plot_display_options_widget)
     plot_options_layout.addWidget(response_window_options_widget)
+    plot_options_layout.addWidget(response_map_options_widget)
     plot_options_layout.addWidget(delta_f_over_f_options_widget)
     plot_options_layout.addWidget(normalization_options_widget)
     plot_options_layout.addWidget(processing_options_widget)
@@ -214,6 +231,7 @@ def create_response_options_panel(
         epoch_options_layout=epoch_options_layout,
         processing_options_widget=processing_options_widget,
         response_window_options_widget=response_window_options_widget,
+        response_map_options_widget=response_map_options_widget,
         delta_f_over_f_options_widget=delta_f_over_f_options_widget,
         normalization_options_widget=normalization_options_widget,
     )

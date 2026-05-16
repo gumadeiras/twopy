@@ -63,6 +63,12 @@ from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.persistence import save_analysis_outputs
+from twopy.analysis.response_maps import (
+    EpochResponseMap,
+    ResponseMapData,
+    ResponseMapOptions,
+    load_response_map_data,
+)
 from twopy.analysis.response_processing import (
     NormalizationOptions,
     ResponseProcessingOptions,
@@ -110,6 +116,7 @@ from twopy.napari.plotting.docks import create_response_plot_widget
 from twopy.napari.plotting.export import (
     draw_roi_contours,
     export_epoch_plots,
+    export_response_heatmaps,
     labels_for_recording_image,
     roi_boundary_segments,
 )
@@ -129,6 +136,12 @@ from twopy.napari.plotting.options import (
 )
 from twopy.napari.plotting.panels import epoch_plot_panel
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
+from twopy.napari.plotting.response_map_colors import RESPONSE_HEATMAP_COLORMAP
+from twopy.napari.plotting.response_map_display import (
+    display_response_limit,
+    display_response_values,
+)
+from twopy.napari.plotting.response_map_options import ResponseMapOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
 from twopy.napari.plotting.roi_generation import (
     RoiGenerationControls,
@@ -1316,7 +1329,9 @@ class NapariAdapterTest(unittest.TestCase):
             viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
             response_widget = cast(Any, opened.response_plot_widget)
             preview_plot_data = _tiny_response_plot_data()
+            preview_map_data = _tiny_response_map_data()
             response_widget._plot_data = preview_plot_data
+            response_widget._response_map_data = preview_map_data
             response_widget._set_response_window_options(
                 ResponseWindowOptions(
                     auto=False,
@@ -1340,7 +1355,14 @@ class NapariAdapterTest(unittest.TestCase):
                 response_widget.save_analysis_and_rois()
 
             roi_path = root / "rois.h5"
+            heatmap_path = root / "response_heatmaps.h5"
             self.assertTrue(roi_path.is_file())
+            self.assertTrue(heatmap_path.is_file())
+            loaded_heatmaps = load_response_map_data(heatmap_path)
+            np.testing.assert_allclose(
+                loaded_heatmaps.epochs[0].response_values,
+                preview_map_data.epochs[0].response_values,
+            )
             analyze.assert_called_once()
             _, roi_set = analyze.call_args.args
             self.assertEqual(roi_set.labels, ("roi_0001",))
@@ -1426,6 +1448,7 @@ class NapariAdapterTest(unittest.TestCase):
                 opened = open_recording_in_napari(recording_path, viewer=viewer)
                 viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
                 response_widget = cast(Any, opened.response_plot_widget)
+                response_widget._response_map_data = _tiny_response_map_data()
                 analysis_path = local_dir / "analysis_outputs.h5"
 
                 def fake_analyze(*_args: object, **_kwargs: object) -> object:
@@ -1460,6 +1483,7 @@ class NapariAdapterTest(unittest.TestCase):
                 (publish_dir / "analysis_outputs.h5").read_text(encoding="utf-8"),
                 "analysis",
             )
+            self.assertTrue((publish_dir / "response_heatmaps.h5").is_file())
 
     def test_reload_saved_analysis_reloads_saved_rois(self) -> None:
         """Confirm Reload saved analysis replaces the editable ROI Labels layer.
@@ -1584,7 +1608,7 @@ class NapariAdapterTest(unittest.TestCase):
         """Confirm the Plot tab presents response options in workflow order.
 
         Inputs: a newly created response widget.
-        Outputs: the Plot tab orders Plot, Response window, dF/F,
+        Outputs: the Plot tab orders Plot, Response window, Heatmap, dF/F,
         Normalization, then processing controls.
         """
         _ = QApplication.instance() or QApplication([])
@@ -1595,9 +1619,15 @@ class NapariAdapterTest(unittest.TestCase):
             ResponseWindowOptionsWidget,
         )
         self.assertIsInstance(
+            response_widget._response_map_options_widget,
+            ResponseMapOptionsWidget,
+        )
+        self.assertIsInstance(
             response_widget._delta_f_over_f_options_widget,
             DeltaFOverFOptionsWidget,
         )
+        self.assertEqual(response_widget._plot_tabs.tabText(0), "Responses")
+        self.assertEqual(response_widget._plot_tabs.tabText(1), "Heatmaps")
         self.assertIsInstance(
             response_widget._normalization_options_widget,
             NormalizationOptionsWidget,
@@ -1605,6 +1635,14 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertLess(
             response_widget._plot_options_layout.indexOf(
                 response_widget._response_window_options_widget,
+            ),
+            response_widget._plot_options_layout.indexOf(
+                response_widget._response_map_options_widget,
+            ),
+        )
+        self.assertLess(
+            response_widget._plot_options_layout.indexOf(
+                response_widget._response_map_options_widget,
             ),
             response_widget._plot_options_layout.indexOf(
                 response_widget._delta_f_over_f_options_widget,
@@ -1626,6 +1664,120 @@ class NapariAdapterTest(unittest.TestCase):
                 response_widget._processing_options_widget,
             ),
         )
+
+    def test_response_map_options_show_only_current_mode_rows(self) -> None:
+        """Confirm Heatmap controls hide parameters for the inactive mode.
+
+        Inputs: heatmap options widget switched from pixel mode to window mode.
+        Outputs: only sigma is shown for pixel mode, and only preset, size, and
+        stride are shown for window mode.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = cast(Any, ResponseMapOptionsWidget(ResponseMapOptions(mode="pixel")))
+        layout = cast(QFormLayout, widget._form_layout)
+
+        def row_label(field: QWidget) -> QLabel:
+            label = layout.labelForField(field)
+            if not isinstance(label, QLabel):
+                self.fail("Heatmap option row is missing a label")
+            return label
+
+        def row_label_at(row: int) -> QLabel:
+            item = layout.itemAt(row, QFormLayout.ItemRole.LabelRole)
+            widget_at_row = item.widget() if item is not None else None
+            if not isinstance(widget_at_row, QLabel):
+                self.fail("Heatmap option row is missing its ordered label")
+            return widget_at_row
+
+        def row_is_hidden(field: QWidget) -> bool:
+            label = row_label(field)
+            return label.isHidden() and field.isHidden()
+
+        self.assertTrue(widget._shared_limits.isChecked())
+        self.assertEqual(row_label_at(0).text(), "Shared limits")
+        self.assertEqual(row_label_at(1).text(), "Mode")
+        self.assertEqual(row_label_at(2).text(), "Sigma")
+        self.assertEqual(row_label(widget._shared_limits).text(), "Shared limits")
+        self.assertEqual(row_label(widget._pixel_smoothing_sigma).text(), "Sigma")
+        self.assertEqual(row_label(widget._window_preset).text(), "Preset")
+        self.assertEqual(row_label(widget._window_size).text(), "Size")
+        self.assertFalse(row_is_hidden(widget._shared_limits))
+        self.assertFalse(row_is_hidden(widget._pixel_smoothing_sigma))
+        self.assertTrue(row_is_hidden(widget._window_preset))
+        self.assertTrue(row_is_hidden(widget._window_size))
+        self.assertTrue(row_is_hidden(widget._window_stride))
+
+        mode_combo = cast(QComboBox, widget._mode)
+        mode_combo.setCurrentIndex(mode_combo.findData("window"))
+
+        self.assertTrue(row_is_hidden(widget._pixel_smoothing_sigma))
+        self.assertFalse(row_is_hidden(widget._window_preset))
+        self.assertFalse(row_is_hidden(widget._window_size))
+        self.assertFalse(row_is_hidden(widget._window_stride))
+
+        self.assertFalse(row_is_hidden(widget._shared_limits))
+
+
+    def test_response_heatmap_colormap_has_black_zero_without_white_band(self) -> None:
+        """Confirm the signed heatmap colorbar has a black neutral point.
+
+        Inputs: the shared response heatmap colormap sampled across the full
+        signed response range.
+        Outputs: zero is black and no sampled color is close to white.
+        """
+        colors = np.asarray(RESPONSE_HEATMAP_COLORMAP(np.linspace(0.0, 1.0, 257)))
+        zero_color = colors[128, :3]
+        low_positive_color = colors[154, :3]
+        mid_positive_color = colors[192, :3]
+        high_positive_color = colors[-1, :3]
+
+        self.assertLess(float(np.max(zero_color)), 0.02)
+        self.assertFalse(np.any(np.all(colors[:, :3] > 0.9, axis=1)))
+        self.assertLess(float(low_positive_color[0]), float(mid_positive_color[0]))
+        self.assertLess(float(mid_positive_color[0]), float(high_positive_color[0]))
+
+
+    def test_response_heatmap_display_uses_robust_limits(self) -> None:
+        """Confirm outliers do not set the heatmap color limit.
+
+        Inputs: one response map with a single extreme pixel.
+        Outputs: the visual limit follows the 95th percentile and clips the
+        outlier.
+        """
+        response = np.concatenate(
+            (np.linspace(0.01, 0.20, 100, dtype=np.float64), np.array([1.0])),
+        ).reshape(101, 1)
+        map_data = ResponseMapData(
+            mean_image=np.ones((101, 1), dtype=np.float64),
+            epochs=(
+                EpochResponseMap(
+                    epoch_name="Odor",
+                    epoch_number=1,
+                    response_values=response,
+                    trial_count=1,
+                ),
+            ),
+            options=ResponseMapOptions(),
+            spatial_crop=SpatialCrop(0, 101, 0, 1, (101, 1), "test"),
+            response_scale=1.0,
+        )
+        epoch = map_data.epochs[0]
+
+        limit = display_response_limit(
+            map_data,
+            epoch,
+            shared_limits=False,
+        )
+        values = display_response_values(
+            map_data,
+            epoch,
+            shared_limits=False,
+        )
+
+        self.assertLess(limit, 0.20)
+        self.assertGreater(limit, 0.18)
+        self.assertEqual(float(values[-1, 0]), limit)
+
 
     def test_response_window_options_auto_default_and_manual_bounds(self) -> None:
         """Confirm response-window controls default to auto and cap manual values.
@@ -5050,6 +5202,98 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertIs(response_widget._plot_area.epoch_plot_widgets[0], cached_plot)
         self.assertIs(cached_plot._data, second.epochs[0])
 
+    def test_response_heatmaps_render_without_roi_plot_data(self) -> None:
+        """Confirm heatmaps are available before any ROI responses exist.
+
+        Inputs: a loaded recording with no saved ROI analysis and a mocked
+        movie-derived response map.
+        Outputs: the heatmap tab renders the map even though plot data is empty.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            map_data = _tiny_response_map_data()
+            with patch(
+                "twopy.napari.plotting.docks.response_plot_widget."
+                "compute_recording_response_maps",
+                return_value=map_data,
+            ) as compute_maps:
+                response_widget = cast(Any, create_response_plot_widget(None))
+                response_widget.load_recording(recording)
+
+        compute_maps.assert_called_once()
+        self.assertIs(response_widget._response_map_data, map_data)
+        self.assertEqual(len(response_widget._response_map_area.epoch_map_widgets), 1)
+        self.assertIsNone(response_widget._plot_data)
+
+
+    def test_response_heatmaps_do_not_recompute_for_roi_plot_updates(self) -> None:
+        """Confirm ROI response refreshes do not recompute movie heatmaps.
+
+        Inputs: a loaded recording with one cached heatmap, then ROI plot data.
+        Outputs: heatmap computation runs only on recording load.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            map_data = _tiny_response_map_data()
+            with patch(
+                "twopy.napari.plotting.docks.response_plot_widget."
+                "compute_recording_response_maps",
+                return_value=map_data,
+            ) as compute_maps:
+                response_widget = cast(Any, create_response_plot_widget(None))
+                response_widget.load_recording(recording)
+                compute_maps.reset_mock()
+                response_widget.set_response_plot_data(
+                    _tiny_response_plot_data(),
+                    reset_axes=True,
+                )
+
+        compute_maps.assert_not_called()
+        self.assertIs(response_widget._response_map_data, map_data)
+
+
+    def test_response_map_shared_limits_updates_display_without_recompute(self) -> None:
+        """Confirm shared heatmap limits are display-only.
+
+        Inputs: a loaded recording with cached heatmaps, then the shared-limits
+        checkbox toggled.
+        Outputs: the cached heatmap image updates without recomputing maps.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            map_data = _tiny_response_map_data()
+            with patch(
+                "twopy.napari.plotting.docks.response_plot_widget."
+                "compute_recording_response_maps",
+                return_value=map_data,
+            ) as compute_maps:
+                response_widget = cast(Any, create_response_plot_widget(None))
+                response_widget.load_recording(recording)
+                first_image = response_widget._response_map_area.epoch_map_widgets[
+                    0
+                ]._image
+                compute_maps.reset_mock()
+                response_widget._response_map_options_widget._shared_limits.setChecked(
+                    False,
+                )
+
+        compute_maps.assert_not_called()
+        self.assertFalse(response_widget._response_map_shared_limits)
+        self.assertIsNot(
+            response_widget._response_map_area.epoch_map_widgets[0]._image,
+            first_image,
+        )
+
+
     def test_epoch_plot_panel_centers_title(self) -> None:
         """Confirm epoch titles are centered above live response plots.
 
@@ -5098,6 +5342,41 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual({path.suffix for path in written}, {".pdf", ".png"})
             self.assertEqual({path.parent.name for path in written}, {"plots"})
             self.assertTrue(all(path.is_file() for path in written))
+
+    def test_response_heatmap_export_writes_editable_figure_bundle(self) -> None:
+        """Confirm response heatmaps export in the expected file formats.
+
+        Inputs: one tiny response map and a temporary output folder.
+        Outputs: PDF and PNG files under the heatmap-specific export folder.
+        """
+        map_data = ResponseMapData(
+            mean_image=np.ones((3, 4), dtype=np.float64),
+            epochs=(
+                EpochResponseMap(
+                    epoch_name="Odor",
+                    epoch_number=2,
+                    response_values=np.ones((3, 4), dtype=np.float64),
+                    trial_count=1,
+                ),
+            ),
+            options=ResponseMapOptions(),
+            spatial_crop=SpatialCrop(0, 3, 0, 4, (3, 4), "test"),
+            response_scale=1.0,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            written = export_response_heatmaps(
+                map_data=map_data,
+                output_dir=Path(temp_dir),
+                epoch_indices=(0,),
+            )
+
+            self.assertEqual({path.suffix for path in written}, {".pdf", ".png"})
+            self.assertEqual(
+                {path.parent.name for path in written},
+                {"response_heatmaps"},
+            )
+            self.assertTrue(all(path.is_file() for path in written))
+
 
     def test_response_export_tab_syncs_cached_exports_to_publish_root(self) -> None:
         """Confirm Export-tab files are published when analysis caching is on.
@@ -5466,6 +5745,31 @@ def _tiny_response_plot_data() -> ResponsePlotData:
         Plot-ready response data with one ROI and one epoch.
     """
     return response_plot_data_from_grouped(_tiny_grouped_responses())
+
+
+def _tiny_response_map_data() -> ResponseMapData:
+    """Build one tiny response heatmap data object for napari plot tests.
+
+    Args:
+        None.
+
+    Returns:
+        One-epoch heatmap data with normalized signed response values.
+    """
+    return ResponseMapData(
+        mean_image=np.ones((2, 2), dtype=np.float64),
+        epochs=(
+            EpochResponseMap(
+                epoch_name="Odor",
+                epoch_number=1,
+                response_values=np.full((2, 2), 0.25, dtype=np.float64),
+                trial_count=1,
+            ),
+        ),
+        options=ResponseMapOptions(),
+        spatial_crop=SpatialCrop(0, 2, 0, 2, (2, 2), "test"),
+        response_scale=4.0,
+    )
 
 
 def _two_roi_response_plot_data() -> ResponsePlotData:

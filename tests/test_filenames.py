@@ -19,6 +19,7 @@ from twopy.filenames import (
     RECORDING_DATA_FILENAME,
     RECORDING_ROI_OVERLAY_EXPORT_STEM,
     RECORDING_VIEW_EXPORT_STEM,
+    RESPONSE_HEATMAPS_FILENAME,
     RESPONSE_SUMMARY_GROUPED_FILENAME,
     RESPONSE_SUMMARY_TRIALS_FILENAME,
     ROI_FILENAME,
@@ -43,6 +44,7 @@ class FilenameConstantsTest(unittest.TestCase):
         self.assertEqual(ALIGNED_MOVIE_FILENAME, "aligned_movie.h5")
         self.assertEqual(ROI_FILENAME, "rois.h5")
         self.assertEqual(ANALYSIS_OUTPUT_FILENAME, "analysis_outputs.h5")
+        self.assertEqual(RESPONSE_HEATMAPS_FILENAME, "response_heatmaps.h5")
         self.assertEqual(EXPORTS_DIRNAME, "exports")
         self.assertEqual(CSV_EXPORTS_DIRNAME, "csvs")
         self.assertEqual(PLOT_EXPORTS_DIRNAME, "plots")

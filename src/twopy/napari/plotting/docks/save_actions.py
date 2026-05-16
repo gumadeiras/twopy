@@ -14,11 +14,13 @@ from pathlib import Path
 import numpy as np
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.response_maps import ResponseMapData, save_response_map_data
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.workflow import analyze_recording_responses
 from twopy.analysis_cache import AnalysisSyncPlan, build_analysis_sync_plan
 from twopy.converted import RecordingData
+from twopy.filenames import RESPONSE_HEATMAPS_FILENAME
 from twopy.napari.display_paths import format_output_folder
 from twopy.napari.plotting.data import response_plot_window_seconds_for_recording
 from twopy.napari.plotting.docks.paths import (
@@ -39,6 +41,7 @@ class SaveAnalysisResult:
     Args:
         roi_output_path: HDF5 path where ROIs were saved.
         analysis_output_path: HDF5 path where response analysis was saved.
+        response_heatmap_path: Optional HDF5 path where heatmaps were saved.
         status_text: User-facing Metadata-tab status text.
         sync_plan: Optional background publish-sync plan.
 
@@ -48,6 +51,7 @@ class SaveAnalysisResult:
 
     roi_output_path: Path
     analysis_output_path: Path
+    response_heatmap_path: Path | None
     status_text: str
     sync_plan: AnalysisSyncPlan | None
 
@@ -61,6 +65,7 @@ def save_current_roi_analysis(
     delta_f_over_f_options: DeltaFOverFOptions,
     response_window_options: ResponseWindowOptions,
     response_processing_options: ResponseProcessingOptions,
+    response_map_data: ResponseMapData | None = None,
 ) -> SaveAnalysisResult:
     """Persist current Labels ROIs and run response analysis.
 
@@ -72,6 +77,8 @@ def save_current_roi_analysis(
         delta_f_over_f_options: Plot-tab dF/F settings to apply.
         response_window_options: Plot-tab response-window settings to apply.
         response_processing_options: Plot-tab processing settings to apply.
+        response_map_data: Optional recording-level heatmaps to persist beside
+            ROI analysis outputs.
 
     Returns:
         Saved output paths and status text for the Metadata tab.
@@ -120,6 +127,7 @@ def save_current_roi_analysis(
         response_window_auto=response_window_options.auto,
         response_processing_options=response_processing_options,
     )
+    response_heatmap_path = _save_response_heatmaps(recording, response_map_data)
     output_folder = format_output_folder(run.output_path, recording)
     status_text = (
         f"Saved {counted_noun(len(roi_set.labels), 'ROI', 'ROIs')} to {output_folder}"
@@ -129,6 +137,7 @@ def save_current_roi_analysis(
         local_paths=(
             roi_output_path,
             run.output_path,
+            response_heatmap_path,
             run.response_summary_trials_csv_path,
             run.response_summary_grouped_csv_path,
         ),
@@ -139,6 +148,19 @@ def save_current_roi_analysis(
     return SaveAnalysisResult(
         roi_output_path=roi_output_path,
         analysis_output_path=run.output_path,
+        response_heatmap_path=response_heatmap_path,
         status_text=status_text,
         sync_plan=sync_plan,
     )
+
+
+def _save_response_heatmaps(
+    recording: RecordingData,
+    response_map_data: ResponseMapData | None,
+) -> Path | None:
+    """Persist recording-level response heatmaps when they are available."""
+    if response_map_data is None:
+        return None
+    path = recording.path.parent / RESPONSE_HEATMAPS_FILENAME
+    save_response_map_data(path, response_map_data)
+    return path

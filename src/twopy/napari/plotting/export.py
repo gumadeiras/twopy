@@ -21,20 +21,28 @@ from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 
+from twopy.analysis.response_maps import EpochResponseMap, ResponseMapData
 from twopy.converted import RecordingData
 from twopy.filenames import (
     PLOT_EXPORTS_DIRNAME,
     PLOT_WITH_ROIS_EXPORTS_DIRNAME,
     RECORDING_ROI_OVERLAY_EXPORT_STEM,
     RECORDING_VIEW_EXPORT_STEM,
+    RESPONSE_HEATMAP_EXPORTS_DIRNAME,
     ROI_VIEW_EXPORT_STEM,
 )
 from twopy.napari.dims import current_step_index
 from twopy.napari.display import display_image_from_movie_image
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
+from twopy.napari.plotting.response_map_colors import RESPONSE_HEATMAP_COLORMAP
+from twopy.napari.plotting.response_map_display import (
+    display_response_limit,
+    display_response_values,
+)
 
 __all__ = [
     "export_epoch_plots",
+    "export_response_heatmaps",
     "export_epoch_roi_overlay_plots",
     "export_recording_roi_overlay",
     "export_recording_view",
@@ -44,6 +52,7 @@ __all__ = [
 
 MM_TO_INCH = 1.0 / 25.4
 DEFAULT_FORMATS = ("pdf", "png")
+RESPONSE_HEATMAP_OVERLAY_ALPHA = 0.42
 type BoundarySegment = tuple[tuple[float, float], tuple[float, float]]
 
 
@@ -329,6 +338,48 @@ def export_epoch_roi_overlay_plots(
     return tuple(written)
 
 
+def export_response_heatmaps(
+    *,
+    map_data: ResponseMapData,
+    output_dir: Path,
+    epoch_indices: tuple[int, ...],
+    shared_limits: bool = False,
+    formats: tuple[str, ...] = DEFAULT_FORMATS,
+) -> tuple[Path, ...]:
+    """Save one response heatmap per visible stimulus epoch.
+
+    Args:
+        map_data: Computed response heatmaps.
+        output_dir: Directory where exported files should be written.
+        epoch_indices: Visible epoch row indices.
+        shared_limits: Whether all epochs should use shared response limits.
+        formats: File formats to write.
+
+    Returns:
+        Paths written to disk.
+    """
+    written: list[Path] = []
+    for epoch in _visible_map_epochs(map_data, epoch_indices):
+        fig, ax = image_figure(map_data.mean_image.T.shape)
+        draw_response_heatmap(
+            ax,
+            map_data=map_data,
+            epoch=epoch,
+            shared_limits=shared_limits,
+        )
+        ax.set_title(_map_epoch_title(epoch), fontsize=7)
+        written.extend(
+            save_figure_bundle(
+                fig,
+                output_dir
+                / RESPONSE_HEATMAP_EXPORTS_DIRNAME
+                / safe_stem(_map_epoch_title(epoch)),
+                formats=formats,
+            )
+        )
+    return tuple(written)
+
+
 def current_recording_image(
     *,
     viewer: object | None,
@@ -508,6 +559,61 @@ def draw_recording_image(ax: Axes, image: npt.NDArray[np.float64]) -> None:
     ax.imshow(image, cmap="gray", origin="upper", interpolation="nearest")
     ax.set_xlim(-0.5, image.shape[1] - 0.5)
     ax.set_ylim(image.shape[0] - 0.5, -0.5)
+
+
+def draw_response_heatmap(
+    ax: Axes,
+    *,
+    map_data: ResponseMapData,
+    epoch: EpochResponseMap,
+    shared_limits: bool = False,
+) -> None:
+    """Draw one recording mean image with a signed response heatmap overlay.
+
+    Args:
+        ax: Matplotlib axis to draw into.
+        map_data: Response-map data carrying the mean image and persisted epoch
+            maps.
+        epoch: Epoch response map to overlay.
+        shared_limits: Whether robust color limits should use all epochs instead
+            of only this epoch.
+
+    Returns:
+        None.
+
+    Export uses the same display scaling as the live Qt heatmap panel: response
+    values are clipped to a robust signed 95th-percentile limit, then drawn with
+    the shared blue-black-orange colormap over a robust grayscale mean image.
+    """
+    mean_image = display_image_from_movie_image(map_data.mean_image)
+    response = display_image_from_movie_image(
+        display_response_values(
+            map_data,
+            epoch,
+            shared_limits=shared_limits,
+        )
+    )
+    response_limit = display_response_limit(
+        map_data,
+        epoch,
+        shared_limits=shared_limits,
+    )
+    draw_recording_image(ax, _normalized_gray(mean_image))
+    heatmap = ax.imshow(
+        np.nan_to_num(response, nan=0.0, posinf=response_limit, neginf=-response_limit),
+        cmap=RESPONSE_HEATMAP_COLORMAP,
+        origin="upper",
+        interpolation="nearest",
+        alpha=RESPONSE_HEATMAP_OVERLAY_ALPHA,
+        vmin=-response_limit,
+        vmax=response_limit,
+    )
+    colorbar = ax.figure.colorbar(heatmap, ax=ax, fraction=0.046, pad=0.04)
+    colorbar.set_ticks((-1.0, 0.0, 1.0))
+    colorbar.set_ticklabels(("-", "0", "+"))
+    colorbar.ax.tick_params(labelsize=6)
+    ax.set_xlim(-0.5, mean_image.shape[1] - 0.5)
+    ax.set_ylim(mean_image.shape[0] - 0.5, -0.5)
 
 
 def draw_roi_contours(
@@ -713,9 +819,36 @@ def _visible_epochs(
     )
 
 
+def _visible_map_epochs(
+    map_data: ResponseMapData,
+    epoch_indices: tuple[int, ...],
+) -> tuple[EpochResponseMap, ...]:
+    """Return response-map epochs for selected rows."""
+    return tuple(
+        map_data.epochs[index]
+        for index in epoch_indices
+        if 0 <= index < len(map_data.epochs)
+    )
+
+
 def _epoch_title(epoch: EpochResponsePlotData) -> str:
     """Return a display title for one epoch plot."""
     return f"Epoch {epoch.epoch_number}: {epoch.epoch_name}"
+
+
+def _map_epoch_title(epoch: EpochResponseMap) -> str:
+    """Return a display title for one epoch heatmap."""
+    return f"Epoch {epoch.epoch_number}: {epoch.epoch_name}"
+
+
+def _normalized_gray(image: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Return a robustly normalized grayscale image."""
+    finite = image[np.isfinite(image)]
+    if finite.size == 0:
+        return np.zeros(image.shape, dtype=np.float64)
+    low, high = np.percentile(finite, (1.0, 99.5))
+    scale = max(float(high - low), np.finfo(np.float64).eps)
+    return np.clip((image - low) / scale, 0, 1)
 
 
 def _axis_figure(

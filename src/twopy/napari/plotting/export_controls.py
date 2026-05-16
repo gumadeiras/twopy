@@ -14,6 +14,7 @@ from pathlib import Path
 
 from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
+from twopy.analysis.response_maps import ResponseMapData
 from twopy.analysis_cache import (
     AnalysisSyncResult,
     build_analysis_sync_plan,
@@ -27,6 +28,7 @@ from twopy.napari.plotting.export import (
     export_epoch_roi_overlay_plots,
     export_recording_roi_overlay,
     export_recording_view,
+    export_response_heatmaps,
     export_roi_view,
 )
 from twopy.napari.text import counted_noun
@@ -55,6 +57,8 @@ class ResponseExportState:
     show_sem: bool
     time_bounds: tuple[float, float]
     value_bounds: tuple[float, float]
+    response_map_data: ResponseMapData | None = None
+    response_map_shared_limits: bool = True
 
 
 def create_response_export_tab(
@@ -82,6 +86,7 @@ def create_response_export_tab(
         ("Save recording ROI overlay", _save_recording_roi_overlay),
         ("Save plots", _save_plots),
         ("Save plots with ROIs", _save_plots_with_rois),
+        ("Save heatmaps", _save_heatmaps),
     ):
         layout.addWidget(_button(text, get_state, status_label, callback))
     layout.addWidget(status_label)
@@ -165,6 +170,18 @@ def _save_plots_with_rois(state: ResponseExportState) -> tuple[Path, ...] | str:
         show_sem=state.show_sem,
         time_bounds=state.time_bounds,
         value_bounds=state.value_bounds,
+    )
+
+
+def _save_heatmaps(state: ResponseExportState) -> tuple[Path, ...] | str:
+    """Export each visible epoch response heatmap."""
+    if state.response_map_data is None:
+        return "No heatmaps available."
+    return export_response_heatmaps(
+        map_data=state.response_map_data,
+        output_dir=state.output_dir,
+        epoch_indices=state.epoch_indices,
+        shared_limits=state.response_map_shared_limits,
     )
 
 
