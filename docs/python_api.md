@@ -175,6 +175,46 @@ Stimulus epoch windows come from classified photodiode events, not nominal frame
 
 Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response processing. Smoothing and low-pass filters run on continuous dF/F before trial grouping. Epoch-peak normalization runs after trial grouping and divides every grouped response by each ROI's peak mean response in the selected epoch, with the selected normalization epoch and per-ROI scale factors saved in the analysis HDF5 output. Correlation filtering scores grouped trials and stores the selected settings plus QC scores in the analysis HDF5 output. Use `validate_grouped_roi_responses` when a script constructs grouped response objects directly; processing, persistence, and CSV exports call the same validator before trusting time, frame, and ROI axes.
 
+Manual FOV groups and cross-recording ROI matches are stored as plain CSV tables. Napari's Group Matching window writes the same formats, and scripts can read or extend them through the core API:
+
+```python
+from pathlib import Path
+
+from twopy import (
+    append_manual_roi_match_rows,
+    load_manual_fov_group_rows,
+    load_manual_roi_match_rows,
+    make_manual_fov_group_rows,
+    make_manual_roi_match_rows,
+    next_group_cell_id,
+    save_manual_fov_group_rows,
+)
+
+fov_path = Path("/path/to/fov_groups.csv")
+fov_rows = make_manual_fov_group_rows(
+    {
+        Path("/recordings/first"): "fov_1",
+        Path("/recordings/second"): "fov_1",
+    },
+)
+save_manual_fov_group_rows(fov_rows, fov_path)
+loaded_fov_rows = load_manual_fov_group_rows(fov_path)
+
+match_path = Path("/path/to/roi_matches.csv")
+existing_rows = load_manual_roi_match_rows(match_path) if match_path.exists() else ()
+rows = make_manual_roi_match_rows(
+    {
+        Path("/recordings/first"): "roi_0004",
+        Path("/recordings/second"): "roi_0012",
+    },
+    group_cell_id=next_group_cell_id(existing_rows),
+    fov_group_id="fov_1",
+)
+append_manual_roi_match_rows(match_path, rows)
+```
+
+Rows that share a `group_cell_id` and `status="matched"` are the same visually assigned cell across recordings. Reviewed singletons can be saved with `status="unmatched"` so downstream analysis can distinguish unreviewed ROIs from ROIs the user intentionally left unmatched.
+
 ## Open Napari From Python
 
 ```python

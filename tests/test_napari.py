@@ -1717,7 +1717,6 @@ class NapariAdapterTest(unittest.TestCase):
 
         self.assertFalse(row_is_hidden(widget._shared_limits))
 
-
     def test_response_heatmap_colormap_has_black_zero_without_white_band(self) -> None:
         """Confirm the signed heatmap colorbar has a black neutral point.
 
@@ -1735,7 +1734,6 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertFalse(np.any(np.all(colors[:, :3] > 0.9, axis=1)))
         self.assertLess(float(low_positive_color[0]), float(mid_positive_color[0]))
         self.assertLess(float(mid_positive_color[0]), float(high_positive_color[0]))
-
 
     def test_response_heatmap_display_uses_robust_limits(self) -> None:
         """Confirm outliers do not set the heatmap color limit.
@@ -1777,7 +1775,6 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertLess(limit, 0.20)
         self.assertGreater(limit, 0.18)
         self.assertEqual(float(values[-1, 0]), limit)
-
 
     def test_response_window_options_auto_default_and_manual_bounds(self) -> None:
         """Confirm response-window controls default to auto and cap manual values.
@@ -5228,7 +5225,6 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(len(response_widget._response_map_area.epoch_map_widgets), 1)
         self.assertIsNone(response_widget._plot_data)
 
-
     def test_response_heatmaps_do_not_recompute_for_roi_plot_updates(self) -> None:
         """Confirm ROI response refreshes do not recompute movie heatmaps.
 
@@ -5256,7 +5252,6 @@ class NapariAdapterTest(unittest.TestCase):
 
         compute_maps.assert_not_called()
         self.assertIs(response_widget._response_map_data, map_data)
-
 
     def test_response_map_shared_limits_updates_display_without_recompute(self) -> None:
         """Confirm shared heatmap limits are display-only.
@@ -5292,7 +5287,6 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget._response_map_area.epoch_map_widgets[0]._image,
             first_image,
         )
-
 
     def test_epoch_plot_panel_centers_title(self) -> None:
         """Confirm epoch titles are centered above live response plots.
@@ -5376,7 +5370,6 @@ class NapariAdapterTest(unittest.TestCase):
                 {"response_heatmaps"},
             )
             self.assertTrue(all(path.is_file() for path in written))
-
 
     def test_response_export_tab_syncs_cached_exports_to_publish_root(self) -> None:
         """Confirm Export-tab files are published when analysis caching is on.
