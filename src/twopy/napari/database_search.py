@@ -38,6 +38,7 @@ from twopy.database.search import (
     ExperimentSearchNode,
     build_experiment_search_tree,
     find_recording_search_results,
+    normalize_experiment_date_filter,
     recording_path_for_database_experiment,
 )
 from twopy.database.types import DatabaseExperiment
@@ -165,6 +166,10 @@ class ExperimentSearchDialog(QDialog):
             None.
         """
         try:
+            raw_date_filter = self._date_filter.text()
+            date_filter = normalize_experiment_date_filter(raw_date_filter)
+            if date_filter is not None and date_filter != raw_date_filter:
+                self._date_filter.setText(date_filter)
             config = self._load_config()
             experiments = find_recording_search_results(
                 config,
@@ -173,7 +178,7 @@ class ExperimentSearchDialog(QDialog):
                     cell_type=self._cell_type_filter.text(),
                     sensor=self._sensor_filter.text(),
                     stimulus=self._stimulus_filter.text(),
-                    date=self._date_filter.text(),
+                    date=date_filter,
                 ),
             )
         except (FileNotFoundError, OSError, ValueError) as error:

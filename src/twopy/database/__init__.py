@@ -16,6 +16,7 @@ from twopy.database.search import (
     ExperimentSearchNode,
     build_experiment_search_tree,
     find_recording_search_results,
+    normalize_experiment_date_filter,
     recording_path_for_database_experiment,
     recording_paths_for_database_experiments,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "find_recordings",
     "find_recording_search_results",
     "find_stimulus_presentations",
+    "normalize_experiment_date_filter",
     "read_database_catalog",
     "recording_path_for_database_experiment",
     "recording_paths_for_database_experiments",

@@ -17,6 +17,7 @@ from twopy.database import (
     find_recording_search_results,
     find_recordings,
     find_stimulus_presentations,
+    normalize_experiment_date_filter,
     read_database_catalog,
     recording_path_for_database_experiment,
     recording_paths_for_database_experiments,
@@ -166,6 +167,47 @@ class DatabaseQueryTest(unittest.TestCase):
 
             self.assertEqual(len(experiments), 1)
             self.assertEqual(missing, ())
+
+    def test_recording_search_normalizes_date_separator_variants(self) -> None:
+        """Confirm GUI-style date filters accept common separator variants.
+
+        Inputs: a temporary Clark-lab-style DB and date-like filter strings.
+        Outputs: each ``YYYY<separator>MM<separator>DD`` variant finds the same
+        recording as the canonical ``YYYY-MM-DD`` filter.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database_dir = root / "db"
+            data_dir = root / "data"
+            database_dir.mkdir()
+            data_dir.mkdir()
+            self._write_clark_style_log(database_dir / "experimentLog.db")
+            config = TwopyConfig(
+                database_path=database_dir,
+                data_path=data_dir,
+                database_access="direct",
+                analysis_output="source",
+            )
+
+            for value in (
+                "2023-10-17",
+                "2023/10/17",
+                "2023\\10\\17",
+                "2023.10.17",
+                "2023_10_17",
+            ):
+                with self.subTest(value=value):
+                    self.assertEqual(
+                        normalize_experiment_date_filter(value),
+                        "2023-10-17",
+                    )
+                    experiments = find_recording_search_results(
+                        config,
+                        ExperimentSearchFilters(date=value),
+                    )
+
+                    self.assertEqual(len(experiments), 1)
+                    self.assertEqual(experiments[0].stimulus_presentation_id, 20005)
 
     def test_recording_search_tree_groups_loadable_hierarchy(self) -> None:
         """Confirm search results group by the Load-tab browse hierarchy.

@@ -3025,6 +3025,7 @@ class NapariAdapterTest(unittest.TestCase):
             )
 
             dialog._user_filter.setText("Gus")
+            dialog._date_filter.setText("2023/10/17")
             dialog.search()
 
             self.assertIsNotNone(dialog.findChild(QSplitter))
@@ -3040,6 +3041,7 @@ class NapariAdapterTest(unittest.TestCase):
                 "bars_singles_stim=5s_bars=3x400ms_dt=200ms_int=20",
             )
             self.assertEqual(dialog._date_filter.placeholderText(), "2025-10-22")
+            self.assertEqual(dialog._date_filter.text(), "2023-10-17")
             self.assertEqual(dialog._tree.columnWidth(1), 72)
             self.assertEqual(dialog._user_filter.textMargins().left(), 6)
             self.assertEqual(dialog._user_filter.textMargins().right(), 6)

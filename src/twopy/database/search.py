@@ -11,8 +11,10 @@ path resolution stay testable without Qt imports.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal
 
@@ -29,6 +31,7 @@ __all__ = [
     "build_experiment_search_tree",
     "date_label_for_experiment",
     "find_recording_search_results",
+    "normalize_experiment_date_filter",
     "recording_path_for_database_experiment",
     "recording_paths_for_database_experiments",
     "time_label_for_experiment",
@@ -45,6 +48,9 @@ ExperimentHierarchyField = Literal[
 
 UNKNOWN_LABEL = "(unknown)"
 DEFAULT_EXPERIMENT_SEARCH_LIMIT = 50_000
+_DATE_FILTER_PATTERN = re.compile(
+    r"^\s*(\d{4})[^0-9A-Za-z]+(\d{2})[^0-9A-Za-z]+(\d{2})\s*$"
+)
 
 
 @dataclass(frozen=True)
@@ -104,7 +110,7 @@ def find_recording_search_results(
     """
     experiments = find_stimulus_presentations(
         config.database_path,
-        date_contains=_clean_filter(filters.date),
+        date_contains=normalize_experiment_date_filter(filters.date),
         stimulus_contains=_clean_filter(filters.stimulus),
         sensor_contains=_clean_filter(filters.sensor),
         cell_type_contains=_clean_filter(filters.cell_type),
@@ -114,6 +120,33 @@ def find_recording_search_results(
         cache_dir=cache_dir,
     )
     return _unique_experiments_by_relative_path(experiments)
+
+
+def normalize_experiment_date_filter(value: str | None) -> str | None:
+    r"""Normalize one user-facing experiment date filter.
+
+    Args:
+        value: Optional date text from the search dialog or scripting API.
+
+    Returns:
+        ``YYYY-MM-DD`` for date-like input with non-letter separators, a
+        stripped non-empty fallback string for other input, or ``None`` for
+        blank input.
+
+    This keeps the GUI forgiving when a user types ``YYYY/MM/DD``,
+    ``YYYY\\MM\\DD``, ``YYYY.MM.DD``, or similar separator variants while
+    preserving the existing substring-search behavior for non-date text.
+    """
+    cleaned = _clean_filter(value)
+    if cleaned is None:
+        return None
+
+    match = _DATE_FILTER_PATTERN.fullmatch(cleaned)
+    if match is None:
+        return cleaned
+
+    year, month, day = (int(part) for part in match.groups())
+    return date(year, month, day).isoformat()
 
 
 def build_experiment_search_tree(
