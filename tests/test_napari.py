@@ -47,12 +47,16 @@ from qtpy.QtWidgets import (
     QSlider,
     QSpinBox,
     QSplitter,
+    QTableWidget,
     QTabWidget,
     QTreeWidgetItem,
     QWidget,
 )
 
 import twopy.napari.controls as napari_controls
+import twopy.napari.group_matching as group_matching
+import twopy.napari.group_matching_roi as group_matching_roi
+import twopy.napari.sidebar as napari_sidebar
 import twopy.napari.trial_timeline as trial_timeline
 from twopy import (
     add_twopy_magicgui_controls,
@@ -105,6 +109,7 @@ from twopy.napari.display_paths import (
     format_twopy_h5_output,
     recording_display_summary,
 )
+from twopy.napari.group_matching_images import mean_image_roi_overlay_pixmap
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.live_analysis import LiveResponseAnalysisCache
 from twopy.napari.loading import resolve_or_convert_recording
@@ -3490,6 +3495,20 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertTrue(viewer.labels[1].visible)
             self.assertTrue(sidebar_buttons["Open Group Matching"].isEnabled())
             self.assertTrue(sidebar_buttons["Save loaded list"].isEnabled())
+            sidebar_buttons["Open Group Matching"].click()
+            group_matching_button = cast(
+                napari_sidebar.GroupMatchingWindowButton,
+                sidebar_buttons["Open Group Matching"],
+            )
+            group_matching_dialog = group_matching_button._dialog
+            group_matching_screen = (
+                group_matching_dialog.screen() or QApplication.primaryScreen()
+            )
+            assert group_matching_screen is not None
+            self.assertEqual(
+                group_matching_dialog.geometry().height(),
+                group_matching_screen.availableGeometry().height(),
+            )
 
             fov_path = root / "fov_groups.csv"
             match_path = root / "roi_matches.csv"
@@ -3502,10 +3521,16 @@ class NapariAdapterTest(unittest.TestCase):
                 QLineEdit,
                 "roi_match_path",
             )
+            fov_note_edit = group_matching_widget.findChild(
+                QLineEdit,
+                "fov_group_note",
+            )
             assert fov_path_edit is not None
             assert match_path_edit is not None
+            assert fov_note_edit is not None
             fov_path_edit.setText(str(fov_path))
             match_path_edit.setText(str(match_path))
+            fov_note_edit.setText("same field")
             contrast_sliders = group_matching_widget.findChildren(QSlider)
             self.assertEqual(len(contrast_sliders), 2)
             contrast_sliders[0].setValue(80)
@@ -3533,6 +3558,21 @@ class NapariAdapterTest(unittest.TestCase):
                 {first.resolve(), second.resolve()},
             )
             self.assertEqual({row.fov_group_id for row in fov_rows}, {"fov_1"})
+            self.assertEqual({row.note for row in fov_rows}, {"same field"})
+            match_buttons["Clear selected FOV"].click()
+            with patch.object(
+                group_matching.FovAssignmentView,
+                "_choose_existing_fov_group_path",
+                return_value=fov_path,
+            ):
+                match_buttons["Load FOV CSV"].click()
+            with patch.object(
+                group_matching.FovAssignmentView,
+                "_choose_fov_group_save_path",
+                return_value=root / "new_fov_groups.csv",
+            ):
+                match_buttons["Browse save path"].click()
+            fov_path_edit.setText(str(fov_path))
             match_buttons["Save and continue to ROI assignment"].click()
 
             fov_filter = group_matching_widget.findChild(QComboBox, "fov_filter")
@@ -3544,6 +3584,21 @@ class NapariAdapterTest(unittest.TestCase):
                     fov_filter.itemText(index) for index in range(fov_filter.count())
                 ),
             )
+            roi_buttons = {
+                button.text(): button
+                for button in group_matching_widget.findChildren(QPushButton)
+            }
+            roi_note_edit = group_matching_widget.findChild(
+                QLineEdit,
+                "roi_match_note",
+            )
+            assert roi_note_edit is not None
+            self.assertIn("Load ROI CSV", roi_buttons)
+            self.assertIn("Browse save path", roi_buttons)
+            self.assertIn("Add new group", roi_buttons)
+            self.assertIn("Overwrite selected group", roi_buttons)
+            self.assertIn("Remove selected group", roi_buttons)
+            self.assertIn("Save and close", roi_buttons)
             roi_cards = group_matching_widget.findChildren(
                 QWidget,
                 "roi_assignment_card",
@@ -3574,18 +3629,8 @@ class NapariAdapterTest(unittest.TestCase):
                         "roi_response_preview",
                     ),
                 ),
-                2,
+                1,
             )
-            add_buttons = [
-                button
-                for card in roi_cards
-                for button in card.findChildren(QPushButton)
-                if button.text() == "Add to group"
-            ]
-            self.assertEqual(len(add_buttons), 2)
-            for button in add_buttons:
-                button.click()
-
             loaded_list.setCurrentRow(0)
             self.assertIn(first.name, str(load_widget.recording_folder.line_edit.value))
             self.assertTrue(viewer.images[0].visible)
@@ -3594,7 +3639,8 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse(viewer.images[2].visible)
             self.assertFalse(viewer.images[3].visible)
             self.assertFalse(viewer.labels[1].visible)
-            match_buttons["Save as same cell"].click()
+            roi_note_edit.setText("strong match")
+            roi_buttons["Add new group"].click()
 
             match_rows = load_manual_roi_match_rows(match_path)
             self.assertEqual(len(match_rows), 2)
@@ -3608,6 +3654,80 @@ class NapariAdapterTest(unittest.TestCase):
             )
             self.assertEqual({row.group_cell_id for row in match_rows}, {1})
             self.assertEqual({row.status for row in match_rows}, {"matched"})
+            self.assertEqual({row.note for row in match_rows}, {"strong match"})
+            self.assertEqual(roi_note_edit.text(), "")
+            group_table = group_matching_widget.findChild(
+                QTableWidget,
+                "roi_match_group_table",
+            )
+            assert group_table is not None
+            self.assertEqual(group_table.rowCount(), 1)
+            roi_buttons["Clear ROI selection"].click()
+            roi_selectors = [
+                combo
+                for combo in group_matching_widget.findChildren(QComboBox)
+                if combo.objectName() == "roi_selector"
+            ]
+            for selector in roi_selectors:
+                self.assertEqual(selector.currentData(), "")
+            group_table.selectRow(0)
+            roi_selectors = [
+                combo
+                for combo in group_matching_widget.findChildren(QComboBox)
+                if combo.objectName() == "roi_selector"
+            ]
+            self.assertEqual(
+                {selector.currentData() for selector in roi_selectors},
+                {"roi_0001", "roi_0002"},
+            )
+            self.assertEqual(roi_note_edit.text(), "strong match")
+            roi_selectors[1].setCurrentIndex(0)
+            roi_note_edit.setText("first only")
+            roi_buttons["Overwrite selected group"].click()
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual(len(match_rows), 1)
+            self.assertEqual(match_rows[0].group_cell_id, 1)
+            self.assertEqual(match_rows[0].recording_path, first.resolve())
+            self.assertEqual(match_rows[0].roi_label, "roi_0001")
+            self.assertEqual(match_rows[0].note, "first only")
+            self.assertEqual(roi_note_edit.text(), "")
+
+            roi_selectors[1].setCurrentIndex(1)
+            roi_note_edit.setText("second group")
+            roi_buttons["Add new group"].click()
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual(len(match_rows), 3)
+            self.assertEqual({row.group_cell_id for row in match_rows}, {1, 2})
+            self.assertEqual(
+                {row.note for row in match_rows if row.group_cell_id == 2},
+                {"second group"},
+            )
+            self.assertEqual(roi_note_edit.text(), "")
+            self.assertEqual(group_table.rowCount(), 2)
+            with patch.object(
+                group_matching_roi.RoiAssignmentView,
+                "_choose_existing_match_path",
+                return_value=match_path,
+            ):
+                roi_buttons["Load ROI CSV"].click()
+            with patch.object(
+                group_matching_roi.RoiAssignmentView,
+                "_choose_match_save_path",
+                return_value=match_path,
+            ):
+                roi_buttons["Browse save path"].click()
+            group_table.selectRow(1)
+            roi_buttons["Remove selected group"].click()
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual(len(match_rows), 1)
+            self.assertEqual({row.group_cell_id for row in match_rows}, {1})
+            self.assertEqual(group_table.rowCount(), 1)
+            self.assertEqual(roi_note_edit.text(), "")
+            group_table.selectRow(0)
+            roi_note_edit.setText("saved on close")
+            roi_buttons["Save and close"].click()
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual({row.note for row in match_rows}, {"saved on close"})
 
             unload_buttons["Unload selected"].click()
 
@@ -5556,6 +5676,107 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertEqual(colors[0].blue(), 0)
         self.assertEqual(colors[1].red(), 0)
         self.assertEqual(colors[1].blue(), 255)
+
+    def test_group_matching_overlay_plot_combines_selected_recording_rois(self) -> None:
+        """Confirm group matching can overlay selected ROIs in one plot strip.
+
+        Inputs: two selected ROI responses from different recording paths.
+        Outputs: combined plot data has one trace row per recording.
+        """
+        first_data = _tiny_response_plot_data()
+        second_data = _tiny_response_plot_data()
+        combined = group_matching_roi._combined_response_plot_data(
+            (
+                group_matching_roi._SelectedRoiResponse(
+                    recording_path=Path("/recordings/first"),
+                    roi_label="roi_0001",
+                    plot_data=first_data,
+                    color=QColor("#1f77b4"),
+                ),
+                group_matching_roi._SelectedRoiResponse(
+                    recording_path=Path("/recordings/second"),
+                    roi_label="roi_0002",
+                    plot_data=second_data,
+                    color=QColor("#d95f02"),
+                ),
+            ),
+        )
+
+        assert combined is not None
+        self.assertEqual(len(combined.epochs), len(first_data.epochs))
+        self.assertEqual(combined.epochs[0].mean_values.shape[0], 2)
+        self.assertEqual(
+            combined.epochs[0].roi_labels,
+            (
+                "first roi_0001",
+                "second roi_0002",
+            ),
+        )
+
+    def test_group_matching_roi_preview_omits_interleave_epochs(self) -> None:
+        """Confirm ROI matching response plots omit interleave epochs.
+
+        Inputs: one baseline-like interleave epoch and one odor epoch.
+        Outputs: only the odor epoch index remains visible in ROI matching.
+        """
+        time_seconds = np.array([0.0, 1.0], dtype=np.float64)
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Gray Interleave",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor",
+                    epoch_number=2,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            group_matching_roi._visible_response_epoch_indices(plot_data),
+            (1,),
+        )
+
+    def test_group_matching_roi_preview_uses_trace_color(self) -> None:
+        """Confirm selected ROI masks match the recording trace color.
+
+        Inputs: one selected ROI mask and one recording trace color.
+        Outputs: the rendered ROI preview uses that color for selected pixels.
+        """
+        _ = QApplication.instance() or QApplication([])
+        selected_color = QColor("#1f77b4")
+
+        pixmap = mean_image_roi_overlay_pixmap(
+            mean_image_layer=_FakeLayer(
+                name="mean",
+                data=np.zeros((12, 12), dtype=np.float64),
+                options={},
+            ),
+            roi_labels_layer=_FakeLayer(
+                name="rois",
+                data=np.full((12, 12), 2, dtype=np.int64),
+                options={},
+            ),
+            roi_label="roi_0002",
+            selected_color=selected_color,
+            contrast_percentile=100.0,
+        )
+
+        assert pixmap is not None
+        pixel_color = pixmap.toImage().pixelColor(8, 8)
+        self.assertLessEqual(abs(pixel_color.red() - selected_color.red()), 1)
+        self.assertLessEqual(abs(pixel_color.green() - selected_color.green()), 1)
+        self.assertLessEqual(abs(pixel_color.blue() - selected_color.blue()), 1)
 
     def test_epoch_plot_widget_uses_compact_height(self) -> None:
         """Confirm response plots trim unused height below the x-axis.

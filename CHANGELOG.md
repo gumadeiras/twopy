@@ -15,11 +15,16 @@
 
 ### Changes
 
-- Made the Group Matching ROI assignment view visual and self-contained, with per-recording ROI overlays, response previews, and match actions inside the popup instead of relying on the active main napari selection.
+- Made the Group Matching ROI assignment view visual and self-contained, with low-opacity numbered context overlays for all ROIs, selected ROI overlays colored to match each recording trace, a compact saved-groups table that restores selected ROIs, FOV/ROI note fields, ROI CSV load/save-path controls, separate Add new group and Overwrite selected group actions, selected-group removal, clickable response trace visibility chips, optional epoch-peak normalization, and translucent overlaid response traces inside the popup instead of relying on the active main napari selection.
+- Made the Group Matching popup open at the full available screen height while preserving its compact width.
+- Split Group Matching FOV CSV controls into separate load and save-path browse actions.
 - Documented response heatmap math, pixel/window methods, display scaling, persistence, and Python API usage in the GUI and Python API guides.
 
 ### Fixes
 
+- Made the Group Matching FOV and ROI load buttons open explicit existing-file CSV pickers instead of a macOS folder chooser that could gray out selectable paths.
+- Cleared the Group Matching ROI note field after adding, overwriting, or removing a group so notes do not carry into later actions accidentally.
+- Omitted gray/grey/interleave epochs from Group Matching ROI response previews, matching the main napari response plot defaults.
 - Prevented repeated napari loads of the same recording from adding duplicate Loaded Recordings entries.
 - Made every napari sidebar tab scrollable so the Export tab no longer sets a tall minimum sidebar height.
 - Made the Search database date filter accept `YYYY-MM-DD`-style input with common separator variants and normalize it before querying.

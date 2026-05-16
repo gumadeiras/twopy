@@ -11,7 +11,7 @@ from typing import Protocol, cast
 
 import numpy as np
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QImage, QPixmap
+from qtpy.QtGui import QColor, QFont, QImage, QPainter, QPixmap
 
 __all__ = [
     "mean_image_roi_overlay_pixmap",
@@ -55,6 +55,7 @@ def mean_image_roi_overlay_pixmap(
     mean_image_layer: object,
     roi_labels_layer: object | None,
     roi_label: str | None,
+    selected_color: QColor,
     contrast_percentile: float,
 ) -> QPixmap | None:
     """Return a mean-image preview with one selected ROI highlighted.
@@ -63,11 +64,13 @@ def mean_image_roi_overlay_pixmap(
         mean_image_layer: Napari mean-image layer.
         roi_labels_layer: Napari Labels layer for the same displayed crop.
         roi_label: ``roi_####`` label to highlight, or ``None`` for no overlay.
+        selected_color: Color used for the selected ROI mask and matching trace.
         contrast_percentile: Upper percentile used as the white point.
 
     Returns:
-        Pixmap containing grayscale mean image and an orange selected-ROI
-        overlay, or ``None`` when image data are unavailable.
+        Pixmap containing the grayscale mean image, low-opacity context for all
+        ROIs, numeric ROI labels, and a selected-ROI overlay colored to match
+        the recording trace, or ``None`` when image data are unavailable.
     """
     image = _layer_image(mean_image_layer)
     if image is None:
@@ -75,13 +78,24 @@ def mean_image_roi_overlay_pixmap(
     rgba = _grayscale_rgba(image, contrast_percentile=contrast_percentile)
     label_value = _roi_label_value(roi_label)
     labels = _layer_image(roi_labels_layer)
-    if label_value is not None and labels is not None and labels.shape == image.shape:
-        mask = labels.astype(np.int64, copy=False) == label_value
-        rgba[mask, 0] = 255
-        rgba[mask, 1] = 136
-        rgba[mask, 2] = 0
-        rgba[mask, 3] = 255
-    return _rgba_pixmap(rgba, size=ROI_PREVIEW_SIZE)
+    roi_centers: tuple[tuple[int, float, float], ...] = ()
+    if labels is not None and labels.shape == image.shape:
+        integer_labels = labels.astype(np.int64, copy=False)
+        roi_centers = _roi_label_centers(integer_labels)
+        _blend_roi_masks(
+            rgba,
+            integer_labels,
+            selected_label=label_value,
+            selected_color=selected_color,
+        )
+    pixmap = _rgba_pixmap(rgba, size=ROI_PREVIEW_SIZE)
+    _draw_roi_numbers(
+        pixmap,
+        roi_centers=roi_centers,
+        image_shape=image.shape,
+        selected_label=label_value,
+    )
+    return pixmap
 
 
 def _layer_image(layer: object | None) -> np.ndarray | None:
@@ -150,6 +164,105 @@ def _rgba_pixmap(image: np.ndarray, *, size: int) -> QPixmap:
         QImage.Format.Format_RGBA8888,
     ).copy()
     return _scaled_pixmap(qimage, size=size)
+
+
+def _blend_roi_masks(
+    rgba: np.ndarray,
+    labels: np.ndarray,
+    *,
+    selected_label: int | None,
+    selected_color: QColor,
+) -> None:
+    """Blend all ROI masks into the preview, emphasizing the selected mask."""
+    roi_values = tuple(
+        int(value)
+        for value in np.unique(labels)
+        if int(value) > 0 and int(value) != selected_label
+    )
+    for roi_value in roi_values:
+        _blend_mask_color(
+            rgba,
+            mask=labels == roi_value,
+            color=(31, 180, 190),
+            alpha=0.28,
+        )
+    if selected_label is not None:
+        selected_mask = labels == selected_label
+        rgba[selected_mask, 0] = selected_color.red()
+        rgba[selected_mask, 1] = selected_color.green()
+        rgba[selected_mask, 2] = selected_color.blue()
+        rgba[selected_mask, 3] = 255
+
+
+def _blend_mask_color(
+    rgba: np.ndarray,
+    *,
+    mask: np.ndarray,
+    color: tuple[int, int, int],
+    alpha: float,
+) -> None:
+    """Alpha-blend one color into selected pixels of an opaque RGBA image."""
+    if not np.any(mask):
+        return
+    base = rgba[mask, :3].astype(np.float64, copy=False)
+    blended = np.round((1.0 - alpha) * base + alpha * np.asarray(color))
+    rgba[mask, :3] = np.clip(blended, 0.0, 255.0).astype(np.uint8)
+    rgba[mask, 3] = 255
+
+
+def _roi_label_centers(labels: np.ndarray) -> tuple[tuple[int, float, float], ...]:
+    """Return label value and centroid coordinates for positive ROI labels."""
+    centers: list[tuple[int, float, float]] = []
+    for label_value in sorted(int(value) for value in np.unique(labels) if value > 0):
+        y_indices, x_indices = np.nonzero(labels == label_value)
+        if y_indices.size == 0:
+            continue
+        centers.append(
+            (
+                label_value,
+                float(np.mean(x_indices)),
+                float(np.mean(y_indices)),
+            ),
+        )
+    return tuple(centers)
+
+
+def _draw_roi_numbers(
+    pixmap: QPixmap,
+    *,
+    roi_centers: tuple[tuple[int, float, float], ...],
+    image_shape: tuple[int, ...],
+    selected_label: int | None,
+) -> None:
+    """Draw ROI numbers at scaled ROI centroids on top of a preview pixmap."""
+    if len(roi_centers) == 0 or len(image_shape) < 2:
+        return
+    height, width = image_shape[:2]
+    if height == 0 or width == 0:
+        return
+    painter = QPainter(pixmap)
+    try:
+        font = QFont()
+        font.setPointSize(9)
+        font.setBold(True)
+        painter.setFont(font)
+        x_scale = pixmap.width() / width
+        y_scale = pixmap.height() / height
+        for label_value, x_center, y_center in roi_centers:
+            text = str(label_value)
+            x = int(round(x_center * x_scale))
+            y = int(round(y_center * y_scale))
+            foreground = (
+                QColor(255, 246, 230)
+                if label_value == selected_label
+                else QColor(215, 255, 255)
+            )
+            painter.setPen(QColor(0, 0, 0))
+            painter.drawText(x + 1, y + 1, text)
+            painter.setPen(foreground)
+            painter.drawText(x, y, text)
+    finally:
+        painter.end()
 
 
 def _scaled_pixmap(image: QImage, *, size: int) -> QPixmap:

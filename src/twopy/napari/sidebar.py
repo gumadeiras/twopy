@@ -11,6 +11,7 @@ napari's built-in layer controls alone.
 """
 
 from qtpy.QtWidgets import (
+    QApplication,
     QDialog,
     QPushButton,
     QScrollArea,
@@ -140,6 +141,7 @@ class GroupMatchingWindowButton(QPushButton):
         if callable(refresh):
             refresh()
         self._dialog.show()
+        _maximize_dialog_height(self._dialog)
         self._dialog.raise_()
         self._dialog.activateWindow()
 
@@ -185,3 +187,20 @@ def _qt_widget(widget: object) -> QWidget:
         msg = f"Twopy sidebar expected a QWidget, got {type(native_widget).__name__}."
         raise TypeError(msg)
     return native_widget
+
+
+def _maximize_dialog_height(dialog: QDialog) -> None:
+    """Resize a popup to available screen height while preserving width.
+
+    Args:
+        dialog: Popup dialog that should open tall enough for dense workflows.
+    """
+    screen = dialog.screen() or QApplication.primaryScreen()
+    if screen is None:
+        return
+    available = screen.availableGeometry()
+    geometry = dialog.geometry()
+    width = geometry.width()
+    max_x = available.left() + max(0, available.width() - width)
+    x_position = min(max(geometry.x(), available.left()), max_x)
+    dialog.setGeometry(x_position, available.top(), width, available.height())

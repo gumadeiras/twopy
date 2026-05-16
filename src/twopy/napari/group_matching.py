@@ -15,6 +15,7 @@ from typing import Protocol
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -105,6 +106,9 @@ class GroupMatchingPanel(QWidget):
     def finalize_fov_assignments(self) -> None:
         """Save current FOV assignments and switch to ROI assignment."""
         if self._fov_view.save_fov_groups():
+            self._roi_view.set_default_output_folder(
+                self._fov_view.output_path().parent
+            )
             self._roi_view.refresh_fov_filter()
             self._stack.setCurrentWidget(self._roi_view)
 
@@ -157,6 +161,10 @@ class FovAssignmentView(QWidget):
         self._on_finalize = on_finalize
         self._path_edit = QLineEdit(str(Path.cwd() / FOV_GROUP_TABLE_FILENAME))
         self._path_edit.setObjectName("fov_group_path")
+        self._path_edit.editingFinished.connect(self.load_fov_groups_from_path)
+        self._note_edit = QLineEdit("")
+        self._note_edit.setObjectName("fov_group_note")
+        self._note_edit.setPlaceholderText("Optional note saved to FOV CSV")
         self._instruction_label = QLabel("Select recordings that share a FOV.")
         self._status_label = QLabel("")
         self._fov_group_spin = QSpinBox()
@@ -182,10 +190,23 @@ class FovAssignmentView(QWidget):
         select_none_button.clicked.connect(self.select_none)
         clear_button = QPushButton("Clear selected FOV")
         clear_button.clicked.connect(self.clear_selected_fov)
+        load_button = QPushButton("Load FOV CSV")
+        load_button.clicked.connect(self.load_fov_group_path)
+        browse_button = QPushButton("Browse save path")
+        browse_button.clicked.connect(self.browse_fov_group_save_path)
         save_button = QPushButton("Save FOV groups")
         save_button.clicked.connect(self.save_fov_groups)
         finalize_button = QPushButton("Save and continue to ROI assignment")
         finalize_button.clicked.connect(self._finalize)
+
+        path_controls = QHBoxLayout()
+        path_controls.addWidget(self._path_edit)
+        path_controls.addWidget(load_button)
+        path_controls.addWidget(browse_button)
+
+        note_controls = QHBoxLayout()
+        note_controls.addWidget(QLabel("Note"))
+        note_controls.addWidget(self._note_edit)
 
         assignment_controls = QHBoxLayout()
         assignment_controls.addWidget(QLabel("Assign selection to FOV"))
@@ -207,7 +228,8 @@ class FovAssignmentView(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(QLabel("FOV Assignment"))
         layout.addWidget(self._instruction_label)
-        layout.addWidget(self._path_edit)
+        layout.addLayout(path_controls)
+        layout.addLayout(note_controls)
         layout.addWidget(scroll_area)
         layout.addLayout(assignment_controls)
         layout.addLayout(cleanup_controls)
@@ -265,6 +287,54 @@ class FovAssignmentView(QWidget):
             card.set_selected(False)
         self._status_label.setText("Cleared card selection.")
 
+    def load_fov_group_path(self) -> None:
+        """Choose an existing FOV CSV path and load matching rows."""
+        selected_path = self._choose_existing_fov_group_path()
+        if selected_path is None:
+            return
+        self._path_edit.setText(str(selected_path))
+        self.load_fov_groups_from_path()
+
+    def browse_fov_group_save_path(self) -> None:
+        """Choose where future FOV assignments will be saved."""
+        selected_path = self._choose_fov_group_save_path()
+        if selected_path is None:
+            return
+        self._path_edit.setText(str(selected_path))
+        if selected_path.exists():
+            self.load_fov_groups_from_path()
+        else:
+            self._status_label.setText(f"FOV CSV will be saved to {selected_path}.")
+
+    def load_fov_groups_from_path(self) -> None:
+        """Load existing FOV assignments for currently loaded recordings."""
+        path = self.output_path()
+        if not path.exists():
+            self._status_label.setText(f"FOV CSV will be saved to {path}.")
+            return
+        try:
+            rows = load_manual_fov_group_rows(path)
+        except (OSError, ValueError) as error:
+            self._status_label.setText(f"Could not load FOV CSV: {error}")
+            return
+        loaded_paths = {
+            recording.display_path.expanduser()
+            for recording in self._state.loaded_recordings
+        }
+        for recording_path in loaded_paths:
+            self._fov_groups.pop(recording_path, None)
+        loaded_rows = {
+            row.recording_path.expanduser(): row.fov_group_id
+            for row in rows
+            if row.recording_path.expanduser() in loaded_paths
+        }
+        self._fov_groups.update(loaded_rows)
+        self._note_edit.setText(_shared_note(tuple(rows)))
+        self.refresh()
+        self._status_label.setText(
+            f"Loaded {len(loaded_rows)} FOV assignments from {path}.",
+        )
+
     def save_fov_groups(self) -> bool:
         """Persist assigned recording-to-FOV rows to CSV.
 
@@ -277,7 +347,10 @@ class FovAssignmentView(QWidget):
             return False
         self._fov_groups.clear()
         self._fov_groups.update(recording_groups)
-        rows = make_manual_fov_group_rows(recording_groups)
+        rows = make_manual_fov_group_rows(
+            recording_groups,
+            note=self._note_edit.text(),
+        )
         save_manual_fov_group_rows(rows, self.output_path())
         self._status_label.setText(f"Saved {len(rows)} FOV assignments.")
         return True
@@ -285,6 +358,42 @@ class FovAssignmentView(QWidget):
     def output_path(self) -> Path:
         """Return the current FOV grouping CSV path."""
         return Path(self._path_edit.text()).expanduser()
+
+    def _choose_existing_fov_group_path(self) -> Path | None:
+        """Return a user-selected existing FOV CSV path."""
+        current_path = self.output_path()
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Load FOV groups CSV")
+        dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        dialog.setNameFilter("CSV files (*.csv);;All files (*)")
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setDirectory(str(current_path.parent))
+        dialog.selectFile(current_path.name)
+        if dialog.exec() != QFileDialog.DialogCode.Accepted:
+            return None
+        selected_files = dialog.selectedFiles()
+        if len(selected_files) == 0:
+            return None
+        return Path(selected_files[0]).expanduser()
+
+    def _choose_fov_group_save_path(self) -> Path | None:
+        """Return a user-selected path for saving FOV CSV rows."""
+        current_path = self.output_path()
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Choose FOV groups save path")
+        dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        dialog.setNameFilter("CSV files (*.csv);;All files (*)")
+        dialog.setDefaultSuffix("csv")
+        dialog.setOption(QFileDialog.Option.DontConfirmOverwrite, True)
+        dialog.setDirectory(str(current_path.parent))
+        dialog.selectFile(current_path.name)
+        if dialog.exec() != QFileDialog.DialogCode.Accepted:
+            return None
+        selected_files = dialog.selectedFiles()
+        if len(selected_files) == 0:
+            return None
+        return Path(selected_files[0]).expanduser()
 
     def _finalize(self) -> None:
         """Call the parent finalize callback."""
@@ -403,3 +512,9 @@ def _clear_grid_layout(layout: QGridLayout) -> None:
         widget = item.widget()
         if widget is not None:
             widget.setParent(None)
+
+
+def _shared_note(rows: tuple[object, ...]) -> str:
+    """Return the common loaded note when all rows share one note."""
+    notes = {getattr(row, "note", "") for row in rows}
+    return notes.pop() if len(notes) == 1 else ""
