@@ -29,6 +29,7 @@ from napari.layers import Labels
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -46,6 +47,7 @@ from qtpy.QtWidgets import (
     QSpinBox,
     QSplitter,
     QTabWidget,
+    QTreeWidgetItem,
     QWidget,
 )
 
@@ -606,6 +608,25 @@ def _record_loaded_paths(
     """
     loaded_paths.append(paths)
     return ExperimentLoadResult(loaded_count=len(paths))
+
+
+def _tree_leaf_items(item: QTreeWidgetItem) -> tuple[QTreeWidgetItem, ...]:
+    """Return all leaf rows below one search-result tree item.
+
+    Args:
+        item: Parent item from a database-search result tree.
+
+    Returns:
+        Leaf descendants in visual order.
+    """
+    if item.childCount() == 0:
+        return (item,)
+    leaves: list[QTreeWidgetItem] = []
+    for index in range(item.childCount()):
+        child = item.child(index)
+        if child is not None:
+            leaves.extend(_tree_leaf_items(child))
+    return tuple(leaves)
 
 
 def _write_database(path: Path) -> None:
@@ -2929,6 +2950,48 @@ class NapariAdapterTest(unittest.TestCase):
                 np.zeros((2, 2), dtype=np.int64),
             )
 
+    def test_manual_load_button_loads_multiple_selected_folders(self) -> None:
+        """Confirm manual loading accepts several selected recording folders.
+
+        Inputs: fake viewer, control dock, and two tiny converted folders
+        returned by the manual chooser.
+        Outputs: both folders are loaded into the same viewer and list panel.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            _write_converted_recording(first)
+            _write_converted_recording(second)
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            panel = cast(QWidget, control_docks.loaded_recordings_widget)
+            loaded_list = panel.findChild(QListWidget)
+            load_panel = cast(QWidget, control_docks.load_widget)
+            load_buttons = {
+                button.text(): button for button in load_panel.findChildren(QPushButton)
+            }
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_paths",
+                return_value=(first, second),
+            ):
+                load_buttons["Load manually"].click()
+
+            assert loaded_list is not None
+            self.assertEqual(loaded_list.count(), 2)
+            self.assertEqual(loaded_list.currentRow(), 1)
+            self.assertEqual(len(viewer.images), 4)
+            self.assertEqual(len(viewer.labels), 2)
+
     def test_database_search_dialog_loads_selected_hierarchy_paths(self) -> None:
         """Confirm DB search selections resolve to configured source paths.
 
@@ -2965,6 +3028,10 @@ class NapariAdapterTest(unittest.TestCase):
             dialog.search()
 
             self.assertIsNotNone(dialog.findChild(QSplitter))
+            self.assertEqual(
+                dialog._tree.selectionMode(),
+                QAbstractItemView.SelectionMode.ExtendedSelection,
+            )
             self.assertEqual(dialog._user_filter.placeholderText(), "gustavo")
             self.assertEqual(dialog._cell_type_filter.placeholderText(), "ALPN")
             self.assertEqual(dialog._sensor_filter.placeholderText(), "g6f")
@@ -3002,6 +3069,95 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(
                 loaded_paths,
                 [(data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49",)],
+            )
+
+    def test_database_search_dialog_loads_multiple_selected_lines(self) -> None:
+        """Confirm DB search can load several selected result rows at once.
+
+        Inputs: two valid experiment rows and a multi-selected search tree.
+        Outputs: Load Selected sends both source folders to the loader callback.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database_dir = root / "db"
+            data_dir = root / "data"
+            database_dir.mkdir()
+            data_dir.mkdir()
+            database_path = database_dir / "experimentLog.db"
+            _write_database(database_path)
+            connection = sqlite3.connect(database_path)
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO stimulusPresentation
+                        (
+                            stimulusPresentationId,
+                            fly,
+                            relativeDataPath,
+                            stimulusFunction,
+                            date,
+                            dataQuality
+                        )
+                    VALUES
+                        (
+                            20006,
+                            10923,
+                            'genotype\\stimulus\\2023\\10_17\\10_03_00',
+                            'combo_stim_singles',
+                            '2023-10-17 10:03:00',
+                            1
+                        )
+                    """,
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {database_dir}\n"
+                f"data_path: {data_dir}\n"
+                "database_access: direct\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            loaded_paths: list[tuple[Path, ...]] = []
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: _record_loaded_paths(
+                    loaded_paths,
+                    paths,
+                ),
+                config_path=config_path,
+            )
+            dialog._user_filter.setText("Gus")
+            dialog.search()
+
+            root_item = dialog._tree.topLevelItem(0)
+            assert root_item is not None
+            leaves = _tree_leaf_items(root_item)
+            self.assertEqual(len(leaves), 2)
+            for item in leaves:
+                item.setSelected(True)
+            dialog.load_selected()
+
+            self.assertEqual(
+                loaded_paths,
+                [
+                    (
+                        data_dir
+                        / "genotype"
+                        / "stimulus"
+                        / "2023"
+                        / "10_17"
+                        / "10_02_49",
+                        data_dir
+                        / "genotype"
+                        / "stimulus"
+                        / "2023"
+                        / "10_17"
+                        / "10_03_00",
+                    )
+                ],
             )
 
     def test_database_load_error_dialog_shows_scrollable_failed_paths(self) -> None:

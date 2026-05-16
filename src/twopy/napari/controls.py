@@ -11,13 +11,17 @@ same typed helpers used by scripts.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, cast
 
 from magicgui.widgets import FileEdit
 from qtpy.QtWidgets import (
+    QAbstractItemView,
+    QFileDialog,
     QLabel,
+    QListView,
     QPushButton,
     QSizePolicy,
+    QTreeView,
     QVBoxLayout,
     QWidget,
 )
@@ -104,17 +108,6 @@ class NapariControlState:
     is_loading: bool = False
     defer_timeline_updates: bool = False
     replace_selected_on_next_load: bool = False
-
-
-class _LoadRecordingGui(Protocol):
-    """Small shape of the magicgui recording-load callable.
-
-    Inputs: magicgui function widget created in ``_make_twopy_load_widget``.
-    Outputs: access to the child controls that need compact Qt placement.
-    """
-
-    recording_folder: object
-    roi_file_to_load: object
 
 
 def add_twopy_magicgui_controls(
@@ -328,6 +321,7 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     return LoadRecordingPanel(
         load_recording=load_recording,
         on_search_database=lambda: _show_database_search_dialog(state),
+        on_load_manually=lambda: _load_manual_recordings_from_dialog(state),
     )
 
 
@@ -374,6 +368,7 @@ class LoadRecordingPanel(QWidget):
         *,
         load_recording: object,
         on_search_database: Callable[[], None],
+        on_load_manually: Callable[[], None],
     ) -> None:
         """Create a compact Load Recording panel.
 
@@ -381,6 +376,8 @@ class LoadRecordingPanel(QWidget):
             load_recording: Magicgui callable widget built by
                 ``_make_twopy_load_widget``.
             on_search_database: Callback that opens the database-search window.
+            on_load_manually: Callback that opens the manual multi-folder
+                selection dialog.
 
         Returns:
             None.
@@ -395,37 +392,13 @@ class LoadRecordingPanel(QWidget):
         title.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         layout.addWidget(title)
 
-        recording_gui = cast(_LoadRecordingGui, load_recording)
         search_button = QPushButton("Search database")
         search_button.clicked.connect(on_search_database)
         layout.addWidget(search_button)
         load_manually_button = QPushButton("Load manually")
-        load_manually_button.clicked.connect(
-            lambda _checked=False: _click_file_edit_choose_button(
-                cast(FileEdit, recording_gui.recording_folder),
-            ),
-        )
+        load_manually_button.clicked.connect(lambda _checked=False: on_load_manually())
         layout.addWidget(load_manually_button)
         self.setLayout(layout)
-
-
-def _click_file_edit_choose_button(file_edit: FileEdit) -> None:
-    """Open a magicgui file edit through its wrapped Qt choose button.
-
-    Args:
-        file_edit: Magicgui file chooser widget.
-
-    Returns:
-        None.
-    """
-    native_button = getattr(file_edit.choose_btn, "native", file_edit.choose_btn)
-    if not isinstance(native_button, QPushButton):
-        msg = (
-            "Load manually expected the FileEdit choose button to wrap a "
-            f"QPushButton, got {type(native_button).__name__}."
-        )
-        raise TypeError(msg)
-    native_button.click()
 
 
 def _load_recording_path(
@@ -507,8 +480,8 @@ def _load_recording_path(
     return f"{status} {paths.recording_data_path}"
 
 
-def _show_database_search_dialog(state: NapariControlState) -> None:
-    """Open or raise the Load-tab database-search window.
+def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
+    """Load all folders selected by the manual recording chooser.
 
     Args:
         state: Mutable napari control state.
@@ -516,33 +489,67 @@ def _show_database_search_dialog(state: NapariControlState) -> None:
     Returns:
         None.
     """
-    from twopy.napari.database_search import ExperimentSearchDialog
-
-    if not isinstance(state.database_search_dialog, ExperimentSearchDialog):
-        state.database_search_dialog = ExperimentSearchDialog(
-            on_load_recording_paths=lambda paths: _load_database_recording_paths(
-                state,
-                paths,
-            ),
-        )
-    dialog = state.database_search_dialog
-    dialog.show()
-    dialog.raise_()
-    dialog.activateWindow()
+    paths = _choose_recording_paths(state)
+    if len(paths) == 0:
+        return
+    result = _load_recording_paths(
+        state,
+        paths,
+        remember_selected_folder=True,
+    )
+    if result.failures:
+        _show_load_errors(result)
 
 
-def _load_database_recording_paths(
+def _choose_recording_paths(state: NapariControlState) -> tuple[Path, ...]:
+    """Return manually selected recording folders from a multi-select dialog.
+
+    Args:
+        state: Mutable napari control state used to choose the starting folder.
+
+    Returns:
+        Selected folder paths, or an empty tuple when the user cancels.
+
+    Qt's native directory dialog is single-select on common platforms. The
+    non-native dialog exposes the tree/list views, so twopy can let scientists
+    select several source or converted folders in one pass.
+    """
+    dialog = QFileDialog()
+    dialog.setWindowTitle("Choose recordings")
+    start_path = _recording_picker_start_path(state)
+    if start_path is not None:
+        dialog.setDirectory(start_path)
+    dialog.setFileMode(QFileDialog.FileMode.Directory)
+    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+    dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
+    _allow_extended_dialog_selection(dialog)
+    if dialog.exec() != QFileDialog.DialogCode.Accepted:
+        return ()
+    return tuple(Path(path).expanduser() for path in dialog.selectedFiles())
+
+
+def _allow_extended_dialog_selection(dialog: QFileDialog) -> None:
+    """Allow selecting more than one row in a non-native file dialog."""
+    for view in (*dialog.findChildren(QListView), *dialog.findChildren(QTreeView)):
+        view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+
+
+def _load_recording_paths(
     state: NapariControlState,
     paths: tuple[Path, ...],
+    *,
+    remember_selected_folder: bool,
 ) -> "ExperimentLoadResult":
-    """Load all source recording paths selected from database search.
+    """Load many source or converted recording paths into napari.
 
     Args:
         state: Mutable napari control state.
-        paths: Source recording folders resolved from selected DB experiments.
+        paths: Recording folders or converted recording paths to load.
+        remember_selected_folder: Whether successful loads should update the
+            next manual picker starting folder.
 
     Returns:
-        Structured load result for the database-search dialog.
+        Structured load result with new-recording count and per-path failures.
     """
     from twopy.napari.database_search import (
         ExperimentLoadFailure,
@@ -580,7 +587,7 @@ def _load_database_recording_paths(
                     path,
                     roi_file_to_load=Path(DEFAULT_PATH_TEXT),
                     replace_selected=False,
-                    remember_selected_folder=False,
+                    remember_selected_folder=remember_selected_folder,
                 )
             except Exception as error:
                 failures.append(
@@ -601,6 +608,57 @@ def _load_database_recording_paths(
     return ExperimentLoadResult(
         loaded_count=loaded_count,
         failures=tuple(failures),
+    )
+
+
+def _show_load_errors(result: "ExperimentLoadResult") -> None:
+    """Show recording-load failures in a scrollable error dialog."""
+    from twopy.napari.database_search import ExperimentLoadErrorDialog
+
+    ExperimentLoadErrorDialog(result).exec()
+
+
+def _show_database_search_dialog(state: NapariControlState) -> None:
+    """Open or raise the Load-tab database-search window.
+
+    Args:
+        state: Mutable napari control state.
+
+    Returns:
+        None.
+    """
+    from twopy.napari.database_search import ExperimentSearchDialog
+
+    if not isinstance(state.database_search_dialog, ExperimentSearchDialog):
+        state.database_search_dialog = ExperimentSearchDialog(
+            on_load_recording_paths=lambda paths: _load_database_recording_paths(
+                state,
+                paths,
+            ),
+        )
+    dialog = state.database_search_dialog
+    dialog.show()
+    dialog.raise_()
+    dialog.activateWindow()
+
+
+def _load_database_recording_paths(
+    state: NapariControlState,
+    paths: tuple[Path, ...],
+) -> "ExperimentLoadResult":
+    """Load all source recording paths selected from database search.
+
+    Args:
+        state: Mutable napari control state.
+        paths: Source recording folders resolved from selected DB experiments.
+
+    Returns:
+        Structured load result for the database-search dialog.
+    """
+    return _load_recording_paths(
+        state,
+        paths,
+        remember_selected_folder=False,
     )
 
 

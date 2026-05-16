@@ -15,6 +15,7 @@ from typing import cast
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
+    QAbstractItemView,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -129,6 +130,9 @@ class ExperimentSearchDialog(QDialog):
         self._date_filter = self._filter_line_edit(FILTER_HINTS["date"])
         self._tree = QTreeWidget()
         self._tree.setHeaderLabels(("Experiment", "Count"))
+        self._tree.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection,
+        )
         self._configure_result_columns()
         self._tree.itemActivated.connect(self._load_tree_item)
 
@@ -191,7 +195,7 @@ class ExperimentSearchDialog(QDialog):
         selected = self._tree.selectedItems()
         if not selected:
             return
-        self._load_tree_item(selected[0], 0)
+        self._load_tree_items(tuple(selected))
 
     def _filter_panel(
         self,
@@ -286,10 +290,11 @@ class ExperimentSearchDialog(QDialog):
 
     def _load_tree_item(self, item: QTreeWidgetItem, _column: int) -> None:
         """Load source recording paths represented by one tree item."""
-        experiments = cast(
-            tuple[DatabaseExperiment, ...],
-            item.data(0, Qt.ItemDataRole.UserRole),
-        )
+        self._load_tree_items((item,))
+
+    def _load_tree_items(self, items: tuple[QTreeWidgetItem, ...]) -> None:
+        """Load source recording paths represented by selected tree items."""
+        experiments = _experiments_for_tree_items(items)
         if len(experiments) == 0:
             return
         resolved = _resolve_experiment_paths(
@@ -468,6 +473,41 @@ def _resolve_experiment_paths(
         paths.append(path)
         seen.add(path)
     return _ResolvedExperimentPaths(paths=tuple(paths), failures=tuple(failures))
+
+
+def _experiments_for_tree_items(
+    items: tuple[QTreeWidgetItem, ...],
+) -> tuple[DatabaseExperiment, ...]:
+    """Return unique experiments represented by selected tree items.
+
+    Args:
+        items: Selected hierarchy rows from the search result tree.
+
+    Returns:
+        Unique experiments in tree-selection order.
+
+    A parent and child can both be selected. Deduplicating here prevents the
+    same database row from being resolved or loaded twice while still allowing
+    users to combine unrelated rows in one load action.
+    """
+    experiments: list[DatabaseExperiment] = []
+    seen: set[tuple[Path, int, str]] = set()
+    for item in items:
+        item_experiments = cast(
+            tuple[DatabaseExperiment, ...],
+            item.data(0, Qt.ItemDataRole.UserRole),
+        )
+        for experiment in item_experiments:
+            key = (
+                experiment.database_path.expanduser().resolve(strict=False),
+                experiment.stimulus_presentation_id,
+                experiment.relative_data_path,
+            )
+            if key in seen:
+                continue
+            experiments.append(experiment)
+            seen.add(key)
+    return tuple(experiments)
 
 
 def _merge_load_failures(

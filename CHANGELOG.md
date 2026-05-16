@@ -4,6 +4,7 @@
 
 ### Features
 
+- Allowed napari manual loading and database search loading to select multiple recording folders or result rows in one action.
 - Added a Load-tab button that opens a Group Matching window, plus core CSV helpers for manually saving FOV grouping and cross-recording ROI match decisions.
 - Added movie-level response heatmaps to the napari response dock, independent of ROI existence, with one signed inhibition-to-activation map per stimulus epoch.
 - Added response heatmap computation options for pixel dF/F maps with Gaussian smoothing and square-window dF/F maps with preset or custom size and stride.
