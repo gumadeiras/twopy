@@ -16,6 +16,7 @@
 
 ### Fixes
 
+- Made response heatmaps reserve colorbar space inside the Plot-tab Size value so heatmap panels scale like response plots.
 - Made the napari Plot-tab correlation filter default its window stop to the shortest plotted epoch duration instead of `0 s`.
 
 ## 0.1.8 - 2026-05-14

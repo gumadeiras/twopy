@@ -33,6 +33,8 @@ from twopy.napari.plotting.widgets import clear_layout
 __all__ = ["ResponseMapArea"]
 
 RESPONSE_OVERLAY_ALPHA = 0.42
+_COLORBAR_HEIGHT = 34
+_MAP_COLORBAR_SPACING = 6
 
 
 class ResponseMapArea:
@@ -114,11 +116,14 @@ class ResponseMapArea:
         map_size: int,
     ) -> None:
         """Update display sizing for cached heatmap widgets."""
+        image_size = _heatmap_image_size(map_size)
         for epoch_index in epoch_indices:
             if epoch_index not in self.epoch_map_widgets:
                 continue
-            self.epoch_map_widgets[epoch_index].update_display(map_size=map_size)
-            self.epoch_colorbar_widgets[epoch_index].update_display(map_size=map_size)
+            self.epoch_map_widgets[epoch_index].update_display(map_size=image_size)
+            self.epoch_colorbar_widgets[epoch_index].update_display(
+                map_size=image_size,
+            )
 
     def has_epoch_widgets(self, epoch_indices: tuple[int, ...]) -> bool:
         """Return whether all requested epoch widgets exist."""
@@ -135,6 +140,7 @@ class ResponseMapArea:
         if map_data is None:
             self.clear_epoch_cache()
             return
+        image_size = _heatmap_image_size(map_size)
         expected_indices = set(range(len(map_data.epochs)))
         for epoch_index in tuple(self.epoch_map_widgets):
             expected_key = (
@@ -162,10 +168,10 @@ class ResponseMapArea:
             widget = EpochMapWidget(
                 map_data,
                 epoch,
-                map_size=map_size,
+                map_size=image_size,
                 shared_limits=shared_limits,
             )
-            colorbar = EpochColorbarWidget(map_size=map_size)
+            colorbar = EpochColorbarWidget(map_size=image_size)
             self.epoch_map_widgets[epoch_index] = widget
             self.epoch_colorbar_widgets[epoch_index] = colorbar
             self._epoch_keys[epoch_index] = _epoch_key(epoch)
@@ -269,13 +275,17 @@ class EpochColorbarWidget(QWidget):
         """Create one horizontal colorbar widget."""
         super().__init__()
         self._map_size = int(map_size)
-        self.setFixedSize(self._map_size, 34)
+        self.setFixedSize(self._map_size, _COLORBAR_HEIGHT)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    def sizeHint(self) -> QSize:
+        """Return the preferred colorbar size."""
+        return QSize(self._map_size, _COLORBAR_HEIGHT)
 
     def update_display(self, *, map_size: int) -> None:
         """Update visible colorbar width."""
         self._map_size = int(map_size)
-        self.setFixedSize(self._map_size, 34)
+        self.setFixedSize(self._map_size, _COLORBAR_HEIGHT)
         self.updateGeometry()
         self.update()
 
@@ -301,6 +311,7 @@ def _epoch_map_panel(
     """Create one titled heatmap panel."""
     panel = QWidget()
     layout = QVBoxLayout()
+    layout.setSpacing(_MAP_COLORBAR_SPACING)
     title_label = QLabel(title)
     title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
     layout.addWidget(title_label)
@@ -308,6 +319,17 @@ def _epoch_map_panel(
     layout.addWidget(colorbar_widget)
     panel.setLayout(layout)
     return panel
+
+
+def _heatmap_image_size(map_size: int) -> int:
+    """Return the response-map image side for one requested heatmap size.
+
+    The Plot-tab Size control represents the heatmap content budget, matching
+    the way response plots include axis-label space inside the requested size.
+    The colorbar is part of that content, so the displayed image is smaller
+    than the requested budget by the colorbar height and the fixed gap above it.
+    """
+    return max(1, int(map_size) - _COLORBAR_HEIGHT - _MAP_COLORBAR_SPACING)
 
 
 def _rgba_qimage(
