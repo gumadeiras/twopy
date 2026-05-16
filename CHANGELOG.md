@@ -4,6 +4,7 @@
 
 ### Features
 
+- Added a Load-tab button that opens a Group Matching window, plus core CSV helpers for manually saving FOV grouping and cross-recording ROI match decisions.
 - Added movie-level response heatmaps to the napari response dock, independent of ROI existence, with one signed inhibition-to-activation map per stimulus epoch.
 - Added response heatmap computation options for pixel dF/F maps with Gaussian smoothing and square-window dF/F maps with preset or custom size and stride.
 - Added robust 95th-percentile signed heatmap color limits, shared-limit display control across epochs, blue-black-orange colorbars, and neutral background rendering over the mean image.

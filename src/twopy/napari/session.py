@@ -54,6 +54,8 @@ class NapariSessionState(Protocol):
     loaded_recordings: list["LoadedNapariRecording"]
     selected_recording_index: int | None
     loaded_recordings_panel: "LoadedRecordingsPanel | None"
+    group_matching_panel: object | None
+    recording_required_widgets: list[object]
 
 
 class _LayerWithVisibility(Protocol):
@@ -382,12 +384,19 @@ def render_loaded_recordings_panel(state: NapariSessionState) -> None:
     Returns:
         None.
     """
-    if state.loaded_recordings_panel is None:
-        return
-    state.loaded_recordings_panel.set_recordings(
-        tuple(state.loaded_recordings),
-        selected_index=state.selected_recording_index,
-    )
+    if state.loaded_recordings_panel is not None:
+        state.loaded_recordings_panel.set_recordings(
+            tuple(state.loaded_recordings),
+            selected_index=state.selected_recording_index,
+        )
+    refresh = getattr(state.group_matching_panel, "refresh", None)
+    if callable(refresh):
+        refresh()
+    has_recordings = len(state.loaded_recordings) > 0
+    for widget in state.recording_required_widgets:
+        set_enabled = getattr(widget, "setEnabled", None)
+        if callable(set_enabled):
+            set_enabled(has_recordings)
 
 
 def set_loaded_recording_visibility(

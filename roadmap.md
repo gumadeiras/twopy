@@ -76,6 +76,8 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Napari has a compact top response plotting dock and one tabbed right-side `twopy` dock with Load, Metadata, Plot, ROIs, Epochs, and Export tabs; it can reload persisted analysis outputs from Load or update plots from the current Labels ROIs through the core analysis workflow. Plots now lay out horizontally with square panels, use saved per-trial response time vectors, match ROI trace colors to the Labels layer, share axes, preserve two seconds before stimulus onset, extend two seconds after stimulus offset when gray interleave frames exist, hide gray epochs by default, sort epochs by epoch number, draw thicker dashed zero-reference lines, and expose ROI/epoch visibility plus manual axis controls in scrollable option panels; the ROI selection list shows each ROI's plot color beside its name, and deselecting an ROI also hides that ROI in the napari Labels overlay without editing label pixels.
 - Napari recording controls show the loaded path tail instead of `default` after a selection.
 - Napari sessions can keep multiple recordings loaded at once. A Loaded Recordings panel lists loaded paths, switches response options to the selected recording, and unloads the selected recording with its associated image/movie/ROI layers. Selecting a loaded recording also makes that recording's layers visible and hides layers from the other loaded recordings.
+- Napari has an MVP Group Matching window launched from the Load tab for manual group-analysis setup. Users first group loaded recordings by FOV from selectable mean-image cards with per-recording contrast sliders and persist `fov_groups.csv`, then finalize into a FOV-filtered ROI assignment view, capture selected ROI labels from loaded recordings, save matched groups or reviewed unmatched ROIs, and persist decisions to a plain `roi_matches.csv` table.
+- Core manual group-analysis helpers can save, load, append, validate, and assign ids for FOV grouping and ROI match CSV tables independent of napari.
 - Napari response plotting code is scoped under `twopy.napari.plotting` with separate modules for plot data, response heatmap data, option controls, drawing widgets, docks, and recording-level heatmap HDF5 persistence.
 - Response heatmaps compute ROI-independent movie-level signed dF/F maps from photodiode-aligned epoch windows, support pixel smoothing and square-window averaging modes, persist normalized maps with an audit `response_scale`, and use robust 95th-percentile display color limits that can be shared across epochs.
 - Napari response options now include a Plot-size control and an Export tab that saves recording views, ROI views, recording/ROI overlays, per-epoch response plots, response heatmaps, and two-column ROI-overlay/response figures as PDF and PNG with Illustrator-editable PDF text and vector ROI/trace paths where possible. Each export action writes into its own subfolder under `exports/`. ROI image exports use pixel-edge ROI outlines and the same cropped display area as the recording view, including when an older full-frame Labels layer is still present in napari.
@@ -134,6 +136,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Make the default response workflow consume classified stimulus windows when the boundary-flash classifier applies, while keeping interpolation available for protocols whose photodiode and stimulus-row counts do not match.
 - Add napari database search and recording selection using the typed database helpers, then hand selected recordings to the existing convert/load, Labels ROI, analysis, persistence, and response-inspection workflow.
 - Group or facet responses by recording and stimulus metadata beyond the current epoch, trial, and ROI groupings.
+- Build downstream group-analysis loaders that consume `fov_groups.csv` and `roi_matches.csv` alongside per-recording analysis outputs for matched-cell and pooled-ROI summaries.
 
 ## Decisions
 
@@ -142,6 +145,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Napari control panels start with magicgui; move to custom widgets or plugin packaging only when the workflow needs it.
 - Current napari workflow: source or converted path selection, optional conversion, converted data load, Labels ROI editing, live response preview, persisted analysis reload, export, and response inspection. Remaining napari workflow work is database-backed recording search and selection.
 - Primary ROI interaction in napari uses Labels layers because they directly represent the pixel masks used by analysis.
+- Cross-recording group analysis starts with human-authored FOV and ROI CSV decision tables; automatic alignment or candidate scoring can assist later but should not be required for correctness.
 - Python: 3.13.
 - Environment: micromamba env named `twopy`.
 - Core modules stay GUI-independent; napari code calls core modules.

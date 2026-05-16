@@ -10,9 +10,20 @@ screens. A single tabbed twopy dock keeps resizing predictable while leaving
 napari's built-in layer controls alone.
 """
 
-from qtpy.QtWidgets import QScrollArea, QTabWidget, QVBoxLayout, QWidget
+from qtpy.QtWidgets import (
+    QDialog,
+    QPushButton,
+    QScrollArea,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-__all__ = ["TWOPY_SIDEBAR_MINIMUM_WIDTH", "create_twopy_sidebar_widget"]
+__all__ = [
+    "GroupMatchingWindowButton",
+    "TWOPY_SIDEBAR_MINIMUM_WIDTH",
+    "create_twopy_sidebar_widget",
+]
 
 TWOPY_SIDEBAR_MINIMUM_WIDTH = 420
 
@@ -21,6 +32,7 @@ def create_twopy_sidebar_widget(
     *,
     load_widget: object,
     loaded_recordings_widget: object,
+    group_matching_button: object | None,
     response_load_button: object | None,
     response_options_widget: object | None,
 ) -> QTabWidget:
@@ -29,6 +41,8 @@ def create_twopy_sidebar_widget(
     Args:
         load_widget: Magicgui recording-loader widget.
         loaded_recordings_widget: Qt widget listing loaded recordings.
+        group_matching_button: Optional Qt button that opens manual group ROI
+            matching in a separate window.
         response_load_button: Optional response action button for the Load tab.
         response_options_widget: Optional Qt tab widget for response controls.
 
@@ -46,6 +60,7 @@ def create_twopy_sidebar_widget(
         _load_tab(
             load_widget=load_widget,
             loaded_recordings_widget=loaded_recordings_widget,
+            group_matching_button=group_matching_button,
             response_load_button=response_load_button,
         ),
         "Load",
@@ -58,6 +73,7 @@ def _load_tab(
     *,
     load_widget: object,
     loaded_recordings_widget: object,
+    group_matching_button: object | None,
     response_load_button: object | None,
 ) -> QScrollArea:
     """Create the scrollable Load tab.
@@ -65,6 +81,7 @@ def _load_tab(
     Args:
         load_widget: Magicgui recording-loader widget.
         loaded_recordings_widget: Qt widget listing loaded recordings.
+        group_matching_button: Optional Qt button opened from the Load tab.
         response_load_button: Optional response action button for the Load tab.
 
     Returns:
@@ -75,9 +92,11 @@ def _load_tab(
     layout.setContentsMargins(8, 8, 8, 8)
     layout.setSpacing(12)
     layout.addWidget(_qt_widget(load_widget))
+    layout.addWidget(_qt_widget(loaded_recordings_widget))
     if response_load_button is not None:
         layout.addWidget(_qt_widget(response_load_button))
-    layout.addWidget(_qt_widget(loaded_recordings_widget))
+    if group_matching_button is not None:
+        layout.addWidget(_qt_widget(group_matching_button))
     layout.addStretch(1)
     content.setLayout(layout)
 
@@ -85,6 +104,35 @@ def _load_tab(
     scroll_area.setWidgetResizable(True)
     scroll_area.setWidget(content)
     return scroll_area
+
+
+class GroupMatchingWindowButton(QPushButton):
+    """Button that opens the group-matching workflow in a separate window."""
+
+    def __init__(self, group_matching_widget: QWidget) -> None:
+        """Create a button that owns one reusable non-modal dialog.
+
+        Args:
+            group_matching_widget: Widget to place inside the popup window.
+        """
+        super().__init__("Open Group Matching")
+        self._group_matching_widget = group_matching_widget
+        self._dialog = QDialog()
+        self._dialog.setWindowTitle("twopy Group Matching")
+        layout = QVBoxLayout()
+        layout.addWidget(group_matching_widget)
+        self._dialog.setLayout(layout)
+        self._dialog.resize(980, 720)
+        self.clicked.connect(self.open_group_matching_window)
+
+    def open_group_matching_window(self) -> None:
+        """Show the group-matching dialog and refresh its loaded-recording list."""
+        refresh = getattr(self._group_matching_widget, "refresh", None)
+        if callable(refresh):
+            refresh()
+        self._dialog.show()
+        self._dialog.raise_()
+        self._dialog.activateWindow()
 
 
 def _response_options_tabs(response_options_widget: object | None) -> QTabWidget:

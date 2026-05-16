@@ -24,6 +24,7 @@ from qtpy.QtWidgets import (
 
 from twopy.converted import RecordingData
 from twopy.napari.errors import exception_message_for_user
+from twopy.napari.group_matching import GroupMatchingPanel
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.paths import (
     DEFAULT_PATH_TEXT,
@@ -42,6 +43,7 @@ from twopy.napari.session import (
 )
 from twopy.napari.sidebar import (
     TWOPY_SIDEBAR_MINIMUM_WIDTH,
+    GroupMatchingWindowButton,
     create_twopy_sidebar_widget,
 )
 from twopy.napari.state import (
@@ -66,6 +68,7 @@ class NapariSidebarWidgets:
 
     load_widget: object
     loaded_recordings_widget: object
+    group_matching_widget: object
     response_options_widget: object | None
     sidebar_widget: object
     sidebar_dock_widget: object
@@ -92,6 +95,8 @@ class NapariControlState:
     loaded_recordings: list[LoadedNapariRecording] = field(default_factory=list)
     selected_recording_index: int | None = None
     loaded_recordings_panel: LoadedRecordingsPanel | None = None
+    group_matching_panel: object | None = None
+    recording_required_widgets: list[object] = field(default_factory=list)
     recording_picker_path: Path | None = None
     recording_picker_display_text: str = DEFAULT_PATH_TEXT
     recording_picker_widget: FileEdit | None = None
@@ -177,11 +182,21 @@ def add_twopy_magicgui_controls(
         )
         state.selected_recording_index = 0
     load_widget = _make_twopy_load_widget(state)
+    group_matching_widget = GroupMatchingPanel(state)
+    state.group_matching_panel = group_matching_widget
+    response_load_button = _response_load_tab_button(response_plot_widget)
+    group_matching_button = GroupMatchingWindowButton(group_matching_widget)
+    state.recording_required_widgets = [
+        widget
+        for widget in (response_load_button, group_matching_button)
+        if widget is not None
+    ]
     loaded_recordings_widget = _make_loaded_recordings_widget(state)
     sidebar_widget = create_twopy_sidebar_widget(
         load_widget=load_widget,
         loaded_recordings_widget=loaded_recordings_widget,
-        response_load_button=_response_load_tab_button(response_plot_widget),
+        group_matching_button=group_matching_button,
+        response_load_button=response_load_button,
         response_options_widget=response_options_widget,
     )
     sidebar_dock_widget = viewer.window.add_dock_widget(
@@ -194,6 +209,7 @@ def add_twopy_magicgui_controls(
     return NapariSidebarWidgets(
         load_widget=load_widget,
         loaded_recordings_widget=loaded_recordings_widget,
+        group_matching_widget=group_matching_widget,
         response_options_widget=response_options_widget,
         sidebar_widget=sidebar_widget,
         sidebar_dock_widget=sidebar_dock_widget,

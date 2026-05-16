@@ -37,10 +37,12 @@ from qtpy.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QLabel,
+    QLineEdit,
     QListWidget,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSlider,
     QSpinBox,
     QSplitter,
     QTabWidget,
@@ -51,6 +53,8 @@ import twopy.napari.controls as napari_controls
 import twopy.napari.trial_timeline as trial_timeline
 from twopy import (
     add_twopy_magicgui_controls,
+    load_manual_fov_group_rows,
+    load_manual_roi_match_rows,
     load_roi_set,
     make_roi_set,
     open_recording_in_napari,
@@ -240,6 +244,7 @@ class _FakeLayer:
     contrast_limits_range: tuple[float, float] | None = None
     events: object | None = None
     metadata: object | None = None
+    selected_label: int = 0
 
 
 @dataclass(frozen=True)
@@ -795,7 +800,14 @@ class NapariAdapterTest(unittest.TestCase):
                     options_widget.tabText(index)
                     for index in range(options_widget.count())
                 ),
-                ("Load", "Metadata", "Plot", "ROIs", "Epochs", "Export"),
+                (
+                    "Load",
+                    "Metadata",
+                    "Plot",
+                    "ROIs",
+                    "Epochs",
+                    "Export",
+                ),
             )
             self.assertIsInstance(options_widget.widget(1), QScrollArea)
             options_buttons = {
@@ -803,9 +815,16 @@ class NapariAdapterTest(unittest.TestCase):
             }
             self.assertIn("Search database", options_buttons)
             self.assertIn("Load manually", options_buttons)
+            self.assertIn("Open Group Matching", options_buttons)
             self.assertIn("Save ROIs + analysis", options_buttons)
             self.assertNotIn("Recompute preview now", options_buttons)
             self.assertIn("Reload saved analysis", options_buttons)
+            action_buttons = {
+                button.text(): button
+                for button in options_widget.findChildren(QPushButton)
+            }
+            self.assertTrue(action_buttons["Open Group Matching"].isEnabled())
+            self.assertTrue(action_buttons["Reload saved analysis"].isEnabled())
             group_titles = {
                 group.title() for group in options_widget.findChildren(QGroupBox)
             }
@@ -3204,9 +3223,21 @@ class NapariAdapterTest(unittest.TestCase):
             }
             self.assertIn("Unload selected", unload_buttons)
             self.assertIn("Unload all", unload_buttons)
+            sidebar_buttons = {
+                button.text(): button
+                for button in cast(QWidget, control_docks.sidebar_widget).findChildren(
+                    QPushButton,
+                )
+            }
+            self.assertIn("Open Group Matching", sidebar_buttons)
+            self.assertFalse(sidebar_buttons["Open Group Matching"].isEnabled())
 
             load_widget(recording_folder=first)
             load_widget(recording_folder=second)
+            viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
+            viewer.labels[0].selected_label = 1
+            viewer.labels[1].data = np.array([[2, 0], [0, 0]], dtype=np.int64)
+            viewer.labels[1].selected_label = 2
 
             self.assertEqual(loaded_list.count(), 2)
             self.assertEqual(loaded_list.currentRow(), 1)
@@ -3218,6 +3249,52 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertTrue(viewer.images[2].visible)
             self.assertTrue(viewer.images[3].visible)
             self.assertTrue(viewer.labels[1].visible)
+            self.assertTrue(sidebar_buttons["Open Group Matching"].isEnabled())
+
+            fov_path = root / "fov_groups.csv"
+            match_path = root / "roi_matches.csv"
+            group_matching_widget = cast(QWidget, control_docks.group_matching_widget)
+            fov_path_edit = group_matching_widget.findChild(
+                QLineEdit,
+                "fov_group_path",
+            )
+            match_path_edit = group_matching_widget.findChild(
+                QLineEdit,
+                "roi_match_path",
+            )
+            assert fov_path_edit is not None
+            assert match_path_edit is not None
+            fov_path_edit.setText(str(fov_path))
+            match_path_edit.setText(str(match_path))
+            contrast_sliders = group_matching_widget.findChildren(QSlider)
+            self.assertEqual(len(contrast_sliders), 2)
+            contrast_sliders[0].setValue(80)
+            match_buttons = {
+                button.text(): button
+                for button in group_matching_widget.findChildren(QPushButton)
+            }
+            select_buttons = [
+                button
+                for button in group_matching_widget.findChildren(QPushButton)
+                if button.text() == "Select"
+            ]
+            self.assertEqual(len(select_buttons), 2)
+            for button in select_buttons:
+                button.click()
+            match_buttons["Select none"].click()
+            for button in select_buttons:
+                self.assertFalse(button.isChecked())
+                button.click()
+            match_buttons["New FOV from selected"].click()
+            match_buttons["Save FOV groups"].click()
+            fov_rows = load_manual_fov_group_rows(fov_path)
+            self.assertEqual(
+                {row.recording_path for row in fov_rows},
+                {first.resolve(), second.resolve()},
+            )
+            self.assertEqual({row.fov_group_id for row in fov_rows}, {"fov_1"})
+            match_buttons["Save and continue to ROI assignment"].click()
+            match_buttons["Add selected ROI to group"].click()
 
             loaded_list.setCurrentRow(0)
             self.assertIn(first.name, str(load_widget.recording_folder.line_edit.value))
@@ -3227,6 +3304,21 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse(viewer.images[2].visible)
             self.assertFalse(viewer.images[3].visible)
             self.assertFalse(viewer.labels[1].visible)
+            match_buttons["Add selected ROI to group"].click()
+            match_buttons["Save as same cell"].click()
+
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual(len(match_rows), 2)
+            self.assertEqual(
+                {row.recording_path for row in match_rows},
+                {first.resolve(), second.resolve()},
+            )
+            self.assertEqual(
+                {row.roi_label for row in match_rows},
+                {"roi_0001", "roi_0002"},
+            )
+            self.assertEqual({row.group_cell_id for row in match_rows}, {1})
+            self.assertEqual({row.status for row in match_rows}, {"matched"})
 
             unload_buttons["Unload selected"].click()
 
@@ -3251,6 +3343,7 @@ class NapariAdapterTest(unittest.TestCase):
             unload_buttons["Unload all"].click()
 
             self.assertEqual(loaded_list.count(), 0)
+            self.assertFalse(sidebar_buttons["Open Group Matching"].isEnabled())
             self.assertEqual(len(viewer.images), 0)
             self.assertEqual(len(viewer.labels), 0)
             self.assertEqual(load_widget.recording_folder.value, Path("default"))
