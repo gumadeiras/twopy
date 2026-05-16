@@ -29,6 +29,10 @@ from qtpy.QtWidgets import (
 from twopy.converted import RecordingData
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.group_matching import GroupMatchingPanel
+from twopy.napari.loaded_recordings_csv import (
+    load_recording_paths_csv,
+    write_loaded_recordings_csv,
+)
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.paths import (
     DEFAULT_PATH_TEXT,
@@ -179,15 +183,21 @@ def add_twopy_magicgui_controls(
     state.group_matching_panel = group_matching_widget
     response_load_button = _response_load_tab_button(response_plot_widget)
     group_matching_button = GroupMatchingWindowButton(group_matching_widget)
+    save_recording_list_button = _save_loaded_recordings_button(state)
     state.recording_required_widgets = [
         widget
-        for widget in (response_load_button, group_matching_button)
+        for widget in (
+            save_recording_list_button,
+            response_load_button,
+            group_matching_button,
+        )
         if widget is not None
     ]
     loaded_recordings_widget = _make_loaded_recordings_widget(state)
     sidebar_widget = create_twopy_sidebar_widget(
         load_widget=load_widget,
         loaded_recordings_widget=loaded_recordings_widget,
+        save_recording_list_button=save_recording_list_button,
         group_matching_button=group_matching_button,
         response_load_button=response_load_button,
         response_options_widget=response_options_widget,
@@ -323,6 +333,15 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         on_search_database=lambda: _show_database_search_dialog(state),
         on_load_manually=lambda: _load_manual_recordings_from_dialog(state),
     )
+
+
+def _save_loaded_recordings_button(state: NapariControlState) -> QPushButton:
+    """Return the Load-tab button that exports the loaded-recording list."""
+    button = QPushButton("Save loaded list")
+    button.clicked.connect(
+        lambda _checked=False: _save_loaded_recordings_from_dialog(state)
+    )
+    return button
 
 
 def _response_load_tab_button(response_plot_widget: object | None) -> object | None:
@@ -481,7 +500,7 @@ def _load_recording_path(
 
 
 def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
-    """Load all folders selected by the manual recording chooser.
+    """Load all folders or recording-list CSVs selected by the manual chooser.
 
     Args:
         state: Mutable napari control state.
@@ -489,12 +508,17 @@ def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
     Returns:
         None.
     """
-    paths = _choose_recording_paths(state)
-    if len(paths) == 0:
+    selected_paths = _choose_recording_paths(state)
+    if len(selected_paths) == 0:
+        return
+    try:
+        recording_paths = _recording_paths_from_manual_selections(selected_paths)
+    except Exception as error:
+        _show_selection_error(selected_paths, error)
         return
     result = _load_recording_paths(
         state,
-        paths,
+        recording_paths,
         remember_selected_folder=True,
     )
     if result.failures:
@@ -502,30 +526,99 @@ def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
 
 
 def _choose_recording_paths(state: NapariControlState) -> tuple[Path, ...]:
-    """Return manually selected recording folders from a multi-select dialog.
+    """Return manually selected recording folders or CSV files.
 
     Args:
         state: Mutable napari control state used to choose the starting folder.
 
     Returns:
-        Selected folder paths, or an empty tuple when the user cancels.
+        Selected folder or CSV paths, or an empty tuple when the user cancels.
 
-    Qt's native directory dialog is single-select on common platforms. The
-    non-native dialog exposes the tree/list views, so twopy can let scientists
-    select several source or converted folders in one pass.
+    The non-native dialog exposes the tree/list views, so twopy can let
+    scientists select several source or converted folders or a reusable CSV
+    recording list in one pass.
     """
     dialog = QFileDialog()
-    dialog.setWindowTitle("Choose recordings")
+    dialog.setWindowTitle("Choose recordings or CSV lists")
     start_path = _recording_picker_start_path(state)
     if start_path is not None:
         dialog.setDirectory(start_path)
-    dialog.setFileMode(QFileDialog.FileMode.Directory)
+    dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+    dialog.setNameFilter("Recording folders or CSV files (*.csv);;All files (*)")
     dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-    dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
     _allow_extended_dialog_selection(dialog)
     if dialog.exec() != QFileDialog.DialogCode.Accepted:
         return ()
     return tuple(Path(path).expanduser() for path in dialog.selectedFiles())
+
+
+def _recording_paths_from_manual_selections(
+    paths: tuple[Path, ...],
+) -> tuple[Path, ...]:
+    """Expand selected CSV lists into concrete recording paths."""
+    recording_paths: list[Path] = []
+    for path in paths:
+        if path.suffix.lower() == ".csv":
+            recording_paths.extend(load_recording_paths_csv(path))
+        else:
+            recording_paths.append(path)
+    return tuple(recording_paths)
+
+
+def _save_loaded_recordings_from_dialog(state: NapariControlState) -> None:
+    """Save the current loaded-recordings list to a user-selected CSV path."""
+    if len(state.loaded_recordings) == 0:
+        return
+    output_path = _choose_loaded_recordings_csv_save_path(state)
+    if output_path is None:
+        return
+    try:
+        write_loaded_recordings_csv(state.loaded_recordings, output_path)
+    except Exception as error:
+        _show_selection_error((output_path,), error)
+
+
+def _choose_loaded_recordings_csv_save_path(state: NapariControlState) -> Path | None:
+    """Return the CSV path selected for saving loaded recordings."""
+    start_path = _recording_picker_start_path(state)
+    suggested_path = (
+        Path(start_path) / "loaded_recordings.csv"
+        if start_path is not None
+        else Path("loaded_recordings.csv")
+    )
+    selected_path, _selected_filter = QFileDialog.getSaveFileName(
+        None,
+        "Save loaded recordings CSV",
+        str(suggested_path),
+        "CSV files (*.csv);;All files (*)",
+    )
+    if selected_path == "":
+        return None
+    output_path = Path(selected_path).expanduser()
+    if output_path.suffix == "":
+        output_path = output_path.with_suffix(".csv")
+    return output_path
+
+
+def _show_selection_error(paths: tuple[Path, ...], error: Exception) -> None:
+    """Show a manual-selection parse or save failure in the load error dialog."""
+    from twopy.napari.database_search import (
+        ExperimentLoadFailure,
+        ExperimentLoadResult,
+    )
+
+    path = paths[0] if len(paths) == 1 else None
+    _show_load_errors(
+        ExperimentLoadResult(
+            loaded_count=0,
+            failures=(
+                ExperimentLoadFailure(
+                    path=path,
+                    message=exception_message_for_user(error),
+                ),
+            ),
+        ),
+    )
 
 
 def _allow_extended_dialog_selection(dialog: QFileDialog) -> None:

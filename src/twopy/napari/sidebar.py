@@ -32,6 +32,7 @@ def create_twopy_sidebar_widget(
     *,
     load_widget: object,
     loaded_recordings_widget: object,
+    save_recording_list_button: object | None,
     group_matching_button: object | None,
     response_load_button: object | None,
     response_options_widget: object | None,
@@ -41,6 +42,8 @@ def create_twopy_sidebar_widget(
     Args:
         load_widget: Magicgui recording-loader widget.
         loaded_recordings_widget: Qt widget listing loaded recordings.
+        save_recording_list_button: Optional Qt button that writes the loaded
+            recording list to CSV.
         group_matching_button: Optional Qt button that opens manual group ROI
             matching in a separate window.
         response_load_button: Optional response action button for the Load tab.
@@ -60,6 +63,7 @@ def create_twopy_sidebar_widget(
         _load_tab(
             load_widget=load_widget,
             loaded_recordings_widget=loaded_recordings_widget,
+            save_recording_list_button=save_recording_list_button,
             group_matching_button=group_matching_button,
             response_load_button=response_load_button,
         ),
@@ -73,6 +77,7 @@ def _load_tab(
     *,
     load_widget: object,
     loaded_recordings_widget: object,
+    save_recording_list_button: object | None,
     group_matching_button: object | None,
     response_load_button: object | None,
 ) -> QScrollArea:
@@ -81,6 +86,8 @@ def _load_tab(
     Args:
         load_widget: Magicgui recording-loader widget.
         loaded_recordings_widget: Qt widget listing loaded recordings.
+        save_recording_list_button: Optional Qt button that writes the loaded
+            recording list to CSV.
         group_matching_button: Optional Qt button opened from the Load tab.
         response_load_button: Optional response action button for the Load tab.
 
@@ -93,6 +100,8 @@ def _load_tab(
     layout.setSpacing(12)
     layout.addWidget(_qt_widget(load_widget))
     layout.addWidget(_qt_widget(loaded_recordings_widget))
+    if save_recording_list_button is not None:
+        layout.addWidget(_qt_widget(save_recording_list_button))
     if response_load_button is not None:
         layout.addWidget(_qt_widget(response_load_button))
     if group_matching_button is not None:

@@ -4,6 +4,7 @@ Inputs: a tiny converted recording, ROI labels, and a fake viewer.
 Outputs: layer data sent to napari-shaped methods and saved ROI HDF5 files.
 """
 
+import csv
 import sqlite3
 import tempfile
 import unittest
@@ -837,6 +838,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Search database", options_buttons)
             self.assertIn("Load manually", options_buttons)
             self.assertIn("Open Group Matching", options_buttons)
+            self.assertIn("Save loaded list", options_buttons)
             self.assertIn("Save ROIs + analysis", options_buttons)
             self.assertNotIn("Recompute preview now", options_buttons)
             self.assertIn("Reload saved analysis", options_buttons)
@@ -846,6 +848,7 @@ class NapariAdapterTest(unittest.TestCase):
             }
             self.assertTrue(action_buttons["Open Group Matching"].isEnabled())
             self.assertTrue(action_buttons["Reload saved analysis"].isEnabled())
+            self.assertTrue(action_buttons["Save loaded list"].isEnabled())
             group_titles = {
                 group.title() for group in options_widget.findChildren(QGroupBox)
             }
@@ -2992,6 +2995,83 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(viewer.images), 4)
             self.assertEqual(len(viewer.labels), 2)
 
+    def test_load_tab_saves_and_loads_recording_list_csv(self) -> None:
+        """Confirm a saved loaded-recordings CSV can be loaded manually.
+
+        Inputs: two converted folders loaded into one viewer, then exported as
+        a Load-tab CSV and selected from a fresh Load manually dialog.
+        Outputs: the CSV lists both recording paths and reloads both rows.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            _write_converted_recording(first)
+            _write_converted_recording(second)
+            csv_path = root / "loaded_recordings.csv"
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            load_widget = _load_recording_widget(control_docks.load_widget)
+            load_widget(recording_folder=first)
+            load_widget(recording_folder=second)
+            sidebar_buttons = {
+                button.text(): button
+                for button in cast(QWidget, control_docks.sidebar_widget).findChildren(
+                    QPushButton,
+                )
+            }
+
+            with patch.object(
+                napari_controls,
+                "_choose_loaded_recordings_csv_save_path",
+                return_value=csv_path,
+            ):
+                sidebar_buttons["Save loaded list"].click()
+
+            with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+                rows = list(csv.DictReader(csv_file))
+            self.assertEqual(
+                [row["recording_path"] for row in rows],
+                [str(first.resolve()), str(second.resolve())],
+            )
+            self.assertTrue(
+                rows[0]["recording_data_path"].endswith("recording_data.h5")
+            )
+
+            fresh_viewer = _FakeViewer()
+            fresh_docks = add_twopy_magicgui_controls(
+                fresh_viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            fresh_load_panel = cast(QWidget, fresh_docks.load_widget)
+            fresh_loaded_panel = cast(QWidget, fresh_docks.loaded_recordings_widget)
+            fresh_loaded_list = fresh_loaded_panel.findChild(QListWidget)
+            load_buttons = {
+                button.text(): button
+                for button in fresh_load_panel.findChildren(QPushButton)
+            }
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_paths",
+                return_value=(csv_path,),
+            ):
+                load_buttons["Load manually"].click()
+
+            assert fresh_loaded_list is not None
+            self.assertEqual(fresh_loaded_list.count(), 2)
+            self.assertEqual(fresh_loaded_list.currentRow(), 1)
+            self.assertEqual(len(fresh_viewer.images), 4)
+            self.assertEqual(len(fresh_viewer.labels), 2)
+
     def test_database_search_dialog_loads_selected_hierarchy_paths(self) -> None:
         """Confirm DB search selections resolve to configured source paths.
 
@@ -3388,7 +3468,9 @@ class NapariAdapterTest(unittest.TestCase):
                 )
             }
             self.assertIn("Open Group Matching", sidebar_buttons)
+            self.assertIn("Save loaded list", sidebar_buttons)
             self.assertFalse(sidebar_buttons["Open Group Matching"].isEnabled())
+            self.assertFalse(sidebar_buttons["Save loaded list"].isEnabled())
 
             load_widget(recording_folder=first)
             load_widget(recording_folder=second)
@@ -3406,6 +3488,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertTrue(viewer.images[3].visible)
             self.assertTrue(viewer.labels[1].visible)
             self.assertTrue(sidebar_buttons["Open Group Matching"].isEnabled())
+            self.assertTrue(sidebar_buttons["Save loaded list"].isEnabled())
 
             fov_path = root / "fov_groups.csv"
             match_path = root / "roi_matches.csv"
