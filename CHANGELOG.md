@@ -15,6 +15,7 @@
 
 ### Changes
 
+- Made Load CSV list automatically use a sibling `fov_groups.csv` when opening Group Matching from a saved loaded-recordings CSV.
 - Changed Group Matching FOV notes from one shared field to per-recording card notes so `fov_groups.csv` can carry row-specific audit notes.
 - Added a Back to FOV assignment action in the Group Matching ROI assignment view so FOV groups can be revised without closing the popup.
 - Made the Group Matching ROI assignment view visual and self-contained, with low-opacity numbered context overlays for all ROIs, selected ROI overlays colored to match each recording trace, a compact saved-groups table that restores selected ROIs, FOV/ROI note fields, ROI CSV load/save-path controls, separate Add new group and Overwrite selected group actions, selected-group removal, clickable response trace visibility chips, optional epoch-peak normalization, and translucent overlaid response traces inside the popup instead of relying on the active main napari selection.
@@ -24,6 +25,7 @@
 
 ### Fixes
 
+- Made the Group Matching ROI assignment view scroll as one page and capped the popup height to the available display height.
 - Kept napari Loaded Recordings and saved loaded-list CSVs on source session paths instead of leaking local analysis-cache paths, while still reopening existing cached data when the source path is unavailable.
 - Made the Group Matching FOV and ROI load buttons open explicit existing-file CSV pickers instead of a macOS folder chooser that could gray out selectable paths.
 - Cleared the Group Matching ROI note field after adding, overwriting, or removing a group so notes do not carry into later actions accidentally.

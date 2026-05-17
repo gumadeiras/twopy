@@ -558,6 +558,7 @@ def _load_recording_csvs_from_dialog(state: NapariControlState) -> None:
     """
     selected_paths = _choose_recording_csv_paths(state)
     _load_selected_recording_paths(state, selected_paths)
+    _load_adjacent_fov_groups_for_recording_csvs(state, selected_paths)
 
 
 def _load_selected_recording_paths(
@@ -630,6 +631,21 @@ def _recording_paths_from_manual_selections(
         else:
             recording_paths.append(path)
     return tuple(recording_paths)
+
+
+def _load_adjacent_fov_groups_for_recording_csvs(
+    state: NapariControlState,
+    csv_paths: tuple[Path, ...],
+) -> None:
+    """Load a FOV CSV beside the selected loaded-recordings CSV, if present."""
+    panel = state.group_matching_panel
+    if not isinstance(panel, GroupMatchingPanel):
+        return
+    for csv_path in csv_paths:
+        if csv_path.suffix.lower() != ".csv":
+            continue
+        if panel.load_fov_groups_from_folder(csv_path.expanduser().parent):
+            return
 
 
 def _save_loaded_recordings_from_dialog(state: NapariControlState) -> None:

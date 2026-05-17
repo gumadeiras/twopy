@@ -120,6 +120,23 @@ class GroupMatchingPanel(QWidget):
         self._stack.setCurrentWidget(self._fov_view)
         self._fov_view.refresh()
 
+    def load_fov_groups_from_folder(self, folder: Path) -> bool:
+        """Load ``fov_groups.csv`` from a recording-list folder when present.
+
+        Args:
+            folder: Folder that may contain the manual FOV grouping CSV.
+
+        Returns:
+            ``True`` when an adjacent FOV CSV was found and loaded.
+        """
+        candidate = folder.expanduser() / FOV_GROUP_TABLE_FILENAME
+        if not candidate.exists():
+            return False
+        self._fov_view.set_output_path(candidate)
+        self._fov_view.load_fov_groups_from_path()
+        self._roi_view.refresh_fov_filter()
+        return True
+
     def _load_fov_groups_if_available(self) -> None:
         """Populate FOV assignments from disk when the panel has none yet."""
         if len(self._fov_groups) > 0:
@@ -343,7 +360,7 @@ class FovAssignmentView(QWidget):
         }
         self._fov_groups.update(loaded_rows)
         self._fov_notes.update(loaded_notes)
-        self.refresh()
+        self._sync_cards_from_state()
         self._status_label.setText(
             f"Loaded {len(loaded_rows)} FOV assignments from {path}.",
         )
@@ -374,6 +391,10 @@ class FovAssignmentView(QWidget):
     def output_path(self) -> Path:
         """Return the current FOV grouping CSV path."""
         return Path(self._path_edit.text()).expanduser()
+
+    def set_output_path(self, path: Path) -> None:
+        """Set the current FOV grouping CSV path."""
+        self._path_edit.setText(str(path.expanduser()))
 
     def _choose_existing_fov_group_path(self) -> Path | None:
         """Return a user-selected existing FOV CSV path."""
@@ -445,6 +466,12 @@ class FovAssignmentView(QWidget):
             for recording_path in recording_groups
         }
 
+    def _sync_cards_from_state(self) -> None:
+        """Update visible card assignments and notes without rebuilding widgets."""
+        for card in self._cards:
+            card.set_fov_group_id(self._fov_groups.get(card.recording_path, ""))
+            card.set_note(self._fov_notes.get(card.recording_path, ""))
+
 
 class FovRecordingCard(QFrame):
     """One selectable mean-image card for FOV assignment."""
@@ -513,6 +540,10 @@ class FovRecordingCard(QFrame):
     def note(self) -> str:
         """Return the row-specific note for this recording."""
         return self._note_edit.text()
+
+    def set_note(self, note: str) -> None:
+        """Set the row-specific note without rebuilding the card."""
+        self._note_edit.setText(note)
 
     def _refresh_image(self) -> None:
         """Refresh the card thumbnail using the current contrast slider."""

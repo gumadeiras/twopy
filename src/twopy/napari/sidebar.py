@@ -203,4 +203,6 @@ def _maximize_dialog_height(dialog: QDialog) -> None:
     width = geometry.width()
     max_x = available.left() + max(0, available.width() - width)
     x_position = min(max(geometry.x(), available.left()), max_x)
-    dialog.setGeometry(x_position, available.top(), width, available.height())
+    height = available.height()
+    dialog.setMaximumHeight(height)
+    dialog.setGeometry(x_position, available.top(), width, height)

@@ -63,9 +63,11 @@ from twopy import (
     load_manual_fov_group_rows,
     load_manual_roi_match_rows,
     load_roi_set,
+    make_manual_fov_group_rows,
     make_roi_set,
     open_recording_in_napari,
     roi_label_image_from_layer,
+    save_manual_fov_group_rows,
     save_napari_label_rois,
     save_roi_set,
 )
@@ -3055,6 +3057,20 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertTrue(
                 rows[0]["recording_data_path"].endswith("recording_data.h5")
             )
+            fov_path = root / "fov_groups.csv"
+            save_manual_fov_group_rows(
+                make_manual_fov_group_rows(
+                    {
+                        first: "fov_1",
+                        second: "fov_2",
+                    },
+                    notes={
+                        first: "first loaded-list note",
+                        second: "second loaded-list note",
+                    },
+                ),
+                fov_path,
+            )
 
             fresh_viewer = _FakeViewer()
             fresh_docks = add_twopy_magicgui_controls(
@@ -3082,6 +3098,24 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(fresh_loaded_list.currentRow(), 1)
             self.assertEqual(len(fresh_viewer.images), 4)
             self.assertEqual(len(fresh_viewer.labels), 2)
+            fresh_group_matching_widget = cast(
+                QWidget,
+                fresh_docks.group_matching_widget,
+            )
+            fov_path_edit = fresh_group_matching_widget.findChild(
+                QLineEdit,
+                "fov_group_path",
+            )
+            assert fov_path_edit is not None
+            self.assertEqual(Path(fov_path_edit.text()), fov_path)
+            fov_note_edits = fresh_group_matching_widget.findChildren(
+                QLineEdit,
+                "fov_recording_note",
+            )
+            self.assertEqual(
+                {note_edit.text() for note_edit in fov_note_edits},
+                {"first loaded-list note", "second loaded-list note"},
+            )
 
     def test_load_tab_saved_recording_list_uses_source_paths_for_cached_loads(
         self,
@@ -3703,6 +3737,7 @@ class NapariAdapterTest(unittest.TestCase):
                 },
             )
             match_buttons["Clear selected FOV"].click()
+            original_note_edit_ids = {id(note_edit) for note_edit in fov_note_edits}
             with patch.object(
                 group_matching.FovAssignmentView,
                 "_choose_existing_fov_group_path",
@@ -3712,6 +3747,10 @@ class NapariAdapterTest(unittest.TestCase):
             fov_note_edits = group_matching_widget.findChildren(
                 QLineEdit,
                 "fov_recording_note",
+            )
+            self.assertEqual(
+                {id(note_edit) for note_edit in fov_note_edits},
+                original_note_edit_ids,
             )
             self.assertEqual(
                 {note_edit.text() for note_edit in fov_note_edits},
@@ -3729,6 +3768,25 @@ class NapariAdapterTest(unittest.TestCase):
             fov_filter = group_matching_widget.findChild(QComboBox, "fov_filter")
             assert fov_filter is not None
             self.assertEqual(fov_filter.currentText(), "fov_1")
+            panel_widget = cast(Any, group_matching_widget)
+            self.assertLessEqual(
+                group_matching_dialog.geometry().height(),
+                group_matching_screen.availableGeometry().height(),
+            )
+            self.assertEqual(
+                group_matching_dialog.maximumHeight(),
+                group_matching_screen.availableGeometry().height(),
+            )
+            roi_scroll_area = panel_widget._roi_view.findChild(
+                QScrollArea,
+                "roi_assignment_scroll_area",
+            )
+            assert roi_scroll_area is not None
+            self.assertTrue(roi_scroll_area.widgetResizable())
+            self.assertIs(
+                roi_scroll_area.widget().findChild(QLineEdit, "roi_match_path"),
+                match_path_edit,
+            )
             self.assertNotIn(
                 "All FOVs",
                 tuple(
@@ -3868,7 +3926,6 @@ class NapariAdapterTest(unittest.TestCase):
             )
             self.assertEqual(roi_note_edit.text(), "")
             self.assertEqual(group_table.rowCount(), 2)
-            panel_widget = cast(Any, group_matching_widget)
             roi_buttons["Back to FOV assignment"].click()
             self.assertIs(panel_widget._stack.currentWidget(), panel_widget._fov_view)
             match_buttons = {

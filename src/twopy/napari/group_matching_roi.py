@@ -32,6 +32,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -227,7 +228,16 @@ class RoiAssignmentView(QWidget):
         layout.addWidget(self._legend_widget)
         layout.addWidget(self._response_widget)
         layout.addWidget(self._status_label)
-        self.setLayout(layout)
+        content = QWidget()
+        content.setLayout(layout)
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("roi_assignment_scroll_area")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(content)
+        outer_layout = QVBoxLayout()
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addWidget(scroll_area)
+        self.setLayout(outer_layout)
         self.refresh_fov_filter()
 
     def _create_normalization_widget(self) -> NormalizationOptionsWidget:
