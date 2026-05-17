@@ -182,13 +182,11 @@ def save_manual_fov_group_rows(
     Returns:
         None.
     """
-    output_path = path.expanduser()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=_FOV_FIELDNAMES)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_fov_row_to_csv(row))
+    _write_csv_rows(
+        path,
+        fieldnames=_FOV_FIELDNAMES,
+        rows=(_fov_row_to_csv(row) for row in rows),
+    )
 
 
 def load_manual_fov_group_rows(path: Path) -> tuple[ManualFovGroupRow, ...]:
@@ -203,20 +201,12 @@ def load_manual_fov_group_rows(path: Path) -> tuple[ManualFovGroupRow, ...]:
     Raises:
         ValueError: If the file contains missing columns or invalid values.
     """
-    input_path = path.expanduser()
-    with input_path.open("r", encoding="utf-8", newline="") as csv_file:
-        reader = csv.DictReader(csv_file)
-        if reader.fieldnames is None:
-            msg = f"Manual FOV group file is empty: {input_path}"
-            raise ValueError(msg)
-        missing = tuple(
-            field for field in _FOV_FIELDNAMES if field not in reader.fieldnames
-        )
-        if len(missing) > 0:
-            msg = f"Manual FOV group file missing columns {missing}: {input_path}"
-            raise ValueError(msg)
-        rows = tuple(_fov_row_from_csv(row) for row in reader)
-    return rows
+    csv_rows = _read_required_csv_rows(
+        path,
+        fieldnames=_FOV_FIELDNAMES,
+        table_name="Manual FOV group file",
+    )
+    return tuple(_fov_row_from_csv(row) for row in csv_rows)
 
 
 def append_manual_roi_match_rows(
@@ -254,13 +244,11 @@ def save_manual_roi_match_rows(
     The CSV file is intentionally plain text so group-analysis decisions can be
     inspected, diffed, and edited without twopy.
     """
-    output_path = path.expanduser()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=_FIELDNAMES)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_row_to_csv(row))
+    _write_csv_rows(
+        path,
+        fieldnames=_FIELDNAMES,
+        rows=(_row_to_csv(row) for row in rows),
+    )
 
 
 def load_manual_roi_match_rows(path: Path) -> tuple[ManualRoiMatchRow, ...]:
@@ -276,19 +264,12 @@ def load_manual_roi_match_rows(path: Path) -> tuple[ManualRoiMatchRow, ...]:
         ValueError: If the file contains missing columns or invalid values.
     """
     input_path = path.expanduser()
-    with input_path.open("r", encoding="utf-8", newline="") as csv_file:
-        reader = csv.DictReader(csv_file)
-        if reader.fieldnames is None:
-            msg = f"Manual ROI match file is empty: {input_path}"
-            raise ValueError(msg)
-        missing = tuple(
-            field for field in _FIELDNAMES if field not in reader.fieldnames
-        )
-        if len(missing) > 0:
-            msg = f"Manual ROI match file missing columns {missing}: {input_path}"
-            raise ValueError(msg)
-        rows = tuple(_row_from_csv(row, input_path=input_path) for row in reader)
-    return rows
+    csv_rows = _read_required_csv_rows(
+        input_path,
+        fieldnames=_FIELDNAMES,
+        table_name="Manual ROI match file",
+    )
+    return tuple(_row_from_csv(row, input_path=input_path) for row in csv_rows)
 
 
 def next_group_cell_id(rows: Sequence[ManualRoiMatchRow]) -> int:
@@ -304,6 +285,61 @@ def next_group_cell_id(rows: Sequence[ManualRoiMatchRow]) -> int:
     if len(rows) == 0:
         return 1
     return max(row.group_cell_id for row in rows) + 1
+
+
+def _write_csv_rows(
+    path: Path,
+    *,
+    fieldnames: Sequence[str],
+    rows: Iterable[Mapping[str, str]],
+) -> None:
+    """Write validated dictionaries to a required-header CSV file."""
+    output_path = path.expanduser()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _read_required_csv_rows(
+    path: Path,
+    *,
+    fieldnames: Sequence[str],
+    table_name: str,
+) -> tuple[dict[str, str], ...]:
+    """Read rows from a CSV table that must contain known columns."""
+    input_path = path.expanduser()
+    with input_path.open("r", encoding="utf-8", newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        if reader.fieldnames is None:
+            msg = f"{table_name} is empty: {input_path}"
+            raise ValueError(msg)
+        missing = tuple(field for field in fieldnames if field not in reader.fieldnames)
+        if len(missing) > 0:
+            msg = f"{table_name} missing columns {missing}: {input_path}"
+            raise ValueError(msg)
+        return tuple(
+            {
+                field: _required_csv_cell(row, field=field, input_path=input_path)
+                for field in fieldnames
+            }
+            for row in reader
+        )
+
+
+def _required_csv_cell(
+    row: Mapping[str, str | None],
+    *,
+    field: str,
+    input_path: Path,
+) -> str:
+    """Return one required CSV cell value."""
+    value = row[field]
+    if value is None:
+        msg = f"Manual group CSV row missing {field!r} value: {input_path}"
+        raise ValueError(msg)
+    return value
 
 
 def _fov_row_to_csv(row: ManualFovGroupRow) -> dict[str, str]:

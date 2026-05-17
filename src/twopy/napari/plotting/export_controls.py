@@ -54,6 +54,7 @@ class ResponseExportState:
     roi_label_values: tuple[int, ...]
     roi_colors: tuple[str, ...]
     epoch_indices: tuple[int, ...]
+    response_map_epoch_indices: tuple[int, ...]
     roi_indices: tuple[int, ...]
     show_sem: bool
     time_bounds: tuple[float, float]
@@ -179,7 +180,7 @@ def _save_heatmaps(state: ResponseExportState) -> tuple[Path, ...] | str:
     return export_response_heatmaps(
         map_data=state.response_map_data,
         output_dir=state.output_dir,
-        epoch_indices=state.epoch_indices,
+        epoch_indices=state.response_map_epoch_indices,
         shared_limits=state.response_map_shared_limits,
     )
 

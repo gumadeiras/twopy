@@ -5568,6 +5568,71 @@ class NapariAdapterTest(unittest.TestCase):
         self.assertFalse(response_widget._plot_area.epoch_plot_panels[1].isHidden())
         self.assertTrue(response_widget._plot_area.epoch_plot_panels[2].isHidden())
 
+    def test_heatmap_epochs_match_visible_plot_epochs_by_identity(self) -> None:
+        """Confirm omitted baseline heatmaps do not shift visible map rows.
+
+        Inputs: plot data with a hidden gray epoch and two visible odor epochs,
+        plus heatmap data containing only the odor epochs.
+        Outputs: both odor heatmaps render even though their map indices differ
+        from the response-plot row indices.
+        """
+        _ = QApplication.instance() or QApplication([])
+        time_seconds = np.array([0.0, 1.0], dtype=np.float64)
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Gray Interleave",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor A",
+                    epoch_number=2,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor B",
+                    epoch_number=3,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[4.0, 5.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
+        )
+        base_map_data = _tiny_response_map_data()
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+        response_widget._response_map_data = replace(
+            base_map_data,
+            epochs=(
+                replace(base_map_data.epochs[0], epoch_name="Odor A", epoch_number=2),
+                replace(base_map_data.epochs[0], epoch_name="Odor B", epoch_number=3),
+            ),
+        )
+
+        response_widget._render_response_maps()
+
+        self.assertEqual(response_widget._visible_epoch_indices(), (1, 2))
+        self.assertEqual(response_widget._visible_response_map_epoch_indices(), (0, 1))
+        self.assertEqual(
+            tuple(response_widget._response_map_area.epoch_map_panels),
+            (0, 1),
+        )
+        self.assertFalse(
+            response_widget._response_map_area.epoch_map_panels[0].isHidden()
+        )
+        self.assertFalse(
+            response_widget._response_map_area.epoch_map_panels[1].isHidden()
+        )
+
     def test_roi_visibility_toggle_is_idempotent_by_row_index(self) -> None:
         """Confirm ROI visibility does not depend on unique display labels.
 
@@ -5969,7 +6034,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             future: Future[ResponseMapData] = Future()
             with patch.object(
-                response_widget._response_map_executor,
+                response_widget._response_map_worker._executor,
                 "submit",
                 return_value=future,
             ) as submit:
@@ -5977,13 +6042,13 @@ class NapariAdapterTest(unittest.TestCase):
                     ResponseMapOptions(pixel_smoothing_sigma=1.0),
                 )
                 submit.assert_not_called()
-                response_widget._response_map_debounce_timer.stop()
-                response_widget._start_latest_response_map_job()
+                response_widget._response_map_worker._debounce_timer.stop()
+                response_widget._response_map_worker._start_latest_job()
                 submit.assert_called_once()
                 self.assertIsNone(response_widget._response_map_data)
 
                 future.set_result(next_map_data)
-                response_widget._collect_finished_response_map_job()
+                response_widget._response_map_worker.collect_finished_job()
 
         self.assertIs(response_widget._response_map_data, next_map_data)
         self.assertEqual(
@@ -6141,6 +6206,7 @@ class NapariAdapterTest(unittest.TestCase):
                 roi_label_values=(),
                 roi_colors=(),
                 epoch_indices=(),
+                response_map_epoch_indices=(),
                 roi_indices=(),
                 show_sem=True,
                 time_bounds=(0.0, 1.0),

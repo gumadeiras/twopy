@@ -44,6 +44,7 @@ from twopy.config import load_config
 from twopy.converted import RecordingData
 from twopy.filenames import EXPORTS_DIRNAME
 from twopy.napari.interactive import LiveResponseController
+from twopy.napari.latest_worker import LatestWorker
 from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import (
     ResponsePlotData,
@@ -143,14 +144,12 @@ class _ResponsePlotWidget(QWidget):
             thread_name_prefix="twopy-analysis-sync",
         )
         self._sync_future: Future[AnalysisSyncResult] | None = None
-        self._response_map_executor = ThreadPoolExecutor(
-            max_workers=1,
+        self._response_map_worker = LatestWorker[ResponseMapData](
             thread_name_prefix="twopy-response-heatmaps",
+            on_result=self._apply_response_map_data,
+            on_value_error=self._show_response_map_value_error,
+            on_exception=self._show_response_map_exception,
         )
-        self._response_map_future: Future[ResponseMapData] | None = None
-        self._response_map_version = 0
-        self._active_response_map_version: int | None = None
-        self._pending_response_map_refresh = False
         self._pixel_calibrations = _load_pixel_calibrations_for_ui()
         self._pixel_calibration_profile_mappings = (
             _load_pixel_calibration_profile_mappings_for_ui()
@@ -158,16 +157,6 @@ class _ResponsePlotWidget(QWidget):
         self._sync_timer = QTimer()
         self._sync_timer.setInterval(200)
         self._sync_timer.timeout.connect(self._collect_finished_sync)
-        self._response_map_debounce_timer = QTimer()
-        self._response_map_debounce_timer.setSingleShot(True)
-        self._response_map_debounce_timer.timeout.connect(
-            self._start_latest_response_map_job,
-        )
-        self._response_map_poll_timer = QTimer()
-        self._response_map_poll_timer.setInterval(30)
-        self._response_map_poll_timer.timeout.connect(
-            self._collect_finished_response_map_job,
-        )
         self._live_controller = LiveResponseController(self)
         self._live_controller.set_delta_f_over_f_options(
             self._delta_f_over_f_options,
@@ -279,18 +268,12 @@ class _ResponsePlotWidget(QWidget):
             self._sync_future.cancel()
             self._sync_future = None
         self._sync_executor.shutdown(wait=True, cancel_futures=True)
-        self._response_map_debounce_timer.stop()
-        self._response_map_poll_timer.stop()
-        if self._response_map_future is not None:
-            self._response_map_future.cancel()
-            self._response_map_future = None
-        self._response_map_executor.shutdown(wait=False, cancel_futures=True)
+        self._response_map_worker.shutdown()
         self._live_controller.shutdown()
         self._recording = None
         self._roi_labels_layer = None
         self._plot_data = None
         self._response_map_data = None
-        self._invalidate_response_map_jobs()
         self._viewer = None
         self._plot_area.clear_epoch_cache()
         self._response_map_area.clear_epoch_cache()
@@ -891,6 +874,7 @@ class _ResponsePlotWidget(QWidget):
             roi_label_values=self._roi_label_values(),
             roi_colors=self._roi_color_hex(),
             epoch_indices=self._visible_epoch_indices(),
+            response_map_epoch_indices=self._visible_response_map_epoch_indices(),
             roi_indices=self._visible_roi_indices(),
             show_sem=self._show_sem,
             time_bounds=resolved_time_bounds(
@@ -973,6 +957,34 @@ class _ResponsePlotWidget(QWidget):
 
     def _visible_epoch_indices(self) -> tuple[int, ...]:
         return visible_indices(self._epoch_visibility, self._epoch_count())
+
+    def _visible_response_map_epoch_indices(self) -> tuple[int, ...]:
+        """Return heatmap row indices matching visible response-plot epochs."""
+        if self._response_map_data is None:
+            return ()
+        if self._plot_data is None:
+            return visible_indices(
+                self._epoch_visibility,
+                len(self._response_map_data.epochs),
+            )
+        visible_plot_epochs = tuple(
+            self._plot_data.epochs[index]
+            for index in self._visible_epoch_indices()
+            if 0 <= index < len(self._plot_data.epochs)
+        )
+        map_indices_by_epoch = {
+            (epoch.epoch_number, epoch.epoch_name): index
+            for index, epoch in enumerate(self._response_map_data.epochs)
+        }
+        indices: list[int] = []
+        seen_indices: set[int] = set()
+        for epoch in visible_plot_epochs:
+            index = map_indices_by_epoch.get((epoch.epoch_number, epoch.epoch_name))
+            if index is None or index in seen_indices:
+                continue
+            indices.append(index)
+            seen_indices.add(index)
+        return tuple(indices)
 
     def _roi_labels(self) -> tuple[str, ...]:
         return roi_labels_from_plot_data(self._plot_data)
@@ -1068,84 +1080,43 @@ class _ResponsePlotWidget(QWidget):
 
     def _schedule_response_map_refresh(self) -> None:
         """Debounce option-driven heatmap recomputation off the Qt thread."""
-        self._response_map_version += 1
         self._response_map_data = None
         self._response_map_area.clear_epoch_cache()
         if self._recording is None:
             self._response_map_area.set_status("No heatmaps available.")
             return
         self._response_map_area.set_status("Recomputing heatmaps...")
-        self._response_map_debounce_timer.start(200)
+        recording = self._recording
+        options = self._response_map_options
+        self._response_map_worker.schedule(
+            lambda: compute_recording_response_maps(recording, options=options),
+        )
 
     def _invalidate_response_map_jobs(self) -> None:
         """Discard queued or stale heatmap worker results."""
-        self._response_map_version += 1
-        self._pending_response_map_refresh = False
-        self._response_map_debounce_timer.stop()
-        if self._response_map_future is not None and self._response_map_future.cancel():
-            self._response_map_future = None
-            self._active_response_map_version = None
-            self._response_map_poll_timer.stop()
+        self._response_map_worker.invalidate()
 
-    def _start_latest_response_map_job(self) -> None:
-        """Start the latest queued heatmap worker job."""
-        if self._is_shutdown:
-            return
-        if self._recording is None:
-            self._response_map_data = None
-            self._response_map_area.set_status("No heatmaps available.")
-            return
-        if self._response_map_future is not None:
-            self._pending_response_map_refresh = True
-            return
-        version = self._response_map_version
-        self._active_response_map_version = version
-        self._response_map_future = self._response_map_executor.submit(
-            compute_recording_response_maps,
-            self._recording,
-            options=self._response_map_options,
-        )
-        self._response_map_poll_timer.start()
+    def _apply_response_map_data(self, map_data: ResponseMapData) -> None:
+        """Apply latest worker heatmaps to the display cache."""
+        self._response_map_data = map_data
+        self._render_response_maps()
 
-    def _collect_finished_response_map_job(self) -> None:
-        """Apply the newest finished heatmap worker result."""
-        if self._is_shutdown:
-            return
-        future = self._response_map_future
-        if future is None or not future.done():
-            return
-        version = self._active_response_map_version
-        self._response_map_future = None
-        self._active_response_map_version = None
-        self._response_map_poll_timer.stop()
-        try:
-            map_data = future.result()
-        except ValueError as error:
-            if version == self._response_map_version:
-                self._response_map_data = None
-                self._response_map_area.set_status(f"Heatmaps unavailable: {error}")
-        except Exception as error:
-            if version == self._response_map_version:
-                self._response_map_data = None
-                self._response_map_area.set_status(
-                    f"Heatmap computation failed: {error}"
-                )
-        else:
-            if version == self._response_map_version:
-                self._response_map_data = map_data
-                self._render_response_maps()
+    def _show_response_map_value_error(self, error: ValueError) -> None:
+        """Show latest expected heatmap-computation failure."""
+        self._response_map_data = None
+        self._response_map_area.set_status(f"Heatmaps unavailable: {error}")
 
-        if self._pending_response_map_refresh:
-            self._pending_response_map_refresh = False
-            if not self._response_map_debounce_timer.isActive():
-                self._start_latest_response_map_job()
+    def _show_response_map_exception(self, error: Exception) -> None:
+        """Show latest unexpected heatmap-computation failure."""
+        self._response_map_data = None
+        self._response_map_area.set_status(f"Heatmap computation failed: {error}")
 
     def _render_response_maps(self) -> None:
         """Render heatmaps for the same visible epochs as response plots."""
         if self._response_map_data is None or len(self._response_map_data.epochs) == 0:
             self._response_map_area.set_status("No heatmaps available.")
             return
-        epoch_indices = self._visible_epoch_indices()
+        epoch_indices = self._visible_response_map_epoch_indices()
         if len(epoch_indices) == 0:
             self._response_map_area.set_status("No epochs selected.")
             return
@@ -1199,9 +1170,10 @@ class _ResponsePlotWidget(QWidget):
             plot_size=self._plot_size,
         )
         if self._response_map_data is not None:
-            if self._response_map_area.has_epoch_widgets(epoch_indices):
+            response_map_epoch_indices = self._visible_response_map_epoch_indices()
+            if self._response_map_area.has_epoch_widgets(response_map_epoch_indices):
                 self._response_map_area.update_epoch_map_widgets(
-                    epoch_indices=epoch_indices,
+                    epoch_indices=response_map_epoch_indices,
                     map_size=self._plot_size,
                 )
             else:
