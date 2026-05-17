@@ -176,6 +176,53 @@ class ResponseMapsTest(unittest.TestCase):
         self.assertEqual(len(maps.epochs), 1)
         np.testing.assert_allclose(maps.epochs[0].response_values[2:4, 2:4], 1.0)
 
+    def test_response_maps_skip_epochs_without_preceding_baseline(self) -> None:
+        """Confirm an initial epoch does not disable later heatmaps.
+
+        Inputs: one movie whose first gray epoch starts at frame zero, followed
+        by a stimulus epoch with enough preceding baseline context.
+        Outputs: heatmaps are computed for the later stimulus epoch only.
+        """
+        movie = np.full((5, 4, 4), 10.0, dtype=np.float64)
+        movie[2:4, 1:3, 1:3] = 15.0
+        windows = (
+            EpochFrameWindow(FrameWindow(0, 0, 1, "epoch_1:gray"), 1, "gray"),
+            EpochFrameWindow(FrameWindow(1, 2, 4, "epoch_2:Odor"), 2, "Odor"),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            maps = compute_recording_response_maps(
+                _recording(Path(directory), movie),
+                epoch_windows=windows,
+                options=ResponseMapOptions(
+                    pixel_smoothing_sigma=0.0,
+                    foreground_percentile=0.0,
+                ),
+            )
+
+        self.assertEqual(tuple(epoch.epoch_name for epoch in maps.epochs), ("Odor",))
+        self.assertEqual(maps.response_scale, 0.5)
+        np.testing.assert_allclose(maps.epochs[0].response_values[1:3, 1:3], 1.0)
+
+    def test_response_maps_fail_when_no_response_epoch_has_baseline(self) -> None:
+        """Confirm heatmaps fail loudly when no auditable baseline exists.
+
+        Inputs: one non-baseline epoch starting at frame zero.
+        Outputs: a clear error instead of fabricating baseline data.
+        """
+        movie = np.full((3, 4, 4), 10.0, dtype=np.float64)
+        windows = (EpochFrameWindow(FrameWindow(0, 0, 2, "epoch_1:Odor"), 1, "Odor"),)
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            self.assertRaisesRegex(ValueError, "preceding baseline"),
+        ):
+            compute_recording_response_maps(
+                _recording(Path(directory), movie),
+                epoch_windows=windows,
+                options=ResponseMapOptions(foreground_percentile=0.0),
+            )
+
     def test_response_map_data_round_trips_hdf5(self) -> None:
         """Confirm response heatmap files preserve maps and audit metadata.
 

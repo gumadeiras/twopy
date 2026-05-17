@@ -30,6 +30,10 @@
 - Made the Search database date filter accept `YYYY-MM-DD`-style input with common separator variants and normalize it before querying.
 - Made response heatmaps reserve colorbar space inside the Plot-tab Size value so heatmap panels scale like response plots.
 - Made the napari Plot-tab correlation filter default its window stop to the shortest plotted epoch duration instead of `0 s`.
+- Made response heatmaps skip gray/interleave and first-frame epochs that lack pre-epoch baseline context instead of disabling all heatmaps for that recording.
+- Moved response heatmap option recomputation off the Qt thread so changing heatmap settings does not block napari while movie maps are rebuilt.
+- Prevented Group Matching's Save and close action from overwriting a newly added or overwritten ROI group with an empty note unless the selected group was edited after loading.
+- Rejected blank manual group CSV `recording_path` fields during load instead of treating them as the current directory.
 
 ## 0.1.8 - 2026-05-14
 

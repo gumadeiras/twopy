@@ -143,6 +143,14 @@ class _ResponsePlotWidget(QWidget):
             thread_name_prefix="twopy-analysis-sync",
         )
         self._sync_future: Future[AnalysisSyncResult] | None = None
+        self._response_map_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="twopy-response-heatmaps",
+        )
+        self._response_map_future: Future[ResponseMapData] | None = None
+        self._response_map_version = 0
+        self._active_response_map_version: int | None = None
+        self._pending_response_map_refresh = False
         self._pixel_calibrations = _load_pixel_calibrations_for_ui()
         self._pixel_calibration_profile_mappings = (
             _load_pixel_calibration_profile_mappings_for_ui()
@@ -150,6 +158,16 @@ class _ResponsePlotWidget(QWidget):
         self._sync_timer = QTimer()
         self._sync_timer.setInterval(200)
         self._sync_timer.timeout.connect(self._collect_finished_sync)
+        self._response_map_debounce_timer = QTimer()
+        self._response_map_debounce_timer.setSingleShot(True)
+        self._response_map_debounce_timer.timeout.connect(
+            self._start_latest_response_map_job,
+        )
+        self._response_map_poll_timer = QTimer()
+        self._response_map_poll_timer.setInterval(30)
+        self._response_map_poll_timer.timeout.connect(
+            self._collect_finished_response_map_job,
+        )
         self._live_controller = LiveResponseController(self)
         self._live_controller.set_delta_f_over_f_options(
             self._delta_f_over_f_options,
@@ -261,11 +279,18 @@ class _ResponsePlotWidget(QWidget):
             self._sync_future.cancel()
             self._sync_future = None
         self._sync_executor.shutdown(wait=True, cancel_futures=True)
+        self._response_map_debounce_timer.stop()
+        self._response_map_poll_timer.stop()
+        if self._response_map_future is not None:
+            self._response_map_future.cancel()
+            self._response_map_future = None
+        self._response_map_executor.shutdown(wait=False, cancel_futures=True)
         self._live_controller.shutdown()
         self._recording = None
         self._roi_labels_layer = None
         self._plot_data = None
         self._response_map_data = None
+        self._invalidate_response_map_jobs()
         self._viewer = None
         self._plot_area.clear_epoch_cache()
         self._response_map_area.clear_epoch_cache()
@@ -328,6 +353,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path = None
         self._plot_data = None
         self._response_map_data = None
+        self._invalidate_response_map_jobs()
         self._live_controller.set_context(None, None)
         self._delta_f_over_f_options_widget.set_epoch_choices(
             {},
@@ -362,6 +388,7 @@ class _ResponsePlotWidget(QWidget):
         """
         self._recording = None
         self._response_map_data = None
+        self._invalidate_response_map_jobs()
         self._response_map_options_widget.set_spatial_shape(
             recording.alignment_valid_crop.shape,
         )
@@ -656,9 +683,8 @@ class _ResponsePlotWidget(QWidget):
 
     def _set_response_map_options(self, options: ResponseMapOptions) -> None:
         self._response_map_options = options
-        self._refresh_response_maps()
-        self._render_response_maps()
-        self._update_status_label.setText("Heatmap settings updated.")
+        self._schedule_response_map_refresh()
+        self._update_status_label.setText("Heatmap settings updated; recomputing.")
 
     def _set_response_map_shared_limits(self, shared_limits: bool) -> None:
         self._response_map_shared_limits = shared_limits
@@ -1039,6 +1065,80 @@ class _ResponsePlotWidget(QWidget):
         except ValueError as error:
             self._response_map_data = None
             self._response_map_area.set_status(f"Heatmaps unavailable: {error}")
+
+    def _schedule_response_map_refresh(self) -> None:
+        """Debounce option-driven heatmap recomputation off the Qt thread."""
+        self._response_map_version += 1
+        self._response_map_data = None
+        self._response_map_area.clear_epoch_cache()
+        if self._recording is None:
+            self._response_map_area.set_status("No heatmaps available.")
+            return
+        self._response_map_area.set_status("Recomputing heatmaps...")
+        self._response_map_debounce_timer.start(200)
+
+    def _invalidate_response_map_jobs(self) -> None:
+        """Discard queued or stale heatmap worker results."""
+        self._response_map_version += 1
+        self._pending_response_map_refresh = False
+        self._response_map_debounce_timer.stop()
+        if self._response_map_future is not None and self._response_map_future.cancel():
+            self._response_map_future = None
+            self._active_response_map_version = None
+            self._response_map_poll_timer.stop()
+
+    def _start_latest_response_map_job(self) -> None:
+        """Start the latest queued heatmap worker job."""
+        if self._is_shutdown:
+            return
+        if self._recording is None:
+            self._response_map_data = None
+            self._response_map_area.set_status("No heatmaps available.")
+            return
+        if self._response_map_future is not None:
+            self._pending_response_map_refresh = True
+            return
+        version = self._response_map_version
+        self._active_response_map_version = version
+        self._response_map_future = self._response_map_executor.submit(
+            compute_recording_response_maps,
+            self._recording,
+            options=self._response_map_options,
+        )
+        self._response_map_poll_timer.start()
+
+    def _collect_finished_response_map_job(self) -> None:
+        """Apply the newest finished heatmap worker result."""
+        if self._is_shutdown:
+            return
+        future = self._response_map_future
+        if future is None or not future.done():
+            return
+        version = self._active_response_map_version
+        self._response_map_future = None
+        self._active_response_map_version = None
+        self._response_map_poll_timer.stop()
+        try:
+            map_data = future.result()
+        except ValueError as error:
+            if version == self._response_map_version:
+                self._response_map_data = None
+                self._response_map_area.set_status(f"Heatmaps unavailable: {error}")
+        except Exception as error:
+            if version == self._response_map_version:
+                self._response_map_data = None
+                self._response_map_area.set_status(
+                    f"Heatmap computation failed: {error}"
+                )
+        else:
+            if version == self._response_map_version:
+                self._response_map_data = map_data
+                self._render_response_maps()
+
+        if self._pending_response_map_refresh:
+            self._pending_response_map_refresh = False
+            if not self._response_map_debounce_timer.isActive():
+                self._start_latest_response_map_job()
 
     def _render_response_maps(self) -> None:
         """Render heatmaps for the same visible epochs as response plots."""

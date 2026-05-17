@@ -10,7 +10,7 @@ import tempfile
 import unittest
 import warnings
 from collections.abc import Callable
-from concurrent.futures import CancelledError
+from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass, replace
 from datetime import date
 from os import chdir, environ
@@ -3664,6 +3664,15 @@ class NapariAdapterTest(unittest.TestCase):
             )
             assert group_table is not None
             self.assertEqual(group_table.rowCount(), 1)
+            roi_view = cast(Any, group_matching_widget)._roi_view
+            with patch.object(
+                group_matching_roi.RoiAssignmentView,
+                "window",
+                return_value=None,
+            ):
+                roi_view.close_group_matching_window()
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual({row.note for row in match_rows}, {"strong match"})
             roi_buttons["Clear ROI selection"].click()
             roi_selectors = [
                 combo
@@ -5935,6 +5944,52 @@ class NapariAdapterTest(unittest.TestCase):
             first_image,
         )
 
+    def test_response_map_option_edits_recompute_in_worker(self) -> None:
+        """Confirm heatmap option edits do not compute on the Qt thread.
+
+        Inputs: a loaded recording with cached heatmaps and a pending options
+        edit.
+        Outputs: recomputation is debounced into the heatmap worker and applied
+        only after the worker future finishes.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            first_map_data = _tiny_response_map_data()
+            next_map_data = _tiny_response_map_data(epoch_name="next")
+            with patch(
+                "twopy.napari.plotting.docks.response_plot_widget."
+                "compute_recording_response_maps",
+                return_value=first_map_data,
+            ):
+                response_widget = cast(Any, create_response_plot_widget(None))
+                response_widget.load_recording(recording)
+
+            future: Future[ResponseMapData] = Future()
+            with patch.object(
+                response_widget._response_map_executor,
+                "submit",
+                return_value=future,
+            ) as submit:
+                response_widget._set_response_map_options(
+                    ResponseMapOptions(pixel_smoothing_sigma=1.0),
+                )
+                submit.assert_not_called()
+                response_widget._response_map_debounce_timer.stop()
+                response_widget._start_latest_response_map_job()
+                submit.assert_called_once()
+                self.assertIsNone(response_widget._response_map_data)
+
+                future.set_result(next_map_data)
+                response_widget._collect_finished_response_map_job()
+
+        self.assertIs(response_widget._response_map_data, next_map_data)
+        self.assertEqual(
+            response_widget._response_map_data.epochs[0].epoch_name, "next"
+        )
+
     def test_epoch_plot_panel_centers_title(self) -> None:
         """Confirm epoch titles are centered above live response plots.
 
@@ -6418,11 +6473,11 @@ def _tiny_response_plot_data() -> ResponsePlotData:
     return response_plot_data_from_grouped(_tiny_grouped_responses())
 
 
-def _tiny_response_map_data() -> ResponseMapData:
+def _tiny_response_map_data(*, epoch_name: str = "Odor") -> ResponseMapData:
     """Build one tiny response heatmap data object for napari plot tests.
 
     Args:
-        None.
+        epoch_name: Name to store on the only heatmap epoch.
 
     Returns:
         One-epoch heatmap data with normalized signed response values.
@@ -6431,7 +6486,7 @@ def _tiny_response_map_data() -> ResponseMapData:
         mean_image=np.ones((2, 2), dtype=np.float64),
         epochs=(
             EpochResponseMap(
-                epoch_name="Odor",
+                epoch_name=epoch_name,
                 epoch_number=1,
                 response_values=np.full((2, 2), 0.25, dtype=np.float64),
                 trial_count=1,

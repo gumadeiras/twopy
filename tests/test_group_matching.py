@@ -132,6 +132,23 @@ class GroupMatchingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "status"):
                 load_manual_roi_match_rows(path)
 
+    def test_blank_loaded_recording_path_fails_loudly(self) -> None:
+        """Confirm blank CSV paths are rejected instead of becoming cwd.
+
+        Inputs: one ROI match CSV row whose ``recording_path`` field is blank.
+        Outputs: a clear ``ValueError`` during load.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "roi_matches.csv"
+            path.write_text(
+                "fov_group_id,group_cell_id,recording_path,roi_label,status,note\n"
+                "fov_1,1,,roi_0001,matched,\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "recording_path"):
+                load_manual_roi_match_rows(path)
+
     def test_public_row_type_has_expected_fields(self) -> None:
         """Confirm the row dataclass remains script-friendly.
 

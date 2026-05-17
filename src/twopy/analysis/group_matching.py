@@ -319,7 +319,7 @@ def _fov_row_from_csv(values: Mapping[str, str]) -> ManualFovGroupRow:
     """Parse one FOV grouping CSV row."""
     return ManualFovGroupRow(
         fov_group_id=_validate_fov_group_id(values["fov_group_id"]),
-        recording_path=_validate_recording_path(Path(values["recording_path"])),
+        recording_path=_recording_path_from_csv(values["recording_path"]),
         note=values["note"],
     )
 
@@ -356,7 +356,7 @@ def _row_from_csv(
     return ManualRoiMatchRow(
         fov_group_id=values["fov_group_id"],
         group_cell_id=_validate_group_cell_id(group_cell_id),
-        recording_path=_validate_recording_path(Path(values["recording_path"])),
+        recording_path=_recording_path_from_csv(values["recording_path"]),
         roi_label=_validate_roi_label(values["roi_label"]),
         status=status,
         note=values["note"],
@@ -396,9 +396,17 @@ def _validate_group_cell_id(group_cell_id: int) -> int:
 def _validate_recording_path(recording_path: Path) -> Path:
     """Return a non-empty recording path."""
     if str(recording_path) == "":
-        msg = "Manual ROI match recording_path cannot be empty."
+        msg = "Manual group recording_path cannot be empty."
         raise ValueError(msg)
     return recording_path.expanduser()
+
+
+def _recording_path_from_csv(value: str) -> Path:
+    """Return a validated recording path from raw CSV text."""
+    if value.strip() == "":
+        msg = "Manual group recording_path cannot be empty."
+        raise ValueError(msg)
+    return _validate_recording_path(Path(value))
 
 
 def _validate_fov_group_id(fov_group_id: str) -> str:

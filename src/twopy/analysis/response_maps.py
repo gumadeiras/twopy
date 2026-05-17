@@ -40,7 +40,7 @@ import numpy.typing as npt
 from scipy.ndimage import gaussian_filter
 
 from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
-from twopy.analysis.trials import EpochFrameWindow
+from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData, recording_frame_rate_hz
 from twopy.spatial import SpatialCrop
 
@@ -188,7 +188,7 @@ def compute_recording_response_maps(
         1,
         int(round(resolved_options.baseline_sample_seconds * frame_rate_hz)),
     )
-    _validate_epoch_window_frames(
+    response_windows = _response_map_epoch_windows(
         resolved_windows,
         frame_count=recording.movie.shape[0],
         baseline_frames=baseline_frames,
@@ -196,7 +196,7 @@ def compute_recording_response_maps(
 
     trial_maps_by_epoch: dict[tuple[int, str], list[npt.NDArray[np.float64]]] = {}
     epoch_order: list[tuple[int, str]] = []
-    for epoch_window in resolved_windows:
+    for epoch_window in response_windows:
         key = (epoch_window.epoch_number, epoch_window.epoch_name)
         if key not in trial_maps_by_epoch:
             epoch_order.append(key)
@@ -457,22 +457,19 @@ def _foreground_threshold(
     )
 
 
-def _validate_epoch_window_frames(
+def _response_map_epoch_windows(
     epoch_windows: Sequence[EpochFrameWindow],
     *,
     frame_count: int,
     baseline_frames: int,
-) -> None:
-    """Validate response-map frame windows before streaming movie data."""
+) -> tuple[EpochFrameWindow, ...]:
+    """Return epoch windows that have enough context for local dF/F maps."""
+    valid_windows: list[EpochFrameWindow] = []
     for epoch_window in epoch_windows:
         start = epoch_window.window.start_frame
         stop = epoch_window.window.stop_frame
-        baseline_start = start - baseline_frames
-        if baseline_start < 0:
-            msg = (
-                f"Epoch window {epoch_window.window.index} starts at frame {start}, "
-                f"leaving fewer than {baseline_frames} baseline frames."
-            )
+        if start < 0:
+            msg = f"Epoch window {epoch_window.window.index} starts before frame 0."
             raise ValueError(msg)
         if stop <= start:
             msg = f"Epoch window {epoch_window.window.index} has no response frames."
@@ -483,6 +480,18 @@ def _validate_epoch_window_frames(
                 f"beyond movie frame count {frame_count}."
             )
             raise ValueError(msg)
+        if start - baseline_frames < 0:
+            continue
+        if is_baseline_epoch_name(epoch_window.epoch_name):
+            continue
+        valid_windows.append(epoch_window)
+    if len(valid_windows) == 0:
+        msg = (
+            "Response maps require at least one non-baseline epoch window with "
+            f"{baseline_frames} preceding baseline frames."
+        )
+        raise ValueError(msg)
+    return tuple(valid_windows)
 
 
 def _trial_response_map(

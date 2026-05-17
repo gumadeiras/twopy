@@ -128,6 +128,7 @@ class RoiAssignmentView(QWidget):
         self._current_rois = current_rois
         self._cards: list[RoiRecordingCard] = []
         self._hidden_response_recordings: set[Path] = set()
+        self._selected_group_dirty = False
         self._normalization_options = NormalizationOptions()
         self._status_label = QLabel("Choose ROIs in the cards, then save a group.")
         self._response_status = QLabel("Choose ROIs to compare responses.")
@@ -148,6 +149,9 @@ class RoiAssignmentView(QWidget):
         self._note_edit = QLineEdit("")
         self._note_edit.setObjectName("roi_match_note")
         self._note_edit.setPlaceholderText("Optional note saved with this ROI group")
+        self._note_edit.textChanged.connect(
+            lambda _text: self._mark_selected_group_dirty(),
+        )
         self._fov_filter = QComboBox()
         self._fov_filter.setObjectName("fov_filter")
         self._fov_filter.currentIndexChanged.connect(lambda _index: self.refresh())
@@ -298,7 +302,7 @@ class RoiAssignmentView(QWidget):
                 fov_group_id=self._fov_groups.get(recording_path, ""),
                 selected_roi=self._current_rois.get(recording_path, ""),
                 trace_color=_trace_color(index),
-                on_selection_changed=self.refresh_response_preview,
+                on_selection_changed=self._handle_roi_selection_changed,
             )
             self._cards.append(card)
             self._grid.addWidget(card, index // 2, index % 2)
@@ -371,7 +375,8 @@ class RoiAssignmentView(QWidget):
         )
         self._refresh_group_table()
         self._select_group_in_table(group_cell_id)
-        self._note_edit.setText("")
+        self._set_note_text("")
+        self._selected_group_dirty = False
 
     def save_selected_match_group(self) -> None:
         """Overwrite the selected saved group with current selected ROIs."""
@@ -393,7 +398,8 @@ class RoiAssignmentView(QWidget):
         )
         self._refresh_group_table()
         self._select_group_in_table(group_cell_id)
-        self._note_edit.setText("")
+        self._set_note_text("")
+        self._selected_group_dirty = False
 
     def remove_selected_match_group(self) -> None:
         """Remove the selected saved group from the match CSV."""
@@ -403,13 +409,14 @@ class RoiAssignmentView(QWidget):
             return
         self._replace_group_rows(group_cell_id, ())
         self._clear_group_table_selection()
-        self._note_edit.setText("")
+        self._set_note_text("")
+        self._selected_group_dirty = False
         self._status_label.setText(f"Removed group {group_cell_id}.")
         self._refresh_group_table()
 
     def close_group_matching_window(self) -> None:
         """Close the group-matching popup after saved decisions are reviewed."""
-        if self._selected_group_cell_id() is not None:
+        if self._selected_group_cell_id() is not None and self._selected_group_dirty:
             self.save_selected_match_group()
         window = self.window()
         if window is not None:
@@ -455,6 +462,7 @@ class RoiAssignmentView(QWidget):
         for card in self._cards:
             card.set_selected_roi("")
             self._current_rois.pop(card.recording_path, None)
+        self._selected_group_dirty = False
         self._status_label.setText("Cleared ROI selection.")
         self.refresh_response_preview()
 
@@ -550,6 +558,24 @@ class RoiAssignmentView(QWidget):
             note=self._note_edit.text(),
         )
 
+    def _handle_roi_selection_changed(self) -> None:
+        """Refresh previews and remember selected saved groups with edits."""
+        self._mark_selected_group_dirty()
+        self.refresh_response_preview()
+
+    def _mark_selected_group_dirty(self) -> None:
+        """Mark the selected saved group as edited by the user."""
+        if self._selected_group_cell_id() is not None:
+            self._selected_group_dirty = True
+
+    def _set_note_text(self, text: str) -> None:
+        """Set the note field without marking a saved group edited."""
+        self._note_edit.blockSignals(True)
+        try:
+            self._note_edit.setText(text)
+        finally:
+            self._note_edit.blockSignals(False)
+
     def _append_rows(self, rows: tuple[ManualRoiMatchRow, ...]) -> None:
         """Append rows to the current output path."""
         append_manual_roi_match_rows(self.output_path(), rows)
@@ -638,7 +664,8 @@ class RoiAssignmentView(QWidget):
         for card in self._cards:
             row = rows_by_path.get(card.recording_path)
             card.set_selected_roi(row.roi_label if row is not None else "")
-        self._note_edit.setText(_shared_note(groups.get(group_cell_id, ())))
+        self._set_note_text(_shared_note(groups.get(group_cell_id, ())))
+        self._selected_group_dirty = False
         self._status_label.setText(f"Loaded saved group {group_cell_id}.")
         self.refresh_response_preview()
 
@@ -673,6 +700,7 @@ class RoiAssignmentView(QWidget):
             self._group_table.clearSelection()
         finally:
             self._group_table.blockSignals(False)
+        self._selected_group_dirty = False
 
     def _selected_response_data(self) -> tuple[_SelectedRoiResponse, ...]:
         """Return response data for card ROIs selected in the popup."""
