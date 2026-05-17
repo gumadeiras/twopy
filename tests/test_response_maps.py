@@ -4,13 +4,13 @@ Inputs: small converted movies with explicit epoch windows.
 Outputs: foreground-masked dF/F response maps for pixel and window modes.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy import (
     EpochFrameWindow,
@@ -51,7 +51,7 @@ class ResponseMapsTest(unittest.TestCase):
             EpochFrameWindow(FrameWindow(1, 4, 6, "epoch_2:B"), 2, "B"),
         )
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             maps = compute_recording_response_maps(
                 _recording(Path(directory), movie),
                 epoch_windows=windows,
@@ -80,7 +80,7 @@ class ResponseMapsTest(unittest.TestCase):
             EpochFrameWindow(FrameWindow(1, 4, 6, "epoch_2:B"), 2, "B"),
         )
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             maps = compute_recording_response_maps(
                 _recording(Path(directory), movie),
                 epoch_windows=windows,
@@ -110,7 +110,7 @@ class ResponseMapsTest(unittest.TestCase):
         movie[1:3, 3:5, 3:5] = 15.0
         windows = (EpochFrameWindow(FrameWindow(0, 1, 3, "epoch_1:A"), 1, "A"),)
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             maps = compute_recording_response_maps(
                 _recording(Path(directory), movie),
                 epoch_windows=windows,
@@ -132,7 +132,7 @@ class ResponseMapsTest(unittest.TestCase):
         windows = (EpochFrameWindow(FrameWindow(0, 1, 3, "epoch_1:A"), 1, "A"),)
 
         with (
-            tempfile.TemporaryDirectory() as directory,
+            temporary_directory() as directory,
             self.assertRaisesRegex(ValueError, "cannot exceed"),
         ):
             compute_recording_response_maps(
@@ -157,7 +157,7 @@ class ResponseMapsTest(unittest.TestCase):
         movie[1:3, 2:4, 2:4] = 15.0
         windows = (EpochFrameWindow(FrameWindow(0, 1, 3, "epoch_1:A"), 1, "A"),)
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             recording = _recording(Path(directory), movie)
             with patch.object(
                 ConvertedMovie,
@@ -190,7 +190,7 @@ class ResponseMapsTest(unittest.TestCase):
             EpochFrameWindow(FrameWindow(1, 2, 4, "epoch_2:Odor"), 2, "Odor"),
         )
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             maps = compute_recording_response_maps(
                 _recording(Path(directory), movie),
                 epoch_windows=windows,
@@ -214,7 +214,7 @@ class ResponseMapsTest(unittest.TestCase):
         windows = (EpochFrameWindow(FrameWindow(0, 0, 2, "epoch_1:Odor"), 1, "Odor"),)
 
         with (
-            tempfile.TemporaryDirectory() as directory,
+            temporary_directory() as directory,
             self.assertRaisesRegex(ValueError, "preceding baseline"),
         ):
             compute_recording_response_maps(
@@ -233,7 +233,7 @@ class ResponseMapsTest(unittest.TestCase):
         movie[1:3, 2:4, 2:4] = 15.0
         windows = (EpochFrameWindow(FrameWindow(0, 1, 3, "epoch_1:Odor"), 1, "Odor"),)
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             root = Path(directory)
             maps = compute_recording_response_maps(
                 _recording(root, movie),

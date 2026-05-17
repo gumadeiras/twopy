@@ -35,14 +35,16 @@ __all__ = [
 
 @dataclass(frozen=True)
 class ResolvedNapariRecording:
-    """Resolved recording paths plus whether napari had to convert first.
+    """Resolved recording paths plus load-path status.
 
     Inputs: one selected path.
-    Outputs: converted paths and a conversion flag for user-facing status.
+    Outputs: converted paths, whether conversion ran, and whether source data
+    was unavailable.
     """
 
     paths: NapariRecordingPaths
     was_converted: bool
+    source_unavailable: bool = False
 
 
 def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
@@ -69,6 +71,10 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
         cached = _resolve_or_convert_cached_source_recording(source_dir)
         if cached is not None:
             return cached
+
+    cached = _resolve_cached_unavailable_source_recording(selected)
+    if cached is not None:
+        return cached
 
     try:
         paths = resolve_converted_paths(selected)
@@ -102,6 +108,44 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
     return ResolvedNapariRecording(
         paths=resolve_converted_paths(converted.path),
         was_converted=True,
+    )
+
+
+def _resolve_cached_unavailable_source_recording(
+    source_dir: Path,
+) -> ResolvedNapariRecording | None:
+    """Resolve an existing cache entry for a currently unavailable source path.
+
+    Args:
+        source_dir: Source recording folder requested by the user.
+
+    Returns:
+        Cached converted paths, or ``None`` when no usable cache entry exists.
+    """
+    if source_dir.exists():
+        return None
+    try:
+        config = load_config(DEFAULT_CONFIG_PATH)
+    except FileNotFoundError:
+        return None
+    if not config.analysis_caching:
+        return None
+    if not _source_is_under_data_path(config, source_dir):
+        return None
+
+    resolved_source_dir = source_dir.expanduser().resolve(strict=False)
+    try:
+        output_dir = resolve_analysis_work_dir(config, resolved_source_dir)
+        paths = resolve_converted_paths(output_dir)
+    except ValueError:
+        return None
+    if paths.movie_path is None:
+        return None
+    return _refresh_cached_analysis_outputs(
+        paths=paths,
+        source_dir=source_dir,
+        was_converted=False,
+        source_unavailable=True,
     )
 
 
@@ -178,6 +222,7 @@ def _refresh_cached_analysis_outputs(
     paths: NapariRecordingPaths,
     source_dir: Path,
     was_converted: bool,
+    source_unavailable: bool = False,
 ) -> ResolvedNapariRecording:
     """Pull published saved outputs into cache and resolve fresh paths.
 
@@ -185,6 +230,8 @@ def _refresh_cached_analysis_outputs(
         paths: Cached converted paths before saved-output refresh.
         source_dir: Source microscope recording folder.
         was_converted: Whether conversion ran during this load.
+        source_unavailable: Whether this load used cache because source data
+            was unavailable.
 
     Returns:
         Resolved cached paths after optional saved-output refresh.
@@ -197,6 +244,7 @@ def _refresh_cached_analysis_outputs(
     return ResolvedNapariRecording(
         paths=refreshed_paths,
         was_converted=was_converted,
+        source_unavailable=source_unavailable,
     )
 
 

@@ -5,9 +5,10 @@ Outputs: assertions that scripts can call one simple function to find recordings
 """
 
 import sqlite3
-import tempfile
 import unittest
 from pathlib import Path
+
+from tests.tempdir import temporary_directory
 
 from twopy import find_recordings
 
@@ -21,7 +22,7 @@ class PublicApiTest(unittest.TestCase):
         Inputs: a temporary config file pointing at a temporary database folder.
         Outputs: an assertion that a filtered recording is returned.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
             data_dir = root / "data"

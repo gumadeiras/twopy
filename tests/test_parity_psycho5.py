@@ -4,12 +4,12 @@ Inputs: tiny converted recordings, ROI masks, and external-analysis assumptions.
 Outputs: parity response computations and selector checks.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import FrameCountAudit
@@ -27,7 +27,7 @@ class Psycho5ParityTest(unittest.TestCase):
 
     def test_psycho5_default_interleave_uses_next_epoch_first(self) -> None:
         """Confirm psycho5 ``nextEpoch`` metadata has highest precedence."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(
                 Path(temp_dir),
                 stimulus_parameters=(
@@ -41,7 +41,7 @@ class Psycho5ParityTest(unittest.TestCase):
 
     def test_psycho5_default_interleave_reverses_epoch_one_gray_list(self) -> None:
         """Confirm multiple exact gray interleaves preserve psycho5 ordering."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(
                 Path(temp_dir),
                 stimulus_parameters=(
@@ -60,7 +60,7 @@ class Psycho5ParityTest(unittest.TestCase):
         self,
     ) -> None:
         """Confirm parity response computation uses comparison-specific defaults."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = self._write_converted_recording(
                 root,
@@ -100,7 +100,7 @@ class Psycho5ParityTest(unittest.TestCase):
         self,
     ) -> None:
         """Confirm psycho5 ``noTrueInterleave`` parity uses one baseline span."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = self._write_converted_recording(
                 root,

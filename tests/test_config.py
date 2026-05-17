@@ -4,9 +4,10 @@ Inputs: temporary YAML config files.
 Outputs: assertions that valid paths load and invalid configs fail clearly.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
+
+from tests.tempdir import temporary_directory
 
 from twopy.config import (
     DEFAULT_ANALYSIS_CACHE_DIR,
@@ -27,7 +28,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a temporary YAML file with ``database_path`` and ``data_path``.
         Outputs: assertions that both values load as ``Path`` objects.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
@@ -61,7 +62,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a temporary YAML file without ``database_access``.
         Outputs: an assertion that the loaded mode is ``copy``.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
@@ -81,7 +82,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a temporary YAML file with explicit cache settings.
         Outputs: assertions that cache policy and directory are parsed.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             config_path = root / "config.yml"
             cache_dir = root / "cache"
@@ -106,7 +107,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a temporary YAML file with ``pixel_calibration_path``.
         Outputs: loaded override path for scripts that need custom calibration.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             config_path = root / "config.yml"
             calibration_path = root / "calibrations" / "pixel_size.csv"
@@ -129,7 +130,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a temporary YAML file with an invalid cache policy.
         Outputs: an assertion that the error names the invalid key.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
@@ -149,7 +150,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a temporary YAML file with an invalid ``database_access``.
         Outputs: an assertion that the error names the invalid key.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
@@ -168,7 +169,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a temporary YAML file without ``analysis_output``.
         Outputs: an assertion that the error names the missing key.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"
@@ -186,7 +187,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a config using ``analysis_output: source`` and a recording path.
         Outputs: the expected ``twopy`` folder path.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             config_path = root / "config.yml"
             recording_dir = root / "data" / "fly" / "stim" / "2023" / "10_17"
@@ -211,7 +212,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a config with an output root and a recording under ``data_path``.
         Outputs: the mirrored output directory.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             output_root = root / "analysis"
             recording_dir = root / "data" / "fly" / "stim" / "2023" / "10_17"
@@ -237,7 +238,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a config with cache enabled and a recording under ``data_path``.
         Outputs: work directory under the configured local cache root.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             cache_root = root / "cache"
@@ -267,7 +268,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a configured cache root and an external recording path.
         Outputs: stable external cache path under ``_external``.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             cache_root = root / "cache"
             external_recording = root / "external" / "10_17"
@@ -295,7 +296,7 @@ class LoadConfigTest(unittest.TestCase):
         Inputs: a temporary YAML file missing ``data_path``.
         Outputs: an assertion that the error names the missing key.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             config_path = Path(temp_dir) / "config.yml"
             config_path.write_text(
                 "database_path: /Volumes/magic/clarklab/_Database\n"

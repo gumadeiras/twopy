@@ -5,9 +5,10 @@ Outputs: validated manual ROI match rows that downstream group analysis can
 load without napari.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
+
+from tests.tempdir import temporary_directory
 
 from twopy import (
     append_manual_roi_match_rows,
@@ -31,12 +32,16 @@ class GroupMatchingTests(unittest.TestCase):
         Inputs: two recordings assigned to one visual FOV group.
         Outputs: loaded rows preserve paths and FOV labels.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "fov_groups.csv"
             rows = make_manual_fov_group_rows(
                 {
                     Path("/recordings/a"): "fov_1",
                     Path("/recordings/b"): "fov_1",
+                },
+                notes={
+                    Path("/recordings/a"): "sharp overlap",
+                    Path("/recordings/b"): "slight drift",
                 },
             )
 
@@ -44,6 +49,10 @@ class GroupMatchingTests(unittest.TestCase):
             loaded = load_manual_fov_group_rows(path)
 
         self.assertEqual(loaded, rows)
+        self.assertEqual(
+            {row.recording_path.name: row.note for row in loaded},
+            {"a": "sharp overlap", "b": "slight drift"},
+        )
 
     def test_manual_roi_match_rows_round_trip_csv(self) -> None:
         """Confirm match decisions are saved as inspectable CSV rows.
@@ -51,7 +60,7 @@ class GroupMatchingTests(unittest.TestCase):
         Inputs: two recordings assigned to one cell group.
         Outputs: the loaded rows preserve paths, ROI labels, status, and group.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "roi_matches.csv"
             rows = make_manual_roi_match_rows(
                 {
@@ -73,7 +82,7 @@ class GroupMatchingTests(unittest.TestCase):
         Inputs: one existing matched group and one unmatched reviewed ROI.
         Outputs: appended rows produce a next group id of three.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "roi_matches.csv"
             first_rows = make_manual_roi_match_rows(
                 {Path("/recordings/a"): "roi_0001"},
@@ -121,7 +130,7 @@ class GroupMatchingTests(unittest.TestCase):
         Inputs: a CSV row with a status outside the documented literals.
         Outputs: a clear ``ValueError``.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "roi_matches.csv"
             path.write_text(
                 "fov_group_id,group_cell_id,recording_path,roi_label,status,note\n"
@@ -138,7 +147,7 @@ class GroupMatchingTests(unittest.TestCase):
         Inputs: one ROI match CSV row whose ``recording_path`` field is blank.
         Outputs: a clear ``ValueError`` during load.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "roi_matches.csv"
             path.write_text(
                 "fov_group_id,group_cell_id,recording_path,roi_label,status,note\n"

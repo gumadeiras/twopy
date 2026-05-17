@@ -82,11 +82,10 @@ class LoadedNapariRecording:
 
     Inputs: converted recording object plus the layers created for that
     recording.
-    Outputs: one auditable record that links a path in the list panel to the
-    napari layers and ROI save default that belong to it.
+    Outputs: one auditable record that links napari layers and ROI save default
+    to the converted recording that owns them.
     """
 
-    display_path: Path
     recording: RecordingData
     roi_save_file: Path
     mean_image_layer: object
@@ -169,7 +168,9 @@ class LoadedRecordingsPanel(QWidget):
         try:
             self._list.clear()
             for recording in recordings:
-                self._list.addItem(str(recording.display_path))
+                self._list.addItem(
+                    str(recording.recording.source_session_dir.expanduser())
+                )
             if selected_index is None:
                 self._list.setCurrentRow(-1)
             else:
@@ -245,7 +246,6 @@ def record_loaded_view(
         None.
     """
     loaded = LoadedNapariRecording(
-        display_path=view.recording.path.parent,
         recording=view.recording,
         roi_save_file=roi_save_file,
         mean_image_layer=view.mean_image_layer,

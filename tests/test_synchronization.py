@@ -4,11 +4,11 @@ Inputs: synthetic photodiode vectors with known event positions.
 Outputs: detected events and high-resolution events paired to imaging frames.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy import (
     detect_photodiode_events,
@@ -81,7 +81,7 @@ class SynchronizationTest(unittest.TestCase):
         Inputs: converted recording photodiode vectors with two events each.
         Outputs: paired events assigned to imaging frames by event order.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(
                 Path(temp_dir),
                 high_res_pd=np.array(

@@ -53,7 +53,9 @@ def write_loaded_recordings_csv(
         for recording in recordings:
             writer.writerow(
                 {
-                    "recording_path": str(recording.display_path),
+                    "recording_path": str(
+                        recording.recording.source_session_dir.expanduser(),
+                    ),
                     "recording_data_path": str(recording.recording.path),
                 },
             )

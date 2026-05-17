@@ -6,7 +6,6 @@ the large aligned movie stored in a separate file.
 """
 
 import json
-import tempfile
 import unittest
 from pathlib import Path
 from zipfile import ZipFile
@@ -14,6 +13,7 @@ from zipfile import ZipFile
 import h5py
 import numpy as np
 import scipy.io
+from tests.tempdir import temporary_directory
 
 from twopy.conversion import convert_recording_to_twopy, load_source_conversion_inputs
 
@@ -28,7 +28,7 @@ class ConversionTest(unittest.TestCase):
         and photodiode files.
         Outputs: assertions that each conversion input is available as Python.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_session(session_dir)
 
@@ -101,7 +101,7 @@ class ConversionTest(unittest.TestCase):
         Outputs: column labels for the stable columns and generic labels for
         stimulus-specific slots that depend on the MATLAB stimulus function.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_session(session_dir, stimulus_data_column_count=35)
 
@@ -165,7 +165,7 @@ class ConversionTest(unittest.TestCase):
         stimulus-bounded frame range.
         Outputs: crop bounds that remove only the invalid aligned border.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_session(
                 session_dir,
@@ -195,7 +195,7 @@ class ConversionTest(unittest.TestCase):
         Outputs: HDF5 datasets for metadata, stimulus, photodiode, full-movie
         mean image, and a separate aligned movie file.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             session_dir = root / "recording"
             output_dir = root / "output"
@@ -341,7 +341,7 @@ class ConversionTest(unittest.TestCase):
         Inputs: a temporary source recording and a selected frame range.
         Outputs: a mean image over only that frame range.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             session_dir = root / "recording"
             output_dir = root / "output"
@@ -368,7 +368,7 @@ class ConversionTest(unittest.TestCase):
         Inputs: a temporary source recording and an empty mean-image range.
         Outputs: clear validation error before writing converted files.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             session_dir = root / "recording"
             output_dir = root / "output"
@@ -389,7 +389,7 @@ class ConversionTest(unittest.TestCase):
         conversion output directory.
         Outputs: converted files under the configured mirrored output root.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             session_dir = data_root / "fly" / "stim" / "2023" / "10_17"
@@ -424,7 +424,7 @@ class ConversionTest(unittest.TestCase):
         Inputs: a temporary config with cache and publish roots.
         Outputs: converted files under the cache root, not publish output.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             session_dir = data_root / "fly" / "stim" / "2023" / "10_17"
@@ -460,7 +460,7 @@ class ConversionTest(unittest.TestCase):
         than the aligned movie and imaging-resolution photodiode.
         Outputs: loaded audit values that preserve the one-frame offset.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_session(session_dir, acquisition_frame_count=2)
 
@@ -477,7 +477,7 @@ class ConversionTest(unittest.TestCase):
         Inputs: a temporary recording where ``imagingResPd`` has too few samples.
         Outputs: a clear failure before conversion writes twopy files.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_session(
                 session_dir,
@@ -494,7 +494,7 @@ class ConversionTest(unittest.TestCase):
         short of the aligned movie.
         Outputs: a clear failure before conversion writes twopy files.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_session(session_dir, acquisition_frame_count=1)
 
@@ -508,7 +508,7 @@ class ConversionTest(unittest.TestCase):
         flashes.
         Outputs: a clear ambiguity error before conversion writes files.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_session(
                 session_dir,

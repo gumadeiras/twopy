@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (
     QFileDialog,
     QLabel,
     QListView,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QTreeView,
@@ -169,7 +170,6 @@ def add_twopy_magicgui_controls(
     if recording is not None and mean_image_layer is not None:
         state.loaded_recordings.append(
             LoadedNapariRecording(
-                display_path=recording.path.parent,
                 recording=recording,
                 roi_save_file=roi_save_file,
                 mean_image_layer=mean_image_layer,
@@ -460,6 +460,11 @@ def _load_recording_path(
     is_selected_replacement = (
         replace_selected and duplicate_index == state.selected_recording_index
     )
+    if resolved_recording.source_unavailable:
+        _show_source_unavailable_warning(
+            source_path=selected_recording_path,
+            cache_path=paths.recording_data_path,
+        )
     if duplicate_index is not None and not is_selected_replacement:
         select_loaded_recording(state, duplicate_index)
         _sync_recording_picker_to_selected(state)
@@ -503,6 +508,30 @@ def _load_recording_path(
         )
     status = "Converted and loaded" if resolved_recording.was_converted else "Loaded"
     return f"{status} {paths.recording_data_path}"
+
+
+def _show_source_unavailable_warning(*, source_path: Path, cache_path: Path) -> None:
+    """Warn that napari opened cached data without source storage available.
+
+    Args:
+        source_path: Requested source recording path that is currently missing.
+        cache_path: Cached converted HDF5 path being opened.
+
+    Returns:
+        None.
+    """
+    QMessageBox.warning(
+        None,
+        "Source path unavailable",
+        (
+            "The requested source path is unavailable, so twopy opened the local "
+            "cached copy.\n\n"
+            f"Source path:\n{source_path}\n\n"
+            f"Cached data:\n{cache_path}\n\n"
+            "Save and export outputs will not sync back to the source location "
+            "until that path is available again."
+        ),
+    )
 
 
 def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
@@ -919,7 +948,11 @@ def _configure_recording_folder_picker(
 
     widget.choose_btn.changed.connect(choose_recording_folder)
     if state.recording is not None:
-        _set_recording_picker_display_path(widget, state, state.recording.path.parent)
+        _set_recording_picker_display_path(
+            widget,
+            state,
+            state.recording.source_session_dir,
+        )
     else:
         _set_recording_picker_display_default(widget, state)
 
@@ -943,7 +976,11 @@ def _sync_recording_picker_to_selected(state: NapariControlState) -> None:
     if state.selected_recording_index is None or state.recording is None:
         _set_recording_picker_display_default(widget, state)
         return
-    _set_recording_picker_display_path(widget, state, state.recording.path.parent)
+    _set_recording_picker_display_path(
+        widget,
+        state,
+        state.recording.source_session_dir,
+    )
 
 
 def _set_recording_picker_display_default(
@@ -1067,10 +1104,10 @@ def _current_recording_path_for_reload(
     Returns:
         Stored real recording path when available, otherwise the picker value.
     """
-    if state.recording_picker_path is not None:
-        return state.recording_picker_path
     if state.recording is not None:
         return state.recording.path
+    if state.recording_picker_path is not None:
+        return state.recording_picker_path
     return _resolve_recording_folder_value(recording_folder, state)
 
 

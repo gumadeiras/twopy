@@ -5,12 +5,12 @@ Outputs: inspectable HDF5 files and response time-series CSV files.
 """
 
 import csv
-import tempfile
 import unittest
 from pathlib import Path
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import RoiDeltaFOverF
@@ -43,7 +43,7 @@ class PersistenceTest(unittest.TestCase):
         Inputs: one ROI set, traces, dF/F, epoch window, and grouped response.
         Outputs: one HDF5 file plus trial-level and grouped response CSVs.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             h5_path = root / "analysis_outputs.h5"
             trials_csv_path = root / "response_summary_trials.csv"
@@ -242,7 +242,7 @@ class PersistenceTest(unittest.TestCase):
         Inputs: a requested CSV path and no grouped response object.
         Outputs: a clear validation error.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             h5_path = Path(temp_dir) / "analysis_outputs.h5"
             with self.assertRaisesRegex(ValueError, "grouped_responses"):
                 save_analysis_outputs(
@@ -260,7 +260,7 @@ class PersistenceTest(unittest.TestCase):
             short for its value matrix.
         Outputs: clear validation error before returning loaded outputs.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             h5_path = Path(temp_dir) / "analysis_outputs.h5"
             grouped = group_delta_f_over_f_by_epoch(
                 self._dff(),
@@ -285,7 +285,7 @@ class PersistenceTest(unittest.TestCase):
         Inputs: two one-frame trials from the same epoch and one ROI.
         Outputs: grouped CSV rows with one relative-time column.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             output_path = Path(temp_dir) / "response_summary_grouped.csv"
             dff = RoiDeltaFOverF(
                 fluorescence=np.ones((2, 1), dtype=np.float64),
@@ -327,7 +327,7 @@ class PersistenceTest(unittest.TestCase):
         Inputs: HDF5 traces group with an unsupported statistic attribute.
         Outputs: clear validation error before returning typed traces.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             h5_path = Path(temp_dir) / "analysis_outputs.h5"
             save_analysis_outputs(h5_path, traces=self._traces())
             with h5py.File(h5_path, "r+") as h5_file:
@@ -342,7 +342,7 @@ class PersistenceTest(unittest.TestCase):
         Inputs: HDF5 traces group with an unsupported method attribute.
         Outputs: clear validation error before returning typed traces.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             h5_path = Path(temp_dir) / "analysis_outputs.h5"
             save_analysis_outputs(h5_path, traces=self._traces())
             with h5py.File(h5_path, "r+") as h5_file:
@@ -360,7 +360,7 @@ class PersistenceTest(unittest.TestCase):
         Inputs: Analysis HDF5 where ``dff/values`` was rewritten as integers.
         Outputs: clear validation error before returning a dF/F object.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             h5_path = Path(temp_dir) / "analysis_outputs.h5"
             save_analysis_outputs(h5_path, dff=self._dff())
             with h5py.File(h5_path, "r+") as h5_file:
@@ -379,7 +379,7 @@ class PersistenceTest(unittest.TestCase):
         Inputs: Analysis HDF5 where ``traces/raw_values`` is one-dimensional.
         Outputs: clear validation error before returning trace objects.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             h5_path = Path(temp_dir) / "analysis_outputs.h5"
             save_analysis_outputs(h5_path, traces=self._traces())
             with h5py.File(h5_path, "r+") as h5_file:

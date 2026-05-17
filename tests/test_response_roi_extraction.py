@@ -4,13 +4,13 @@ Inputs: small converted movies with repeated stimulus windows.
 Outputs: ROIs generated from repeatable stimulus-locked response score images.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 import twopy.response_roi_extraction as response_roi_extraction
 from twopy import (
@@ -51,7 +51,7 @@ class ResponseRoiExtractionTest(unittest.TestCase):
                 response_mask,
             ] += 5.0
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             recording = _recording(Path(directory), movie)
 
             extraction = extract_response_watershed_rois(
@@ -91,7 +91,7 @@ class ResponseRoiExtractionTest(unittest.TestCase):
         movie[10:12, 2:4, 4:6] += 5.0
         movie[16:18, 2:4, 4:6] += 5.0
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             recording = _recording(Path(directory), movie)
 
             roi_set = response_watershed_roi_set(
@@ -120,7 +120,7 @@ class ResponseRoiExtractionTest(unittest.TestCase):
                 response_mask,
             ] += 5.0
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             recording = _recording(Path(directory), movie)
 
             extraction = extract_response_watershed_rois(
@@ -158,7 +158,7 @@ class ResponseRoiExtractionTest(unittest.TestCase):
             source="test",
         )
 
-        with tempfile.TemporaryDirectory() as directory:
+        with temporary_directory() as directory:
             recording = _recording(Path(directory), movie, crop=crop)
 
             extraction = extract_response_watershed_rois(

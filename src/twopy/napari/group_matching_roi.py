@@ -114,6 +114,7 @@ class RoiAssignmentView(QWidget):
         state: GroupMatchingState,
         fov_groups: dict[Path, str],
         current_rois: dict[Path, str],
+        on_back: Callable[[], None],
     ) -> None:
         """Create the second-stage ROI assignment view.
 
@@ -121,11 +122,13 @@ class RoiAssignmentView(QWidget):
             state: Shared loaded-recording state.
             fov_groups: Recording-to-FOV assignments from the first stage.
             current_rois: Mutable unsaved ROI group keyed by recording path.
+            on_back: Callback returning the popup to FOV assignment.
         """
         super().__init__()
         self._state = state
         self._fov_groups = fov_groups
         self._current_rois = current_rois
+        self._on_back = on_back
         self._cards: list[RoiRecordingCard] = []
         self._hidden_response_recordings: set[Path] = set()
         self._selected_group_dirty = False
@@ -173,6 +176,8 @@ class RoiAssignmentView(QWidget):
         remove_button.clicked.connect(self.remove_selected_match_group)
         clear_button = QPushButton("Clear ROI selection")
         clear_button.clicked.connect(self.clear_current_group)
+        back_button = QPushButton("Back to FOV assignment")
+        back_button.clicked.connect(self.return_to_fov_assignment)
         close_button = QPushButton("Save and close")
         close_button.clicked.connect(self.close_group_matching_window)
 
@@ -191,6 +196,7 @@ class RoiAssignmentView(QWidget):
         action_panel.addWidget(save_button)
         action_panel.addWidget(remove_button)
         action_panel.addWidget(clear_button)
+        action_panel.addWidget(back_button)
         action_panel.addWidget(close_button)
         action_panel.addWidget(QLabel("Note"))
         action_panel.addWidget(self._note_edit)
@@ -296,7 +302,7 @@ class RoiAssignmentView(QWidget):
             selected_epoch_number=self._normalization_options.epoch_number,
         )
         for index, recording in enumerate(recordings):
-            recording_path = recording.display_path.expanduser()
+            recording_path = recording.recording.source_session_dir.expanduser()
             card = RoiRecordingCard(
                 recording=recording,
                 fov_group_id=self._fov_groups.get(recording_path, ""),
@@ -422,6 +428,11 @@ class RoiAssignmentView(QWidget):
         if window is not None:
             window.close()
 
+    def return_to_fov_assignment(self) -> None:
+        """Return to FOV assignment without closing the group-matching popup."""
+        self._sync_current_rois_from_cards()
+        self._on_back()
+
     def load_match_row_path(self) -> None:
         """Choose an existing ROI match CSV path and load its rows."""
         selected_path = self._choose_existing_match_path()
@@ -506,7 +517,9 @@ class RoiAssignmentView(QWidget):
         return tuple(
             recording
             for recording in self._state.loaded_recordings
-            if self._recording_matches_filter(recording.display_path.expanduser())
+            if self._recording_matches_filter(
+                recording.recording.source_session_dir.expanduser(),
+            )
         )
 
     def _recording_matches_filter(self, recording_path: Path) -> bool:
@@ -742,7 +755,7 @@ class RoiRecordingCard(QFrame):
     ) -> None:
         """Create one ROI card."""
         super().__init__()
-        self.recording_path = recording.display_path.expanduser()
+        self.recording_path = recording.recording.source_session_dir.expanduser()
         self.recording = recording
         self.trace_color = trace_color
         self._image_label = QLabel()
@@ -865,7 +878,7 @@ def _selected_roi_response_plot_data(
     return compute_response_plot_data_from_labels(
         recording.recording,
         _SelectedRoiLayer(data=selected.astype(np.int64, copy=False)),
-        source_path=recording.display_path,
+        source_path=recording.recording.source_session_dir.expanduser(),
         response_processing_options=ResponseProcessingOptions(
             normalization=normalization_options,
         ),

@@ -5,13 +5,13 @@ Outputs: assertions that twopy classifies and summarizes recognized files.
 """
 
 import csv
-import tempfile
 import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
 import scipy.io
 import tifffile
+from tests.tempdir import temporary_directory
 
 from twopy.inspection import inspect_recording_files
 
@@ -25,7 +25,7 @@ class InspectRecordingFilesTest(unittest.TestCase):
         Inputs: a temporary folder containing representative source files.
         Outputs: assertions for kind detection and type-specific summaries.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             scipy.io.savemat(session_dir / "imageDescription.mat", {"zoom": [[2.0]]})
             tifffile.imwrite(
@@ -66,7 +66,7 @@ class InspectRecordingFilesTest(unittest.TestCase):
         Inputs: a temporary recording with one TIFF that has ScanImage metadata.
         Outputs: a CSV row with TIFF layout and selected ScanImage fields.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             csv_path = session_dir / "metadata" / "tiff_metadata.csv"
             tifffile.imwrite(

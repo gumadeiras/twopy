@@ -4,7 +4,6 @@ Inputs: small converted movies, ROI masks, and background-correction settings.
 Outputs: raw, background, and corrected ROI traces with known expected values.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 from typing import cast
@@ -12,6 +11,7 @@ from typing import cast
 import h5py
 import numpy as np
 import numpy.typing as npt
+from tests.tempdir import temporary_directory
 
 from twopy import extract_background_corrected_roi_traces, make_roi_set
 from twopy.analysis.background_subtraction import BackgroundCorrectionMethod
@@ -31,7 +31,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Outputs: raw and corrected crop-domain traces that match, plus zero
         background.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             movie = np.array(
                 [
                     [[99.0, 99.0], [10.0, 20.0]],
@@ -76,7 +76,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Inputs: an ROI in the invalid border and explicit ``full_frame`` domain.
         Outputs: raw traces from the full movie frame.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             movie = np.array(
                 [
                     [[1.0, 2.0], [10.0, 20.0]],
@@ -115,7 +115,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Outputs: raw ROI values, repeated background values, and corrected ROI
         values after pixel-level subtraction and clamping.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             movie = np.array(
                 [
                     [[10.0, 4.0], [6.0, 1.0]],
@@ -159,7 +159,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Outputs: corrected ROI value larger than raw-minus-background because
         the low pixel is clamped to zero before averaging.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             movie = np.array(
                 [
                     [[10.0, 1.0], [4.0, 9.0]],
@@ -196,7 +196,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         a dim valid pixel inside the crop.
         Outputs: background values from the crop, not the full frame.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             movie = np.array(
                 [
                     [
@@ -261,7 +261,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Outputs: each ROI is corrected by the low-percentile value from its own
         frame stripe.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             movie = np.array(
                 [
                     [
@@ -329,7 +329,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Inputs: an ROI in the invalid border outside the alignment-valid crop.
         Outputs: a validation error naming the spatial domain.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             movie = np.ones((2, 3, 3), dtype=np.float64)
             crop = SpatialCrop(
                 axis0_start=1,
@@ -368,7 +368,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Inputs: an untyped-script-style background correction method.
         Outputs: a clear validation error before branch-specific work starts.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._write_recording(Path(temp_dir))
             roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
 
@@ -388,7 +388,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Inputs: an untyped-script-style ``median`` statistic request.
         Outputs: a clear validation error before trace extraction.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._write_recording(Path(temp_dir))
             roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
 
@@ -405,7 +405,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Inputs: a converted movie and an empty trace frame range.
         Outputs: clear validation error before background branch work starts.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._write_recording(Path(temp_dir))
             roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
 
@@ -424,7 +424,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         pixels outside all ROIs.
         Outputs: ROI traces corrected by their own nearby background rows.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             movie = np.array(
                 [
                     [
@@ -489,7 +489,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
         Outputs: clear guidance that ROI-local subtraction needs unlabeled
         background pixels instead of a cryptic per-ROI candidate error.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._write_recording(Path(temp_dir))
             roi_set = make_roi_set(
                 np.array(

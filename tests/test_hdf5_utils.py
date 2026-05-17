@@ -5,12 +5,12 @@ Outputs: assertions that helpers preserve twopy's persistence-boundary
 semantics.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy.hdf5_utils import (
     decode_hdf5_string,
@@ -29,7 +29,7 @@ class Hdf5UtilsTest(unittest.TestCase):
         Inputs: a temporary HDF5 file and text label values.
         Outputs: decoded Python strings in original order.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "strings.h5"
             with h5py.File(path, "w") as h5_file:
                 write_string_dataset(h5_file, "labels", ("roi_1", "cafe"))

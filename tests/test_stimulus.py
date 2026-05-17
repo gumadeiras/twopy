@@ -4,11 +4,11 @@ Inputs: small ``RecordingData`` objects with decoded stimulus-code metadata.
 Outputs: assertions that stable column names map to per-``stimtype`` meanings.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
@@ -25,7 +25,7 @@ class StimulusMetadataTest(unittest.TestCase):
         Inputs: a loaded recording with two ``stimtype`` metadata entries.
         Outputs: mappings preserving the backed-up MATLAB source assignment.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(Path(temp_dir))
 
             mappings = map_stimulus_specific_column(
@@ -47,7 +47,7 @@ class StimulusMetadataTest(unittest.TestCase):
         Inputs: a loaded recording and one requested stimulus type.
         Outputs: only the matching mapping.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(Path(temp_dir))
 
             mappings = map_stimulus_specific_column(
@@ -66,7 +66,7 @@ class StimulusMetadataTest(unittest.TestCase):
         Inputs: a loaded recording where slot 20 was never assigned.
         Outputs: an empty tuple rather than a fabricated meaning.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(Path(temp_dir))
 
             self.assertEqual(
@@ -80,7 +80,7 @@ class StimulusMetadataTest(unittest.TestCase):
         Inputs: a loaded recording and the stable time column.
         Outputs: a clear error.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(Path(temp_dir))
 
             with self.assertRaisesRegex(ValueError, "stimulus_specific"):
@@ -92,7 +92,7 @@ class StimulusMetadataTest(unittest.TestCase):
         Inputs: decoded metadata whose columns list contains a scalar.
         Outputs: a clear malformed-metadata error.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(Path(temp_dir))
             recording.stimulus_specific_columns["62002"]["columns"] = [1]
 

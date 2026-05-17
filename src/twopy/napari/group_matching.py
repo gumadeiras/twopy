@@ -77,17 +77,20 @@ class GroupMatchingPanel(QWidget):
         super().__init__()
         self._state = state
         self._fov_groups: dict[Path, str] = {}
+        self._fov_notes: dict[Path, str] = {}
         self._current_rois: dict[Path, str] = {}
         self._stack = QStackedWidget()
         self._fov_view = FovAssignmentView(
             state=state,
             fov_groups=self._fov_groups,
+            fov_notes=self._fov_notes,
             on_finalize=self.finalize_fov_assignments,
         )
         self._roi_view = RoiAssignmentView(
             state=state,
             fov_groups=self._fov_groups,
             current_rois=self._current_rois,
+            on_back=self.show_fov_assignment,
         )
         self._stack.addWidget(self._fov_view)
         self._stack.addWidget(self._roi_view)
@@ -125,13 +128,21 @@ class GroupMatchingPanel(QWidget):
         if not output_path.exists():
             return
         loaded_paths = {
-            recording.display_path.expanduser()
+            recording.recording.source_session_dir.expanduser()
             for recording in self._state.loaded_recordings
         }
+        rows = load_manual_fov_group_rows(output_path)
         self._fov_groups.update(
             {
                 row.recording_path.expanduser(): row.fov_group_id
-                for row in load_manual_fov_group_rows(output_path)
+                for row in rows
+                if row.recording_path.expanduser() in loaded_paths
+            },
+        )
+        self._fov_notes.update(
+            {
+                row.recording_path.expanduser(): row.note
+                for row in rows
                 if row.recording_path.expanduser() in loaded_paths
             },
         )
@@ -145,6 +156,7 @@ class FovAssignmentView(QWidget):
         *,
         state: GroupMatchingState,
         fov_groups: dict[Path, str],
+        fov_notes: dict[Path, str],
         on_finalize: Callable[[], None],
     ) -> None:
         """Create the first-stage FOV assignment view.
@@ -152,19 +164,18 @@ class FovAssignmentView(QWidget):
         Args:
             state: Shared loaded-recording state.
             fov_groups: Mutable recording-to-FOV assignment mapping.
+            fov_notes: Mutable recording-to-FOV-note mapping.
             on_finalize: Callback invoked by Finalize and assign ROIs.
         """
         super().__init__()
         self._state = state
         self._fov_groups = fov_groups
+        self._fov_notes = fov_notes
         self._cards: list[FovRecordingCard] = []
         self._on_finalize = on_finalize
         self._path_edit = QLineEdit(str(Path.cwd() / FOV_GROUP_TABLE_FILENAME))
         self._path_edit.setObjectName("fov_group_path")
         self._path_edit.editingFinished.connect(self.load_fov_groups_from_path)
-        self._note_edit = QLineEdit("")
-        self._note_edit.setObjectName("fov_group_note")
-        self._note_edit.setPlaceholderText("Optional note saved to FOV CSV")
         self._instruction_label = QLabel("Select recordings that share a FOV.")
         self._status_label = QLabel("")
         self._fov_group_spin = QSpinBox()
@@ -204,10 +215,6 @@ class FovAssignmentView(QWidget):
         path_controls.addWidget(load_button)
         path_controls.addWidget(browse_button)
 
-        note_controls = QHBoxLayout()
-        note_controls.addWidget(QLabel("Note"))
-        note_controls.addWidget(self._note_edit)
-
         assignment_controls = QHBoxLayout()
         assignment_controls.addWidget(QLabel("Assign selection to FOV"))
         assignment_controls.addWidget(self._fov_group_spin)
@@ -229,7 +236,6 @@ class FovAssignmentView(QWidget):
         layout.addWidget(QLabel("FOV Assignment"))
         layout.addWidget(self._instruction_label)
         layout.addLayout(path_controls)
-        layout.addLayout(note_controls)
         layout.addWidget(scroll_area)
         layout.addLayout(assignment_controls)
         layout.addLayout(cleanup_controls)
@@ -242,10 +248,11 @@ class FovAssignmentView(QWidget):
         _clear_grid_layout(self._grid)
         self._cards.clear()
         for index, recording in enumerate(self._state.loaded_recordings):
-            recording_path = recording.display_path.expanduser()
+            recording_path = recording.recording.source_session_dir.expanduser()
             card = FovRecordingCard(
                 recording=recording,
                 fov_group_id=self._fov_groups.get(recording_path, ""),
+                note=self._fov_notes.get(recording_path, ""),
             )
             self._cards.append(card)
             self._grid.addWidget(card, index // 3, index % 3)
@@ -318,18 +325,24 @@ class FovAssignmentView(QWidget):
             self._status_label.setText(f"Could not load FOV CSV: {error}")
             return
         loaded_paths = {
-            recording.display_path.expanduser()
+            recording.recording.source_session_dir.expanduser()
             for recording in self._state.loaded_recordings
         }
         for recording_path in loaded_paths:
             self._fov_groups.pop(recording_path, None)
+            self._fov_notes.pop(recording_path, None)
         loaded_rows = {
             row.recording_path.expanduser(): row.fov_group_id
             for row in rows
             if row.recording_path.expanduser() in loaded_paths
         }
+        loaded_notes = {
+            row.recording_path.expanduser(): row.note
+            for row in rows
+            if row.recording_path.expanduser() in loaded_paths
+        }
         self._fov_groups.update(loaded_rows)
-        self._note_edit.setText(_shared_note(tuple(rows)))
+        self._fov_notes.update(loaded_notes)
         self.refresh()
         self._status_label.setText(
             f"Loaded {len(loaded_rows)} FOV assignments from {path}.",
@@ -345,11 +358,14 @@ class FovAssignmentView(QWidget):
         if len(recording_groups) == 0:
             self._status_label.setText("No FOV assignments to save.")
             return False
+        recording_notes = self._loaded_recording_notes(recording_groups)
         self._fov_groups.clear()
         self._fov_groups.update(recording_groups)
+        self._fov_notes.clear()
+        self._fov_notes.update(recording_notes)
         rows = make_manual_fov_group_rows(
             recording_groups,
-            note=self._note_edit.text(),
+            notes=recording_notes,
         )
         save_manual_fov_group_rows(rows, self.output_path())
         self._status_label.setText(f"Saved {len(rows)} FOV assignments.")
@@ -407,13 +423,26 @@ class FovAssignmentView(QWidget):
     def _loaded_recording_groups(self) -> dict[Path, str]:
         """Return FOV assignments for currently loaded recordings only."""
         loaded_paths = {
-            recording.display_path.expanduser()
+            recording.recording.source_session_dir.expanduser()
             for recording in self._state.loaded_recordings
         }
         return {
             recording_path: fov_group_id
             for recording_path, fov_group_id in self._fov_groups.items()
             if recording_path in loaded_paths
+        }
+
+    def _loaded_recording_notes(
+        self,
+        recording_groups: dict[Path, str],
+    ) -> dict[Path, str]:
+        """Return card notes for currently assigned recordings."""
+        notes = dict(self._fov_notes)
+        for card in self._cards:
+            notes[card.recording_path] = card.note()
+        return {
+            recording_path: notes.get(recording_path, "")
+            for recording_path in recording_groups
         }
 
 
@@ -425,15 +454,17 @@ class FovRecordingCard(QFrame):
         *,
         recording: LoadedNapariRecording,
         fov_group_id: str,
+        note: str,
     ) -> None:
         """Create a FOV-assignment card.
 
         Args:
             recording: Loaded recording represented by this card.
             fov_group_id: Existing FOV assignment, if any.
+            note: Existing row-specific FOV note, if any.
         """
         super().__init__()
-        self.recording_path = recording.display_path.expanduser()
+        self.recording_path = recording.recording.source_session_dir.expanduser()
         self._mean_image_layer = recording.mean_image_layer
         self._image_label = QLabel()
         self._image_label.setFixedSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
@@ -441,6 +472,9 @@ class FovRecordingCard(QFrame):
         self._fov_label = QLabel()
         self._path_label = QLabel(self.recording_path.name)
         self._path_label.setWordWrap(True)
+        self._note_edit = QLineEdit(note)
+        self._note_edit.setObjectName("fov_recording_note")
+        self._note_edit.setPlaceholderText("Optional note saved to this CSV row")
         self._select_button = QPushButton("Select")
         self._select_button.setCheckable(True)
         self._select_button.toggled.connect(self._sync_selection_style)
@@ -453,6 +487,8 @@ class FovRecordingCard(QFrame):
         layout.addWidget(self._image_label)
         layout.addWidget(self._path_label)
         layout.addWidget(self._fov_label)
+        layout.addWidget(QLabel("Note"))
+        layout.addWidget(self._note_edit)
         layout.addWidget(QLabel("Contrast"))
         layout.addWidget(self._contrast_slider)
         layout.addWidget(self._select_button)
@@ -473,6 +509,10 @@ class FovRecordingCard(QFrame):
     def set_fov_group_id(self, fov_group_id: str) -> None:
         """Set the visual FOV assignment label."""
         self._fov_label.setText(f"FOV: {fov_group_id}" if fov_group_id else "FOV: none")
+
+    def note(self) -> str:
+        """Return the row-specific note for this recording."""
+        return self._note_edit.text()
 
     def _refresh_image(self) -> None:
         """Refresh the card thumbnail using the current contrast slider."""
@@ -502,12 +542,6 @@ def _clear_grid_layout(layout: QGridLayout) -> None:
         widget = item.widget()
         if widget is not None:
             widget.setParent(None)
-
-
-def _shared_note(rows: tuple[object, ...]) -> str:
-    """Return the common loaded note when all rows share one note."""
-    notes = {getattr(row, "note", "") for row in rows}
-    return notes.pop() if len(notes) == 1 else ""
 
 
 def _selected_dialog_path(dialog: QFileDialog) -> Path | None:

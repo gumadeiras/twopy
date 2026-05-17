@@ -4,13 +4,13 @@ Inputs: small ROI masks and a tiny converted aligned movie.
 Outputs: saved ROI files and fluorescence traces with known expected values.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 from typing import cast
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy import (
     extract_roi_traces,
@@ -39,7 +39,7 @@ class RoiTest(unittest.TestCase):
         Inputs: two boolean ROI masks and labels.
         Outputs: a saved ROI file and loaded masks matching the source.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             roi_path = Path(temp_dir) / "rois.h5"
             masks = np.array(
                 [
@@ -61,7 +61,7 @@ class RoiTest(unittest.TestCase):
         Inputs: ROI HDF5 file whose ``masks`` dataset was rewritten as integers.
         Outputs: clear validation error before returning a ``RoiSet``.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             roi_path = Path(temp_dir) / "rois.h5"
             roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
             save_roi_set(roi_set, roi_path)
@@ -81,7 +81,7 @@ class RoiTest(unittest.TestCase):
         Inputs: two ROI masks over a three-frame converted movie.
         Outputs: a frame-by-ROI trace matrix for the requested frame range.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = self._write_recording(root)
             roi_set = make_roi_set(
@@ -125,7 +125,7 @@ class RoiTest(unittest.TestCase):
         Inputs: a converted movie and a ROI mask with a different shape.
         Outputs: a clear validation error.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._write_recording(Path(temp_dir))
             roi_set = make_roi_set(np.ones((1, 3, 2), dtype=bool))
 
@@ -138,7 +138,7 @@ class RoiTest(unittest.TestCase):
         Inputs: a converted movie and an empty trace frame range.
         Outputs: clear validation error before streaming movie chunks.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._write_recording(Path(temp_dir))
             roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
 
@@ -156,7 +156,7 @@ class RoiTest(unittest.TestCase):
         Inputs: an untyped-script-style ``median`` statistic request.
         Outputs: a clear validation error before trace extraction.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._write_recording(Path(temp_dir))
             roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
 

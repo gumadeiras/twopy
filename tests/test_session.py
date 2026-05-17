@@ -4,9 +4,10 @@ Inputs: temporary session folders built with the expected microscope file names.
 Outputs: assertions that discovery returns the right typed paths and errors.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
+
+from tests.tempdir import temporary_directory
 
 from twopy.session import discover_session_files
 
@@ -20,7 +21,7 @@ class DiscoverSessionFilesTest(unittest.TestCase):
         Inputs: a temporary session folder with all required files.
         Outputs: assertions that flexible and fixed filenames are discovered.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_required_session(session_dir)
             (session_dir / "savedAnalysis").mkdir()
@@ -46,7 +47,7 @@ class DiscoverSessionFilesTest(unittest.TestCase):
         Inputs: a temporary session folder without ``savedAnalysis``.
         Outputs: an assertion that the optional path is represented as ``None``.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_required_session(session_dir)
 
@@ -60,7 +61,7 @@ class DiscoverSessionFilesTest(unittest.TestCase):
         Inputs: a temporary session folder missing ``alignedMovie.mat``.
         Outputs: an assertion that the error names the missing file.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_required_session(session_dir)
             (session_dir / "alignedMovie.mat").unlink()
@@ -74,7 +75,7 @@ class DiscoverSessionFilesTest(unittest.TestCase):
         Inputs: a temporary session folder with two TIFF movies.
         Outputs: an assertion that discovery reports the ambiguity.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_required_session(session_dir)
             (session_dir / "second_movie.tif").touch()
@@ -89,7 +90,7 @@ class DiscoverSessionFilesTest(unittest.TestCase):
             macOS on some network and external volumes.
         Outputs: discovered raw movie and alignment paths ignore sidecars.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             session_dir = Path(temp_dir)
             self._write_required_session(session_dir)
             (session_dir / "._stimulus_name_changes_001.tif").touch()

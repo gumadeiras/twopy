@@ -7,11 +7,11 @@ The fixture is spatially and temporally cropped from the example recording so
 tests stay small while still exercising real movie values and metadata.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy import analyze_recording_responses, load_converted_recording, load_roi_set
 from twopy.analysis.persistence import load_analysis_outputs
@@ -56,7 +56,7 @@ class RealDataFixtureTest(unittest.TestCase):
             EpochFrameWindow(FrameWindow(1, 20, 40, "odor_1"), 2, "Odor"),
             EpochFrameWindow(FrameWindow(2, 40, 60, "gray_2"), 1, "Gray Interleave"),
         )
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             run = analyze_recording_responses(
                 FIXTURE_ROOT / "recording_data.h5",

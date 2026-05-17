@@ -5,12 +5,12 @@ Outputs: analysis objects plus persisted HDF5 and response CSV files.
 """
 
 import csv
-import tempfile
 import unittest
 from pathlib import Path
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy import (
     analyze_recording_responses,
@@ -33,7 +33,7 @@ class WorkflowTest(unittest.TestCase):
         windows.
         Outputs: dF/F, grouped responses, analysis HDF5, and response CSVs.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = self._write_converted_recording(root)
             roi_path = root / "rois.h5"
@@ -110,7 +110,7 @@ class WorkflowTest(unittest.TestCase):
         windows.
         Outputs: response objects in memory and no analysis files on disk.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = self._write_converted_recording(root)
             recording = load_converted_recording(recording_path)
@@ -148,7 +148,7 @@ class WorkflowTest(unittest.TestCase):
         Inputs: a recording whose gray-like epoch is not epoch one.
         Outputs: baseline windows and metadata select the named baseline epoch.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = self._write_converted_recording(
                 root,
@@ -193,7 +193,7 @@ class WorkflowTest(unittest.TestCase):
         explicit request for baseline epoch one.
         Outputs: baseline windows come from epoch one.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = self._write_converted_recording(
                 root,
@@ -238,7 +238,7 @@ class WorkflowTest(unittest.TestCase):
         Inputs: explicit epoch windows and an explicit baseline window.
         Outputs: dF/F metadata and trace range from the normal workflow.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = self._write_converted_recording(root)
             recording = load_converted_recording(recording_path)
@@ -281,7 +281,7 @@ class WorkflowTest(unittest.TestCase):
         Inputs: explicit epoch windows with a selected first stimulus epoch.
         Outputs: one baseline window spans that epoch and all later epochs.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = self._write_converted_recording(
                 root,

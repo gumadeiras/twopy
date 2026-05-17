@@ -6,7 +6,6 @@ Outputs: layer data sent to napari-shaped methods and saved ROI HDF5 files.
 
 import csv
 import sqlite3
-import tempfile
 import unittest
 import warnings
 from collections.abc import Callable
@@ -52,6 +51,7 @@ from qtpy.QtWidgets import (
     QTreeWidgetItem,
     QWidget,
 )
+from tests.tempdir import temporary_directory
 
 import twopy.napari.controls as napari_controls
 import twopy.napari.group_matching as group_matching
@@ -726,7 +726,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: none.
         Outputs: isolated state path in the test environment.
         """
-        self._state_temp_dir = tempfile.TemporaryDirectory()
+        self._state_temp_dir = temporary_directory()
         self._previous_state_file = environ.get("TWOPY_NAPARI_STATE_FILE")
         environ["TWOPY_NAPARI_STATE_FILE"] = str(
             Path(self._state_temp_dir.name) / "napari_state.json",
@@ -765,7 +765,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: tiny converted recording and fake viewer.
         Outputs: one zero-valued labels layer matching the movie frame shape.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
@@ -877,7 +877,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: tiny converted recording, ROI HDF5 file, and fake viewer.
         Outputs: fake napari layers with expected shapes.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             roi_path = root / "rois.h5"
@@ -931,7 +931,7 @@ class NapariAdapterTest(unittest.TestCase):
         updates on the movie dimension.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -978,7 +978,7 @@ class NapariAdapterTest(unittest.TestCase):
         real epoch names from converted stimulus parameters.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -1023,7 +1023,7 @@ class NapariAdapterTest(unittest.TestCase):
         unchanged, while seeking a loaded frame updates it.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -1067,7 +1067,7 @@ class NapariAdapterTest(unittest.TestCase):
         controller = TrialTimelineController(viewer)
         timeline = _two_window_timeline(frame_count=4)
 
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(
                     Path(temp_dir),
@@ -1141,7 +1141,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: one label image and a temporary output path.
         Outputs: saved ROI HDF5 file loaded by the normal ROI helper.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             output_path = Path(temp_dir) / "drawn_rois.h5"
 
             saved = save_napari_label_rois(
@@ -1162,7 +1162,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: response widget status explains that the layer shape is
         invalid before analysis runs.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -1197,7 +1197,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: edited Labels layer and a patched response calculation.
         Outputs: plot data shown in the widget without creating analysis HDF5.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
@@ -1225,7 +1225,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the live plot path requests the same two-second post window
         used when saved analysis outputs are loaded for plotting.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(
                 _write_converted_recording(
@@ -1278,7 +1278,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: converted recording without gray/grey/interleave epoch names.
         Outputs: the live plot path requests no post-epoch plotting context.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(
                 _write_converted_recording(
@@ -1324,7 +1324,7 @@ class NapariAdapterTest(unittest.TestCase):
         patched analysis computation.
         Outputs: live analysis receives the requested pre/post seconds.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             roi_set = make_roi_set(
@@ -1371,7 +1371,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: ROI HDF5 file written beside the recording without replacing
         the current in-memory plot preview.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             analysis_path = root / "analysis_outputs.h5"
             recording_path = _write_converted_recording(root)
@@ -1470,7 +1470,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: local cached recording with a source publish destination.
         Outputs: background sync copies ROI and analysis files to publish path.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
@@ -1543,7 +1543,7 @@ class NapariAdapterTest(unittest.TestCase):
         Labels pixels.
         Outputs: reloading restores the saved ROI labels from disk.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             save_analysis_outputs(
@@ -1577,7 +1577,7 @@ class NapariAdapterTest(unittest.TestCase):
         settings change.
         Outputs: the live response controller receives an update request.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
@@ -1602,7 +1602,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the live response controller receives one update request and
         processing controls preserve the selected normalization.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
@@ -1633,7 +1633,7 @@ class NapariAdapterTest(unittest.TestCase):
         change.
         Outputs: the live response controller receives an update request.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
@@ -2211,7 +2211,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the dF/F baseline dropdown lists those names and stores the
         selected epoch selector.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -2242,7 +2242,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: converted recording where the gray-like epoch is not epoch one.
         Outputs: the baseline dropdown selects that named epoch by default.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -2264,7 +2264,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: converted recording with an ``interleave`` baseline name.
         Outputs: the baseline dropdown selects that epoch by default.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -2287,7 +2287,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: normalization is disabled by default but points at the odor
         epoch when enabled.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -2463,7 +2463,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: parsed root, genotype, stimulus, recording time, and
         twopy-relative output paths.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             source_dir = (
                 root / "data" / "gh146" / "combo_stim" / "2025" / "12_21" / "17_42_22"
@@ -2500,7 +2500,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the plot receiver gets new plot data after an event.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             events = _FakeLabelEvents()
@@ -2551,7 +2551,7 @@ class NapariAdapterTest(unittest.TestCase):
         start another background computation.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             layer = _FakeLayer(
@@ -2592,7 +2592,7 @@ class NapariAdapterTest(unittest.TestCase):
         the latest plot data.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             layer = _FakeLayer(
@@ -2651,7 +2651,7 @@ class NapariAdapterTest(unittest.TestCase):
         the cache object captured by the active worker.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             layer = _FakeLayer(
@@ -2708,7 +2708,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: first run extracts both traces, second run extracts none, and
         the edited run extracts only ROI 2.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             cache = LiveResponseAnalysisCache()
@@ -2782,7 +2782,7 @@ class NapariAdapterTest(unittest.TestCase):
         of ROI 2.
         Outputs: ROI 1 is recomputed because its background excludes all ROIs.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             cache = LiveResponseAnalysisCache()
@@ -2868,7 +2868,7 @@ class NapariAdapterTest(unittest.TestCase):
         shutdown.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             events = _FakeLabelEvents()
@@ -2905,7 +2905,7 @@ class NapariAdapterTest(unittest.TestCase):
         during mouse movement without a committed ROI edit.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = load_converted_recording(_write_converted_recording(root))
             events = _FakeLabelEvents()
@@ -2938,7 +2938,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: fake viewer, control dock, and tiny converted recording folder.
         Outputs: mean image, movie preview, and ROI Labels layer.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             roi_save_file = root / "drawn_rois.h5"
             _write_converted_recording(root)
@@ -2969,14 +2969,14 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: both folders are loaded into the same viewer and list panel.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             first = root / "first"
             second = root / "second"
             first.mkdir()
             second.mkdir()
-            _write_converted_recording(first)
-            _write_converted_recording(second)
+            _write_converted_recording(first, source_session_dir=first)
+            _write_converted_recording(second, source_session_dir=second)
             viewer = _FakeViewer()
             control_docks = add_twopy_magicgui_controls(
                 viewer,
@@ -3011,14 +3011,14 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the CSV lists both recording paths and reloads both rows.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             first = root / "first"
             second = root / "second"
             first.mkdir()
             second.mkdir()
-            _write_converted_recording(first)
-            _write_converted_recording(second)
+            _write_converted_recording(first, source_session_dir=first)
+            _write_converted_recording(second, source_session_dir=second)
             csv_path = root / "loaded_recordings.csv"
             viewer = _FakeViewer()
             control_docks = add_twopy_magicgui_controls(
@@ -3046,8 +3046,11 @@ class NapariAdapterTest(unittest.TestCase):
             with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
                 rows = list(csv.DictReader(csv_file))
             self.assertEqual(
-                [row["recording_path"] for row in rows],
-                [str(first.resolve()), str(second.resolve())],
+                [Path(row["recording_path"]).resolve(strict=False) for row in rows],
+                [
+                    first.resolve(strict=False),
+                    second.resolve(strict=False),
+                ],
             )
             self.assertTrue(
                 rows[0]["recording_data_path"].endswith("recording_data.h5")
@@ -3080,6 +3083,134 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(len(fresh_viewer.images), 4)
             self.assertEqual(len(fresh_viewer.labels), 2)
 
+    def test_load_tab_saved_recording_list_uses_source_paths_for_cached_loads(
+        self,
+    ) -> None:
+        """Confirm saved loaded-recording CSVs do not expose cache paths.
+
+        Inputs: source recording with converted data already in the analysis
+            cache.
+        Outputs: the loaded list and saved CSV use the source session path while
+            the audit column still records the cached HDF5 path.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
+            csv_path = root / "loaded_recordings.csv"
+            _write_source_recording_shape(source_dir)
+            cache_dir.mkdir(parents=True)
+            cached_recording_path = _write_converted_recording(
+                cache_dir,
+                source_session_dir=source_dir,
+            )
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {root / 'cache'}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            viewer = _FakeViewer()
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                control_docks = add_twopy_magicgui_controls(
+                    viewer,
+                    roi_labels_layer=None,
+                    roi_save_file=Path("unused.h5"),
+                )
+                load_widget = _load_recording_widget(control_docks.load_widget)
+                load_widget(recording_folder=source_dir)
+                picker_text = str(load_widget.recording_folder.line_edit.value)
+                panel = cast(QWidget, control_docks.loaded_recordings_widget)
+                loaded_list = panel.findChild(QListWidget)
+                sidebar_buttons = {
+                    button.text(): button
+                    for button in cast(
+                        QWidget,
+                        control_docks.sidebar_widget,
+                    ).findChildren(QPushButton)
+                }
+
+                with patch.object(
+                    napari_controls,
+                    "_choose_loaded_recordings_csv_save_path",
+                    return_value=csv_path,
+                ):
+                    sidebar_buttons["Save loaded list"].click()
+            finally:
+                chdir(original_cwd)
+
+            assert loaded_list is not None
+            loaded_item = loaded_list.item(0)
+            assert loaded_item is not None
+            self.assertIn(source_dir.name, picker_text)
+            self.assertNotIn(str(root / "cache"), picker_text)
+            self.assertEqual(loaded_item.text(), str(source_dir))
+            with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+                rows = list(csv.DictReader(csv_file))
+            self.assertEqual(rows[0]["recording_path"], str(source_dir))
+            self.assertEqual(
+                Path(rows[0]["recording_data_path"]).resolve(strict=False),
+                cached_recording_path.resolve(strict=False),
+            )
+
+    def test_load_tab_warns_when_using_cache_for_unavailable_source(self) -> None:
+        """Confirm cache-only source loads are visible to the user.
+
+        Inputs: missing source recording folder with matching cached converted
+            files.
+        Outputs: loading succeeds from cache and shows one source-unavailable
+            warning dialog.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
+            cache_dir.mkdir(parents=True)
+            cached_recording_path = _write_converted_recording(
+                cache_dir,
+                source_session_dir=source_dir,
+            )
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {root / 'cache'}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            viewer = _FakeViewer()
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                control_docks = add_twopy_magicgui_controls(
+                    viewer,
+                    roi_labels_layer=None,
+                    roi_save_file=Path("unused.h5"),
+                )
+                load_widget = _load_recording_widget(control_docks.load_widget)
+                with patch.object(napari_controls.QMessageBox, "warning") as warning:
+                    result = load_widget(recording_folder=source_dir)
+            finally:
+                chdir(original_cwd)
+
+            self.assertIn(str(cached_recording_path.resolve()), str(result))
+            warning.assert_called_once()
+            _parent, title, message = warning.call_args.args
+            self.assertEqual(title, "Source path unavailable")
+            self.assertIn(str(source_dir), message)
+            self.assertIn(str(cached_recording_path.resolve()), message)
+            self.assertIn("will not sync back", message)
+
     def test_database_search_dialog_loads_selected_hierarchy_paths(self) -> None:
         """Confirm DB search selections resolve to configured source paths.
 
@@ -3088,7 +3219,7 @@ class NapariAdapterTest(unittest.TestCase):
         the loader callback.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
             data_dir = root / "data"
@@ -3168,7 +3299,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: Load Selected sends both source folders to the loader callback.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
             data_dir = root / "data"
@@ -3292,7 +3423,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: search clears the tree and reports the actual error.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             errors: list[Exception] = []
             dialog = ExperimentSearchDialog(
                 on_load_recording_paths=lambda paths: ExperimentLoadResult(
@@ -3336,7 +3467,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the valid source path is loaded and the bad row is reported.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
             data_dir = root / "data"
@@ -3447,14 +3578,14 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: selected recording controls layer visibility, and unload
         removes only that recording's layers.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             first = root / "first"
             second = root / "second"
             first.mkdir()
             second.mkdir()
-            _write_converted_recording(first)
-            _write_converted_recording(second)
+            _write_converted_recording(first, source_session_dir=first)
+            _write_converted_recording(second, source_session_dir=second)
             viewer = _FakeViewer()
             control_docks = add_twopy_magicgui_controls(
                 viewer,
@@ -3523,19 +3654,20 @@ class NapariAdapterTest(unittest.TestCase):
                 QLineEdit,
                 "roi_match_path",
             )
-            fov_note_edit = group_matching_widget.findChild(
-                QLineEdit,
-                "fov_group_note",
-            )
             assert fov_path_edit is not None
             assert match_path_edit is not None
-            assert fov_note_edit is not None
             fov_path_edit.setText(str(fov_path))
             match_path_edit.setText(str(match_path))
-            fov_note_edit.setText("same field")
             contrast_sliders = group_matching_widget.findChildren(QSlider)
             self.assertEqual(len(contrast_sliders), 2)
             contrast_sliders[0].setValue(80)
+            fov_note_edits = group_matching_widget.findChildren(
+                QLineEdit,
+                "fov_recording_note",
+            )
+            self.assertEqual(len(fov_note_edits), 2)
+            fov_note_edits[0].setText("first field edge")
+            fov_note_edits[1].setText("second field edge")
             match_buttons = {
                 button.text(): button
                 for button in group_matching_widget.findChildren(QPushButton)
@@ -3556,11 +3688,20 @@ class NapariAdapterTest(unittest.TestCase):
             match_buttons["Save FOV groups"].click()
             fov_rows = load_manual_fov_group_rows(fov_path)
             self.assertEqual(
-                {row.recording_path for row in fov_rows},
-                {first.resolve(), second.resolve()},
+                {row.recording_path.resolve(strict=False) for row in fov_rows},
+                {first.resolve(strict=False), second.resolve(strict=False)},
             )
             self.assertEqual({row.fov_group_id for row in fov_rows}, {"fov_1"})
-            self.assertEqual({row.note for row in fov_rows}, {"same field"})
+            self.assertEqual(
+                {
+                    row.recording_path.resolve(strict=False): row.note
+                    for row in fov_rows
+                },
+                {
+                    first.resolve(strict=False): "first field edge",
+                    second.resolve(strict=False): "second field edge",
+                },
+            )
             match_buttons["Clear selected FOV"].click()
             with patch.object(
                 group_matching.FovAssignmentView,
@@ -3568,6 +3709,14 @@ class NapariAdapterTest(unittest.TestCase):
                 return_value=fov_path,
             ):
                 match_buttons["Load FOV CSV"].click()
+            fov_note_edits = group_matching_widget.findChildren(
+                QLineEdit,
+                "fov_recording_note",
+            )
+            self.assertEqual(
+                {note_edit.text() for note_edit in fov_note_edits},
+                {"first field edge", "second field edge"},
+            )
             with patch.object(
                 group_matching.FovAssignmentView,
                 "_choose_fov_group_save_path",
@@ -3600,6 +3749,7 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertIn("Add new group", roi_buttons)
             self.assertIn("Overwrite selected group", roi_buttons)
             self.assertIn("Remove selected group", roi_buttons)
+            self.assertIn("Back to FOV assignment", roi_buttons)
             self.assertIn("Save and close", roi_buttons)
             roi_cards = group_matching_widget.findChildren(
                 QWidget,
@@ -3647,8 +3797,8 @@ class NapariAdapterTest(unittest.TestCase):
             match_rows = load_manual_roi_match_rows(match_path)
             self.assertEqual(len(match_rows), 2)
             self.assertEqual(
-                {row.recording_path for row in match_rows},
-                {first.resolve(), second.resolve()},
+                {row.recording_path.resolve(strict=False) for row in match_rows},
+                {first.resolve(strict=False), second.resolve(strict=False)},
             )
             self.assertEqual(
                 {row.roi_label for row in match_rows},
@@ -3698,7 +3848,10 @@ class NapariAdapterTest(unittest.TestCase):
             match_rows = load_manual_roi_match_rows(match_path)
             self.assertEqual(len(match_rows), 1)
             self.assertEqual(match_rows[0].group_cell_id, 1)
-            self.assertEqual(match_rows[0].recording_path, first.resolve())
+            self.assertEqual(
+                match_rows[0].recording_path.resolve(strict=False),
+                first.resolve(strict=False),
+            )
             self.assertEqual(match_rows[0].roi_label, "roi_0001")
             self.assertEqual(match_rows[0].note, "first only")
             self.assertEqual(roi_note_edit.text(), "")
@@ -3715,6 +3868,19 @@ class NapariAdapterTest(unittest.TestCase):
             )
             self.assertEqual(roi_note_edit.text(), "")
             self.assertEqual(group_table.rowCount(), 2)
+            panel_widget = cast(Any, group_matching_widget)
+            roi_buttons["Back to FOV assignment"].click()
+            self.assertIs(panel_widget._stack.currentWidget(), panel_widget._fov_view)
+            match_buttons = {
+                button.text(): button
+                for button in group_matching_widget.findChildren(QPushButton)
+            }
+            match_buttons["Save and continue to ROI assignment"].click()
+            self.assertIs(panel_widget._stack.currentWidget(), panel_widget._roi_view)
+            roi_buttons = {
+                button.text(): button
+                for button in group_matching_widget.findChildren(QPushButton)
+            }
             with patch.object(
                 group_matching_roi.RoiAssignmentView,
                 "_choose_existing_match_path",
@@ -3775,7 +3941,7 @@ class NapariAdapterTest(unittest.TestCase):
         first folder loaded again.
         Outputs: the existing row is selected and no extra layers are added.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             first = root / "first"
             second = root / "second"
@@ -3817,7 +3983,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: recording-folder widget displays ``default`` instead of the
         remembered path.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             write_last_recording_folder(root)
             viewer = _FakeViewer()
@@ -3837,7 +4003,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: converted output folder containing recording/movie/ROI files.
         Outputs: loaded layers and default ROI save path from that folder.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             roi_path = root / "rois.h5"
@@ -3867,10 +4033,10 @@ class NapariAdapterTest(unittest.TestCase):
         """Confirm loaded recording paths show the useful folder tail.
 
         Inputs: long converted output path selected through the load widget.
-        Outputs: picker text starts with ``...`` and ends with the recording
-            folder tail.
+        Outputs: picker text starts with ``...`` and ends with the source
+            recording folder tail.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = (
                 Path(temp_dir)
                 / "very_long_project_name"
@@ -3881,7 +4047,7 @@ class NapariAdapterTest(unittest.TestCase):
                 / "twopy"
             )
             root.mkdir(parents=True)
-            _write_converted_recording(root)
+            _write_converted_recording(root, source_session_dir=root.parent)
             viewer = _FakeViewer()
             control_docks = add_twopy_magicgui_controls(
                 viewer,
@@ -3894,7 +4060,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             display_text = str(load_widget.recording_folder.line_edit.value)
             self.assertTrue(display_text.startswith("..."))
-            self.assertTrue(display_text.endswith("/2025/10_03/twopy/"))
+            self.assertTrue(display_text.endswith("/stimulus/2025/10_03/"))
 
     def test_roi_file_change_reuses_resolved_recording_path(self) -> None:
         """Confirm ROI file changes work after the path field is shortened.
@@ -3904,7 +4070,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: changing the ROI file reloads without resolving the
             shortened display text as a filesystem path.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir) / ("long_" * 20) / "twopy"
             root.mkdir(parents=True)
             _write_converted_recording(root)
@@ -3937,7 +4103,7 @@ class NapariAdapterTest(unittest.TestCase):
             ``rois.h5``.
         Outputs: concrete paths for the viewer and controls.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             roi_path = root / "rois.h5"
@@ -3957,7 +4123,7 @@ class NapariAdapterTest(unittest.TestCase):
             ``FileEdit`` callback values.
         Outputs: concrete recording, movie, and ROI paths.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             roi_path = root / "rois.h5"
@@ -3978,7 +4144,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: source-shaped recording folder without twopy output.
         Outputs: converted paths plus a flag saying conversion ran.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             source_dir = Path(temp_dir)
             _write_source_recording_shape(source_dir)
 
@@ -4005,7 +4171,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: a source-shaped recording under configured ``data_path``.
         Outputs: converted paths under ``analysis_cache_dir``.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
@@ -4045,13 +4211,61 @@ class NapariAdapterTest(unittest.TestCase):
                 (expected_dir / "aligned_movie.h5").resolve(),
             )
 
+    def test_recording_path_resolution_uses_existing_cache_for_unavailable_source(
+        self,
+    ) -> None:
+        """Confirm unavailable source paths can reopen existing cached data.
+
+        Inputs: missing source recording folder under ``data_path`` and a
+            matching converted cache folder.
+        Outputs: resolved paths point at the existing cached HDF5 files.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_root = root / "cache"
+            cache_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
+            cache_dir.mkdir(parents=True)
+            _write_converted_recording(cache_dir, source_session_dir=source_dir)
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with patch(
+                    "twopy.napari.loading.convert_recording_to_twopy",
+                    side_effect=AssertionError("conversion should not run"),
+                ):
+                    resolved = resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
+
+            self.assertFalse(resolved.was_converted)
+            self.assertTrue(resolved.source_unavailable)
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (cache_dir / "recording_data.h5").resolve(),
+            )
+            self.assertEqual(
+                resolved.paths.movie_path,
+                (cache_dir / "aligned_movie.h5").resolve(),
+            )
+
     def test_recording_path_resolution_pulls_published_rois_into_cache(self) -> None:
         """Confirm cached source loads reuse published ROI files locally.
 
         Inputs: source recording, cache config, and a published ``rois.h5``.
         Outputs: resolved ROI file path points at the local cache copy.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
@@ -4092,7 +4306,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: a converted folder on a publish path with source metadata.
         Outputs: resolved paths point at the local analysis cache.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
@@ -4136,7 +4350,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: a newer selected converted file and an older local cache copy.
         Outputs: local cached recording data is refreshed from the selected file.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
@@ -4182,7 +4396,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: source-shaped recording folder with two real TIFF movies.
         Outputs: the source discovery error reaches the caller.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             source_dir = Path(temp_dir)
             _write_source_recording_shape(source_dir)
             (source_dir / "second_movie.tif").touch()
@@ -4197,7 +4411,7 @@ class NapariAdapterTest(unittest.TestCase):
             ``aligned_movie.h5``.
         Outputs: conversion called with that existing output directory.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             source_dir = Path(temp_dir)
             output_dir = source_dir / "twopy"
             _write_source_recording_shape(source_dir)
@@ -4229,7 +4443,7 @@ class NapariAdapterTest(unittest.TestCase):
             attribute and no ``aligned_movie.h5``.
         Outputs: conversion called with the selected converted output folder.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             source_dir = root / "source"
             output_dir = root / "converted"
@@ -4343,7 +4557,7 @@ class NapariAdapterTest(unittest.TestCase):
         grid and live response recomputation is requested.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -4380,7 +4594,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the ROIs-tab zoom control is initialized from metadata.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -4397,7 +4611,7 @@ class NapariAdapterTest(unittest.TestCase):
         estimated microns per pixel without calibration-method prose.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -4460,7 +4674,7 @@ class NapariAdapterTest(unittest.TestCase):
         plus the profile mapping.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording_path = _write_converted_recording(Path(temp_dir))
             with h5py.File(recording_path, "a") as h5_file:
                 h5_file["metadata"].attrs["configName"] = (
@@ -4494,7 +4708,7 @@ class NapariAdapterTest(unittest.TestCase):
         matching measured calibration group instead of falling back to mode 2.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording_path = _write_converted_recording(Path(temp_dir))
             with h5py.File(recording_path, "a") as h5_file:
                 h5_file["metadata"].attrs["configName"] = "128x128_1ms_6.5Hz"
@@ -4523,7 +4737,7 @@ class NapariAdapterTest(unittest.TestCase):
         until the user chooses a rig.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording_path = _write_converted_recording(Path(temp_dir))
             with h5py.File(recording_path, "a") as h5_file:
                 h5_file["metadata"].attrs["configName"] = "128x128_1ms_6.5Hz"
@@ -4573,7 +4787,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: response-watershed options become active and selectable.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -4670,7 +4884,7 @@ class NapariAdapterTest(unittest.TestCase):
         requested.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -5348,7 +5562,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: grouped responses persisted with ``response_window_auto`` true.
         Outputs: loaded plot data hydrates ``ResponseWindowOptions.auto`` true.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "analysis_outputs.h5"
             grouped = replace(
                 _tiny_grouped_responses(),
@@ -5378,7 +5592,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: persisted dF/F metadata with a non-default baseline epoch.
         Outputs: loaded plot data hydrates the dF/F Plot-tab selector.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "analysis_outputs.h5"
             save_analysis_outputs(
                 path,
@@ -5928,7 +6142,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the heatmap tab renders the map even though plot data is empty.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -5953,7 +6167,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: heatmap computation runs only on recording load.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -5982,7 +6196,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: the cached heatmap image updates without recomputing maps.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -6018,7 +6232,7 @@ class NapariAdapterTest(unittest.TestCase):
         only after the worker future finishes.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(Path(temp_dir)),
             )
@@ -6088,7 +6302,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: PDF and PNG files under a plot-specific export folder.
         """
         plot_data = _tiny_response_plot_data()
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             written = export_epoch_plots(
                 plot_data=plot_data,
                 output_dir=Path(temp_dir),
@@ -6124,7 +6338,7 @@ class NapariAdapterTest(unittest.TestCase):
             spatial_crop=SpatialCrop(0, 3, 0, 4, (3, 4), "test"),
             response_scale=1.0,
         )
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             written = export_response_heatmaps(
                 map_data=map_data,
                 output_dir=Path(temp_dir),
@@ -6177,7 +6391,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: local export files are copied to the source ``twopy`` folder.
         """
         _ = QApplication.instance() or QApplication([])
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
@@ -6285,7 +6499,7 @@ class NapariAdapterTest(unittest.TestCase):
         Outputs: labels cropped to the same display shape as the recording
         image, excluding ROI pixels outside the valid crop.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = _write_converted_recording(
                 root,
@@ -6322,7 +6536,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: temporary directory without converted recording files.
         Outputs: ``None`` so the launcher can open an empty viewer.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             original_cwd = Path.cwd()
             try:
                 chdir(temp_dir)
@@ -6339,7 +6553,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: temporary directory containing ``recording_data.h5``.
         Outputs: resolved path to that file.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = root / "recording_data.h5"
             recording_path.touch()
@@ -6361,7 +6575,7 @@ class NapariAdapterTest(unittest.TestCase):
         Inputs: temporary directory containing ``twopy/recording_data.h5``.
         Outputs: resolved path to the converted recording file.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording_path = root / "twopy" / "recording_data.h5"
             recording_path.parent.mkdir()

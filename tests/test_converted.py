@@ -4,13 +4,13 @@ Inputs: tiny synthetic ``recording_data.h5`` and ``aligned_movie.h5`` files.
 Outputs: assertions that analysis-facing objects load and validate them.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 from typing import cast
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy import load_converted_recording, recording_frame_rate_hz
 from twopy.converted import RecordingData
@@ -26,7 +26,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         photodiode, frame-count audit, mean image, and aligned movie.
         Outputs: assertions on loaded values and chunked movie reads.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             self._write_converted_recording(root)
 
@@ -97,7 +97,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         Inputs: a converted recording manifest without ``aligned_movie.h5``.
         Outputs: a clear validation error before analysis starts.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             self._write_recording_data_file(root / "recording_data.h5")
 
@@ -110,7 +110,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         Inputs: loaded converted movie and negative or empty frame ranges.
         Outputs: clear validation errors before HDF5 slicing.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             self._write_converted_recording(root)
             recording = load_converted_recording(root / "recording_data.h5")
@@ -126,7 +126,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         Inputs: converted files where ``imaging_res_pd`` is too short.
         Outputs: a clear validation error.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             self._write_aligned_movie_file(root / "aligned_movie.h5")
             self._write_recording_data_file(
@@ -143,7 +143,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         Inputs: a minimal loaded recording without ``acq.frameRate``.
         Outputs: a clear metadata error.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = self._recording_with_acquisition_metadata(root, {})
 
@@ -156,7 +156,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         Inputs: a minimal loaded recording with a nonnumeric frame rate.
         Outputs: a clear metadata error.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             recording = self._recording_with_acquisition_metadata(
                 root,
@@ -173,7 +173,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         non-dictionary value for one ``stimtype``.
         Outputs: clear validation error before stimulus helpers consume it.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             self._write_aligned_movie_file(root / "aligned_movie.h5")
             self._write_recording_data_file(
@@ -193,7 +193,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         Inputs: Converted recording where ``stimulus/data`` is integer-typed.
         Outputs: clear validation error before recording data is returned.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             self._write_aligned_movie_file(root / "aligned_movie.h5")
             self._write_recording_data_file(root / "recording_data.h5")
@@ -213,7 +213,7 @@ class ConvertedRecordingTest(unittest.TestCase):
         Inputs: Converted recording where ``mean_image`` is one-dimensional.
         Outputs: clear validation error before recording data is returned.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             self._write_aligned_movie_file(root / "aligned_movie.h5")
             self._write_recording_data_file(root / "recording_data.h5")

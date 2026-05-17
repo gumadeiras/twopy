@@ -4,10 +4,11 @@ Inputs: small CSV fixtures and measured microscope calibration rows.
 Outputs: direct, interpolated, and extrapolated microns-per-pixel estimates.
 """
 
-import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+
+from tests.tempdir import temporary_directory
 
 from twopy import (
     DEFAULT_PIXEL_CALIBRATION_PATH,
@@ -40,7 +41,7 @@ class PixelCalibrationTest(unittest.TestCase):
         Outputs: one ``PixelCalibrationRow`` with numeric mode, zoom, and pixel
         size.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "pixel_size.csv"
             path.write_text(
                 "rig,mode,scanner,zoom,pixel_size_um,measured_on\n"
@@ -163,7 +164,7 @@ class PixelCalibrationTest(unittest.TestCase):
         Inputs: a CSV with one repeated rig/mode/scanner/zoom key.
         Outputs: clear validation error naming the duplicate conflict.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "pixel_size.csv"
             path.write_text(
                 "rig,mode,scanner,zoom,pixel_size_um,measured_on\n"
@@ -181,7 +182,7 @@ class PixelCalibrationTest(unittest.TestCase):
         Inputs: a CSV row with a non-date ``measured_on`` value.
         Outputs: clear validation error naming the invalid date format.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "pixel_size.csv"
             path.write_text(
                 "rig,mode,scanner,zoom,pixel_size_um,measured_on\n"

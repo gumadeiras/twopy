@@ -4,12 +4,12 @@ Inputs: small converted-recording fixtures and synthetic saved-analysis objects.
 Outputs: ROI sets, dF/F comparisons, and validation errors.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy.analysis.trials import FrameWindow
 from twopy.conversion.types import FrameCountAudit
@@ -32,7 +32,7 @@ class ParityTest(unittest.TestCase):
         Inputs: a crop-shaped saved ROI label image and a recording crop.
         Outputs: full-frame ROI masks with labels sorted by saved ROI number.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(Path(temp_dir))
             saved = self._saved_analysis(
                 roi_mask=np.array([[1.0, 0.0], [2.0, 2.0]]),
@@ -88,7 +88,7 @@ class ParityTest(unittest.TestCase):
         Outputs: zero comparison error because constant fluorescence has a
         constant baseline.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             recording = self._recording(Path(temp_dir))
             saved = self._saved_analysis(
                 roi_mask=np.array([[1.0, 0.0], [2.0, 2.0]]),

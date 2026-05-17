@@ -4,12 +4,12 @@ Inputs: small temporary MATLAB files written through SciPy and h5py.
 Outputs: assertions that twopy reports variable names, shapes, and formats.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 
 import h5py
 import scipy.io
+from tests.tempdir import temporary_directory
 
 from twopy.matlab import MatlabHdf5Group, inspect_mat_file, load_mat_file
 
@@ -23,7 +23,7 @@ class InspectMatFileTest(unittest.TestCase):
         Inputs: a temporary SciPy-written MAT file.
         Outputs: assertions for file format, variable name, shape, and dtype.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             mat_path = Path(temp_dir) / "metadata.mat"
             scipy.io.savemat(mat_path, {"frame_times": [[0.0, 1.0, 2.0]]})
 
@@ -41,7 +41,7 @@ class InspectMatFileTest(unittest.TestCase):
         Inputs: a temporary HDF5 file with a dataset shaped like movie data.
         Outputs: assertions for HDF5 format, shape, dtype, and dataset type.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             mat_path = Path(temp_dir) / "alignedMovie.mat"
             with h5py.File(mat_path, "w") as mat_file:
                 mat_file.create_dataset(
@@ -62,7 +62,7 @@ class InspectMatFileTest(unittest.TestCase):
         Inputs: a temporary SciPy-written MAT file.
         Outputs: an assertion that only the requested variable is returned.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             mat_path = Path(temp_dir) / "metadata.mat"
             scipy.io.savemat(mat_path, {"frame_times": [[0.0]], "other": [[1.0]]})
 
@@ -76,7 +76,7 @@ class InspectMatFileTest(unittest.TestCase):
         Inputs: a temporary HDF5 MAT-like file with one dataset and one group.
         Outputs: assertions that dataset and group handling stay explicit.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             mat_path = Path(temp_dir) / "alignedMovie.mat"
             with h5py.File(mat_path, "w") as mat_file:
                 mat_file.create_dataset("aligned_movie", data=[[1, 2, 3]])

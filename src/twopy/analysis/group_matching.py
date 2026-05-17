@@ -91,13 +91,15 @@ def make_manual_fov_group_rows(
     recording_groups: Mapping[Path, str],
     *,
     note: str = "",
+    notes: Mapping[Path, str] | None = None,
 ) -> tuple[ManualFovGroupRow, ...]:
     """Create validated FOV-group rows from recording assignments.
 
     Args:
         recording_groups: Mapping from recording path to non-empty FOV group
             id.
-        note: Optional free-text note stored on each row.
+        note: Optional fallback free-text note stored on each row.
+        notes: Optional per-recording free-text notes stored on matching rows.
 
     Returns:
         Tuple of FOV group rows sorted by recording path.
@@ -113,7 +115,7 @@ def make_manual_fov_group_rows(
         ManualFovGroupRow(
             fov_group_id=_validate_fov_group_id(fov_group_id),
             recording_path=_validate_recording_path(recording_path),
-            note=note,
+            note=notes.get(recording_path, note) if notes is not None else note,
         )
         for recording_path, fov_group_id in sorted(
             recording_groups.items(),

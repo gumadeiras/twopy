@@ -5,9 +5,10 @@ Outputs: assertions that table discovery and filtering behave predictably.
 """
 
 import sqlite3
-import tempfile
 import unittest
 from pathlib import Path
+
+from tests.tempdir import temporary_directory
 
 from twopy.config import TwopyConfig
 from twopy.database import (
@@ -33,7 +34,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Inputs: a temporary database directory with ``experimentLog.db``.
         Outputs: an assertion that the catalog reports that DB file.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             database_dir = Path(temp_dir)
             self._write_experiment_log(database_dir / "experimentLog.db")
             (database_dir / "._experimentLog.db").write_text("resource fork")
@@ -48,7 +49,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Inputs: a temporary experiment log table with two rows.
         Outputs: an assertion that exact and substring filters find one row.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             database_dir = Path(temp_dir)
             self._write_experiment_log(database_dir / "experimentLog.db")
 
@@ -68,7 +69,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Inputs: a temporary experiment log table.
         Outputs: an assertion that search text matches the stimulus column.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             database_dir = Path(temp_dir)
             self._write_experiment_log(database_dir / "experimentLog.db")
 
@@ -83,7 +84,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Inputs: a temporary experiment log table and an unknown column filter.
         Outputs: an assertion that the error names the missing column.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             database_dir = Path(temp_dir)
             self._write_experiment_log(database_dir / "experimentLog.db")
 
@@ -100,7 +101,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Inputs: a temporary DB with Clark-lab-style stimulus and fly tables.
         Outputs: an assertion that the returned experiment includes fly metadata.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             database_dir = Path(temp_dir)
             self._write_clark_style_log(database_dir / "experimentLog.db")
 
@@ -123,7 +124,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Inputs: a temporary Clark-lab-style DB row.
         Outputs: an assertion that date, stimulus, hemisphere, and person match.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             database_dir = Path(temp_dir)
             self._write_clark_style_log(database_dir / "experimentLog.db")
 
@@ -152,7 +153,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Outputs: date substring filters include matching rows and exclude
         non-matching rows.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             database_dir = Path(temp_dir)
             self._write_clark_style_log(database_dir / "experimentLog.db")
 
@@ -175,7 +176,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Outputs: each ``YYYY<separator>MM<separator>DD`` variant finds the same
         recording as the canonical ``YYYY-MM-DD`` filter.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
             data_dir = root / "data"
@@ -216,7 +217,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Outputs: user, cell type, sensor, stimulus, date, and time nodes that
         all retain the experiments beneath them.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
             data_dir = root / "data"
@@ -269,7 +270,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Outputs: the search tree includes the later LN6 result instead of
         silently stopping at the first 1000 rows.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
             data_dir = root / "data"
@@ -301,7 +302,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Inputs: a temporary Clark-lab-style DB and month 13.
         Outputs: an assertion that range validation names the month filter.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             database_dir = Path(temp_dir)
             self._write_clark_style_log(database_dir / "experimentLog.db")
 
@@ -315,7 +316,7 @@ class DatabaseQueryTest(unittest.TestCase):
         Outputs: assertions that querying through a cache finds the experiment
         and writes a manifest.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
             cache_dir = root / "cache"

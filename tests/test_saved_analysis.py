@@ -4,12 +4,12 @@ Inputs: tiny HDF5-backed MATLAB-style ``lastRoi`` files.
 Outputs: arrays used by parity checks against twopy analysis.
 """
 
-import tempfile
 import unittest
 from pathlib import Path
 
 import h5py
 import numpy as np
+from tests.tempdir import temporary_directory
 
 from twopy.parity import load_saved_analysis_last_roi
 
@@ -24,7 +24,7 @@ class SavedAnalysisTest(unittest.TestCase):
         and one referenced ROI trace matrix.
         Outputs: typed arrays with traces shaped frame-by-ROI.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "saved.mat"
             self._write_saved_analysis(path)
 
