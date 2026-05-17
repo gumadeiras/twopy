@@ -609,7 +609,7 @@ def draw_response_heatmap(
         vmax=response_limit,
     )
     colorbar = ax.figure.colorbar(heatmap, ax=ax, fraction=0.046, pad=0.04)
-    colorbar.set_ticks((-1.0, 0.0, 1.0))
+    colorbar.set_ticks((-response_limit, 0.0, response_limit))
     colorbar.set_ticklabels(("-", "0", "+"))
     colorbar.ax.tick_params(labelsize=6)
     ax.set_xlim(-0.5, mean_image.shape[1] - 0.5)

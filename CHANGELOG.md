@@ -4,7 +4,7 @@
 
 ### Features
 
-- Added a Load-tab Save loaded list action that exports the current loaded recordings to CSV, and made Load manually accept those CSV recording lists.
+- Added a Load-tab Save loaded list action that exports the current loaded recordings to CSV, plus a separate Load CSV list action for reopening those recording lists.
 - Allowed napari manual loading and database search loading to select multiple recording folders or result rows in one action.
 - Added a Load-tab button that opens a Group Matching window, plus core CSV helpers for manually saving FOV grouping and cross-recording ROI match decisions.
 - Added movie-level response heatmaps to the napari response dock, independent of ROI existence, with one signed inhibition-to-activation map per stimulus epoch.

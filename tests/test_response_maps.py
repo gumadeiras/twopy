@@ -7,6 +7,7 @@ Outputs: foreground-masked dF/F response maps for pixel and window modes.
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import h5py
 import numpy as np
@@ -143,6 +144,37 @@ class ResponseMapsTest(unittest.TestCase):
                     window_stride_pixels=4,
                 ),
             )
+
+    def test_response_maps_stream_windows_without_full_movie_read(self) -> None:
+        """Confirm heatmaps do not load the full aligned movie at once.
+
+        Inputs: one small movie and an epoch window that can be read in bounded
+        frame batches.
+        Outputs: response-map computation succeeds without calling the
+        ``read_frames`` escape hatch.
+        """
+        movie = np.full((4, 5, 5), 10.0, dtype=np.float64)
+        movie[1:3, 2:4, 2:4] = 15.0
+        windows = (EpochFrameWindow(FrameWindow(0, 1, 3, "epoch_1:A"), 1, "A"),)
+
+        with tempfile.TemporaryDirectory() as directory:
+            recording = _recording(Path(directory), movie)
+            with patch.object(
+                ConvertedMovie,
+                "read_frames",
+                side_effect=AssertionError("full movie read"),
+            ):
+                maps = compute_recording_response_maps(
+                    recording,
+                    epoch_windows=windows,
+                    options=ResponseMapOptions(
+                        pixel_smoothing_sigma=0.0,
+                        foreground_percentile=0.0,
+                    ),
+                )
+
+        self.assertEqual(len(maps.epochs), 1)
+        np.testing.assert_allclose(maps.epochs[0].response_values[2:4, 2:4], 1.0)
 
     def test_response_map_data_round_trips_hdf5(self) -> None:
         """Confirm response heatmap files preserve maps and audit metadata.

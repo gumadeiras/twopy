@@ -332,6 +332,7 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         load_recording=load_recording,
         on_search_database=lambda: _show_database_search_dialog(state),
         on_load_manually=lambda: _load_manual_recordings_from_dialog(state),
+        on_load_csv_list=lambda: _load_recording_csvs_from_dialog(state),
     )
 
 
@@ -388,6 +389,7 @@ class LoadRecordingPanel(QWidget):
         load_recording: object,
         on_search_database: Callable[[], None],
         on_load_manually: Callable[[], None],
+        on_load_csv_list: Callable[[], None],
     ) -> None:
         """Create a compact Load Recording panel.
 
@@ -397,6 +399,7 @@ class LoadRecordingPanel(QWidget):
             on_search_database: Callback that opens the database-search window.
             on_load_manually: Callback that opens the manual multi-folder
                 selection dialog.
+            on_load_csv_list: Callback that opens the recording-list CSV picker.
 
         Returns:
             None.
@@ -417,6 +420,9 @@ class LoadRecordingPanel(QWidget):
         load_manually_button = QPushButton("Load manually")
         load_manually_button.clicked.connect(lambda _checked=False: on_load_manually())
         layout.addWidget(load_manually_button)
+        load_csv_button = QPushButton("Load CSV list")
+        load_csv_button.clicked.connect(lambda _checked=False: on_load_csv_list())
+        layout.addWidget(load_csv_button)
         self.setLayout(layout)
 
 
@@ -500,7 +506,7 @@ def _load_recording_path(
 
 
 def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
-    """Load all folders or recording-list CSVs selected by the manual chooser.
+    """Load all recording folders selected by the manual chooser.
 
     Args:
         state: Mutable napari control state.
@@ -509,6 +515,27 @@ def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
         None.
     """
     selected_paths = _choose_recording_paths(state)
+    _load_selected_recording_paths(state, selected_paths)
+
+
+def _load_recording_csvs_from_dialog(state: NapariControlState) -> None:
+    """Load recordings from selected recording-list CSV files.
+
+    Args:
+        state: Mutable napari control state.
+
+    Returns:
+        None.
+    """
+    selected_paths = _choose_recording_csv_paths(state)
+    _load_selected_recording_paths(state, selected_paths)
+
+
+def _load_selected_recording_paths(
+    state: NapariControlState,
+    selected_paths: tuple[Path, ...],
+) -> None:
+    """Expand selected folders or CSVs, then load their recordings."""
     if len(selected_paths) == 0:
         return
     try:
@@ -526,30 +553,41 @@ def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
 
 
 def _choose_recording_paths(state: NapariControlState) -> tuple[Path, ...]:
-    """Return manually selected recording folders or CSV files.
+    """Return manually selected recording folders.
 
     Args:
         state: Mutable napari control state used to choose the starting folder.
 
     Returns:
-        Selected folder or CSV paths, or an empty tuple when the user cancels.
+        Selected folder paths, or an empty tuple when the user cancels.
 
-    The non-native dialog exposes the tree/list views, so twopy can let
-    scientists select several source or converted folders or a reusable CSV
-    recording list in one pass.
+    Directory loading keeps a standard file dialog with normal navigation and
+    places/sidebar affordances. The CSV path stays separate because Qt's normal
+    dialog API does not support selecting directories and files in one clean mode.
     """
     dialog = QFileDialog()
-    dialog.setWindowTitle("Choose recordings or CSV lists")
+    dialog.setWindowTitle("Choose recording folders")
     start_path = _recording_picker_start_path(state)
     if start_path is not None:
         dialog.setDirectory(start_path)
-    dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
-    dialog.setNameFilter("Recording folders or CSV files (*.csv);;All files (*)")
+    dialog.setFileMode(QFileDialog.FileMode.Directory)
+    dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
     dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
     _allow_extended_dialog_selection(dialog)
     if dialog.exec() != QFileDialog.DialogCode.Accepted:
         return ()
     return tuple(Path(path).expanduser() for path in dialog.selectedFiles())
+
+
+def _choose_recording_csv_paths(state: NapariControlState) -> tuple[Path, ...]:
+    """Return selected loaded-recordings CSV files."""
+    selected_paths, _selected_filter = QFileDialog.getOpenFileNames(
+        None,
+        "Choose loaded-recordings CSV",
+        _recording_picker_start_path(state) or "",
+        "CSV files (*.csv);;All files (*)",
+    )
+    return tuple(Path(path).expanduser() for path in selected_paths)
 
 
 def _recording_paths_from_manual_selections(

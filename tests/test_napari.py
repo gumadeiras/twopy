@@ -126,6 +126,7 @@ from twopy.napari.plotting.data import (
 from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
 from twopy.napari.plotting.docks import create_response_plot_widget
 from twopy.napari.plotting.export import (
+    draw_response_heatmap,
     draw_roi_contours,
     export_epoch_plots,
     export_response_heatmaps,
@@ -812,7 +813,7 @@ class NapariAdapterTest(unittest.TestCase):
             ]
             self.assertEqual(
                 load_buttons,
-                ["Search database", "Load manually"],
+                ["Search database", "Load manually", "Load CSV list"],
             )
             sidebar_tabs = cast(QTabWidget, opened.twopy_sidebar_widget)
             self.assertIs(sidebar_tabs, opened.response_options_widget)
@@ -843,6 +844,7 @@ class NapariAdapterTest(unittest.TestCase):
             }
             self.assertIn("Search database", options_buttons)
             self.assertIn("Load manually", options_buttons)
+            self.assertIn("Load CSV list", options_buttons)
             self.assertIn("Open Group Matching", options_buttons)
             self.assertIn("Save loaded list", options_buttons)
             self.assertIn("Save ROIs + analysis", options_buttons)
@@ -3005,7 +3007,7 @@ class NapariAdapterTest(unittest.TestCase):
         """Confirm a saved loaded-recordings CSV can be loaded manually.
 
         Inputs: two converted folders loaded into one viewer, then exported as
-        a Load-tab CSV and selected from a fresh Load manually dialog.
+        a Load-tab CSV and selected from a fresh Load CSV list dialog.
         Outputs: the CSV lists both recording paths and reloads both rows.
         """
         _ = QApplication.instance() or QApplication([])
@@ -3067,10 +3069,10 @@ class NapariAdapterTest(unittest.TestCase):
 
             with patch.object(
                 napari_controls,
-                "_choose_recording_paths",
+                "_choose_recording_csv_paths",
                 return_value=(csv_path,),
             ):
-                load_buttons["Load manually"].click()
+                load_buttons["Load CSV list"].click()
 
             assert fresh_loaded_list is not None
             self.assertEqual(fresh_loaded_list.count(), 2)
@@ -6015,6 +6017,37 @@ class NapariAdapterTest(unittest.TestCase):
                 {"response_heatmaps"},
             )
             self.assertTrue(all(path.is_file() for path in written))
+
+    def test_response_heatmap_export_colorbar_ticks_match_display_limit(self) -> None:
+        """Confirm heatmap export labels the actual robust response limits.
+
+        Inputs: one heatmap whose robust display limit is below one.
+        Outputs: colorbar ticks are placed at ``-limit``, ``0``, and ``+limit``.
+        """
+        map_data = ResponseMapData(
+            mean_image=np.ones((2, 2), dtype=np.float64),
+            epochs=(
+                EpochResponseMap(
+                    epoch_name="Odor",
+                    epoch_number=1,
+                    response_values=np.array(
+                        [[-0.2, 0.0], [0.2, 0.0]],
+                        dtype=np.float64,
+                    ),
+                    trial_count=1,
+                ),
+            ),
+            options=ResponseMapOptions(),
+            spatial_crop=SpatialCrop(0, 2, 0, 2, (2, 2), "test"),
+            response_scale=1.0,
+        )
+        fig = Figure()
+        ax = fig.add_subplot(111)
+
+        draw_response_heatmap(ax, map_data=map_data, epoch=map_data.epochs[0])
+
+        self.assertEqual(len(fig.axes), 2)
+        np.testing.assert_allclose(fig.axes[1].get_yticks(), (-0.2, 0.0, 0.2))
 
     def test_response_export_tab_syncs_cached_exports_to_publish_root(self) -> None:
         """Confirm Export-tab files are published when analysis caching is on.

@@ -29,7 +29,6 @@ that divisor in ``response_scale`` so users can audit or recover the original
 dF/F units. Display color limits are handled separately by napari plotting code.
 """
 
-import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -184,15 +183,15 @@ def compute_recording_response_maps(
         msg = "Response-map foreground mask is empty."
         raise ValueError(msg)
 
-    movie = recording.movie.read_frames(spatial_crop=crop).astype(
-        np.float64,
-        copy=False,
-    )
-    movie = _masked_movie(movie, recording.motion_artifact_mask, foreground_mask)
     frame_rate_hz = recording_frame_rate_hz(recording)
     baseline_frames = max(
         1,
         int(round(resolved_options.baseline_sample_seconds * frame_rate_hz)),
+    )
+    _validate_epoch_window_frames(
+        resolved_windows,
+        frame_count=recording.movie.shape[0],
+        baseline_frames=baseline_frames,
     )
 
     trial_maps_by_epoch: dict[tuple[int, str], list[npt.NDArray[np.float64]]] = {}
@@ -204,7 +203,9 @@ def compute_recording_response_maps(
             trial_maps_by_epoch[key] = []
         trial_maps_by_epoch[key].append(
             _trial_response_map(
-                movie,
+                recording,
+                crop,
+                foreground_mask,
                 epoch_window,
                 baseline_frames=baseline_frames,
                 denominator_floor=threshold,
@@ -456,21 +457,38 @@ def _foreground_threshold(
     )
 
 
-def _masked_movie(
-    movie: npt.NDArray[np.float64],
-    motion_mask: npt.NDArray[np.bool_],
-    foreground_mask: npt.NDArray[np.bool_],
-) -> npt.NDArray[np.float64]:
-    """Return a movie copy with motion frames and background pixels masked."""
-    masked = np.where(foreground_mask[None, :, :], movie, np.nan)
-    if np.any(motion_mask):
-        masked = masked.copy()
-        masked[motion_mask, :, :] = np.nan
-    return masked
+def _validate_epoch_window_frames(
+    epoch_windows: Sequence[EpochFrameWindow],
+    *,
+    frame_count: int,
+    baseline_frames: int,
+) -> None:
+    """Validate response-map frame windows before streaming movie data."""
+    for epoch_window in epoch_windows:
+        start = epoch_window.window.start_frame
+        stop = epoch_window.window.stop_frame
+        baseline_start = start - baseline_frames
+        if baseline_start < 0:
+            msg = (
+                f"Epoch window {epoch_window.window.index} starts at frame {start}, "
+                f"leaving fewer than {baseline_frames} baseline frames."
+            )
+            raise ValueError(msg)
+        if stop <= start:
+            msg = f"Epoch window {epoch_window.window.index} has no response frames."
+            raise ValueError(msg)
+        if stop > frame_count:
+            msg = (
+                f"Epoch window {epoch_window.window.index} stops at frame {stop}, "
+                f"beyond movie frame count {frame_count}."
+            )
+            raise ValueError(msg)
 
 
 def _trial_response_map(
-    movie: npt.NDArray[np.float64],
+    recording: RecordingData,
+    crop: SpatialCrop,
+    foreground_mask: npt.NDArray[np.bool_],
     epoch_window: EpochFrameWindow,
     *,
     baseline_frames: int,
@@ -487,19 +505,20 @@ def _trial_response_map(
     """
     start = epoch_window.window.start_frame
     stop = epoch_window.window.stop_frame
-    baseline_start = start - baseline_frames
-    if baseline_start < 0:
-        msg = (
-            f"Epoch window {epoch_window.window.index} starts at frame {start}, "
-            f"leaving fewer than {baseline_frames} baseline frames."
-        )
-        raise ValueError(msg)
-    if stop <= start:
-        msg = f"Epoch window {epoch_window.window.index} has no response frames."
-        raise ValueError(msg)
-
-    baseline = _nanmean_image(movie[baseline_start:start])
-    response = _nanmean_image(movie[start:stop])
+    baseline = _mean_masked_frames(
+        recording,
+        crop,
+        start=start - baseline_frames,
+        stop=start,
+        foreground_mask=foreground_mask,
+    )
+    response = _mean_masked_frames(
+        recording,
+        crop,
+        start=start,
+        stop=stop,
+        foreground_mask=foreground_mask,
+    )
     if options.mode == "pixel":
         values = _delta_f_over_f(response, baseline, denominator_floor)
         if options.pixel_smoothing_sigma > 0:
@@ -514,11 +533,46 @@ def _trial_response_map(
     )
 
 
-def _nanmean_image(block: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    """Return a frame mean image without emitting all-NaN slice warnings."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        return np.nanmean(block, axis=0)
+def _mean_masked_frames(
+    recording: RecordingData,
+    crop: SpatialCrop,
+    *,
+    start: int,
+    stop: int,
+    foreground_mask: npt.NDArray[np.bool_],
+) -> npt.NDArray[np.float64]:
+    """Return a frame mean image while streaming bounded movie chunks.
+
+    Motion-artifact frames do not contribute. Background pixels outside the
+    foreground mask remain NaN so downstream dF/F and smoothing treat them as
+    missing data rather than zero response.
+    """
+    sums = np.zeros(crop.shape, dtype=np.float64)
+    counts = np.zeros(crop.shape, dtype=np.int64)
+    for chunk_start, chunk_stop, frames in recording.movie.iter_frame_batches(
+        start=start,
+        stop=stop,
+        spatial_crop=crop,
+    ):
+        motion_mask = recording.motion_artifact_mask[chunk_start:chunk_stop]
+        if motion_mask.shape[0] != frames.shape[0]:
+            msg = (
+                "Motion-artifact mask length does not match movie frame count "
+                f"for frames [{chunk_start}, {chunk_stop})."
+            )
+            raise ValueError(msg)
+        valid_frames = frames[~motion_mask]
+        if valid_frames.size == 0:
+            continue
+        finite = np.isfinite(valid_frames) & foreground_mask[None, :, :]
+        sums += np.sum(np.where(finite, valid_frames, 0.0), axis=0)
+        counts += np.sum(finite, axis=0)
+    return np.divide(
+        sums,
+        counts,
+        out=np.full(crop.shape, np.nan, dtype=np.float64),
+        where=counts > 0,
+    )
 
 
 def _delta_f_over_f(
@@ -612,9 +666,18 @@ def _epoch_response_map(
     trial_maps: tuple[npt.NDArray[np.float64], ...],
 ) -> EpochResponseMap:
     """Average trial maps for one epoch."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        response = np.nanmean(np.stack(trial_maps), axis=0)
+    sums = np.zeros(trial_maps[0].shape, dtype=np.float64)
+    counts = np.zeros(trial_maps[0].shape, dtype=np.int64)
+    for trial_map in trial_maps:
+        finite = np.isfinite(trial_map)
+        sums += np.where(finite, trial_map, 0.0)
+        counts += finite
+    response = np.divide(
+        sums,
+        counts,
+        out=np.full_like(sums, np.nan),
+        where=counts > 0,
+    )
     return EpochResponseMap(
         epoch_name=epoch_name,
         epoch_number=epoch_number,
@@ -632,14 +695,14 @@ def _normalize_epoch_response_maps(
     maps stay in a fixed ``[-1, 1]`` audit space, while ``response_scale`` keeps
     the original dF/F magnitude that produced a persisted value of 1.
     """
-    chunks: list[npt.NDArray[np.float64]] = []
+    response_scale = 0.0
     for epoch in epochs:
         values = np.abs(epoch.response_values[np.isfinite(epoch.response_values)])
         if values.size > 0:
-            chunks.append(values)
-    if len(chunks) == 0:
+            response_scale = max(response_scale, float(np.max(values)))
+    if response_scale == 0.0:
         return epochs, 1.0
-    response_scale = max(float(np.max(np.concatenate(chunks))), 1e-6)
+    response_scale = max(response_scale, 1e-6)
     return (
         tuple(
             EpochResponseMap(
