@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.9 - 2026-05-17
+
 ### Features
 
 - Added a Load-tab Save loaded list action that exports the current loaded recordings to CSV, plus a separate Load CSV list action for reopening those recording lists.
