@@ -21,8 +21,11 @@ from qtpy.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
     QSplitter,
@@ -42,9 +45,22 @@ from twopy.database.search import (
     recording_path_for_database_experiment,
 )
 from twopy.database.types import DatabaseExperiment
+from twopy.napari.database_favorites import (
+    DEFAULT_DATABASE_FAVORITES_PATH,
+    ExperimentSearchFavorite,
+    database_search_favorite_filters_are_empty,
+    database_search_favorite_tooltip,
+    default_database_search_favorite_name,
+    load_database_search_favorites,
+    normalized_database_search_favorite,
+    normalized_database_search_filters,
+    replace_database_search_favorite,
+    save_database_search_favorites,
+)
 from twopy.napari.errors import exception_message_for_user
 
 __all__ = [
+    "ExperimentFavoriteErrorDialog",
     "ExperimentLoadErrorDialog",
     "ExperimentLoadFailure",
     "ExperimentLoadResult",
@@ -54,7 +70,36 @@ __all__ = [
 
 COUNT_COLUMN_WIDTH = 72
 FILTER_PANEL_WIDTH = 340
+FAVORITE_NAME_DIALOG_WIDTH = FILTER_PANEL_WIDTH * 3
 TEXT_FIELD_MARGIN_PX = 6
+PRIMARY_ACTION_BUTTON_STYLE = (
+    "QPushButton {"
+    "background-color: #2d7dd2;"
+    "color: white;"
+    "border: 1px solid #1f5f9f;"
+    "border-radius: 4px;"
+    "padding: 4px 10px;"
+    "}"
+    "QPushButton:disabled {"
+    "background-color: #8fb5d8;"
+    "color: #edf4fb;"
+    "border-color: #7aa6cc;"
+    "}"
+)
+SECONDARY_ACTION_BUTTON_STYLE = (
+    "QPushButton {"
+    "background-color: #f2f2f2;"
+    "color: #202020;"
+    "border: 1px solid #a8a8a8;"
+    "border-radius: 4px;"
+    "padding: 4px 10px;"
+    "}"
+    "QPushButton:disabled {"
+    "background-color: #eeeeee;"
+    "color: #8a8a8a;"
+    "border-color: #c8c8c8;"
+    "}"
+)
 
 FILTER_HINTS = {
     "user": "gustavo",
@@ -116,19 +161,29 @@ class ExperimentSearchDialog(QDialog):
         *,
         on_load_recording_paths: Callable[[tuple[Path, ...]], ExperimentLoadResult],
         config_path: Path = DEFAULT_CONFIG_PATH,
+        favorites_path: Path = DEFAULT_DATABASE_FAVORITES_PATH,
         parent: QWidget | None = None,
     ) -> None:
         """Create the database experiment search dialog."""
         super().__init__(parent)
         self._on_load_recording_paths = on_load_recording_paths
         self._config_path = config_path
+        self._favorites_path = favorites_path
         self._config: TwopyConfig | None = None
+        self._favorites = self._load_favorites()
 
         self._user_filter = self._filter_line_edit(FILTER_HINTS["user"])
         self._cell_type_filter = self._filter_line_edit(FILTER_HINTS["cell_type"])
         self._sensor_filter = self._filter_line_edit(FILTER_HINTS["sensor"])
         self._stimulus_filter = self._filter_line_edit(FILTER_HINTS["stimulus"])
         self._date_filter = self._filter_line_edit(FILTER_HINTS["date"])
+        self._favorites_list = QListWidget()
+        self._favorites_list.itemDoubleClicked.connect(
+            lambda _item: self.use_selected_favorite(),
+        )
+        self._favorites_list.itemSelectionChanged.connect(
+            self._update_favorite_action_states,
+        )
         self._tree = QTreeWidget()
         self._tree.setHeaderLabels(("Experiment", "Count"))
         self._tree.setSelectionMode(
@@ -138,11 +193,24 @@ class ExperimentSearchDialog(QDialog):
         self._tree.itemActivated.connect(self._load_tree_item)
 
         search_button = QPushButton("Search")
+        search_button.setStyleSheet(SECONDARY_ACTION_BUTTON_STYLE)
         search_button.clicked.connect(self.search)
-        load_button = QPushButton("Load Selected")
+        self._save_favorite_button = QPushButton("Save favorite...")
+        self._save_favorite_button.setStyleSheet(PRIMARY_ACTION_BUTTON_STYLE)
+        self._save_favorite_button.clicked.connect(self.save_current_favorite)
+        self._use_favorite_button = QPushButton("Use")
+        self._use_favorite_button.clicked.connect(self.use_selected_favorite)
+        self._remove_favorite_button = QPushButton("Remove")
+        self._remove_favorite_button.clicked.connect(self.remove_selected_favorite)
+        load_button = QPushButton("Load selected")
         load_button.clicked.connect(self.load_selected)
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.reject)
+
+        for widget in self._filter_widgets():
+            widget.textChanged.connect(self._update_favorite_action_states)
+        self._render_favorites()
+        self._update_favorite_action_states()
 
         self.setWindowTitle("Search database")
         self.resize(1040, 560)
@@ -188,6 +256,88 @@ class ExperimentSearchDialog(QDialog):
 
         self._render_tree(build_experiment_search_tree(experiments))
 
+    def save_current_favorite(self) -> None:
+        """Save the current search filters as a reusable favorite.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        Blank filter sets are ignored because a favorite should represent a
+        real reusable query, not an accidental all-database search.
+        """
+        try:
+            filters = normalized_database_search_filters(self._current_filters())
+            if database_search_favorite_filters_are_empty(filters):
+                return
+
+            name = self._favorite_name_from_user(
+                default_database_search_favorite_name(filters),
+            )
+            if name is None:
+                return
+
+            favorite = normalized_database_search_favorite(
+                ExperimentSearchFavorite(name=name, filters=filters),
+            )
+            self._favorites = replace_database_search_favorite(
+                self._favorites,
+                favorite,
+            )
+            save_database_search_favorites(self._favorites, self._favorites_path)
+        except (OSError, ValueError) as error:
+            self._show_favorite_error(error)
+            return
+
+        self._render_favorites(selected=favorite)
+        self._update_favorite_action_states()
+
+    def use_selected_favorite(self) -> None:
+        """Apply the selected favorite to the filters and search.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        Running the search only after an explicit Use action or double-click
+        keeps ordinary selection safe for review and removal.
+        """
+        favorite = self._selected_favorite()
+        if favorite is None:
+            return
+        self._apply_filters(favorite.filters)
+        self.search()
+
+    def remove_selected_favorite(self) -> None:
+        """Remove the selected favorite from the local favorite list.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        Removal targets the selected favorite row, not the current filter text,
+        so users can safely edit filters while a favorite remains selected.
+        """
+        selected = self._selected_favorite_index()
+        if selected is None:
+            return
+        self._favorites = self._favorites[:selected] + self._favorites[selected + 1 :]
+        try:
+            save_database_search_favorites(self._favorites, self._favorites_path)
+        except (OSError, ValueError) as error:
+            self._show_favorite_error(error)
+            return
+        self._render_favorites(
+            selected_index=min(selected, len(self._favorites) - 1),
+        )
+        self._update_favorite_action_states()
+
     def load_selected(self) -> None:
         """Load recordings for the selected tree node.
 
@@ -213,11 +363,13 @@ class ExperimentSearchDialog(QDialog):
         action_layout = QHBoxLayout()
         action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.addStretch(1)
+        action_layout.addWidget(self._save_favorite_button)
         action_layout.addWidget(search_button)
 
         layout = QVBoxLayout()
         layout.addLayout(self._filter_form())
         layout.addLayout(action_layout)
+        layout.addWidget(self._favorites_panel())
         layout.addStretch(1)
         panel.setLayout(layout)
         return panel
@@ -232,6 +384,25 @@ class ExperimentSearchDialog(QDialog):
         form.addRow("Stimulus", self._stimulus_filter)
         form.addRow("Date", self._date_filter)
         return form
+
+    def _favorites_panel(self) -> QWidget:
+        """Return the lower-left favorites panel."""
+        panel = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(QLabel("Favorites"))
+        layout.addWidget(self._favorites_list)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.addStretch(1)
+        actions.addWidget(self._use_favorite_button)
+        actions.addWidget(self._remove_favorite_button)
+        layout.addLayout(actions)
+
+        panel.setLayout(layout)
+        return panel
 
     def _filter_line_edit(self, placeholder: str) -> QLineEdit:
         """Create one filter field with an italic placeholder hint."""
@@ -253,6 +424,107 @@ class ExperimentSearchDialog(QDialog):
         )
         _set_filter_hint_font(line_edit, is_hint_visible=True)
         return line_edit
+
+    def _filter_widgets(self) -> tuple[QLineEdit, ...]:
+        """Return filter widgets in saved-favorite field order."""
+        return (
+            self._user_filter,
+            self._cell_type_filter,
+            self._sensor_filter,
+            self._stimulus_filter,
+            self._date_filter,
+        )
+
+    def _current_filters(self) -> ExperimentSearchFilters:
+        """Return search filters from the current dialog fields."""
+        return ExperimentSearchFilters(
+            user=self._user_filter.text(),
+            cell_type=self._cell_type_filter.text(),
+            sensor=self._sensor_filter.text(),
+            stimulus=self._stimulus_filter.text(),
+            date=self._date_filter.text(),
+        )
+
+    def _apply_filters(self, filters: ExperimentSearchFilters) -> None:
+        """Apply one saved favorite filter set to the dialog fields."""
+        normalized = normalized_database_search_filters(filters)
+        self._user_filter.setText(normalized.user or "")
+        self._cell_type_filter.setText(normalized.cell_type or "")
+        self._sensor_filter.setText(normalized.sensor or "")
+        self._stimulus_filter.setText(normalized.stimulus or "")
+        self._date_filter.setText(normalized.date or "")
+
+    def _load_favorites(self) -> tuple[ExperimentSearchFavorite, ...]:
+        """Load persisted favorites for this dialog instance."""
+        try:
+            return load_database_search_favorites(self._favorites_path)
+        except (OSError, ValueError) as error:
+            self._show_favorite_error(error)
+            return ()
+
+    def _render_favorites(
+        self,
+        *,
+        selected: ExperimentSearchFavorite | None = None,
+        selected_index: int | None = None,
+    ) -> None:
+        """Render persisted favorites into the lower-left list."""
+        self._favorites_list.clear()
+        selected_row = selected_index
+        for index, favorite in enumerate(self._favorites):
+            item = QListWidgetItem(favorite.name)
+            item.setToolTip(database_search_favorite_tooltip(favorite))
+            self._favorites_list.addItem(item)
+            if selected is not None and favorite == selected:
+                selected_row = index
+
+        if (
+            selected_row is not None
+            and 0 <= selected_row < self._favorites_list.count()
+        ):
+            self._favorites_list.setCurrentRow(selected_row)
+
+    def _selected_favorite_index(self) -> int | None:
+        """Return the selected favorite row, if any."""
+        selected = self._favorites_list.currentRow()
+        if selected < 0 or selected >= len(self._favorites):
+            return None
+        return selected
+
+    def _selected_favorite(self) -> ExperimentSearchFavorite | None:
+        """Return the selected favorite, if any."""
+        selected = self._selected_favorite_index()
+        if selected is None:
+            return None
+        return self._favorites[selected]
+
+    def _update_favorite_action_states(self) -> None:
+        """Enable favorite actions only when their targets are valid."""
+        self._save_favorite_button.setEnabled(self._current_filters_can_be_saved())
+        has_selection = self._selected_favorite_index() is not None
+        self._use_favorite_button.setEnabled(has_selection)
+        self._remove_favorite_button.setEnabled(has_selection)
+
+    def _current_filters_can_be_saved(self) -> bool:
+        """Return whether current filters are valid favorite contents."""
+        try:
+            return not database_search_favorite_filters_are_empty(
+                self._current_filters(),
+            )
+        except ValueError:
+            return False
+
+    def _favorite_name_from_user(self, default_name: str) -> str | None:
+        """Prompt the user for a favorite name."""
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle("Save Favorite")
+        dialog.setLabelText("Favorite name")
+        dialog.setInputMode(QInputDialog.InputMode.TextInput)
+        dialog.setTextValue(default_name)
+        dialog.resize(FAVORITE_NAME_DIALOG_WIDTH, dialog.sizeHint().height())
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.textValue()
 
     def _configure_result_columns(self) -> None:
         """Keep Experiment wide and Count compact."""
@@ -323,6 +595,10 @@ class ExperimentSearchDialog(QDialog):
         """Show database-result load failures with path details."""
         ExperimentLoadErrorDialog(result, parent=self.parentWidget()).exec()
 
+    def _show_favorite_error(self, error: Exception) -> None:
+        """Show a favorites persistence failure with clear details."""
+        ExperimentFavoriteErrorDialog(error, parent=self.parentWidget()).exec()
+
 
 def _set_filter_hint_font(line_edit: QLineEdit, *, is_hint_visible: bool) -> None:
     """Italicize empty filter fields so placeholder hints read as hints.
@@ -384,6 +660,36 @@ class ExperimentSearchErrorDialog(QDialog):
         self.resize(720, 360)
 
         summary = QLabel("Could not search the experiment database.")
+        layout = QVBoxLayout()
+        layout.addWidget(summary)
+        layout.addWidget(_read_only_details(exception_message_for_user(error)))
+        layout.addWidget(_close_button_box(self))
+        self.setLayout(layout)
+
+
+class ExperimentFavoriteErrorDialog(QDialog):
+    """Dialog showing database-search favorite persistence failures.
+
+    Args:
+        error: Exception raised while loading or saving favorites.
+        parent: Optional Qt parent widget.
+
+    Outputs:
+        Modal dialog with a clear summary and scrollable diagnostic details.
+    """
+
+    def __init__(
+        self,
+        error: Exception,
+        *,
+        parent: QWidget | None = None,
+    ) -> None:
+        """Create an error dialog for failed favorite operations."""
+        super().__init__(parent)
+        self.setWindowTitle("Database Favorites Error")
+        self.resize(720, 360)
+
+        summary = QLabel("Could not update database search favorites.")
         layout = QVBoxLayout()
         layout.addWidget(summary)
         layout.addWidget(_read_only_details(exception_message_for_user(error)))

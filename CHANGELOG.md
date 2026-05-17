@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- Added database search favorites in the napari Load-tab search window, with Save favorite, Use, and Remove actions backed by a machine-local YAML file.
+
 ## 0.1.9 - 2026-05-17
 
 ### Features

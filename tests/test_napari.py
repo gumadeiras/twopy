@@ -93,6 +93,13 @@ from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_b
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
 from twopy.converted import load_converted_recording
+from twopy.database.search import ExperimentSearchFilters
+from twopy.napari.database_favorites import (
+    ExperimentSearchFavorite,
+    load_database_search_favorites,
+    replace_database_search_favorite,
+    save_database_search_favorites,
+)
 from twopy.napari.database_search import (
     ExperimentLoadErrorDialog,
     ExperimentLoadFailure,
@@ -3403,9 +3410,21 @@ class NapariAdapterTest(unittest.TestCase):
             bottom_buttons = [
                 button.text()
                 for button in dialog.findChildren(QPushButton)
-                if button.text() in {"Load Selected", "Close"}
+                if button.text() in {"Load selected", "Close"}
             ]
-            self.assertEqual(bottom_buttons, ["Load Selected", "Close"])
+            self.assertEqual(bottom_buttons, ["Load selected", "Close"])
+            search_buttons = {
+                button.text(): button
+                for button in dialog.findChildren(QPushButton)
+                if button.text() in {"Search", "Save favorite..."}
+            }
+            self.assertIn(
+                "background-color: #f2f2f2", search_buttons["Search"].styleSheet()
+            )
+            self.assertIn(
+                "background-color: #2d7dd2",
+                search_buttons["Save favorite..."].styleSheet(),
+            )
 
             result = dialog._tree.topLevelItem(0)
             assert result is not None
@@ -3418,11 +3437,126 @@ class NapariAdapterTest(unittest.TestCase):
                 [(data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49",)],
             )
 
+    def test_database_search_favorites_round_trip_and_deduplicate(self) -> None:
+        """Confirm search favorites persist normalized filter sets.
+
+        Inputs: two favorites with equivalent filters and different names.
+        Outputs: one persisted favorite with stripped text and normalized date.
+        """
+        with temporary_directory() as temp_dir:
+            favorites_path = Path(temp_dir) / "favorites.yml"
+            first = ExperimentSearchFavorite(
+                name="first",
+                filters=ExperimentSearchFilters(
+                    user=" Gus ",
+                    cell_type="ALPN",
+                    stimulus=" bars ",
+                    date="2023/10/17",
+                ),
+            )
+            renamed = ExperimentSearchFavorite(
+                name="renamed",
+                filters=ExperimentSearchFilters(
+                    user="Gus",
+                    cell_type="ALPN",
+                    stimulus="bars",
+                    date="2023-10-17",
+                ),
+            )
+
+            favorites = replace_database_search_favorite((), first)
+            favorites = replace_database_search_favorite(favorites, renamed)
+            save_database_search_favorites(favorites, favorites_path)
+
+            loaded = load_database_search_favorites(favorites_path)
+            self.assertEqual(len(loaded), 1)
+            self.assertEqual(loaded[0].name, "renamed")
+            self.assertEqual(loaded[0].filters.user, "Gus")
+            self.assertEqual(loaded[0].filters.cell_type, "ALPN")
+            self.assertEqual(loaded[0].filters.stimulus, "bars")
+            self.assertEqual(loaded[0].filters.date, "2023-10-17")
+
+    def test_database_search_dialog_saves_uses_and_removes_favorites(self) -> None:
+        """Confirm favorite buttons manage reusable search filters.
+
+        Inputs: a search dialog with a temporary favorites file.
+        Outputs: Save persists filters, Use restores them and searches, and
+        Remove deletes only the selected favorite.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            database_dir = root / "db"
+            data_dir = root / "data"
+            database_dir.mkdir()
+            data_dir.mkdir()
+            _write_database(database_dir / "experimentLog.db")
+            config_path = root / "config.yml"
+            favorites_path = root / "favorites.yml"
+            config_path.write_text(
+                f"database_path: {database_dir}\n"
+                f"data_path: {data_dir}\n"
+                "database_access: direct\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                    loaded_count=len(paths),
+                ),
+                config_path=config_path,
+                favorites_path=favorites_path,
+            )
+
+            self.assertFalse(dialog._save_favorite_button.isEnabled())
+            self.assertFalse(dialog._use_favorite_button.isEnabled())
+            self.assertFalse(dialog._remove_favorite_button.isEnabled())
+
+            dialog._user_filter.setText("Gus")
+            dialog._stimulus_filter.setText("combo")
+            dialog._date_filter.setText("2023/10/17")
+            with patch.object(
+                dialog,
+                "_favorite_name_from_user",
+                return_value="Gus combo",
+            ):
+                dialog.save_current_favorite()
+
+            self.assertEqual(dialog._favorites_list.count(), 1)
+            self.assertTrue(dialog._use_favorite_button.isEnabled())
+            self.assertTrue(dialog._remove_favorite_button.isEnabled())
+            loaded = load_database_search_favorites(favorites_path)
+            self.assertEqual(len(loaded), 1)
+            self.assertEqual(loaded[0].filters.date, "2023-10-17")
+
+            dialog._user_filter.clear()
+            dialog._stimulus_filter.clear()
+            dialog._date_filter.clear()
+            searches: list[bool] = []
+            with patch.object(
+                dialog,
+                "search",
+                side_effect=lambda: searches.append(True),
+            ):
+                dialog.use_selected_favorite()
+
+            self.assertEqual(dialog._user_filter.text(), "Gus")
+            self.assertEqual(dialog._stimulus_filter.text(), "combo")
+            self.assertEqual(dialog._date_filter.text(), "2023-10-17")
+            self.assertEqual(searches, [True])
+
+            dialog.remove_selected_favorite()
+
+            self.assertEqual(dialog._favorites_list.count(), 0)
+            self.assertFalse(dialog._use_favorite_button.isEnabled())
+            self.assertFalse(dialog._remove_favorite_button.isEnabled())
+            self.assertEqual(load_database_search_favorites(favorites_path), ())
+
     def test_database_search_dialog_loads_multiple_selected_lines(self) -> None:
         """Confirm DB search can load several selected result rows at once.
 
         Inputs: two valid experiment rows and a multi-selected search tree.
-        Outputs: Load Selected sends both source folders to the loader callback.
+        Outputs: Load selected sends both source folders to the loader callback.
         """
         _ = QApplication.instance() or QApplication([])
         with temporary_directory() as temp_dir:
