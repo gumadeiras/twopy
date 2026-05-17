@@ -3117,6 +3117,98 @@ class NapariAdapterTest(unittest.TestCase):
                 {"first loaded-list note", "second loaded-list note"},
             )
 
+    def test_load_tab_csv_converts_from_recording_path_when_h5_missing(
+        self,
+    ) -> None:
+        """Confirm CSV loading treats ``recording_path`` as the load contract.
+
+        Inputs: a CSV row with a valid source recording path and a missing
+            ``recording_data_path`` audit value.
+        Outputs: loading runs conversion from the source path and opens the new
+            converted files.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = root / "source"
+            missing_recording_data_path = root / "missing" / "recording_data.h5"
+            csv_path = root / "loaded_recordings.csv"
+            _write_source_recording_shape(source_dir)
+            with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
+                writer = csv.DictWriter(
+                    csv_file,
+                    fieldnames=("recording_path", "recording_data_path"),
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "recording_path": str(source_dir),
+                        "recording_data_path": str(missing_recording_data_path),
+                    },
+                )
+
+            def write_loadable_conversion(
+                source: Path,
+                output_dir: Path | None = None,
+                **_kwargs: object,
+            ) -> ConvertedRecording:
+                destination = output_dir or source / "twopy"
+                destination.mkdir(parents=True, exist_ok=True)
+                recording_path = _write_converted_recording(
+                    destination,
+                    source_session_dir=source,
+                )
+                return ConvertedRecording(
+                    path=recording_path,
+                    movie_path=destination / "aligned_movie.h5",
+                    source_session_dir=source,
+                    movie_shape=(3, 2, 2),
+                    mean_image_start_frame=0,
+                    mean_image_stop_frame=3,
+                )
+
+            viewer = _FakeViewer()
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                control_docks = add_twopy_magicgui_controls(
+                    viewer,
+                    roi_labels_layer=None,
+                    roi_save_file=Path("unused.h5"),
+                )
+                load_panel = cast(QWidget, control_docks.load_widget)
+                loaded_panel = cast(QWidget, control_docks.loaded_recordings_widget)
+                loaded_list = loaded_panel.findChild(QListWidget)
+                load_buttons = {
+                    button.text(): button
+                    for button in load_panel.findChildren(QPushButton)
+                }
+
+                with (
+                    patch.object(
+                        napari_controls,
+                        "_choose_recording_csv_paths",
+                        return_value=(csv_path,),
+                    ),
+                    patch(
+                        "twopy.napari.loading.convert_recording_to_twopy",
+                        side_effect=write_loadable_conversion,
+                    ) as convert,
+                ):
+                    load_buttons["Load CSV list"].click()
+            finally:
+                chdir(original_cwd)
+
+            assert loaded_list is not None
+            convert.assert_called_once_with(source_dir.resolve())
+            self.assertEqual(loaded_list.count(), 1)
+            loaded_item = loaded_list.item(0)
+            assert loaded_item is not None
+            self.assertEqual(loaded_item.text(), str(source_dir))
+            self.assertEqual(len(viewer.images), 2)
+            self.assertEqual(len(viewer.labels), 1)
+            self.assertFalse(missing_recording_data_path.exists())
+
     def test_load_tab_saved_recording_list_uses_source_paths_for_cached_loads(
         self,
     ) -> None:
