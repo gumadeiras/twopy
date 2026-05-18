@@ -17,6 +17,7 @@
 
 ### Fixes
 
+- Restored saved-analysis reload for source recordings routed through the stable external analysis cache.
 - Prevented database search favorites from changing the dialog state or overwriting a corrupt favorites file when local YAML persistence fails.
 
 ## 0.1.9 - 2026-05-17

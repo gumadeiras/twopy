@@ -96,7 +96,10 @@ def refresh_cached_analysis_outputs(
     if not config.analysis_caching:
         return ()
 
-    publish_dir = resolve_analysis_output_dir(config, source_session_dir)
+    try:
+        publish_dir = resolve_analysis_output_dir(config, source_session_dir)
+    except ValueError:
+        return ()
     local_dir = local_output_dir.expanduser()
     if _same_path(publish_dir, local_dir):
         return ()

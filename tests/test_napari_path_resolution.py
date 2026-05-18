@@ -23,6 +23,8 @@ from tests.napari_support import (
     unittest,
 )
 
+from twopy.config import load_config, resolve_analysis_cache_dir
+
 
 class NapariPathResolutionTest(NapariAdapterTestCase):
     """Napari recording path resolution tests."""
@@ -100,17 +102,22 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             self.assertEqual(paths.roi_file_to_load, roi_path.resolve())
             self.assertEqual(paths.roi_save_file, roi_path.resolve())
 
-    def test_recording_path_resolution_converts_source_folder_when_output_missing(
+    def test_recording_path_resolution_converts_external_source_to_cache(
         self,
     ) -> None:
-        """Confirm source folders are converted before napari opens them.
+        """Confirm configured caching routes external source conversion to cache.
 
-        Inputs: source-shaped recording folder without twopy output.
-        Outputs: converted paths plus a flag saying conversion ran.
+        Inputs: source-shaped recording folder outside configured ``data_path``.
+        Outputs: converted paths in the stable external cache plus a flag saying
+            conversion ran.
         """
         with temporary_directory() as temp_dir:
             source_dir = Path(temp_dir)
             _write_source_recording_shape(source_dir)
+            expected_dir = resolve_analysis_cache_dir(
+                load_config(),
+                source_dir.resolve(),
+            )
 
             with patch(
                 "twopy.napari.loading.convert_recording_to_twopy",
@@ -119,14 +126,17 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 resolved = resolve_or_convert_recording(source_dir)
 
             self.assertTrue(resolved.was_converted)
-            convert.assert_called_once_with(source_dir.resolve())
+            convert.assert_called_once_with(
+                source_dir.resolve(),
+                output_dir=expected_dir,
+            )
             self.assertEqual(
                 resolved.paths.recording_data_path,
-                (source_dir / "twopy" / "recording_data.h5").resolve(),
+                (expected_dir / "recording_data.h5").resolve(),
             )
             self.assertEqual(
                 resolved.paths.movie_path,
-                (source_dir / "twopy" / "aligned_movie.h5").resolve(),
+                (expected_dir / "aligned_movie.h5").resolve(),
             )
 
     def test_recording_path_resolution_uses_local_analysis_cache(self) -> None:
@@ -262,6 +272,69 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             self.assertEqual(resolved.paths.roi_file_to_load, expected_roi.resolve())
             self.assertEqual(expected_roi.read_text(encoding="utf-8"), "published")
 
+    def test_external_source_cache_pulls_published_analysis_outputs(self) -> None:
+        """Confirm external cached source loads refresh saved analysis files.
+
+        Inputs: source recording outside configured ``data_path``, an existing
+            external cache entry, and published source-local analysis outputs.
+        Outputs: the existing cache is reused and saved analysis files are
+            copied beside the cached converted files.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "configured_data"
+            source_dir = root / "external" / "fly" / "stim" / "2023" / "10_17"
+            cache_root = root / "cache"
+            publish_dir = source_dir / "twopy"
+            _write_source_recording_shape(source_dir)
+            publish_dir.mkdir()
+            (publish_dir / "rois.h5").write_text("published-rois", encoding="utf-8")
+            (publish_dir / "analysis_outputs.h5").write_text(
+                "published-analysis",
+                encoding="utf-8",
+            )
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            expected_dir = resolve_analysis_cache_dir(
+                load_config(config_path),
+                source_dir.resolve(),
+            )
+            expected_dir.mkdir(parents=True)
+            _write_converted_recording(expected_dir, source_session_dir=source_dir)
+
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with patch(
+                    "twopy.napari.loading.convert_recording_to_twopy",
+                    side_effect=AssertionError("conversion should not run"),
+                ):
+                    resolved = resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
+
+            self.assertFalse(resolved.was_converted)
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (expected_dir / "recording_data.h5").resolve(),
+            )
+            self.assertEqual(
+                (expected_dir / "rois.h5").read_text(encoding="utf-8"),
+                "published-rois",
+            )
+            self.assertEqual(
+                (expected_dir / "analysis_outputs.h5").read_text(encoding="utf-8"),
+                "published-analysis",
+            )
+
     def test_recording_path_resolution_localizes_selected_converted_output(
         self,
     ) -> None:
@@ -368,17 +441,20 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             with self.assertRaisesRegex(ValueError, "raw TIFF movie"):
                 resolve_or_convert_recording(source_dir)
 
-    def test_recording_path_resolution_repairs_missing_converted_movie(self) -> None:
-        """Confirm incomplete source-local twopy output is regenerated in place.
+    def test_recording_path_resolution_repairs_missing_cached_movie(self) -> None:
+        """Confirm incomplete cached twopy output is regenerated in place.
 
-        Inputs: source-shaped folder with ``twopy/recording_data.h5`` but no
-            ``aligned_movie.h5``.
-        Outputs: conversion called with that existing output directory.
+        Inputs: source-shaped folder with external cache ``recording_data.h5``
+            but no ``aligned_movie.h5``.
+        Outputs: conversion called with the existing cache directory.
         """
         with temporary_directory() as temp_dir:
             source_dir = Path(temp_dir)
-            output_dir = source_dir / "twopy"
             _write_source_recording_shape(source_dir)
+            output_dir = resolve_analysis_cache_dir(
+                load_config(),
+                source_dir.resolve(),
+            )
             output_dir.mkdir()
             (output_dir / "recording_data.h5").touch()
 

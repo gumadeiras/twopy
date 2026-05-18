@@ -130,8 +130,6 @@ def _resolve_cached_unavailable_source_recording(
         return None
     if not config.analysis_caching:
         return None
-    if not _source_is_under_data_path(config, source_dir):
-        return None
 
     resolved_source_dir = source_dir.expanduser().resolve(strict=False)
     try:
@@ -166,8 +164,6 @@ def _resolve_or_convert_cached_source_recording(
     except FileNotFoundError:
         return None
     if not config.analysis_caching:
-        return None
-    if not _source_is_under_data_path(config, source_dir):
         return None
 
     try:
@@ -306,7 +302,8 @@ def _source_is_under_data_path(config: TwopyConfig, source_dir: Path) -> bool:
         source_dir: Source recording folder.
 
     Returns:
-        ``True`` when source-local GUI loading should use the configured cache.
+        ``True`` when direct converted-file selections should be localized into
+        the configured cache mirror.
     """
     resolved_data_path = config.data_path.expanduser().resolve(strict=False)
     resolved_source_dir = source_dir.expanduser().resolve(strict=False)
