@@ -112,18 +112,36 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             conversion ran.
         """
         with temporary_directory() as temp_dir:
-            source_dir = Path(temp_dir)
+            root = Path(temp_dir)
+            data_root = root / "configured_data"
+            source_dir = root / "external_source"
+            cache_root = root / "cache"
             _write_source_recording_shape(source_dir)
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
             expected_dir = resolve_analysis_cache_dir(
-                load_config(),
+                load_config(config_path),
                 source_dir.resolve(),
             )
 
-            with patch(
-                "twopy.napari.loading.convert_recording_to_twopy",
-                side_effect=_fake_convert_recording,
-            ) as convert:
-                resolved = resolve_or_convert_recording(source_dir)
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with patch(
+                    "twopy.napari.loading.convert_recording_to_twopy",
+                    side_effect=_fake_convert_recording,
+                ) as convert:
+                    resolved = resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
 
             self.assertTrue(resolved.was_converted)
             convert.assert_called_once_with(
@@ -449,20 +467,38 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
         Outputs: conversion called with the existing cache directory.
         """
         with temporary_directory() as temp_dir:
-            source_dir = Path(temp_dir)
+            root = Path(temp_dir)
+            data_root = root / "configured_data"
+            source_dir = root / "external_source"
+            cache_root = root / "cache"
             _write_source_recording_shape(source_dir)
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
             output_dir = resolve_analysis_cache_dir(
-                load_config(),
+                load_config(config_path),
                 source_dir.resolve(),
             )
-            output_dir.mkdir()
+            output_dir.mkdir(parents=True)
             (output_dir / "recording_data.h5").touch()
 
-            with patch(
-                "twopy.napari.loading.convert_recording_to_twopy",
-                side_effect=_fake_convert_recording,
-            ) as convert:
-                resolved = resolve_or_convert_recording(source_dir)
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with patch(
+                    "twopy.napari.loading.convert_recording_to_twopy",
+                    side_effect=_fake_convert_recording,
+                ) as convert:
+                    resolved = resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
 
             self.assertTrue(resolved.was_converted)
             convert.assert_called_once_with(
