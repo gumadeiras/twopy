@@ -20,6 +20,7 @@ from tests.tempdir import temporary_directory
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.persistence import save_analysis_outputs
+from twopy.analysis.response_processing import RoiCorrelationScores
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
@@ -56,12 +57,10 @@ class NapariPlotDataTest(unittest.TestCase):
             epoch.sem_values,
             np.zeros((1, 2), dtype=np.float64),
         )
-        self.assertIsNotNone(filtered.correlation_scores)
-        if filtered.correlation_scores is None:
-            raise AssertionError("correlation scores should be present")
-        self.assertEqual(filtered.correlation_scores.roi_labels, ("roi_0002",))
+        correlation_scores = _require_correlation_scores(filtered.correlation_scores)
+        self.assertEqual(correlation_scores.roi_labels, ("roi_0002",))
         np.testing.assert_array_equal(
-            filtered.correlation_scores.included_mask,
+            correlation_scores.included_mask,
             np.array([False]),
         )
 
@@ -204,16 +203,15 @@ class NapariPlotDataTest(unittest.TestCase):
 
             result = load_response_plot_data(path)
 
-        self.assertIsInstance(result, ResponsePlotData)
-        if isinstance(result, ResponsePlotData):
-            self.assertEqual(
-                result.response_window_options,
-                ResponseWindowOptions(
-                    auto=True,
-                    pre_window_seconds=0.0,
-                    post_window_seconds=0.0,
-                ),
-            )
+        result = _require_response_plot_data(result)
+        self.assertEqual(
+            result.response_window_options,
+            ResponseWindowOptions(
+                auto=True,
+                pre_window_seconds=0.0,
+                post_window_seconds=0.0,
+            ),
+        )
 
     def test_load_response_plot_data_restores_saved_baseline_epoch_selection(
         self,
@@ -242,19 +240,18 @@ class NapariPlotDataTest(unittest.TestCase):
 
             result = load_response_plot_data(path)
 
-        self.assertIsInstance(result, ResponsePlotData)
-        if isinstance(result, ResponsePlotData):
-            self.assertEqual(
-                result.delta_f_over_f_options,
-                DeltaFOverFOptions(
-                    baseline_mode="no_baseline_epoch",
-                    baseline_epoch_number=3,
-                    baseline_epoch_name="Manual baseline",
-                    baseline_sample_seconds=None,
-                    fit_mode="log_linear",
-                    apply_motion_mask=False,
-                ),
-            )
+        result = _require_response_plot_data(result)
+        self.assertEqual(
+            result.delta_f_over_f_options,
+            DeltaFOverFOptions(
+                baseline_mode="no_baseline_epoch",
+                baseline_epoch_number=3,
+                baseline_epoch_name="Manual baseline",
+                baseline_sample_seconds=None,
+                fit_mode="log_linear",
+                apply_motion_mask=False,
+            ),
+        )
 
     def test_response_plot_data_sorts_epochs_by_number(self) -> None:
         """Confirm epoch plots and option lists use epoch-number order.
@@ -290,6 +287,22 @@ class NapariPlotDataTest(unittest.TestCase):
             tuple(epoch.epoch_number for epoch in plot_data.epochs),
             (1, 3),
         )
+
+
+def _require_response_plot_data(result: ResponsePlotData | str) -> ResponsePlotData:
+    """Return loaded plot data when a scenario requires analysis output."""
+    if not isinstance(result, ResponsePlotData):
+        raise AssertionError(f"expected response plot data; got {result!r}")
+    return result
+
+
+def _require_correlation_scores(
+    scores: RoiCorrelationScores | None,
+) -> RoiCorrelationScores:
+    """Return correlation scores when a scenario requires QC output."""
+    if scores is None:
+        raise AssertionError("correlation scores should be present")
+    return scores
 
 
 if __name__ == "__main__":

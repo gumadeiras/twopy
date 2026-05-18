@@ -15,6 +15,8 @@ from twopy.analysis.response_processing import (
     LowPassFilterOptions,
     NormalizationOptions,
     ResponseProcessingOptions,
+    RoiCorrelationScores,
+    RoiNormalizationFactors,
     SmoothingOptions,
     mask_grouped_roi_responses_by_included_rois,
     nan_aware_moving_average,
@@ -183,11 +185,9 @@ class ResponseProcessingTest(unittest.TestCase):
 
         result = process_grouped_roi_responses(grouped, options=options)
 
-        self.assertIsNotNone(result.correlation_scores)
-        if result.correlation_scores is None:
-            raise AssertionError("correlation scores should be present")
+        correlation_scores = _require_correlation_scores(result.correlation_scores)
         np.testing.assert_array_equal(
-            result.correlation_scores.included_mask,
+            correlation_scores.included_mask,
             np.array([True, False]),
         )
         self.assertEqual(result.grouped_responses.roi_labels, ("roi_1", "roi_2"))
@@ -213,9 +213,7 @@ class ResponseProcessingTest(unittest.TestCase):
             options=NormalizationOptions(method="epoch_peak", epoch_number=2),
         )
 
-        self.assertIsNotNone(factors)
-        if factors is None:
-            raise AssertionError("normalization factors should be present")
+        factors = _require_normalization_factors(factors)
         np.testing.assert_allclose(factors.factors, np.array([3.0, 6.0]))
         np.testing.assert_allclose(
             normalized.trials[0].values,
@@ -240,22 +238,27 @@ class ResponseProcessingTest(unittest.TestCase):
 
         result = process_grouped_roi_responses(grouped, options=options)
 
-        self.assertIsNotNone(result.normalization_factors)
-        if result.normalization_factors is None:
-            raise AssertionError("normalization factors should be present")
+        normalization_factors = _require_normalization_factors(
+            result.normalization_factors,
+        )
         np.testing.assert_allclose(
-            result.normalization_factors.factors,
+            normalization_factors.factors,
             np.array([3.0, 6.0]),
         )
-        selected_trials = result.grouped_responses.trials
-        mean_peak = np.nanmax(
-            np.nanmean(
-                np.stack([trial.values for trial in selected_trials]),
-                axis=0,
+        np.testing.assert_allclose(
+            result.grouped_responses.trials[0].values,
+            np.array(
+                [[0.0, 0.0], [2.0 / 3.0, 4.0 / 6.0]],
+                dtype=np.float64,
             ),
-            axis=0,
         )
-        np.testing.assert_allclose(mean_peak, np.array([1.0, 1.0]))
+        np.testing.assert_allclose(
+            result.grouped_responses.trials[1].values,
+            np.array(
+                [[0.0, 0.0], [4.0 / 3.0, 8.0 / 6.0]],
+                dtype=np.float64,
+            ),
+        )
 
     def test_epoch_peak_normalization_rejects_zero_peaks(self) -> None:
         """Confirm normalization fails loudly when scale factors are invalid.
@@ -294,12 +297,10 @@ class ResponseProcessingTest(unittest.TestCase):
 
         result = process_grouped_roi_responses(grouped, options=options)
 
-        self.assertIsNotNone(result.correlation_scores)
-        if result.correlation_scores is None:
-            raise AssertionError("correlation scores should be present")
-        self.assertEqual(result.correlation_scores.reference, "epoch_peak")
+        correlation_scores = _require_correlation_scores(result.correlation_scores)
+        self.assertEqual(correlation_scores.reference, "epoch_peak")
         np.testing.assert_array_equal(
-            result.correlation_scores.included_mask,
+            correlation_scores.included_mask,
             np.array([True, False]),
         )
 
@@ -332,12 +333,10 @@ class ResponseProcessingTest(unittest.TestCase):
 
         result = process_grouped_roi_responses(grouped, options=options)
 
-        self.assertIsNotNone(result.correlation_scores)
-        if result.correlation_scores is None:
-            raise AssertionError("correlation scores should be present")
-        self.assertEqual(result.correlation_scores.window_seconds, (2.0, None))
+        correlation_scores = _require_correlation_scores(result.correlation_scores)
+        self.assertEqual(correlation_scores.window_seconds, (2.0, None))
         np.testing.assert_array_equal(
-            result.correlation_scores.included_mask,
+            correlation_scores.included_mask,
             np.array([True, True]),
         )
 
@@ -436,6 +435,24 @@ def _grouped_responses(
         data_rate_hz=1.0,
         trials=trials,
     )
+
+
+def _require_correlation_scores(
+    scores: RoiCorrelationScores | None,
+) -> RoiCorrelationScores:
+    """Return correlation scores when a scenario requires QC output."""
+    if scores is None:
+        raise AssertionError("correlation scores should be present")
+    return scores
+
+
+def _require_normalization_factors(
+    factors: RoiNormalizationFactors | None,
+) -> RoiNormalizationFactors:
+    """Return normalization factors when a scenario requires scaling output."""
+    if factors is None:
+        raise AssertionError("normalization factors should be present")
+    return factors
 
 
 if __name__ == "__main__":
