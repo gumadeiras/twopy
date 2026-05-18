@@ -120,6 +120,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Real example `savedAnalysis/` loader read saved ROI mask shape `(244, 109)` and saved trace shape `(3909, 1221)` from a prior analysis file.
 - Real example dF/F parity comparison against `WatershedRoiExtraction_28_12_10_17_10_23.mat` matched 1,221 saved ROI traces over 3,909 frames with mean absolute error `1.84e-10` and median ROI correlation `1.0`.
 - Real example photodiode classification found 1 stimulus start event, 99 trial transition events, 1 stimulus end event, and 100 classified stimulus windows.
+- Native response timing now resolves through one `resolve_recording_timing(...)` boundary that consumes classified stimulus windows when the boundary-flash classifier applies and keeps interpolation for recordings without that boundary-flash contract.
 - Real database query matched the example recording in both `experimentLog.db` and `experimentInitLog.db` with `stimulusPresentationId=20005` and `fly=10923`.
 - Real filtered API query matched the example recording with date `2023-10-17`, genotype `gh146`, stimulus `combo_stim_singles=3s_blank=3s_intensity=20`, sensor `g6f`, cell type `ALPN`, hemisphere `right`, and person `Harsh`.
 - Response analysis now has an in-memory computation API separate from the script-facing persistence API, so GUI previews do not write HDF5 files.
@@ -134,7 +135,6 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 ## Next
 
 - Add protocol-specific photodiode classifiers for recordings with extra within-epoch alignment flashes.
-- Make the default response workflow consume classified stimulus windows when the boundary-flash classifier applies, while keeping interpolation available for protocols whose photodiode and stimulus-row counts do not match.
 - Add napari database search and recording selection using the typed database helpers, then hand selected recordings to the existing convert/load, Labels ROI, analysis, persistence, and response-inspection workflow.
 - Group or facet responses by recording and stimulus metadata beyond the current epoch, trial, and ROI groupings.
 - Build downstream group-analysis loaders that consume `fov_groups.csv` and `roi_matches.csv` alongside per-recording analysis outputs for matched-cell and pooled-ROI summaries.

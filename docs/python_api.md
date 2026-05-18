@@ -48,14 +48,12 @@ from pathlib import Path
 import numpy as np
 
 from twopy import (
-    classify_recording_photodiode_events,
     compute_roi_delta_f_over_f,
-    detect_recording_photodiode_events,
     extract_background_corrected_roi_traces,
     load_converted_recording,
     make_roi_set,
-    map_stimulus_epochs_to_frame_windows,
     recording_frame_rate_hz,
+    resolve_recording_timing,
     select_baseline_frame_windows,
 )
 
@@ -68,9 +66,8 @@ traces = extract_background_corrected_roi_traces(
     roi_set,
     method="movie_global_percentile",
 )
-alignment = detect_recording_photodiode_events(recording)
-timing = classify_recording_photodiode_events(recording, alignment)
-epoch_windows = map_stimulus_epochs_to_frame_windows(recording, alignment)
+timing = resolve_recording_timing(recording)
+epoch_windows = timing.epoch_windows
 baseline_windows = select_baseline_frame_windows(
     epoch_windows,
     epoch_name="Gray Interleave",
@@ -177,7 +174,7 @@ Response maps use the following data flow:
 - Saved epoch maps are scaled by the largest absolute finite response across all epochs; multiply `epoch.response_values` by `map_data.response_scale` to recover original dF/F units.
 - Napari display and exports use a separate robust 95th-percentile color limit, optionally shared across epochs, without changing saved heatmap values.
 
-Stimulus epoch windows come from classified photodiode events, not nominal frame-rate assumptions. `timing.events` keeps the start, transition, and end classifications auditable. ROI dF/F uses corrected fluorescence plus baseline windows to fit one shared exponential tau and one amplitude per ROI. When scripts do not pass explicit baseline windows or a baseline selector, twopy defaults to the first epoch name containing `gray`, `grey`, or `interleave`, then falls back to epoch 1. For stimuli without a distinct baseline epoch, pass `baseline_mode="no_baseline_epoch"` plus the first epoch number to include in the baseline fit; twopy fits over one continuous span from that epoch through later epochs. The default dF/F fit mode is `direct_bounded_tau`; use `log_linear` for a log-space linear fit, or `direct_bounded_tau_and_log_amplitude` when both tau and log-amplitude should be bounded.
+Stimulus epoch windows come from `resolve_recording_timing(...)`, not nominal frame-rate assumptions. Native timing prefers classified photodiode boundary evidence when the converted stimulus table has active `photodiode_flash` rows, and keeps interpolation for recordings without that boundary-flash contract. `timing.source` and `timing.metadata` keep the chosen path auditable. ROI dF/F uses corrected fluorescence plus baseline windows to fit one shared exponential tau and one amplitude per ROI. When scripts do not pass explicit baseline windows or a baseline selector, twopy defaults to the first epoch name containing `gray`, `grey`, or `interleave`, then falls back to epoch 1. For stimuli without a distinct baseline epoch, pass `baseline_mode="no_baseline_epoch"` plus the first epoch number to include in the baseline fit; twopy fits over one continuous span from that epoch through later epochs. The default dF/F fit mode is `direct_bounded_tau`; use `log_linear` for a log-space linear fit, or `direct_bounded_tau_and_log_amplitude` when both tau and log-amplitude should be bounded.
 
 Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response processing:
 
