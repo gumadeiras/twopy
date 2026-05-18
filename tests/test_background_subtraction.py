@@ -8,9 +8,9 @@ import unittest
 from pathlib import Path
 from typing import cast
 
-import h5py
 import numpy as np
 import numpy.typing as npt
+from tests.converted_files import write_aligned_movie_file
 from tests.tempdir import temporary_directory
 
 from twopy import extract_background_corrected_roi_traces, make_roi_set
@@ -536,9 +536,7 @@ class BackgroundSubtractionTest(unittest.TestCase):
             full_frame_crop(movie_values.shape[1:]) if crop is None else crop
         )
         movie_path = root / "aligned_movie.h5"
-        with h5py.File(movie_path, "w") as h5_file:
-            h5_file.attrs["twopy_format"] = "aligned-movie"
-            h5_file.create_dataset("movie/aligned", data=movie_values)
+        write_aligned_movie_file(movie_path, movie_values)
 
         return RecordingData(
             path=root / "recording_data.h5",

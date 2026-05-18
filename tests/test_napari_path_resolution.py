@@ -4,6 +4,7 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from tests.converted_files import write_converted_recording_files
 from tests.napari_support import (
     NapariAdapterTestCase,
     Path,
@@ -14,7 +15,6 @@ from tests.napari_support import (
     _write_source_recording_shape,
     add_twopy_magicgui_controls,
     chdir,
-    h5py,
     patch,
     resolve_launch_recording_path,
     resolve_or_convert_recording,
@@ -412,9 +412,11 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             source_dir = root / "source"
             output_dir = root / "converted"
             _write_source_recording_shape(source_dir)
-            output_dir.mkdir()
-            with h5py.File(output_dir / "recording_data.h5", "w") as h5_file:
-                h5_file.attrs["source_session_dir"] = str(source_dir)
+            write_converted_recording_files(
+                output_dir,
+                source_session_dir=source_dir,
+            )
+            (output_dir / "aligned_movie.h5").unlink()
 
             with patch(
                 "twopy.napari.loading.convert_recording_to_twopy",
