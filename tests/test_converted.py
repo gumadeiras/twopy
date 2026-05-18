@@ -10,11 +10,16 @@ from typing import cast
 
 import h5py
 import numpy as np
-from tests.converted_files import write_aligned_movie_file
+from tests.converted_files import (
+    write_aligned_movie_file,
+    write_converted_recording_files,
+)
 from tests.tempdir import temporary_directory
 
 from twopy import load_converted_recording, recording_frame_rate_hz
+from twopy.conversion.types import FrameCountAudit
 from twopy.converted import RecordingData
+from twopy.spatial import SpatialCrop
 
 
 class ConvertedRecordingTest(unittest.TestCase):
@@ -100,7 +105,8 @@ class ConvertedRecordingTest(unittest.TestCase):
         """
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
-            self._write_recording_data_file(root / "recording_data.h5")
+            self._write_converted_recording(root)
+            (root / "aligned_movie.h5").unlink()
 
             with self.assertRaisesRegex(ValueError, "Missing converted aligned movie"):
                 load_converted_recording(root / "recording_data.h5")
@@ -309,101 +315,58 @@ class ConvertedRecordingTest(unittest.TestCase):
         Returns:
             None.
         """
-        with h5py.File(path, "w") as h5_file:
-            h5_file.attrs["twopy_format"] = "converted-recording"
-            h5_file.attrs["source_session_dir"] = "/source/recording"
-
-            movie_group = h5_file.create_group("movie")
-            movie_group.attrs["aligned_movie_file"] = "aligned_movie.h5"
-            movie_group.attrs["aligned_movie_dataset"] = "movie/aligned"
-            movie_group.attrs["aligned_movie_shape"] = (3, 2, 2)
-            movie_group.attrs["aligned_movie_dtype"] = "float64"
-            movie_group.create_dataset(
-                "mean_image",
-                data=np.array([[4.0, 5.0], [6.0, 7.0]]),
-            )
-            crop_group = movie_group.create_group("alignment_valid_crop")
-            crop_group.attrs["source"] = "alignment_valid_crop"
-            crop_group.attrs["axis0_start"] = 1
-            crop_group.attrs["axis0_stop"] = 2
-            crop_group.attrs["axis1_start"] = 0
-            crop_group.attrs["axis1_stop"] = 2
-            crop_group.attrs["original_shape"] = (2, 2)
-            crop_group.create_dataset(
-                "alignment_shift_pixels",
-                data=np.array([0.0, 6.0, 0.0]),
-            )
-            crop_group.create_dataset(
-                "motion_artifact_mask",
-                data=np.array([False, True, False]),
-            )
-
-            metadata_group = h5_file.create_group("metadata")
-            metadata_group.attrs["acq.frameRate"] = 10.0
-            metadata_group.attrs["acq.zoomFactor"] = 2.0
-
-            run_group = h5_file.create_group("run")
-            run_group.attrs["rig_name"] = "OdorRig"
-            run_group.attrs["run_number"] = 1
-
-            stimulus_group = h5_file.create_group("stimulus")
-            stimulus_group.attrs["clock_source"] = "stimulus presentation computer"
-            stimulus_group.create_dataset(
-                "data",
-                data=np.array(
-                    [[0.0, 1.0, 1.0], [0.1, 2.0, 2.0], [0.2, 3.0, 2.0]],
+        write_converted_recording_files(
+            path.parent,
+            movie_values=np.arange(12, dtype=np.float64).reshape(3, 2, 2),
+            alignment_valid_crop=SpatialCrop(
+                axis0_start=1,
+                axis0_stop=2,
+                axis1_start=0,
+                axis1_stop=2,
+                original_shape=(2, 2),
+                source="alignment_valid_crop",
+            ),
+            source_session_dir=Path("/source/recording"),
+            acquisition_metadata={"acq.frameRate": 10.0, "acq.zoomFactor": 2.0},
+            run_metadata={"rig_name": "OdorRig", "run_number": 1},
+            stimulus_data=np.array(
+                [[0.0, 1.0, 1.0], [0.1, 2.0, 2.0], [0.2, 3.0, 2.0]],
+            ),
+            stimulus_data_column_names=(
+                "time_seconds",
+                "stimulus_frame_number",
+                "epoch_number",
+            ),
+            stimulus_parameters_json=(
+                '[{"epochName": "Gray Interleave", "stimtype": 62002}, '
+                '{"epochName": "LR20", "stimtype": 62002}]'
+            ),
+            function_lookup_json='{"62002": "LEDMovingBars"}',
+            stimulus_specific_columns_json=stimulus_specific_columns_json
+            or (
+                '{"62002": {"stimtype": "62002", "function": "LEDMovingBars", '
+                '"source_path": "stimfunctions/LEDMovingBars.m", "columns": ['
+                '{"mat_slot": 1, "column_name": "stimulus_specific_01", '
+                '"source_expression": "p.antenna", "source_line": 4}]}}'
+            ),
+            imaging_res_pd=(
+                np.array([0.0, 1.0, 0.0]) if imaging_res_pd is None else imaging_res_pd
+            ),
+            high_res_pd=np.array([0.0, 1.0, 0.0, 1.0, 0.0]),
+            alignment_shift_pixels=np.array([0.0, 6.0, 0.0]),
+            motion_artifact_mask=np.array([False, True, False]),
+            frame_counts=FrameCountAudit(
+                aligned_movie_frames=3,
+                imaging_res_pd_samples=(
+                    3 if imaging_res_pd is None else len(imaging_res_pd)
                 ),
-            )
-            stimulus_group.create_dataset(
-                "data_column_names",
-                data=np.asarray(
-                    ("time_seconds", "stimulus_frame_number", "epoch_number"),
-                    dtype=h5py.string_dtype("utf-8"),
+                acquisition_number_of_frames=2,
+                imaging_res_pd_minus_movie=(
+                    0 if imaging_res_pd is None else len(imaging_res_pd) - 3
                 ),
-            )
-            stimulus_group.create_dataset(
-                "parameters_json",
-                data=(
-                    '[{"epochName": "Gray Interleave", "stimtype": 62002}, '
-                    '{"epochName": "LR20", "stimtype": 62002}]'
-                ),
-            )
-            stimulus_group.create_dataset(
-                "function_lookup_json",
-                data='{"62002": "LEDMovingBars"}',
-            )
-            stimulus_group.create_dataset(
-                "stimulus_specific_columns_json",
-                data=stimulus_specific_columns_json
-                or (
-                    '{"62002": {"stimtype": "62002", "function": "LEDMovingBars", '
-                    '"source_path": "stimfunctions/LEDMovingBars.m", "columns": ['
-                    '{"mat_slot": 1, "column_name": "stimulus_specific_01", '
-                    '"source_expression": "p.antenna", "source_line": 4}]}}'
-                ),
-            )
-
-            photodiode_group = h5_file.create_group("photodiode")
-            photodiode_group.attrs["sync_signal"] = "photodiode"
-            photodiode_group.create_dataset(
-                "imaging_res_pd",
-                data=(
-                    np.array([0.0, 1.0, 0.0])
-                    if imaging_res_pd is None
-                    else imaging_res_pd
-                ),
-            )
-            photodiode_group.create_dataset(
-                "high_res_pd",
-                data=np.array([0.0, 1.0, 0.0, 1.0, 0.0]),
-            )
-
-            frame_counts = h5_file.create_group("frame_counts")
-            frame_counts.attrs["aligned_movie_frames"] = 3
-            frame_counts.attrs["imaging_res_pd_samples"] = 3
-            frame_counts.attrs["acquisition_number_of_frames"] = 2
-            frame_counts.attrs["imaging_res_pd_minus_movie"] = 0
-            frame_counts.attrs["acquisition_minus_movie"] = -1
+                acquisition_minus_movie=-1,
+            ),
+        )
 
 
 if __name__ == "__main__":

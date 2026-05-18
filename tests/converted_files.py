@@ -14,6 +14,7 @@ import h5py
 import numpy as np
 import numpy.typing as npt
 
+from twopy.conversion.types import FrameCountAudit
 from twopy.spatial import SpatialCrop
 
 
@@ -59,6 +60,7 @@ def write_converted_recording_files(
     high_res_pd: npt.NDArray[np.float64] | None = None,
     alignment_shift_pixels: npt.NDArray[np.float64] | None = None,
     motion_artifact_mask: npt.NDArray[np.bool_] | None = None,
+    frame_counts: FrameCountAudit | None = None,
 ) -> Path:
     """Write one minimal converted recording and its aligned movie.
 
@@ -78,6 +80,7 @@ def write_converted_recording_files(
         high_res_pd: Optional high-resolution photodiode vector.
         alignment_shift_pixels: Optional per-frame alignment shifts.
         motion_artifact_mask: Optional per-frame motion mask.
+        frame_counts: Optional frame-count audit metadata override.
 
     Returns:
         Path to the written ``recording_data.h5`` file.
@@ -89,6 +92,21 @@ def write_converted_recording_files(
         else movie_values
     )
     frame_count = resolved_movie.shape[0]
+    resolved_imaging_res_pd = (
+        np.zeros(frame_count, dtype=np.float64)
+        if imaging_res_pd is None
+        else imaging_res_pd
+    )
+    resolved_high_res_pd = (
+        np.zeros(frame_count, dtype=np.float64) if high_res_pd is None else high_res_pd
+    )
+    resolved_frame_counts = frame_counts or FrameCountAudit(
+        aligned_movie_frames=frame_count,
+        imaging_res_pd_samples=len(resolved_imaging_res_pd),
+        acquisition_number_of_frames=frame_count,
+        imaging_res_pd_minus_movie=len(resolved_imaging_res_pd) - frame_count,
+        acquisition_minus_movie=0,
+    )
     resolved_crop = (
         SpatialCrop(
             axis0_start=0,
@@ -175,30 +193,28 @@ def write_converted_recording_files(
         photodiode_group = h5_file.create_group("photodiode")
         photodiode_group.create_dataset(
             "imaging_res_pd",
-            data=(
-                np.zeros(frame_count, dtype=np.float64)
-                if imaging_res_pd is None
-                else imaging_res_pd
-            ),
+            data=resolved_imaging_res_pd,
         )
         photodiode_group.create_dataset(
             "high_res_pd",
-            data=(
-                np.zeros(frame_count, dtype=np.float64)
-                if high_res_pd is None
-                else high_res_pd
-            ),
+            data=resolved_high_res_pd,
         )
 
         frame_counts = h5_file.create_group("frame_counts")
-        frame_counts.attrs["aligned_movie_frames"] = frame_count
+        frame_counts.attrs["aligned_movie_frames"] = (
+            resolved_frame_counts.aligned_movie_frames
+        )
         frame_counts.attrs["imaging_res_pd_samples"] = (
-            frame_count if imaging_res_pd is None else len(imaging_res_pd)
+            resolved_frame_counts.imaging_res_pd_samples
         )
-        frame_counts.attrs["acquisition_number_of_frames"] = frame_count
+        frame_counts.attrs["acquisition_number_of_frames"] = (
+            resolved_frame_counts.acquisition_number_of_frames
+        )
         frame_counts.attrs["imaging_res_pd_minus_movie"] = (
-            0 if imaging_res_pd is None else len(imaging_res_pd) - frame_count
+            resolved_frame_counts.imaging_res_pd_minus_movie
         )
-        frame_counts.attrs["acquisition_minus_movie"] = 0
+        frame_counts.attrs["acquisition_minus_movie"] = (
+            resolved_frame_counts.acquisition_minus_movie
+        )
 
     return recording_path
