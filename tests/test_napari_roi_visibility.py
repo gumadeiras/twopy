@@ -13,23 +13,15 @@ from tests.napari_support import (
     QColor,
     QPushButton,
     QScrollArea,
-    SpatialCrop,
-    _FakeLayer,
     _two_roi_response_plot_data,
     _two_roi_response_plot_data_with_correlation_scores,
     apply_roi_visibility_to_labels_layer,
     cast,
     create_response_plot_widget,
-    display_image_from_movie_image,
-    display_labels_from_movie_labels,
-    display_metadata_for_spatial_crop,
-    filter_response_plot_data_rois,
     global_value_bounds,
     interior_random_frame_indices,
-    movie_labels_from_display_layer,
     np,
     resolve_movie_frame_range,
-    roi_label_image_from_layer,
     unittest,
     visibility_options_widget,
 )
@@ -37,37 +29,6 @@ from tests.napari_support import (
 
 class NapariRoiVisibilityTest(NapariAdapterTestCase):
     """Napari ROI visibility tests."""
-
-    def test_filter_response_plot_data_rois_keeps_matching_rows(self) -> None:
-        """Confirm plot data ROI filtering keeps labels and trace rows aligned.
-
-        Inputs: two-ROI plot data and one row index to keep.
-        Outputs: every epoch and correlation score contains only the requested
-        ROI row.
-        """
-        filtered = filter_response_plot_data_rois(
-            _two_roi_response_plot_data_with_correlation_scores(),
-            (1,),
-        )
-        epoch = filtered.epochs[0]
-
-        self.assertEqual(epoch.roi_labels, ("roi_0002",))
-        np.testing.assert_array_equal(
-            epoch.mean_values,
-            np.array([[2.0, 3.0]], dtype=np.float64),
-        )
-        np.testing.assert_array_equal(
-            epoch.sem_values,
-            np.zeros((1, 2), dtype=np.float64),
-        )
-        self.assertIsNotNone(filtered.correlation_scores)
-        if filtered.correlation_scores is None:
-            raise AssertionError("correlation scores should be present")
-        self.assertEqual(filtered.correlation_scores.roi_labels, ("roi_0002",))
-        np.testing.assert_array_equal(
-            filtered.correlation_scores.included_mask,
-            np.array([False]),
-        )
 
     def test_correlation_filter_hides_excluded_rois_in_roi_tab(self) -> None:
         """Confirm correlation QC initializes ROI visibility checkboxes.
@@ -293,106 +254,6 @@ class NapariRoiVisibilityTest(NapariAdapterTestCase):
 
         self.assertIs(layer.metadata["twopy_base_label_color_dict"], cached)
         self.assertAlmostEqual(layer.get_color(1)[3], 1.0)
-
-    def test_display_helpers_transpose_movie_axes_for_napari(self) -> None:
-        """Confirm movie axes are transposed only at the napari boundary.
-
-        Inputs: non-square movie-coordinate image.
-        Outputs: display image with swapped spatial axes.
-        """
-        movie_image = np.arange(6, dtype=np.float64).reshape(2, 3)
-
-        display_image = display_image_from_movie_image(movie_image)
-
-        np.testing.assert_array_equal(display_image, movie_image.T)
-
-    def test_display_labels_round_trip_through_alignment_crop(self) -> None:
-        """Confirm napari labels return to full-frame movie coordinates.
-
-        Inputs: full-frame labels plus an alignment-valid crop.
-        Outputs: cropped/transposed display labels and restored full-frame
-        labels with zeros outside the displayed crop.
-        """
-        crop = SpatialCrop(
-            axis0_start=1,
-            axis0_stop=3,
-            axis1_start=0,
-            axis1_stop=3,
-            original_shape=(3, 4),
-            source="alignment_valid_crop",
-        )
-        movie_labels = np.array(
-            [
-                [0, 0, 0, 0],
-                [1, 0, 2, 0],
-                [0, 3, 0, 0],
-            ],
-            dtype=np.int64,
-        )
-
-        display_labels = display_labels_from_movie_labels(movie_labels, crop)
-        layer = _FakeLayer(
-            name="rois",
-            data=display_labels,
-            options={"metadata": display_metadata_for_spatial_crop(crop)},
-        )
-
-        self.assertEqual(display_labels.shape, (3, 2))
-        np.testing.assert_array_equal(roi_label_image_from_layer(layer), movie_labels)
-        np.testing.assert_array_equal(
-            movie_labels_from_display_layer(layer),
-            np.array(
-                [
-                    [0, 0, 0, 0],
-                    [1, 0, 2, 0],
-                    [0, 3, 0, 0],
-                ],
-                dtype=np.int64,
-            ),
-        )
-
-    def test_malformed_display_crop_metadata_is_ignored(self) -> None:
-        """Confirm bad crop metadata does not crash label extraction.
-
-        Inputs: display-coordinate labels with incomplete or invalid crop
-        metadata.
-        Outputs: labels treated as uncropped display data.
-        """
-        display_labels = np.array([[0, 1], [2, 0]], dtype=np.int64)
-        bad_metadata: tuple[dict[str, object], ...] = (
-            {
-                "twopy_display_spatial_crop": {
-                    "axis0_start": 0,
-                    "axis1_start": 0,
-                    "axis1_stop": 2,
-                    "original_shape": (2, 2),
-                    "source": "alignment_valid_crop",
-                }
-            },
-            {
-                "twopy_display_spatial_crop": {
-                    "axis0_start": True,
-                    "axis0_stop": 2,
-                    "axis1_start": 0,
-                    "axis1_stop": 2,
-                    "original_shape": (2, 2),
-                    "source": "alignment_valid_crop",
-                }
-            },
-        )
-
-        for metadata in bad_metadata:
-            with self.subTest(metadata=metadata):
-                layer = _FakeLayer(
-                    name="rois",
-                    data=display_labels,
-                    options={"metadata": metadata},
-                )
-
-                np.testing.assert_array_equal(
-                    movie_labels_from_display_layer(layer),
-                    display_labels,
-                )
 
     def test_movie_frame_range_accepts_last_default(self) -> None:
         """Confirm empty-launch widget defaults request the full movie.

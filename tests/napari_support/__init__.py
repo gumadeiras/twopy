@@ -4,6 +4,7 @@ Inputs: support modules with fake viewers, Qt helpers, and tiny data builders.
 Outputs: one import surface for napari test modules.
 """
 
+from tests import napari_plot_data_helpers as _plot_data_helpers
 from tests.napari_support.base import (
     APPLICATION_TITLE,
     PLOT_CONTROL_WIDTH,
@@ -203,18 +204,21 @@ from tests.napari_support.base import (
 from tests.napari_support.helpers import (
     _fake_convert_recording,
     _timeline_photodiode,
-    _tiny_dff,
-    _tiny_grouped_responses,
     _tiny_response_map_data,
-    _tiny_response_plot_data,
-    _two_roi_grouped_responses,
-    _two_roi_response_plot_data,
-    _two_roi_response_plot_data_with_correlation_scores,
     _two_window_timeline,
     _write_converted_recording,
     _write_database,
     _write_source_recording_shape,
     write_converted_recording_files,
+)
+
+_tiny_dff = _plot_data_helpers.tiny_dff
+_tiny_grouped_responses = _plot_data_helpers.tiny_grouped_responses
+_tiny_response_plot_data = _plot_data_helpers.tiny_response_plot_data
+_two_roi_grouped_responses = _plot_data_helpers._two_roi_grouped_responses
+_two_roi_response_plot_data = _plot_data_helpers.two_roi_response_plot_data
+_two_roi_response_plot_data_with_correlation_scores = (
+    _plot_data_helpers.two_roi_response_plot_data_with_correlation_scores
 )
 
 __all__ = (

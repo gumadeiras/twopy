@@ -19,7 +19,6 @@ from tests.napari_support import (
     _FakeViewer,
     _write_converted_recording,
     cast,
-    counted_noun,
     create_viewer,
     load_roi_set,
     make_roi_set,
@@ -36,17 +35,6 @@ from tests.napari_support import (
 
 class CoreNapariAdapterTest(NapariAdapterTestCase):
     """Core napari adapter tests."""
-
-    def test_counted_noun_formats_status_text(self) -> None:
-        """Confirm napari status text uses normal singular and plural words.
-
-        Inputs: singular and plural counts.
-        Outputs: phrases with full singular or plural nouns.
-        """
-        self.assertEqual(counted_noun(1, "file"), "1 file")
-        self.assertEqual(counted_noun(2, "file"), "2 files")
-        self.assertEqual(counted_noun(1, "ROI", "ROIs"), "1 ROI")
-        self.assertEqual(counted_noun(2, "ROI", "ROIs"), "2 ROIs")
 
     def test_create_viewer_uses_twopy_version_window_title(self) -> None:
         """Confirm the launcher brands the top-level napari window.

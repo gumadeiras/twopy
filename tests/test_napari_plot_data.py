@@ -1,34 +1,69 @@
-"""Napari response plot-data tests.
+"""Pure napari response plot-data tests.
 
-Inputs: shared fake napari state and tiny converted recordings.
-Outputs: assertions for one napari workflow area.
+Inputs: tiny grouped responses and saved analysis outputs.
+Outputs: plot-ready data assertions without importing Qt.
 """
 
-from tests.napari_support import (
-    DeltaFOverFOptions,
-    EpochFrameWindow,
-    FrameWindow,
-    NapariAdapterTestCase,
-    Path,
+import unittest
+import warnings
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+from tests.napari_plot_data_helpers import (
+    tiny_dff,
+    tiny_grouped_responses,
+    two_roi_response_plot_data_with_correlation_scores,
+)
+from tests.tempdir import temporary_directory
+
+from twopy.analysis.dff import RoiDeltaFOverF
+from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.persistence import save_analysis_outputs
+from twopy.analysis.response_window_options import ResponseWindowOptions
+from twopy.analysis.responses import group_delta_f_over_f_by_epoch
+from twopy.analysis.trials import EpochFrameWindow, FrameWindow
+from twopy.napari.plotting.data import (
     ResponsePlotData,
-    ResponseWindowOptions,
-    RoiDeltaFOverF,
-    _tiny_dff,
-    _tiny_grouped_responses,
-    group_delta_f_over_f_by_epoch,
+    filter_response_plot_data_rois,
     load_response_plot_data,
-    np,
-    replace,
     response_plot_data_from_grouped,
-    save_analysis_outputs,
-    temporary_directory,
-    unittest,
-    warnings,
 )
 
 
-class NapariPlotDataTest(NapariAdapterTestCase):
+class NapariPlotDataTest(unittest.TestCase):
     """Napari response plot-data tests."""
+
+    def test_filter_response_plot_data_rois_keeps_matching_rows(self) -> None:
+        """Confirm plot data ROI filtering keeps labels and trace rows aligned.
+
+        Inputs: two-ROI plot data and one row index to keep.
+        Outputs: every epoch and correlation score contains only the requested
+        ROI row.
+        """
+        filtered = filter_response_plot_data_rois(
+            two_roi_response_plot_data_with_correlation_scores(),
+            (1,),
+        )
+        epoch = filtered.epochs[0]
+
+        self.assertEqual(epoch.roi_labels, ("roi_0002",))
+        np.testing.assert_array_equal(
+            epoch.mean_values,
+            np.array([[2.0, 3.0]], dtype=np.float64),
+        )
+        np.testing.assert_array_equal(
+            epoch.sem_values,
+            np.zeros((1, 2), dtype=np.float64),
+        )
+        self.assertIsNotNone(filtered.correlation_scores)
+        if filtered.correlation_scores is None:
+            raise AssertionError("correlation scores should be present")
+        self.assertEqual(filtered.correlation_scores.roi_labels, ("roi_0002",))
+        np.testing.assert_array_equal(
+            filtered.correlation_scores.included_mask,
+            np.array([False]),
+        )
 
     def test_response_plot_data_summarizes_epoch_roi_mean_and_sem(self) -> None:
         """Confirm plotting data has one mean and SEM trace per ROI.
@@ -161,7 +196,7 @@ class NapariPlotDataTest(NapariAdapterTestCase):
         with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "analysis_outputs.h5"
             grouped = replace(
-                _tiny_grouped_responses(),
+                tiny_grouped_responses(),
                 response_window_auto=True,
             )
 
@@ -192,7 +227,7 @@ class NapariPlotDataTest(NapariAdapterTestCase):
             path = Path(temp_dir) / "analysis_outputs.h5"
             save_analysis_outputs(
                 path,
-                dff=_tiny_dff(
+                dff=tiny_dff(
                     {
                         "method": "test",
                         "baseline_mode": "no_baseline_epoch",
@@ -202,7 +237,7 @@ class NapariPlotDataTest(NapariAdapterTestCase):
                         "fit_mode": "log_linear",
                     },
                 ),
-                grouped_responses=_tiny_grouped_responses(),
+                grouped_responses=tiny_grouped_responses(),
             )
 
             result = load_response_plot_data(path)
