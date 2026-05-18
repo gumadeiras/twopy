@@ -64,15 +64,27 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
 
             opened = open_recording_in_napari(recording_path, viewer=viewer)
 
-            self.assertIsNotNone(opened.roi_labels_layer)
-            self.assertIsNotNone(opened.load_widget)
-            self.assertIsNotNone(opened.loaded_recordings_widget)
-            self.assertIsNotNone(opened.twopy_sidebar_widget)
-            self.assertIsNotNone(opened.twopy_sidebar_dock_widget)
-            self.assertIsNotNone(opened.response_plot_widget)
-            self.assertIsNotNone(opened.response_plot_dock_widget)
-            self.assertIsNotNone(opened.response_options_widget)
+            self.assertIs(opened.viewer, viewer)
             self.assertEqual(len(viewer.labels), 1)
+            self.assertIs(opened.roi_labels_layer, viewer.labels[0])
+            self.assertEqual(len(viewer.images), 1)
+            self.assertIs(opened.mean_image_layer, viewer.images[0])
+            self.assertIsNone(opened.movie_layer)
+            self.assertEqual(len(viewer.window.dock_widgets), 2)
+            self.assertIs(
+                opened.response_plot_dock_widget,
+                viewer.window.dock_widgets[0],
+            )
+            self.assertIs(
+                opened.twopy_sidebar_dock_widget,
+                viewer.window.dock_widgets[1],
+            )
+            self.assertIs(
+                opened.response_plot_widget, viewer.window.dock_widgets[0].widget
+            )
+            self.assertIs(
+                opened.twopy_sidebar_widget, viewer.window.dock_widgets[1].widget
+            )
             self.assertEqual(viewer.labels[0].options["opacity"], 0.5)
             self.assertEqual(viewer.labels[0].options["blending"], "additive")
             self.assertEqual(viewer.labels[0].brush_size, 6)
@@ -80,7 +92,6 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             self.assertEqual(viewer.images[0].options["gamma"], 1.3)
             self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
             self.assertEqual(viewer.images[0].contrast_limits_range, (4.0, 7.0))
-            self.assertEqual(len(viewer.window.dock_widgets), 2)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
             self.assertEqual(viewer.window._qt_window.resize_calls[0].sizes, [345])

@@ -107,6 +107,7 @@ TEST_GROUPS = {
         "tests.test_napari_plot_data",
         "tests.test_napari_plot_widgets",
         "tests.test_napari_processing_controls",
+        "tests.test_napari_response_map_display",
         "tests.test_napari_response_workflow",
         "tests.test_napari_roi_generation",
         "tests.test_napari_roi_visibility",
