@@ -128,6 +128,7 @@ twopy is a two-photon imaging analysis tool.
   - what it does
   - why it exists in the analysis workflow
 - Use human language. Explain the goal and intuition, not just mechanics.
+- Write documentation and comments from the reader's concrete object first: say what the user sees, what data value is used, and why it stays correct; avoid dense phrases that combine implementation jargon such as "factory", "derive", "identity", or "contract" unless those words are the subject being explained.
 - Key analysis code must include inline comments that explain the reasoning behind the logic.
 - Comments should clarify scientific or data-processing intent. Do not restate obvious syntax.
 

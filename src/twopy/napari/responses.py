@@ -56,6 +56,9 @@ class ResponseAnalysisRequest:
 
     The request stores the core ROI object rather than a napari layer so
     preview and save actions share one analysis contract after GUI validation.
+    Requests built from napari Labels layers use labels such as ``roi_0004``.
+    The number comes from the integer label painted in the layer, so each drawn
+    ROI has a stable name while the user edits its pixels.
     """
 
     recording: RecordingData
