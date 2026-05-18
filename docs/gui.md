@@ -57,7 +57,7 @@ Save ROIs + analysis writes `rois.h5` beside the current local recording plus:
 - `exports/csvs/response_summary_trials.csv`
 - `exports/csvs/response_summary_grouped.csv`
 
-Export actions write recording views, ROI views, overlays, per-epoch response plots, response heatmaps, and paired ROI-overlay/response figures under `exports/`.
+Export actions write recording views, ROI views, overlays, per-epoch response plots, response heatmaps, and paired ROI-overlay/response figures under `exports/`. When analysis caching publishes those PDF and PNG figures back to `analysis_output`, twopy deletes the local cache copies after the destination copy succeeds.
 
 When `analysis_caching: true`, Save ROIs + analysis saves locally first and then syncs the changed ROI, analysis HDF5, response heatmap HDF5, and response-summary CSV files to the configured `analysis_output` destination in a background worker. The Metadata tab reports local save, sync success, or sync failure.
 

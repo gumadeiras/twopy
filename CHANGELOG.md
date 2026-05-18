@@ -18,6 +18,7 @@
 ### Fixes
 
 - Restored saved-analysis reload for source recordings routed through the stable external analysis cache.
+- Deleted local cached PDF and PNG export figures after they successfully sync to the configured analysis output destination.
 - Prevented database search favorites from changing the dialog state or overwriting a corrupt favorites file when local YAML persistence fails.
 
 ## 0.1.9 - 2026-05-17

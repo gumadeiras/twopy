@@ -266,6 +266,11 @@ def _export_status(
         return status
     if len(sync_result.copied_paths) == 0:
         return f"{status}; sync already current"
+    if len(sync_result.removed_local_paths) > 0:
+        return (
+            f"Synced {counted_noun(len(sync_result.copied_paths), 'file')} "
+            f"to {sync_result.publish_root}; removed local cache copies"
+        )
     return (
         f"{status}; synced {counted_noun(len(sync_result.copied_paths), 'file')} "
         f"to {sync_result.publish_root}"

@@ -11,6 +11,7 @@ from tests.napari_support import (
     NapariAdapterTestCase,
     Path,
     QApplication,
+    QLabel,
     QPushButton,
     ResponseExportState,
     ResponseMapData,
@@ -163,11 +164,12 @@ class NapariExportTest(NapariAdapterTestCase):
         )
 
     def test_response_export_tab_syncs_cached_exports_to_publish_root(self) -> None:
-        """Confirm Export-tab files are published when analysis caching is on.
+        """Confirm cached Export-tab figures publish then leave local cache.
 
         Inputs: cached converted recording, source publish destination, and the
         recording-view export button.
-        Outputs: local export files are copied to the source ``twopy`` folder.
+        Outputs: local export figures are copied to the source ``twopy`` folder
+        and deleted from the cache.
         """
         _ = QApplication.instance() or QApplication([])
         with temporary_directory() as temp_dir:
@@ -216,9 +218,14 @@ class NapariExportTest(NapariAdapterTestCase):
                     button.text(): button for button in tab.findChildren(QPushButton)
                 }
                 buttons["Save recording view"].click()
+                status = tab.findChild(QLabel)
             finally:
                 chdir(original_cwd)
 
+            local_pdf = local_dir / "exports" / "recording_view" / "recording_view.pdf"
+            local_png = local_dir / "exports" / "recording_view" / "recording_view.png"
+            self.assertFalse(local_pdf.exists())
+            self.assertFalse(local_png.exists())
             self.assertTrue(
                 (
                     publish_dir / "exports" / "recording_view" / "recording_view.pdf"
@@ -229,6 +236,8 @@ class NapariExportTest(NapariAdapterTestCase):
                     publish_dir / "exports" / "recording_view" / "recording_view.png"
                 ).is_file(),
             )
+            self.assertIsNotNone(status)
+            self.assertIn("removed local cache copies", status.text())
 
     def test_export_roi_contours_keep_display_orientation(self) -> None:
         """Confirm exported ROI contours keep the same top-origin view as napari.

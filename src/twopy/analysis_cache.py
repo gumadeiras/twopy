@@ -5,7 +5,9 @@ Outputs: cache refreshes and publish-sync plans for twopy-owned outputs.
 
 The cache keeps interactive reads and writes on local storage. The publish sync
 copies only user-visible analysis outputs back to the configured output folder;
-converted movies remain derived local working files by default.
+converted movies remain derived local working files by default. Exported figure
+files are removed from the local cache after they copy successfully because the
+publish destination is their durable location.
 """
 
 import shutil
@@ -42,6 +44,7 @@ _CACHE_REFRESH_FILENAMES = (
     ANALYSIS_OUTPUT_FILENAME,
     RESPONSE_HEATMAPS_FILENAME,
 )
+_REMOVE_AFTER_SYNC_SUFFIXES = frozenset((".pdf", ".png"))
 
 
 @dataclass(frozen=True)
@@ -62,11 +65,12 @@ class AnalysisSyncResult:
     """Result of publishing saved analysis outputs.
 
     Inputs: one completed sync plan.
-    Outputs: publish paths that were copied.
+    Outputs: publish paths that were copied and local cache files removed.
     """
 
     publish_root: Path
     copied_paths: tuple[Path, ...]
+    removed_local_paths: tuple[Path, ...] = ()
 
 
 def refresh_cached_analysis_outputs(
@@ -176,9 +180,12 @@ def copy_analysis_sync_plan(plan: AnalysisSyncPlan) -> AnalysisSyncResult:
         Publish paths copied by this sync.
 
     Copies go through a temporary file in the target directory before replace,
-    so readers never see a partially written HDF5 or CSV file.
+    so readers never see a partially written HDF5, CSV, or figure file. Figure
+    files are cache artifacts and are deleted locally after the destination copy
+    succeeds.
     """
     copied: list[Path] = []
+    removed: list[Path] = []
     for local_path in plan.local_paths:
         if not local_path.is_file():
             continue
@@ -188,9 +195,13 @@ def copy_analysis_sync_plan(plan: AnalysisSyncPlan) -> AnalysisSyncResult:
             continue
         copy_file_atomically(local_path, publish_path)
         copied.append(publish_path)
+        if _should_remove_after_sync(local_path):
+            local_path.unlink()
+            removed.append(local_path)
     return AnalysisSyncResult(
         publish_root=plan.publish_root,
         copied_paths=tuple(copied),
+        removed_local_paths=tuple(removed),
     )
 
 
@@ -273,3 +284,8 @@ def _same_path(left: Path, right: Path) -> bool:
     return left.expanduser().resolve(strict=False) == right.expanduser().resolve(
         strict=False,
     )
+
+
+def _should_remove_after_sync(path: Path) -> bool:
+    """Return whether a local cache file is disposable after publish sync."""
+    return path.suffix.lower() in _REMOVE_AFTER_SYNC_SUFFIXES
