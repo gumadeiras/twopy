@@ -1,0 +1,261 @@
+"""Napari response plot-data tests.
+
+Inputs: shared fake napari state and tiny converted recordings.
+Outputs: assertions for one napari workflow area.
+"""
+
+from tests.napari_support import (
+    DeltaFOverFOptions,
+    EpochFrameWindow,
+    FrameWindow,
+    NapariAdapterTestCase,
+    Path,
+    ResponsePlotData,
+    ResponseWindowOptions,
+    RoiDeltaFOverF,
+    _tiny_dff,
+    _tiny_grouped_responses,
+    group_delta_f_over_f_by_epoch,
+    load_response_plot_data,
+    np,
+    replace,
+    response_plot_data_from_grouped,
+    save_analysis_outputs,
+    temporary_directory,
+    unittest,
+    warnings,
+)
+
+
+class NapariPlotDataTest(NapariAdapterTestCase):
+    """Napari response plot-data tests."""
+
+    def test_response_plot_data_summarizes_epoch_roi_mean_and_sem(self) -> None:
+        """Confirm plotting data has one mean and SEM trace per ROI.
+
+        Inputs: two repeated trials for one epoch and two ROIs.
+        Outputs: plot-ready arrays shaped as ``(roi, frame)``.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((4, 2), dtype=np.float64),
+            baseline=np.ones((4, 2), dtype=np.float64),
+            values=np.array(
+                [
+                    [1.0, 2.0],
+                    [3.0, 4.0],
+                    [5.0, 8.0],
+                    [7.0, 10.0],
+                ],
+                dtype=np.float64,
+            ),
+            labels=("roi_1", "roi_2"),
+            start_frame=0,
+            stop_frame=4,
+            tau=0.0,
+            amplitudes=np.ones(2, dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 2), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "odor_1"), 2, "Odor"),
+                EpochFrameWindow(FrameWindow(1, 2, 4, "odor_2"), 2, "Odor"),
+            ),
+            data_rate_hz=2.0,
+        )
+
+        plot_data = response_plot_data_from_grouped(grouped)
+
+        self.assertEqual(len(plot_data.epochs), 1)
+        epoch = plot_data.epochs[0]
+        self.assertEqual(epoch.epoch_name, "Odor")
+        np.testing.assert_allclose(epoch.time_seconds, np.array([0.0, 0.5]))
+        np.testing.assert_allclose(
+            epoch.mean_values,
+            np.array([[3.0, 5.0], [5.0, 7.0]]),
+        )
+        np.testing.assert_allclose(
+            epoch.sem_values,
+            np.array([[2.0, 2.0], [3.0, 3.0]]),
+        )
+
+    def test_response_plot_data_avoids_sem_warning_for_single_trial(self) -> None:
+        """Confirm one-trial epochs do not emit NumPy SEM warnings.
+
+        Inputs: one trial for one epoch and one ROI.
+        Outputs: plot-ready data has zero SEM and no runtime warning.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((2, 1), dtype=np.float64),
+            baseline=np.ones((2, 1), dtype=np.float64),
+            values=np.array([[1.0], [3.0]], dtype=np.float64),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=2,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 2, "Odor"),),
+            data_rate_hz=2.0,
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            plot_data = response_plot_data_from_grouped(grouped)
+
+        np.testing.assert_allclose(
+            plot_data.epochs[0].sem_values,
+            np.zeros((1, 2), dtype=np.float64),
+        )
+
+    def test_response_plot_data_uses_prestimulus_time_axis(self) -> None:
+        """Confirm response plots preserve negative prestimulus times.
+
+        Inputs: dF/F grouped with one second before stimulus onset.
+        Outputs: plot-ready time axis starts at ``-1`` seconds.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((4, 1), dtype=np.float64),
+            baseline=np.ones((4, 1), dtype=np.float64),
+            values=np.array([[0.0], [1.0], [2.0], [3.0]], dtype=np.float64),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=4,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (EpochFrameWindow(FrameWindow(0, 2, 4, "odor"), 2, "Odor"),),
+            data_rate_hz=2.0,
+            pre_window_seconds=1.0,
+        )
+
+        plot_data = response_plot_data_from_grouped(grouped)
+
+        np.testing.assert_allclose(
+            plot_data.epochs[0].time_seconds,
+            np.array([-1.0, -0.5, 0.0, 0.5]),
+        )
+        np.testing.assert_allclose(
+            plot_data.epochs[0].mean_values,
+            np.array([[0.0, 1.0, 2.0, 3.0]]),
+        )
+
+    def test_load_response_plot_data_restores_saved_auto_response_window(self) -> None:
+        """Confirm saved analysis reloads the response-window Auto choice.
+
+        Inputs: grouped responses persisted with ``response_window_auto`` true.
+        Outputs: loaded plot data hydrates ``ResponseWindowOptions.auto`` true.
+        """
+        with temporary_directory() as temp_dir:
+            path = Path(temp_dir) / "analysis_outputs.h5"
+            grouped = replace(
+                _tiny_grouped_responses(),
+                response_window_auto=True,
+            )
+
+            save_analysis_outputs(path, grouped_responses=grouped)
+
+            result = load_response_plot_data(path)
+
+        self.assertIsInstance(result, ResponsePlotData)
+        if isinstance(result, ResponsePlotData):
+            self.assertEqual(
+                result.response_window_options,
+                ResponseWindowOptions(
+                    auto=True,
+                    pre_window_seconds=0.0,
+                    post_window_seconds=0.0,
+                ),
+            )
+
+    def test_load_response_plot_data_restores_saved_baseline_epoch_selection(
+        self,
+    ) -> None:
+        """Confirm saved analysis reloads the baseline epoch selector.
+
+        Inputs: persisted dF/F metadata with a non-default baseline epoch.
+        Outputs: loaded plot data hydrates the dF/F Plot-tab selector.
+        """
+        with temporary_directory() as temp_dir:
+            path = Path(temp_dir) / "analysis_outputs.h5"
+            save_analysis_outputs(
+                path,
+                dff=_tiny_dff(
+                    {
+                        "method": "test",
+                        "baseline_mode": "no_baseline_epoch",
+                        "baseline_epoch_number": 3,
+                        "baseline_epoch_name": "Manual baseline",
+                        "baseline_sample_seconds": "full",
+                        "fit_mode": "log_linear",
+                    },
+                ),
+                grouped_responses=_tiny_grouped_responses(),
+            )
+
+            result = load_response_plot_data(path)
+
+        self.assertIsInstance(result, ResponsePlotData)
+        if isinstance(result, ResponsePlotData):
+            self.assertEqual(
+                result.delta_f_over_f_options,
+                DeltaFOverFOptions(
+                    baseline_mode="no_baseline_epoch",
+                    baseline_epoch_number=3,
+                    baseline_epoch_name="Manual baseline",
+                    baseline_sample_seconds=None,
+                    fit_mode="log_linear",
+                    apply_motion_mask=False,
+                ),
+            )
+
+    def test_response_plot_data_sorts_epochs_by_number(self) -> None:
+        """Confirm epoch plots and option lists use epoch-number order.
+
+        Inputs: grouped responses whose first trial is epoch 3 before epoch 1.
+        Outputs: plot data ordered as epoch 1, then epoch 3.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((4, 1), dtype=np.float64),
+            baseline=np.ones((4, 1), dtype=np.float64),
+            values=np.arange(4, dtype=np.float64).reshape(4, 1),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=4,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            (
+                EpochFrameWindow(FrameWindow(0, 0, 2, "epoch_3"), 3, "Third"),
+                EpochFrameWindow(FrameWindow(1, 2, 4, "epoch_1"), 1, "First"),
+            ),
+            data_rate_hz=1.0,
+        )
+
+        plot_data = response_plot_data_from_grouped(grouped)
+
+        self.assertEqual(
+            tuple(epoch.epoch_number for epoch in plot_data.epochs),
+            (1, 3),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

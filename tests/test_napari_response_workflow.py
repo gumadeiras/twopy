@@ -1,0 +1,560 @@
+"""Napari response workflow tests.
+
+Inputs: shared fake napari state and tiny converted recordings.
+Outputs: assertions for one napari workflow area.
+"""
+
+from tests.napari_support import (
+    Any,
+    DeltaFOverFOptions,
+    EpochFrameWindow,
+    FrameWindow,
+    NapariAdapterTestCase,
+    NormalizationOptions,
+    Path,
+    QLabel,
+    ResponseProcessingOptions,
+    ResponseWindowOptions,
+    RoiCorrelationScores,
+    SimpleNamespace,
+    SpatialCrop,
+    _FakeViewer,
+    _tiny_grouped_responses,
+    _tiny_response_map_data,
+    _tiny_response_plot_data,
+    _write_converted_recording,
+    _write_source_recording_shape,
+    cast,
+    chdir,
+    compute_response_preview,
+    load_converted_recording,
+    load_response_map_data,
+    make_roi_set,
+    np,
+    open_recording_in_napari,
+    patch,
+    response_analysis_request_from_label_image,
+    roi_label_image_from_layer,
+    roi_set_to_label_image,
+    save_analysis_outputs,
+    save_roi_set,
+    temporary_directory,
+    unittest,
+)
+
+
+class NapariResponseWorkflowTest(NapariAdapterTestCase):
+    """Napari response workflow tests."""
+
+    def test_response_update_rejects_full_frame_labels_layer(self) -> None:
+        """Confirm response updates use the same crop-native ROI contract.
+
+        Inputs: cropped recording display plus a stale full-frame Labels image.
+        Outputs: response widget status explains that the layer shape is
+        invalid before analysis runs.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                movie_values=np.arange(27, dtype=np.float64).reshape(3, 3, 3),
+                alignment_valid_crop=SpatialCrop(
+                    axis0_start=1,
+                    axis0_stop=3,
+                    axis1_start=0,
+                    axis1_stop=2,
+                    original_shape=(3, 3),
+                    source="alignment_valid_crop",
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.ones((3, 3), dtype=np.int64)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            response_widget.update_from_current_rois()
+
+            status_text = "\n".join(
+                label.text() for label in response_widget.findChildren(QLabel)
+            )
+            self.assertIn(
+                "ROI Labels layer must use the cropped recording view",
+                status_text,
+            )
+
+    def test_response_update_from_rois_does_not_write_analysis_file(self) -> None:
+        """Confirm napari plot previews compute in memory only.
+
+        Inputs: edited Labels layer and a patched response calculation.
+        Outputs: plot data shown in the widget without creating analysis HDF5.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            with patch(
+                "twopy.napari.interactive.compute_response_preview",
+                return_value=_tiny_response_plot_data(),
+            ):
+                response_widget.update_from_current_rois()
+
+            self.assertFalse((root / "analysis_outputs.h5").exists())
+            self.assertFalse((root / "response_summary_trials.csv").exists())
+            self.assertFalse((root / "response_summary_grouped.csv").exists())
+            self.assertFalse((root / "exports" / "csvs").exists())
+            self.assertIsNotNone(response_widget._plot_data)
+
+    def test_live_response_plot_data_preserves_gray_post_window(self) -> None:
+        """Confirm live Plot-tab recompute keeps post-stimulus plot context.
+
+        Inputs: converted recording with a gray epoch and patched analysis
+        computation.
+        Outputs: the live plot path requests the same two-second post window
+        used when saved analysis outputs are loaded for plotting.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(
+                _write_converted_recording(
+                    root,
+                    stimulus_parameters_json=(
+                        '[{"epochName": "Gray"}, {"epochName": "Odor A"}]'
+                    ),
+                ),
+            )
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                epoch_windows=(
+                    EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),
+                ),
+                response_processing_options=ResponseProcessingOptions(),
+                correlation_scores=RoiCorrelationScores(
+                    roi_labels=("roi_1",),
+                    scores=np.array([1.0], dtype=np.float64),
+                    included_mask=np.array([True], dtype=np.bool_),
+                    minimum_correlation=0.5,
+                    reference="epoch_mean",
+                    window_seconds=(0.0, None),
+                ),
+            )
+
+            with patch(
+                "twopy.napari.responses.compute_recording_responses",
+                return_value=computation,
+            ) as compute:
+                request = response_analysis_request_from_label_image(
+                    recording,
+                    roi_set_to_label_image(roi_set),
+                )
+                plot_data = compute_response_preview(request)
+
+            self.assertIsNotNone(plot_data)
+            self.assertIs(plot_data.correlation_scores, computation.correlation_scores)
+            self.assertEqual(
+                compute.call_args.kwargs["response_pre_window_seconds"],
+                2.0,
+            )
+            self.assertEqual(
+                compute.call_args.kwargs["response_post_window_seconds"],
+                2.0,
+            )
+
+    def test_live_response_plot_data_omits_post_window_without_gray(self) -> None:
+        """Confirm non-interleave recordings keep epoch-bounded live plots.
+
+        Inputs: converted recording without gray/grey/interleave epoch names.
+        Outputs: the live plot path requests no post-epoch plotting context.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(
+                _write_converted_recording(
+                    root,
+                    stimulus_parameters_json=(
+                        '[{"epochName": "Odor A"}, {"epochName": "Odor B"}]'
+                    ),
+                ),
+            )
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                epoch_windows=(
+                    EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),
+                ),
+                response_processing_options=ResponseProcessingOptions(),
+                correlation_scores=None,
+            )
+
+            with patch(
+                "twopy.napari.responses.compute_recording_responses",
+                return_value=computation,
+            ) as compute:
+                request = response_analysis_request_from_label_image(
+                    recording,
+                    roi_set_to_label_image(roi_set),
+                )
+                plot_data = compute_response_preview(request)
+
+            self.assertIsNotNone(plot_data)
+            self.assertEqual(
+                compute.call_args.kwargs["response_pre_window_seconds"],
+                2.0,
+            )
+            self.assertEqual(
+                compute.call_args.kwargs["response_post_window_seconds"],
+                0.0,
+            )
+
+    def test_live_response_plot_data_uses_manual_response_window(self) -> None:
+        """Confirm manual Plot-tab response windows reach live analysis.
+
+        Inputs: converted recording, manual response-window options, and
+        patched analysis computation.
+        Outputs: live analysis receives the requested pre/post seconds.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]]),
+                labels=("roi_1",),
+            )
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                epoch_windows=(
+                    EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),
+                ),
+                response_processing_options=ResponseProcessingOptions(),
+                correlation_scores=None,
+            )
+
+            with patch(
+                "twopy.napari.responses.compute_recording_responses",
+                return_value=computation,
+            ) as compute:
+                request = response_analysis_request_from_label_image(
+                    recording,
+                    roi_set_to_label_image(roi_set),
+                    response_window_options=ResponseWindowOptions(
+                        auto=False,
+                        pre_window_seconds=0.5,
+                        post_window_seconds=1.5,
+                    ),
+                )
+                plot_data = compute_response_preview(request)
+
+            self.assertIsNotNone(plot_data)
+            self.assertEqual(
+                compute.call_args.kwargs["response_pre_window_seconds"],
+                0.5,
+            )
+            self.assertEqual(
+                compute.call_args.kwargs["response_post_window_seconds"],
+                1.5,
+            )
+
+    def test_save_analysis_button_writes_roi_and_analysis_outputs(self) -> None:
+        """Confirm the Export tab can persist current ROI analysis.
+
+        Inputs: edited Labels layer and a patched analysis workflow.
+        Outputs: ROI HDF5 file written beside the recording without replacing
+        the current in-memory plot preview.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            analysis_path = root / "analysis_outputs.h5"
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
+            response_widget = cast(Any, opened.response_plot_widget)
+            preview_plot_data = _tiny_response_plot_data()
+            preview_map_data = _tiny_response_map_data()
+            response_widget._plot_data = preview_plot_data
+            response_widget._response_map_data = preview_map_data
+            response_widget._set_response_window_options(
+                ResponseWindowOptions(
+                    auto=False,
+                    pre_window_seconds=0.5,
+                    post_window_seconds=1.5,
+                ),
+            )
+
+            with patch(
+                (
+                    "twopy.napari.plotting.docks.save_actions."
+                    "analyze_recording_responses"
+                ),
+                return_value=SimpleNamespace(
+                    output_path=analysis_path,
+                    grouped_responses=_tiny_grouped_responses(),
+                    response_summary_trials_csv_path=None,
+                    response_summary_grouped_csv_path=None,
+                ),
+            ) as analyze:
+                response_widget.save_analysis_and_rois()
+
+            roi_path = root / "rois.h5"
+            heatmap_path = root / "response_heatmaps.h5"
+            self.assertTrue(roi_path.is_file())
+            self.assertTrue(heatmap_path.is_file())
+            loaded_heatmaps = load_response_map_data(heatmap_path)
+            np.testing.assert_allclose(
+                loaded_heatmaps.epochs[0].response_values,
+                preview_map_data.epochs[0].response_values,
+            )
+            analyze.assert_called_once()
+            _, roi_set = analyze.call_args.args
+            self.assertEqual(roi_set.labels, ("roi_0001",))
+            self.assertEqual(analyze.call_args.kwargs["output_path"], analysis_path)
+            self.assertEqual(
+                analyze.call_args.kwargs["background_method"],
+                "movie_global_percentile",
+            )
+            self.assertEqual(
+                analyze.call_args.kwargs["baseline_sample_seconds"],
+                1.0,
+            )
+            self.assertIsNone(analyze.call_args.kwargs["baseline_epoch_name"])
+            self.assertEqual(
+                analyze.call_args.kwargs["fit_mode"],
+                "direct_bounded_tau",
+            )
+            self.assertTrue(analyze.call_args.kwargs["apply_motion_mask"])
+            self.assertEqual(
+                analyze.call_args.kwargs["response_pre_window_seconds"],
+                0.5,
+            )
+            self.assertEqual(
+                analyze.call_args.kwargs["response_post_window_seconds"],
+                1.5,
+            )
+            self.assertFalse(analyze.call_args.kwargs["response_window_auto"])
+            self.assertIsInstance(
+                analyze.call_args.kwargs["response_processing_options"],
+                ResponseProcessingOptions,
+            )
+            self.assertIs(response_widget._plot_data, preview_plot_data)
+
+            recording_summary_text = response_widget._recording_summary_label.text()
+            self.assertEqual(len(recording_summary_text.split("\n\n")), 4)
+            microscope_summary_text = response_widget._microscope_summary_label.text()
+            self.assertIn("Rig: TestRig", microscope_summary_text)
+            self.assertIn("Frame rate: 10 Hz", microscope_summary_text)
+            labels_text = "\n".join(
+                (
+                    response_widget._analysis_path_label.text(),
+                    response_widget._roi_save_path_label.text(),
+                    response_widget._update_status_label.text(),
+                ),
+            )
+            self.assertIn("Analysis output: ./twopy/analysis_outputs.h5", labels_text)
+            self.assertIn("ROI output: ./twopy/rois.h5", labels_text)
+            self.assertIn("Saved 1 ROI to ./twopy", labels_text)
+            response_widget.shutdown()
+
+    def test_save_analysis_button_syncs_cached_outputs_in_background(self) -> None:
+        """Confirm cached saves publish changed outputs without blocking save.
+
+        Inputs: local cached recording with a source publish destination.
+        Outputs: background sync copies ROI and analysis files to publish path.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            local_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
+            publish_dir = source_dir / "twopy"
+            local_dir.mkdir(parents=True)
+            _write_source_recording_shape(source_dir)
+            recording_path = _write_converted_recording(
+                local_dir,
+                source_session_dir=source_dir,
+            )
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {root / 'cache'}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            viewer = _FakeViewer()
+            original_cwd = Path.cwd()
+            response_widget: Any | None = None
+            try:
+                chdir(root)
+                opened = open_recording_in_napari(recording_path, viewer=viewer)
+                viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
+                response_widget = cast(Any, opened.response_plot_widget)
+                response_widget._response_map_data = _tiny_response_map_data()
+                analysis_path = local_dir / "analysis_outputs.h5"
+
+                def fake_analyze(*_args: object, **_kwargs: object) -> object:
+                    analysis_path.write_text("analysis", encoding="utf-8")
+                    return SimpleNamespace(
+                        output_path=analysis_path,
+                        grouped_responses=_tiny_grouped_responses(),
+                        response_summary_trials_csv_path=None,
+                        response_summary_grouped_csv_path=None,
+                    )
+
+                with patch(
+                    (
+                        "twopy.napari.plotting.docks.save_actions."
+                        "analyze_recording_responses"
+                    ),
+                    side_effect=fake_analyze,
+                ):
+                    response_widget.save_analysis_and_rois()
+
+                future = response_widget._sync_future
+                self.assertIsNotNone(future)
+                future.result(timeout=2)
+                response_widget._collect_finished_sync()
+            finally:
+                chdir(original_cwd)
+                if response_widget is not None:
+                    response_widget.shutdown()
+
+            self.assertTrue((publish_dir / "rois.h5").is_file())
+            self.assertEqual(
+                (publish_dir / "analysis_outputs.h5").read_text(encoding="utf-8"),
+                "analysis",
+            )
+            self.assertTrue((publish_dir / "response_heatmaps.h5").is_file())
+
+    def test_reload_saved_analysis_reloads_saved_rois(self) -> None:
+        """Confirm Reload saved analysis replaces the editable ROI Labels layer.
+
+        Inputs: saved analysis output, saved ROI HDF5, and edited in-memory
+        Labels pixels.
+        Outputs: reloading restores the saved ROI labels from disk.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            save_analysis_outputs(
+                root / "analysis_outputs.h5",
+                grouped_responses=_tiny_grouped_responses(),
+            )
+            save_roi_set(
+                make_roi_set(
+                    np.array([[[True, False], [False, False]]], dtype=np.bool_),
+                    labels=("roi_0001",),
+                ),
+                root / "rois.h5",
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            viewer.labels[0].data = np.array([[0, 0], [0, 2]], dtype=np.int64)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            response_widget.reload()
+
+            np.testing.assert_array_equal(
+                roi_label_image_from_layer(viewer.labels[0]),
+                np.array([[1, 0], [0, 0]], dtype=np.int64),
+            )
+            response_widget.shutdown()
+
+    def test_processing_option_changes_request_preview_update(self) -> None:
+        """Confirm processing controls trigger debounced preview recompute.
+
+        Inputs: loaded recording, active ROI Labels layer, and a processing
+        settings change.
+        Outputs: the live response controller receives an update request.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            requests: list[str] = []
+            response_widget._live_controller.request_update = lambda: requests.append(
+                "requested"
+            )
+
+            response_widget._set_response_processing_options(
+                ResponseProcessingOptions(),
+            )
+
+            self.assertEqual(requests, ["requested"])
+
+    def test_normalization_option_changes_request_preview_update(self) -> None:
+        """Confirm normalization controls update the shared processing options.
+
+        Inputs: loaded recording, active ROI Labels layer, and normalization
+        settings.
+        Outputs: the live response controller receives one update request and
+        processing controls preserve the selected normalization.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            requests: list[str] = []
+            response_widget._live_controller.request_update = lambda: requests.append(
+                "requested"
+            )
+            options = NormalizationOptions(method="epoch_peak", epoch_number=1)
+
+            response_widget._set_normalization_options(options)
+
+            self.assertEqual(requests, ["requested"])
+            self.assertEqual(
+                response_widget._response_processing_options.normalization,
+                options,
+            )
+            self.assertEqual(
+                response_widget._processing_options_widget.options().normalization,
+                options,
+            )
+
+    def test_delta_f_over_f_option_changes_request_preview_update(self) -> None:
+        """Confirm dF/F controls trigger debounced preview recompute.
+
+        Inputs: loaded recording, active ROI Labels layer, and a dF/F settings
+        change.
+        Outputs: the live response controller receives an update request.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            requests: list[str] = []
+            response_widget._live_controller.request_update = lambda: requests.append(
+                "requested"
+            )
+
+            response_widget._set_delta_f_over_f_options(
+                DeltaFOverFOptions(
+                    background_method="none",
+                    baseline_sample_seconds=None,
+                    fit_mode="direct_bounded_tau_and_log_amplitude",
+                    apply_motion_mask=False,
+                ),
+            )
+
+            self.assertEqual(requests, ["requested"])
+
+
+if __name__ == "__main__":
+    unittest.main()

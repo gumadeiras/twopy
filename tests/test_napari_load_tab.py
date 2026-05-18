@@ -1,0 +1,443 @@
+"""Napari Load tab tests.
+
+Inputs: shared fake napari state and tiny converted recordings.
+Outputs: assertions for one napari workflow area.
+"""
+
+from tests.napari_support import (
+    ConvertedRecording,
+    NapariAdapterTestCase,
+    Path,
+    QApplication,
+    QLineEdit,
+    QListWidget,
+    QPushButton,
+    QWidget,
+    _FakeViewer,
+    _load_recording_widget,
+    _write_converted_recording,
+    _write_source_recording_shape,
+    add_twopy_magicgui_controls,
+    cast,
+    chdir,
+    csv,
+    make_manual_fov_group_rows,
+    napari_controls,
+    np,
+    patch,
+    roi_label_image_from_layer,
+    save_manual_fov_group_rows,
+    temporary_directory,
+    unittest,
+)
+
+
+class NapariLoadTabTest(NapariAdapterTestCase):
+    """Napari Load tab tests."""
+
+    def test_recording_folder_selection_loads_recording_layers(self) -> None:
+        """Confirm selecting a recording folder populates an empty viewer.
+
+        Inputs: fake viewer, control dock, and tiny converted recording folder.
+        Outputs: mean image, movie preview, and ROI Labels layer.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            roi_save_file = root / "drawn_rois.h5"
+            _write_converted_recording(root)
+            viewer = _FakeViewer()
+
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=roi_save_file,
+            )
+            load_widget = _load_recording_widget(control_docks.load_widget)
+
+            load_widget.recording_folder.value = root
+
+            self.assertEqual(len(viewer.images), 2)
+            self.assertEqual(len(viewer.labels), 1)
+            self.assertEqual(np.asarray(viewer.images[1].data).shape[0], 3)
+            np.testing.assert_array_equal(
+                roi_label_image_from_layer(viewer.labels[0]),
+                np.zeros((2, 2), dtype=np.int64),
+            )
+
+    def test_manual_load_button_loads_multiple_selected_folders(self) -> None:
+        """Confirm manual loading accepts several selected recording folders.
+
+        Inputs: fake viewer, control dock, and two tiny converted folders
+        returned by the manual chooser.
+        Outputs: both folders are loaded into the same viewer and list panel.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            _write_converted_recording(first, source_session_dir=first)
+            _write_converted_recording(second, source_session_dir=second)
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            panel = cast(QWidget, control_docks.loaded_recordings_widget)
+            loaded_list = panel.findChild(QListWidget)
+            load_panel = cast(QWidget, control_docks.load_widget)
+            load_buttons = {
+                button.text(): button for button in load_panel.findChildren(QPushButton)
+            }
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_paths",
+                return_value=(first, second),
+            ):
+                load_buttons["Load manually"].click()
+
+            assert loaded_list is not None
+            self.assertEqual(loaded_list.count(), 2)
+            self.assertEqual(loaded_list.currentRow(), 1)
+            self.assertEqual(len(viewer.images), 4)
+            self.assertEqual(len(viewer.labels), 2)
+
+    def test_load_tab_saves_and_loads_recording_list_csv(self) -> None:
+        """Confirm a saved loaded-recordings CSV can be loaded manually.
+
+        Inputs: two converted folders loaded into one viewer, then exported as
+        a Load-tab CSV and selected from a fresh Load CSV list dialog.
+        Outputs: the CSV lists both recording paths and reloads both rows.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            _write_converted_recording(first, source_session_dir=first)
+            _write_converted_recording(second, source_session_dir=second)
+            csv_path = root / "loaded_recordings.csv"
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            load_widget = _load_recording_widget(control_docks.load_widget)
+            load_widget(recording_folder=first)
+            load_widget(recording_folder=second)
+            sidebar_buttons = {
+                button.text(): button
+                for button in cast(QWidget, control_docks.sidebar_widget).findChildren(
+                    QPushButton,
+                )
+            }
+
+            with patch.object(
+                napari_controls,
+                "_choose_loaded_recordings_csv_save_path",
+                return_value=csv_path,
+            ):
+                sidebar_buttons["Save loaded list"].click()
+
+            with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+                rows = list(csv.DictReader(csv_file))
+            self.assertEqual(
+                [Path(row["recording_path"]).resolve(strict=False) for row in rows],
+                [
+                    first.resolve(strict=False),
+                    second.resolve(strict=False),
+                ],
+            )
+            self.assertTrue(
+                rows[0]["recording_data_path"].endswith("recording_data.h5")
+            )
+            fov_path = root / "fov_groups.csv"
+            save_manual_fov_group_rows(
+                make_manual_fov_group_rows(
+                    {
+                        first: "fov_1",
+                        second: "fov_2",
+                    },
+                    notes={
+                        first: "first loaded-list note",
+                        second: "second loaded-list note",
+                    },
+                ),
+                fov_path,
+            )
+
+            fresh_viewer = _FakeViewer()
+            fresh_docks = add_twopy_magicgui_controls(
+                fresh_viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            fresh_load_panel = cast(QWidget, fresh_docks.load_widget)
+            fresh_loaded_panel = cast(QWidget, fresh_docks.loaded_recordings_widget)
+            fresh_loaded_list = fresh_loaded_panel.findChild(QListWidget)
+            load_buttons = {
+                button.text(): button
+                for button in fresh_load_panel.findChildren(QPushButton)
+            }
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_csv_paths",
+                return_value=(csv_path,),
+            ):
+                load_buttons["Load CSV list"].click()
+
+            assert fresh_loaded_list is not None
+            self.assertEqual(fresh_loaded_list.count(), 2)
+            self.assertEqual(fresh_loaded_list.currentRow(), 1)
+            self.assertEqual(len(fresh_viewer.images), 4)
+            self.assertEqual(len(fresh_viewer.labels), 2)
+            fresh_group_matching_widget = cast(
+                QWidget,
+                fresh_docks.group_matching_widget,
+            )
+            fov_path_edit = fresh_group_matching_widget.findChild(
+                QLineEdit,
+                "fov_group_path",
+            )
+            assert fov_path_edit is not None
+            self.assertEqual(Path(fov_path_edit.text()), fov_path)
+            fov_note_edits = fresh_group_matching_widget.findChildren(
+                QLineEdit,
+                "fov_recording_note",
+            )
+            self.assertEqual(
+                {note_edit.text() for note_edit in fov_note_edits},
+                {"first loaded-list note", "second loaded-list note"},
+            )
+
+    def test_load_tab_csv_converts_from_recording_path_when_h5_missing(
+        self,
+    ) -> None:
+        """Confirm CSV loading treats ``recording_path`` as the load contract.
+
+        Inputs: a CSV row with a valid source recording path and a missing
+            ``recording_data_path`` audit value.
+        Outputs: loading runs conversion from the source path and opens the new
+            converted files.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = root / "source"
+            missing_recording_data_path = root / "missing" / "recording_data.h5"
+            csv_path = root / "loaded_recordings.csv"
+            _write_source_recording_shape(source_dir)
+            with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
+                writer = csv.DictWriter(
+                    csv_file,
+                    fieldnames=("recording_path", "recording_data_path"),
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "recording_path": str(source_dir),
+                        "recording_data_path": str(missing_recording_data_path),
+                    },
+                )
+
+            def write_loadable_conversion(
+                source: Path,
+                output_dir: Path | None = None,
+                **_kwargs: object,
+            ) -> ConvertedRecording:
+                destination = output_dir or source / "twopy"
+                destination.mkdir(parents=True, exist_ok=True)
+                recording_path = _write_converted_recording(
+                    destination,
+                    source_session_dir=source,
+                )
+                return ConvertedRecording(
+                    path=recording_path,
+                    movie_path=destination / "aligned_movie.h5",
+                    source_session_dir=source,
+                    movie_shape=(3, 2, 2),
+                    mean_image_start_frame=0,
+                    mean_image_stop_frame=3,
+                )
+
+            viewer = _FakeViewer()
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                control_docks = add_twopy_magicgui_controls(
+                    viewer,
+                    roi_labels_layer=None,
+                    roi_save_file=Path("unused.h5"),
+                )
+                load_panel = cast(QWidget, control_docks.load_widget)
+                loaded_panel = cast(QWidget, control_docks.loaded_recordings_widget)
+                loaded_list = loaded_panel.findChild(QListWidget)
+                load_buttons = {
+                    button.text(): button
+                    for button in load_panel.findChildren(QPushButton)
+                }
+
+                with (
+                    patch.object(
+                        napari_controls,
+                        "_choose_recording_csv_paths",
+                        return_value=(csv_path,),
+                    ),
+                    patch(
+                        "twopy.napari.loading.convert_recording_to_twopy",
+                        side_effect=write_loadable_conversion,
+                    ) as convert,
+                ):
+                    load_buttons["Load CSV list"].click()
+            finally:
+                chdir(original_cwd)
+
+            assert loaded_list is not None
+            convert.assert_called_once_with(source_dir.resolve())
+            self.assertEqual(loaded_list.count(), 1)
+            loaded_item = loaded_list.item(0)
+            assert loaded_item is not None
+            self.assertEqual(loaded_item.text(), str(source_dir))
+            self.assertEqual(len(viewer.images), 2)
+            self.assertEqual(len(viewer.labels), 1)
+            self.assertFalse(missing_recording_data_path.exists())
+
+    def test_load_tab_saved_recording_list_uses_source_paths_for_cached_loads(
+        self,
+    ) -> None:
+        """Confirm saved loaded-recording CSVs do not expose cache paths.
+
+        Inputs: source recording with converted data already in the analysis
+            cache.
+        Outputs: the loaded list and saved CSV use the source session path while
+            the audit column still records the cached HDF5 path.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
+            csv_path = root / "loaded_recordings.csv"
+            _write_source_recording_shape(source_dir)
+            cache_dir.mkdir(parents=True)
+            cached_recording_path = _write_converted_recording(
+                cache_dir,
+                source_session_dir=source_dir,
+            )
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {root / 'cache'}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            viewer = _FakeViewer()
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                control_docks = add_twopy_magicgui_controls(
+                    viewer,
+                    roi_labels_layer=None,
+                    roi_save_file=Path("unused.h5"),
+                )
+                load_widget = _load_recording_widget(control_docks.load_widget)
+                load_widget(recording_folder=source_dir)
+                picker_text = str(load_widget.recording_folder.line_edit.value)
+                panel = cast(QWidget, control_docks.loaded_recordings_widget)
+                loaded_list = panel.findChild(QListWidget)
+                sidebar_buttons = {
+                    button.text(): button
+                    for button in cast(
+                        QWidget,
+                        control_docks.sidebar_widget,
+                    ).findChildren(QPushButton)
+                }
+
+                with patch.object(
+                    napari_controls,
+                    "_choose_loaded_recordings_csv_save_path",
+                    return_value=csv_path,
+                ):
+                    sidebar_buttons["Save loaded list"].click()
+            finally:
+                chdir(original_cwd)
+
+            assert loaded_list is not None
+            loaded_item = loaded_list.item(0)
+            assert loaded_item is not None
+            self.assertIn(source_dir.name, picker_text)
+            self.assertNotIn(str(root / "cache"), picker_text)
+            self.assertEqual(loaded_item.text(), str(source_dir))
+            with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+                rows = list(csv.DictReader(csv_file))
+            self.assertEqual(rows[0]["recording_path"], str(source_dir))
+            self.assertEqual(
+                Path(rows[0]["recording_data_path"]).resolve(strict=False),
+                cached_recording_path.resolve(strict=False),
+            )
+
+    def test_load_tab_warns_when_using_cache_for_unavailable_source(self) -> None:
+        """Confirm cache-only source loads are visible to the user.
+
+        Inputs: missing source recording folder with matching cached converted
+            files.
+        Outputs: loading succeeds from cache and shows one source-unavailable
+            warning dialog.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
+            cache_dir.mkdir(parents=True)
+            cached_recording_path = _write_converted_recording(
+                cache_dir,
+                source_session_dir=source_dir,
+            )
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {root / 'cache'}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            viewer = _FakeViewer()
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                control_docks = add_twopy_magicgui_controls(
+                    viewer,
+                    roi_labels_layer=None,
+                    roi_save_file=Path("unused.h5"),
+                )
+                load_widget = _load_recording_widget(control_docks.load_widget)
+                with patch.object(napari_controls.QMessageBox, "warning") as warning:
+                    result = load_widget(recording_folder=source_dir)
+            finally:
+                chdir(original_cwd)
+
+            self.assertIn(str(cached_recording_path.resolve()), str(result))
+            warning.assert_called_once()
+            _parent, title, message = warning.call_args.args
+            self.assertEqual(title, "Source path unavailable")
+            self.assertIn(str(source_dir), message)
+            self.assertIn(str(cached_recording_path.resolve()), message)
+            self.assertIn("will not sync back", message)
+
+
+if __name__ == "__main__":
+    unittest.main()
