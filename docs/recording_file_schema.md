@@ -424,13 +424,13 @@ Minimum source-file load set for conversion:
 
 twopy reads this set with `load_source_conversion_inputs(recording_dir)` and writes converted HDF5 files with `convert_recording_to_twopy(...)`. The source files are read-only conversion inputs. Response analysis should use the converted HDF5 files rather than reading MATLAB files directly.
 
-This load set is smaller than the full required top-level folder contract. The raw `*.tif` movie and `defaultAlignChannel.txt` remain part of the source recording contract for raw-data access, metadata audit, and alignment provenance, but normal conversion does not need to read them.
+This load set is smaller than the full required top-level folder list. The raw `*.tif` movie and `defaultAlignChannel.txt` are still required in the source recording because they support raw-data access, metadata audits, and alignment review, but normal conversion does not need to read them.
 
 The converted `recording_data.h5` file contains:
 
 - `movie`: attributes pointing to the separate aligned movie file and dataset.
 - `movie/mean_image`: uncompressed mean image generated during conversion. This is one image, so compression is unnecessary complexity.
-- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from stimulus-bounded alignment offsets. The converted aligned movie stays full-frame; analysis code uses this crop when it needs the same valid spatial contract as crop-domain background correction.
+- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from stimulus-bounded alignment offsets. The converted aligned movie stays full-frame; analysis code uses this crop when it should ignore invalid motion-border pixels.
 - `metadata`: selected acquisition fields as HDF5 attributes.
 - `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case twopy field names such as `rig_name`, `run_number`, `fly_id`, and `rig_temperature`.
 - `stimulus/data`: numeric stimulus data.
@@ -451,7 +451,12 @@ The twopy ROI HDF5 file contains:
 - `masks`: boolean ROI masks with shape `(rois, x, y)` in aligned movie coordinates.
 - `labels`: one human-readable label per ROI.
 
-The lower-level `extract_roi_traces` helper reads `movie/aligned` in chunks and writes full-frame ROI traces in memory for the requested frame range. Analysis trace extraction through `extract_background_corrected_roi_traces` reads only the selected spatial domain from the aligned movie, including `method="none"` when uncorrected crop-domain traces are needed. The default domain is `alignment_valid_crop`, so background pixels and ROI pixels come from the alignment-valid crop rather than invalid motion border pixels. ROI masks remain full-frame; crop-domain analysis validates that all ROI pixels lie inside the selected crop before extracting traces. Frame-window response splitting uses explicit imaging-frame boundaries, usually from paired photodiode events.
+Trace extraction uses these rules:
+
+- `extract_roi_traces` reads `movie/aligned` in chunks and returns full-frame ROI traces for the requested frame range.
+- `extract_background_corrected_roi_traces` reads only the selected crop from the aligned movie. With the default `alignment_valid_crop`, background pixels and ROI pixels come from valid motion-aligned pixels instead of invalid border pixels.
+- ROI masks stay full-frame. Crop-domain analysis checks that every ROI pixel lies inside the selected crop before extracting traces.
+- Response splitting uses imaging-frame boundaries, usually from paired photodiode events.
 
 By default, the mean image uses the entire aligned movie. Callers can pass `mean_start_frame` and `mean_stop_frame` to compute it over a frame range.
 
