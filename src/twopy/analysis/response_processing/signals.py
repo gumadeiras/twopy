@@ -177,10 +177,13 @@ def _convolve_columns(
     """Convolve each column with the same one-dimensional kernel."""
     convolved = np.empty(values.shape, dtype=np.float64)
     for column_index in range(values.shape[1]):
-        column = np.convolve(
-            values[:, column_index],
-            kernel,
-            mode="same",
+        column = np.asarray(
+            np.convolve(
+                values[:, column_index],
+                kernel,
+                mode="same",
+            ),
+            dtype=np.float64,
         )
         convolved[:, column_index] = _center_crop(column, values.shape[0])
     return convolved

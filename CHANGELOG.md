@@ -10,6 +10,7 @@
 
 - Routed napari manual, CSV-list, and database recording loads through one shared Load-tab workflow with consistent load-failure wording.
 - Unified napari response preview, live update, and Save Analysis handling around one ROI analysis request so plotted previews and saved outputs use the same ROI masks and Plot-tab settings.
+- Split napari response-map display scaling coverage into a pure helper test module and reused shared converted-HDF5 fixture writers across more analysis tests.
 
 ### Fixes
 
