@@ -142,7 +142,7 @@ twopy is a two-photon imaging analysis tool.
 - Do not use `cast(Any, ...)` to silence the checker. Parse the value explicitly or define the smallest useful Protocol/helper for the operation being used.
 - When a cast remains necessary, keep it narrow and local. Avoid passing a casted object deeper into the code than the exact operation that needs it.
 - Use standard library types where possible.
-- Type checking is part of the gate:
+- Type checking is part of the gate. Run `ty` only through the micromamba command below. Do not use a raw interpreter path such as `/Users/.../envs/twopy/bin/python -m ty check`; `ty` can then resolve Homebrew/global site-packages instead of the micromamba environment and report bogus unresolved imports for installed dependencies.
 
 ```sh
 micromamba run -n twopy python -m ty check
@@ -164,6 +164,7 @@ micromamba run -n twopy python -m ruff format --check .
 - Add regression tests for bugs when feasible.
 - Tests should be readable evidence for expected behavior.
 - Prefer small fixtures and explicit expected values over opaque golden files.
+- Avoid star-importing shared test helpers. Prefer explicit imports so `ty` can resolve the names in split or generated test modules.
 - Use the standard-library unittest runner for direct test runs. This repo does not depend on pytest. Example:
 
 ```sh
