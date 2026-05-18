@@ -23,6 +23,7 @@ from tests.napari_support import (
     add_twopy_magicgui_controls,
     cast,
     group_matching,
+    group_matching_roi,
     load_manual_fov_group_rows,
     load_manual_roi_match_rows,
     make_roi_set,
@@ -289,7 +290,17 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
 
             match_rows = load_manual_roi_match_rows(match_path)
             self.assertEqual(len(match_rows), 2)
+            self.assertEqual(
+                {row.recording_path.resolve(strict=False) for row in match_rows},
+                {first.resolve(strict=False), second.resolve(strict=False)},
+            )
+            self.assertEqual(
+                {row.roi_label for row in match_rows},
+                {"roi_0001", "roi_0002"},
+            )
             self.assertEqual({row.group_cell_id for row in match_rows}, {1})
+            self.assertEqual({row.status for row in match_rows}, {"matched"})
+            self.assertEqual({row.note for row in match_rows}, {"strong match"})
             self.assertEqual(roi_note_edit.text(), "")
             group_table = group_matching_widget.findChild(
                 QTableWidget,
@@ -297,6 +308,15 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             )
             assert group_table is not None
             self.assertEqual(group_table.rowCount(), 1)
+            roi_view = cast(Any, group_matching_widget)._roi_view
+            with patch.object(
+                group_matching_roi.RoiAssignmentView,
+                "window",
+                return_value=None,
+            ):
+                roi_view.close_group_matching_window()
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual({row.note for row in match_rows}, {"strong match"})
             roi_buttons["Clear ROI selection"].click()
             roi_selectors = [
                 combo
@@ -321,18 +341,27 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             roi_buttons["Overwrite selected group"].click()
             match_rows = load_manual_roi_match_rows(match_path)
             self.assertEqual(len(match_rows), 1)
+            self.assertEqual(match_rows[0].group_cell_id, 1)
+            self.assertEqual(
+                match_rows[0].recording_path.resolve(strict=False),
+                first.resolve(strict=False),
+            )
             self.assertEqual(match_rows[0].roi_label, "roi_0001")
             self.assertEqual(match_rows[0].note, "first only")
             self.assertEqual(roi_note_edit.text(), "")
-            group_table.selectRow(0)
-            roi_buttons["Remove selected group"].click()
-            self.assertEqual(load_manual_roi_match_rows(match_path), ())
-            self.assertEqual(group_table.rowCount(), 0)
 
-            for selector in roi_selectors:
-                selector.setCurrentIndex(1)
-            roi_note_edit.setText("restored group")
+            roi_selectors[1].setCurrentIndex(1)
+            roi_note_edit.setText("second group")
             roi_buttons["Add new group"].click()
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual(len(match_rows), 3)
+            self.assertEqual({row.group_cell_id for row in match_rows}, {1, 2})
+            self.assertEqual(
+                {row.note for row in match_rows if row.group_cell_id == 2},
+                {"second group"},
+            )
+            self.assertEqual(roi_note_edit.text(), "")
+            self.assertEqual(group_table.rowCount(), 2)
             roi_buttons["Back to FOV assignment"].click()
             self.assertIs(panel_widget._stack.currentWidget(), panel_widget._fov_view)
             match_buttons = {
@@ -341,6 +370,29 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             }
             match_buttons["Save and continue to ROI assignment"].click()
             self.assertIs(panel_widget._stack.currentWidget(), panel_widget._roi_view)
+            roi_buttons = {
+                button.text(): button
+                for button in group_matching_widget.findChildren(QPushButton)
+            }
+            with patch.object(
+                group_matching_roi.RoiAssignmentView,
+                "_choose_existing_match_path",
+                return_value=match_path,
+            ):
+                roi_buttons["Load ROI CSV"].click()
+            with patch.object(
+                group_matching_roi.RoiAssignmentView,
+                "_choose_match_save_path",
+                return_value=match_path,
+            ):
+                roi_buttons["Browse save path"].click()
+            group_table.selectRow(1)
+            roi_buttons["Remove selected group"].click()
+            match_rows = load_manual_roi_match_rows(match_path)
+            self.assertEqual(len(match_rows), 1)
+            self.assertEqual({row.group_cell_id for row in match_rows}, {1})
+            self.assertEqual(group_table.rowCount(), 1)
+            self.assertEqual(roi_note_edit.text(), "")
             group_table.selectRow(0)
             roi_note_edit.setText("saved on close")
             roi_buttons["Save and close"].click()
