@@ -103,11 +103,9 @@ from twopy.napari.database_favorites import (
 )
 from twopy.napari.database_search import (
     ExperimentFavoriteErrorDialog,
-    ExperimentLoadErrorDialog,
-    ExperimentLoadFailure,
-    ExperimentLoadResult,
     ExperimentSearchDialog,
     ExperimentSearchErrorDialog,
+    RecordingLoadErrorDialog,
 )
 from twopy.napari.display import (
     display_image_from_movie_image,
@@ -123,6 +121,7 @@ from twopy.napari.display_paths import (
 from twopy.napari.group_matching_images import mean_image_roi_overlay_pixmap
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.live_analysis import LiveResponseAnalysisCache
+from twopy.napari.load_workflow import RecordingLoadFailure, RecordingLoadResult
 from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
@@ -617,7 +616,7 @@ def _wait_for_live_response_job(
 def _record_loaded_paths(
     loaded_paths: list[tuple[Path, ...]],
     paths: tuple[Path, ...],
-) -> ExperimentLoadResult:
+) -> RecordingLoadResult:
     """Record database-search paths received by a test callback.
 
     Args:
@@ -628,7 +627,7 @@ def _record_loaded_paths(
         Structured load result for the dialog.
     """
     loaded_paths.append(paths)
-    return ExperimentLoadResult(loaded_count=len(paths))
+    return RecordingLoadResult(loaded_count=len(paths))
 
 
 def _tree_leaf_items(item: QTreeWidgetItem) -> tuple[QTreeWidgetItem, ...]:
@@ -3525,7 +3524,7 @@ class NapariAdapterTest(unittest.TestCase):
                 encoding="utf-8",
             )
             dialog = ExperimentSearchDialog(
-                on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
                     loaded_count=len(paths),
                 ),
                 config_path=config_path,
@@ -3594,7 +3593,7 @@ class NapariAdapterTest(unittest.TestCase):
             )
             save_database_search_favorites((saved,), favorites_path)
             dialog = ExperimentSearchDialog(
-                on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
                     loaded_count=len(paths),
                 ),
                 favorites_path=favorites_path,
@@ -3644,7 +3643,7 @@ class NapariAdapterTest(unittest.TestCase):
             )
             save_database_search_favorites((saved,), favorites_path)
             dialog = ExperimentSearchDialog(
-                on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
                     loaded_count=len(paths),
                 ),
                 favorites_path=favorites_path,
@@ -3691,7 +3690,7 @@ class NapariAdapterTest(unittest.TestCase):
                 return_value=QDialog.DialogCode.Rejected,
             ):
                 dialog = ExperimentSearchDialog(
-                    on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                    on_load_recording_paths=lambda paths: RecordingLoadResult(
                         loaded_count=len(paths),
                     ),
                     favorites_path=favorites_path,
@@ -3808,21 +3807,21 @@ class NapariAdapterTest(unittest.TestCase):
         failure details.
         """
         _ = QApplication.instance() or QApplication([])
-        result = ExperimentLoadResult(
+        result = RecordingLoadResult(
             loaded_count=1,
             failures=(
-                ExperimentLoadFailure(
+                RecordingLoadFailure(
                     path=Path("/missing/first"),
                     message="Could not find recording_data.h5.",
                 ),
-                ExperimentLoadFailure(
+                RecordingLoadFailure(
                     path=Path("/missing/second"),
                     message="Missing source files.",
                 ),
             ),
         )
 
-        dialog = ExperimentLoadErrorDialog(result)
+        dialog = RecordingLoadErrorDialog(result)
         summary_text = "\n".join(label.text() for label in dialog.findChildren(QLabel))
         details = dialog.findChild(QPlainTextEdit)
         assert details is not None
@@ -3845,7 +3844,7 @@ class NapariAdapterTest(unittest.TestCase):
         with temporary_directory() as temp_dir:
             errors: list[Exception] = []
             dialog = ExperimentSearchDialog(
-                on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
                     loaded_count=len(paths),
                 ),
                 config_path=Path(temp_dir) / "missing.yml",
@@ -3930,7 +3929,7 @@ class NapariAdapterTest(unittest.TestCase):
                 encoding="utf-8",
             )
             loaded_paths: list[tuple[Path, ...]] = []
-            shown_results: list[ExperimentLoadResult] = []
+            shown_results: list[RecordingLoadResult] = []
             dialog = ExperimentSearchDialog(
                 on_load_recording_paths=lambda paths: _record_loaded_paths(
                     loaded_paths,
@@ -3959,36 +3958,6 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertEqual(shown_results[0].loaded_count, 1)
             self.assertEqual(len(shown_results[0].failures), 1)
             self.assertIn("relativeDataPath", shown_results[0].failures[0].message)
-
-    def test_database_load_records_non_value_errors_per_path(self) -> None:
-        """Confirm conversion KeyErrors become path-level load failures.
-
-        Inputs: database load callback with a loader raising ``KeyError``.
-        Outputs: structured failure result instead of an uncaught traceback.
-        """
-        state = napari_controls.NapariControlState(
-            viewer=_FakeViewer(),
-            roi_labels_layer=None,
-            roi_save_file=Path("rois.h5"),
-            recording=None,
-            response_plot_widget=None,
-        )
-
-        with patch.object(
-            napari_controls,
-            "_load_recording_path",
-            side_effect=KeyError("missing stimtype"),
-        ):
-            result = napari_controls._load_database_recording_paths(
-                state,
-                (Path("/bad/source"),),
-            )
-
-        self.assertEqual(result.loaded_count, 0)
-        self.assertEqual(len(result.failures), 1)
-        self.assertEqual(result.failures[0].path, Path("/bad/source"))
-        self.assertIn("KeyError", result.failures[0].message)
-        self.assertFalse(state.is_loading)
 
     def test_loaded_recordings_panel_selects_and_unloads_layers(self) -> None:
         """Confirm multi-recording selection controls layer ownership.
@@ -4536,6 +4505,39 @@ class NapariAdapterTest(unittest.TestCase):
             np.testing.assert_array_equal(
                 np.unique(roi_label_image_from_layer(viewer.labels[0])),
                 np.array([0, 1]),
+            )
+
+    def test_failed_single_load_keeps_visible_recording_picker_text(self) -> None:
+        """Confirm failed single loads do not reset the recording picker.
+
+        Inputs: one loaded recording and a bad manually entered recording path.
+        Outputs: the error is returned and the user-entered recording field
+        stays visible for correction.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir) / "twopy"
+            root.mkdir()
+            _write_converted_recording(root)
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            load_widget = _load_recording_widget(control_docks.load_widget)
+
+            load_widget(recording_folder=root)
+            user_text = root / "manual-entry"
+            load_widget.recording_folder.line_edit.value = str(user_text)
+            result = load_widget(
+                recording_folder=user_text,
+                roi_file_to_load=Path("default"),
+            )
+
+            self.assertIn("Could not find recording_data.h5", str(result))
+            self.assertEqual(
+                load_widget.recording_folder.line_edit.value,
+                str(user_text),
             )
 
     def test_recording_path_resolution_reports_available_files(self) -> None:

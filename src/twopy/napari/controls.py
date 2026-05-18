@@ -11,7 +11,7 @@ same typed helpers used by scripts.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from magicgui.widgets import FileEdit
 from qtpy.QtWidgets import (
@@ -30,11 +30,16 @@ from qtpy.QtWidgets import (
 from twopy.converted import RecordingData
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.group_matching import GroupMatchingPanel
+from twopy.napari.load_workflow import (
+    RecordingLoadFailure,
+    RecordingLoadResult,
+    SourceUnavailableWarning,
+    load_recording_paths,
+)
 from twopy.napari.loaded_recordings_csv import (
     load_recording_paths_csv,
     write_loaded_recordings_csv,
 )
-from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.paths import (
     DEFAULT_PATH_TEXT,
     PathInput,
@@ -44,7 +49,6 @@ from twopy.napari.protocols import NapariViewer
 from twopy.napari.session import (
     LoadedNapariRecording,
     LoadedRecordingsPanel,
-    record_loaded_view,
     render_loaded_recordings_panel,
     select_loaded_recording,
     unload_all_loaded_recordings,
@@ -57,12 +61,7 @@ from twopy.napari.sidebar import (
 )
 from twopy.napari.state import (
     read_last_recording_folder,
-    recording_folder_for_state,
-    write_last_recording_folder,
 )
-
-if TYPE_CHECKING:
-    from twopy.napari.database_search import ExperimentLoadResult
 
 __all__ = ["NapariSidebarWidgets", "add_twopy_magicgui_controls"]
 
@@ -250,9 +249,6 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         Returns:
             Human-readable status for the dock widget.
         """
-        if state.is_loading:
-            return "Recording load already in progress."
-        state.is_loading = True
         replace_selected = state.replace_selected_on_next_load
         state.replace_selected_on_next_load = False
         selected_recording_path = _resolve_recording_folder_value(
@@ -260,16 +256,20 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
             state,
         )
         try:
-            return _load_recording_path(
+            result = load_recording_paths(
                 state,
-                selected_recording_path,
+                (selected_recording_path,),
                 roi_file_to_load=roi_file_to_load,
                 replace_selected=replace_selected,
                 remember_selected_folder=True,
             )
+            if result.failures:
+                return result.failures[0].message
+            _show_source_unavailable_warnings(result.source_warnings)
+            _sync_recording_picker_to_selected(state)
+            return result.status_text
         finally:
             state.replace_selected_on_next_load = False
-            state.is_loading = False
 
     load_recording.recording_folder.mode = "d"
     load_recording.roi_file_to_load.mode = "r"
@@ -426,88 +426,15 @@ class LoadRecordingPanel(QWidget):
         self.setLayout(layout)
 
 
-def _load_recording_path(
-    state: NapariControlState,
-    selected_recording_path: Path,
-    *,
-    roi_file_to_load: PathInput,
-    replace_selected: bool,
-    remember_selected_folder: bool,
-) -> str:
-    """Load one source or converted recording path into napari.
-
-    Args:
-        state: Mutable napari control state.
-        selected_recording_path: Source folder, converted folder, or
-            ``recording_data.h5`` path.
-        roi_file_to_load: Optional ROI path widget value, or ``default``.
-        replace_selected: Whether to replace the selected loaded recording.
-        remember_selected_folder: Whether to save the selected folder as the
-            next file-dialog starting point.
-
-    Returns:
-        Human-readable load status.
-
-    This is shared by the folder picker and database search so both paths use
-    the same conversion, ROI default, viewer, and loaded-recording behavior.
-    """
-    resolved_recording = resolve_or_convert_recording(selected_recording_path)
-    paths = resolved_recording.paths
-    duplicate_index = _loaded_recording_index_for_path(
-        state,
-        paths.recording_data_path,
-    )
-    is_selected_replacement = (
-        replace_selected and duplicate_index == state.selected_recording_index
-    )
-    if resolved_recording.source_unavailable:
+def _show_source_unavailable_warnings(
+    warnings: tuple[SourceUnavailableWarning, ...],
+) -> None:
+    """Warn about cache-backed loads whose source paths were unavailable."""
+    for warning in warnings:
         _show_source_unavailable_warning(
-            source_path=selected_recording_path,
-            cache_path=paths.recording_data_path,
+            source_path=warning.source_path,
+            cache_path=warning.cache_path,
         )
-    if duplicate_index is not None and not is_selected_replacement:
-        select_loaded_recording(state, duplicate_index)
-        _sync_recording_picker_to_selected(state)
-        if remember_selected_folder:
-            _remember_recording_folder(
-                selected_recording_path,
-                paths.recording_data_path,
-            )
-        return f"Already loaded {paths.recording_data_path}"
-
-    roi_path = (
-        paths.roi_file_to_load
-        if is_default_path(roi_file_to_load)
-        else _resolve_optional_roi_path(roi_file_to_load)
-    )
-
-    # Import here to avoid a top-level cycle: viewer creates controls,
-    # while controls can load recordings into that same viewer.
-    from twopy.napari.viewer import open_recording_in_napari
-
-    view = open_recording_in_napari(
-        paths.recording_data_path,
-        viewer=state.viewer,
-        roi_set=roi_path,
-        roi_save_file=paths.roi_save_file,
-        movie_path=paths.movie_path,
-        movie_frame_range=(0, None),
-        add_controls=False,
-    )
-    record_loaded_view(
-        state,
-        view=view,
-        roi_save_file=paths.roi_save_file,
-        replace_selected=replace_selected,
-    )
-    _sync_recording_picker_to_selected(state)
-    if remember_selected_folder:
-        _remember_recording_folder(
-            selected_recording_path,
-            paths.recording_data_path,
-        )
-    status = "Converted and loaded" if resolved_recording.was_converted else "Loaded"
-    return f"{status} {paths.recording_data_path}"
 
 
 def _show_source_unavailable_warning(*, source_path: Path, cache_path: Path) -> None:
@@ -573,11 +500,13 @@ def _load_selected_recording_paths(
     except Exception as error:
         _show_selection_error(selected_paths, error)
         return
-    result = _load_recording_paths(
+    result = load_recording_paths(
         state,
         recording_paths,
         remember_selected_folder=True,
     )
+    _show_source_unavailable_warnings(result.source_warnings)
+    _sync_recording_picker_to_selected(state)
     if result.failures:
         _show_load_errors(result)
 
@@ -685,17 +614,12 @@ def _choose_loaded_recordings_csv_save_path(state: NapariControlState) -> Path |
 
 def _show_selection_error(paths: tuple[Path, ...], error: Exception) -> None:
     """Show a manual-selection parse or save failure in the load error dialog."""
-    from twopy.napari.database_search import (
-        ExperimentLoadFailure,
-        ExperimentLoadResult,
-    )
-
     path = paths[0] if len(paths) == 1 else None
     _show_load_errors(
-        ExperimentLoadResult(
+        RecordingLoadResult(
             loaded_count=0,
             failures=(
-                ExperimentLoadFailure(
+                RecordingLoadFailure(
                     path=path,
                     message=exception_message_for_user(error),
                 ),
@@ -710,88 +634,11 @@ def _allow_extended_dialog_selection(dialog: QFileDialog) -> None:
         view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
 
-def _load_recording_paths(
-    state: NapariControlState,
-    paths: tuple[Path, ...],
-    *,
-    remember_selected_folder: bool,
-) -> "ExperimentLoadResult":
-    """Load many source or converted recording paths into napari.
-
-    Args:
-        state: Mutable napari control state.
-        paths: Recording folders or converted recording paths to load.
-        remember_selected_folder: Whether successful loads should update the
-            next manual picker starting folder.
-
-    Returns:
-        Structured load result with new-recording count and per-path failures.
-    """
-    from twopy.napari.database_search import (
-        ExperimentLoadFailure,
-        ExperimentLoadResult,
-    )
-
-    if state.is_loading:
-        return ExperimentLoadResult(
-            loaded_count=0,
-            failures=(
-                ExperimentLoadFailure(
-                    path=None,
-                    message="Recording load already in progress.",
-                ),
-            ),
-        )
-    if len(paths) == 0:
-        return ExperimentLoadResult(
-            loaded_count=0,
-            failures=(
-                ExperimentLoadFailure(path=None, message="No recordings selected."),
-            ),
-        )
-
-    state.is_loading = True
-    state.defer_timeline_updates = True
-    loaded_count = 0
-    failures: list[ExperimentLoadFailure] = []
-    try:
-        for path in paths:
-            try:
-                previous_loaded_count = len(state.loaded_recordings)
-                _load_recording_path(
-                    state,
-                    path,
-                    roi_file_to_load=Path(DEFAULT_PATH_TEXT),
-                    replace_selected=False,
-                    remember_selected_folder=remember_selected_folder,
-                )
-            except Exception as error:
-                failures.append(
-                    ExperimentLoadFailure(
-                        path=path,
-                        message=exception_message_for_user(error),
-                    ),
-                )
-            else:
-                if len(state.loaded_recordings) > previous_loaded_count:
-                    loaded_count += 1
-    finally:
-        state.is_loading = False
-        state.defer_timeline_updates = False
-        if state.selected_recording_index is not None:
-            select_loaded_recording(state, state.selected_recording_index)
-
-    return ExperimentLoadResult(
-        loaded_count=loaded_count,
-        failures=tuple(failures),
-    )
-
-
-def _show_load_errors(result: "ExperimentLoadResult") -> None:
+def _show_load_errors(result: RecordingLoadResult) -> None:
     """Show recording-load failures in a scrollable error dialog."""
-    from twopy.napari.database_search import ExperimentLoadErrorDialog
+    from twopy.napari.database_search import RecordingLoadErrorDialog
 
-    ExperimentLoadErrorDialog(result).exec()
+    RecordingLoadErrorDialog(result).exec()
 
 
 def _show_database_search_dialog(state: NapariControlState) -> None:
@@ -807,7 +654,7 @@ def _show_database_search_dialog(state: NapariControlState) -> None:
 
     if not isinstance(state.database_search_dialog, ExperimentSearchDialog):
         state.database_search_dialog = ExperimentSearchDialog(
-            on_load_recording_paths=lambda paths: _load_database_recording_paths(
+            on_load_recording_paths=lambda paths: _load_recordings_from_database_search(
                 state,
                 paths,
             ),
@@ -818,24 +665,19 @@ def _show_database_search_dialog(state: NapariControlState) -> None:
     dialog.activateWindow()
 
 
-def _load_database_recording_paths(
+def _load_recordings_from_database_search(
     state: NapariControlState,
     paths: tuple[Path, ...],
-) -> "ExperimentLoadResult":
-    """Load all source recording paths selected from database search.
-
-    Args:
-        state: Mutable napari control state.
-        paths: Source recording folders resolved from selected DB experiments.
-
-    Returns:
-        Structured load result for the database-search dialog.
-    """
-    return _load_recording_paths(
+) -> RecordingLoadResult:
+    """Load source paths selected in database search and render warnings."""
+    result = load_recording_paths(
         state,
         paths,
         remember_selected_folder=False,
     )
+    _show_source_unavailable_warnings(result.source_warnings)
+    _sync_recording_picker_to_selected(state)
+    return result
 
 
 def _make_loaded_recordings_widget(state: NapariControlState) -> object:
@@ -871,60 +713,6 @@ def _make_loaded_recordings_widget(state: NapariControlState) -> object:
     state.loaded_recordings_panel = panel
     render_loaded_recordings_panel(state)
     return panel
-
-
-def _loaded_recording_index_for_path(
-    state: NapariControlState,
-    recording_data_path: Path,
-) -> int | None:
-    """Return the loaded-recording row for an already open recording.
-
-    Args:
-        state: Current napari control state.
-        recording_data_path: Resolved ``recording_data.h5`` path requested by
-            the user.
-
-    Returns:
-        Loaded-recording index, or ``None`` when this is a new recording.
-    """
-    requested = _recording_path_key(recording_data_path)
-    for index, loaded in enumerate(state.loaded_recordings):
-        if _recording_path_key(loaded.recording.path) == requested:
-            return index
-    return None
-
-
-def _remember_recording_folder(
-    selected_recording_path: Path,
-    recording_data_path: Path,
-) -> None:
-    """Persist the next starting folder for manual recording selection.
-
-    Args:
-        selected_recording_path: Path chosen by the user.
-        recording_data_path: Resolved converted recording path.
-
-    Returns:
-        None.
-    """
-    write_last_recording_folder(
-        recording_folder_for_state(
-            selected_recording_path,
-            recording_data_path,
-        ),
-    )
-
-
-def _recording_path_key(path: Path) -> Path:
-    """Return a stable comparison key for a converted recording path.
-
-    Args:
-        path: Converted recording-data path.
-
-    Returns:
-        Absolute path with symlinks and ``..`` normalized when possible.
-    """
-    return path.expanduser().resolve(strict=False)
 
 
 def _configure_recording_folder_picker(
@@ -1176,21 +964,3 @@ def _normalized_display_path_text(text: str) -> str:
         Text without a trailing path separator.
     """
     return text.rstrip("/")
-
-
-def _resolve_optional_roi_path(path: PathInput) -> Path | None:
-    """Resolve an optional ROI file selected by the user.
-
-    Args:
-        path: Candidate ROI file path.
-
-    Returns:
-        Existing ROI file path, or ``None`` for empty/default values.
-    """
-    if is_default_path(path):
-        return None
-    resolved = Path(path).expanduser()
-    if not resolved.is_file():
-        msg = f"ROI file does not exist: {resolved}"
-        raise ValueError(msg)
-    return resolved.resolve()

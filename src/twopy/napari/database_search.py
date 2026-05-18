@@ -58,14 +58,13 @@ from twopy.napari.database_favorites import (
     save_database_search_favorites,
 )
 from twopy.napari.errors import exception_message_for_user
+from twopy.napari.load_workflow import RecordingLoadFailure, RecordingLoadResult
 
 __all__ = [
     "ExperimentFavoriteErrorDialog",
-    "ExperimentLoadErrorDialog",
-    "ExperimentLoadFailure",
-    "ExperimentLoadResult",
     "ExperimentSearchErrorDialog",
     "ExperimentSearchDialog",
+    "RecordingLoadErrorDialog",
 ]
 
 COUNT_COLUMN_WIDTH = 72
@@ -111,35 +110,11 @@ FILTER_HINTS = {
 
 
 @dataclass(frozen=True)
-class ExperimentLoadFailure:
-    """One recording path that failed to load from database search.
-
-    Inputs: source recording path and the error message from the loader.
-    Outputs: immutable failure item for the error dialog.
-    """
-
-    path: Path | None
-    message: str
-
-
-@dataclass(frozen=True)
-class ExperimentLoadResult:
-    """Result from loading recordings selected in database search.
-
-    Inputs: count of successfully loaded recordings and per-path failures.
-    Outputs: structured load result the dialog can use for user feedback.
-    """
-
-    loaded_count: int
-    failures: tuple[ExperimentLoadFailure, ...] = ()
-
-
-@dataclass(frozen=True)
 class _ResolvedExperimentPaths:
     """Resolved source paths plus database-row failures from one selection."""
 
     paths: tuple[Path, ...]
-    failures: tuple[ExperimentLoadFailure, ...] = ()
+    failures: tuple[RecordingLoadFailure, ...] = ()
 
 
 class ExperimentSearchDialog(QDialog):
@@ -159,7 +134,7 @@ class ExperimentSearchDialog(QDialog):
     def __init__(
         self,
         *,
-        on_load_recording_paths: Callable[[tuple[Path, ...]], ExperimentLoadResult],
+        on_load_recording_paths: Callable[[tuple[Path, ...]], RecordingLoadResult],
         config_path: Path = DEFAULT_CONFIG_PATH,
         favorites_path: Path = DEFAULT_DATABASE_FAVORITES_PATH,
         parent: QWidget | None = None,
@@ -608,9 +583,9 @@ class ExperimentSearchDialog(QDialog):
         """Show one database-search failure with clear details."""
         ExperimentSearchErrorDialog(error, parent=self.parentWidget()).exec()
 
-    def _show_load_errors(self, result: ExperimentLoadResult) -> None:
+    def _show_load_errors(self, result: RecordingLoadResult) -> None:
         """Show database-result load failures with path details."""
-        ExperimentLoadErrorDialog(result, parent=self.parentWidget()).exec()
+        RecordingLoadErrorDialog(result, parent=self.parentWidget()).exec()
 
     def _show_favorite_error(self, error: Exception) -> None:
         """Show a favorites persistence failure with clear details."""
@@ -714,8 +689,8 @@ class ExperimentFavoriteErrorDialog(QDialog):
         self.setLayout(layout)
 
 
-class ExperimentLoadErrorDialog(QDialog):
-    """Dialog showing database-search load failures.
+class RecordingLoadErrorDialog(QDialog):
+    """Dialog showing recording-load failures.
 
     Args:
         result: Structured load result containing failed paths and messages.
@@ -727,13 +702,13 @@ class ExperimentLoadErrorDialog(QDialog):
 
     def __init__(
         self,
-        result: ExperimentLoadResult,
+        result: RecordingLoadResult,
         *,
         parent: QWidget | None = None,
     ) -> None:
-        """Create an error dialog for failed experiment loads."""
+        """Create an error dialog for failed recording loads."""
         super().__init__(parent)
-        self.setWindowTitle("Experiment Load Errors")
+        self.setWindowTitle("Recording Load Errors")
         self.resize(720, 420)
 
         summary = QLabel(_load_failure_summary(result))
@@ -744,7 +719,7 @@ class ExperimentLoadErrorDialog(QDialog):
         self.setLayout(layout)
 
 
-def _load_failure_summary(result: ExperimentLoadResult) -> str:
+def _load_failure_summary(result: RecordingLoadResult) -> str:
     """Return a short load-failure summary."""
     failed_count = len(result.failures)
     if result.loaded_count == 0:
@@ -755,7 +730,7 @@ def _load_failure_summary(result: ExperimentLoadResult) -> str:
     )
 
 
-def _load_failure_text(failures: tuple[ExperimentLoadFailure, ...]) -> str:
+def _load_failure_text(failures: tuple[RecordingLoadFailure, ...]) -> str:
     """Return scrollable plain text for all failed recording paths."""
     entries: list[str] = []
     for failure in failures:
@@ -786,14 +761,14 @@ def _resolve_experiment_paths(
 ) -> _ResolvedExperimentPaths:
     """Resolve selected experiments while preserving per-row failures."""
     paths: list[Path] = []
-    failures: list[ExperimentLoadFailure] = []
+    failures: list[RecordingLoadFailure] = []
     seen: set[Path] = set()
     for experiment in experiments:
         try:
             path = recording_path_for_database_experiment(config, experiment)
         except (FileNotFoundError, OSError, ValueError) as error:
             failures.append(
-                ExperimentLoadFailure(path=None, message=_experiment_error(error)),
+                RecordingLoadFailure(path=None, message=_experiment_error(error)),
             )
             continue
         if path in seen:
@@ -839,15 +814,17 @@ def _experiments_for_tree_items(
 
 
 def _merge_load_failures(
-    result: ExperimentLoadResult,
-    failures: tuple[ExperimentLoadFailure, ...],
-) -> ExperimentLoadResult:
+    result: RecordingLoadResult,
+    failures: tuple[RecordingLoadFailure, ...],
+) -> RecordingLoadResult:
     """Return one load result with path-resolution and loader failures."""
     if len(failures) == 0:
         return result
-    return ExperimentLoadResult(
+    return RecordingLoadResult(
         loaded_count=result.loaded_count,
         failures=failures + result.failures,
+        source_warnings=result.source_warnings,
+        status_text=result.status_text,
     )
 
 
