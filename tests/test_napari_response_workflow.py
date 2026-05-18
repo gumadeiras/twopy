@@ -6,9 +6,11 @@ Outputs: assertions for one napari workflow area.
 
 from tests.napari_support import (
     Any,
+    BackgroundCorrectedRoiTraces,
     DeltaFOverFOptions,
     EpochFrameWindow,
     FrameWindow,
+    LiveResponseAnalysisCache,
     NapariAdapterTestCase,
     NormalizationOptions,
     Path,
@@ -17,6 +19,7 @@ from tests.napari_support import (
     ResponseWindowOptions,
     RoiCorrelationScores,
     SimpleNamespace,
+    SmoothingOptions,
     SpatialCrop,
     _FakeViewer,
     _tiny_grouped_responses,
@@ -41,6 +44,8 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
+
+from twopy.napari.plotting.docks.save_actions import save_current_roi_analysis
 
 
 class NapariResponseWorkflowTest(NapariAdapterTestCase):
@@ -263,6 +268,174 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                 compute.call_args.kwargs["response_post_window_seconds"],
                 1.5,
             )
+
+    def test_response_analysis_request_options_reach_preview_save_and_live_cache(
+        self,
+    ) -> None:
+        """Confirm one request drives all napari ROI response paths.
+
+        Inputs: one response-analysis request with non-default dF/F,
+        response-window, and processing settings.
+        Outputs: preview, Save Analysis, and live cached preview pass the same
+        request-derived options to their underlying analysis calls.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(
+                _write_converted_recording(
+                    root,
+                    stimulus_parameters_json=(
+                        '[{"epochName": "Gray"}, {"epochName": "Odor"}]'
+                    ),
+                ),
+            )
+            roi_set = make_roi_set(
+                np.array([[[True, False], [False, False]]], dtype=np.bool_),
+                labels=("roi_0001",),
+            )
+            dff_options = DeltaFOverFOptions(
+                baseline_epoch_number=2,
+                baseline_epoch_name="Odor",
+                baseline_mode="no_baseline_epoch",
+                background_method="none",
+                baseline_sample_seconds=None,
+                fit_mode="log_linear",
+                apply_motion_mask=False,
+            )
+            response_window_options = ResponseWindowOptions(
+                auto=False,
+                pre_window_seconds=0.25,
+                post_window_seconds=0.75,
+            )
+            processing_options = ResponseProcessingOptions(
+                smoothing=SmoothingOptions(
+                    method="moving_average",
+                    window_frames=3,
+                ),
+                normalization=NormalizationOptions(
+                    method="epoch_peak",
+                    epoch_number=2,
+                    epoch_name="Odor",
+                ),
+            )
+            request = response_analysis_request_from_label_image(
+                recording,
+                roi_set_to_label_image(roi_set),
+                delta_f_over_f_options=dff_options,
+                response_window_options=response_window_options,
+                response_processing_options=processing_options,
+            )
+            computation = SimpleNamespace(
+                grouped_responses=_tiny_grouped_responses(),
+                epoch_windows=(
+                    EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 2, "Odor"),
+                ),
+                response_processing_options=processing_options,
+                correlation_scores=None,
+            )
+
+            with patch(
+                "twopy.napari.responses.compute_recording_responses",
+                return_value=computation,
+            ) as preview_compute:
+                compute_response_preview(request)
+
+            preview_kwargs = preview_compute.call_args.kwargs
+            self._assert_request_workflow_kwargs(
+                preview_kwargs,
+                processing_options=processing_options,
+            )
+
+            analysis_path = root / "analysis_outputs.h5"
+            with patch(
+                (
+                    "twopy.napari.plotting.docks.save_actions."
+                    "analyze_recording_responses"
+                ),
+                return_value=SimpleNamespace(
+                    output_path=analysis_path,
+                    response_summary_trials_csv_path=None,
+                    response_summary_grouped_csv_path=None,
+                ),
+            ) as save_analyze:
+                save_current_roi_analysis(
+                    request,
+                    roi_save_file=None,
+                    analysis_path=analysis_path,
+                )
+
+            save_kwargs = save_analyze.call_args.kwargs
+            self._assert_request_workflow_kwargs(
+                save_kwargs,
+                processing_options=processing_options,
+            )
+            self.assertFalse(save_kwargs["response_window_auto"])
+
+            live_cache = LiveResponseAnalysisCache()
+            context = SimpleNamespace(trace_start=0, trace_stop=2)
+
+            def extract(
+                _recording: object,
+                extracted_roi_set: object,
+                **kwargs: object,
+            ) -> BackgroundCorrectedRoiTraces:
+                del _recording, kwargs
+                roi_labels = cast(Any, extracted_roi_set).labels
+                values = np.ones((2, len(roi_labels)), dtype=np.float64)
+                return BackgroundCorrectedRoiTraces(
+                    raw_values=values,
+                    background_values=np.zeros_like(values),
+                    corrected_values=values,
+                    labels=roi_labels,
+                    start_frame=0,
+                    stop_frame=2,
+                    statistic="mean",
+                    method="none",
+                    metadata={"method": "none"},
+                )
+
+            with (
+                patch(
+                    "twopy.napari.live_analysis.resolve_response_analysis_context",
+                    return_value=context,
+                ) as live_context,
+                patch(
+                    "twopy.napari.live_analysis."
+                    "extract_background_corrected_roi_traces",
+                    side_effect=extract,
+                ) as live_extract,
+                patch(
+                    "twopy.napari.live_analysis."
+                    "compute_recording_responses_from_traces",
+                    return_value=computation,
+                ) as live_compute,
+                patch(
+                    "twopy.napari.live_analysis.response_plot_data_from_computation",
+                    return_value=_tiny_response_plot_data(),
+                ),
+            ):
+                live_cache.compute_response_preview(request)
+
+            live_context_kwargs = live_context.call_args.kwargs
+            self.assertEqual(live_context_kwargs["baseline_mode"], "no_baseline_epoch")
+            self.assertEqual(live_context_kwargs["baseline_epoch_number"], 2)
+            self.assertEqual(live_context_kwargs["baseline_epoch_name"], "Odor")
+            self.assertEqual(live_context_kwargs["response_pre_window_seconds"], 0.25)
+            self.assertEqual(live_context_kwargs["response_post_window_seconds"], 0.75)
+            self.assertIs(
+                live_context_kwargs["response_processing_options"],
+                processing_options,
+            )
+            live_extract_kwargs = live_extract.call_args.kwargs
+            self.assertEqual(live_extract_kwargs["method"], "none")
+            self.assertEqual(
+                live_extract_kwargs["spatial_domain"],
+                "alignment_valid_crop",
+            )
+            live_compute_kwargs = live_compute.call_args.kwargs
+            self.assertIsNone(live_compute_kwargs["baseline_sample_seconds"])
+            self.assertEqual(live_compute_kwargs["fit_mode"], "log_linear")
+            self.assertFalse(live_compute_kwargs["apply_motion_mask"])
 
     def test_save_analysis_button_writes_roi_and_analysis_outputs(self) -> None:
         """Confirm the Export tab can persist current ROI analysis.
@@ -554,6 +727,24 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
             )
 
             self.assertEqual(requests, ["requested"])
+
+    def _assert_request_workflow_kwargs(
+        self,
+        kwargs: Any,
+        *,
+        processing_options: ResponseProcessingOptions,
+    ) -> None:
+        """Assert request options passed to core response workflow kwargs."""
+        self.assertEqual(kwargs["baseline_mode"], "no_baseline_epoch")
+        self.assertEqual(kwargs["baseline_epoch_number"], 2)
+        self.assertEqual(kwargs["baseline_epoch_name"], "Odor")
+        self.assertEqual(kwargs["background_method"], "none")
+        self.assertIsNone(kwargs["baseline_sample_seconds"])
+        self.assertEqual(kwargs["fit_mode"], "log_linear")
+        self.assertFalse(kwargs["apply_motion_mask"])
+        self.assertEqual(kwargs["response_pre_window_seconds"], 0.25)
+        self.assertEqual(kwargs["response_post_window_seconds"], 0.75)
+        self.assertIs(kwargs["response_processing_options"], processing_options)
 
 
 if __name__ == "__main__":
