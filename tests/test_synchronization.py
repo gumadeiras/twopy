@@ -5,19 +5,16 @@ Outputs: detected events and high-resolution events paired to imaging frames.
 """
 
 import unittest
-from pathlib import Path
 
 import numpy as np
-from tests.tempdir import temporary_directory
+from tests.recording_data import minimal_recording_data
 
 from twopy import (
     detect_photodiode_events,
     detect_recording_photodiode_events,
     pair_photodiode_events_to_imaging_frames,
 )
-from twopy.conversion.types import FrameCountAudit
-from twopy.converted import ConvertedMovie, RecordingData
-from twopy.spatial import full_frame_crop
+from twopy.converted import RecordingData
 from twopy.synchronization import PhotodiodeEvent
 
 
@@ -81,30 +78,28 @@ class SynchronizationTest(unittest.TestCase):
         Inputs: converted recording photodiode vectors with two events each.
         Outputs: paired events assigned to imaging frames by event order.
         """
-        with temporary_directory() as temp_dir:
-            recording = self._recording(
-                Path(temp_dir),
-                high_res_pd=np.array(
-                    [0.0, 1.0, 1.0, 0.0, 0.0, 2.0, 2.0, 0.0],
-                    dtype=np.float64,
-                ),
-                imaging_res_pd=np.array(
-                    [0.0, 1.0, 0.0, 0.0, 2.0, 0.0],
-                    dtype=np.float64,
-                ),
-            )
+        recording = self._recording(
+            high_res_pd=np.array(
+                [0.0, 1.0, 1.0, 0.0, 0.0, 2.0, 2.0, 0.0],
+                dtype=np.float64,
+            ),
+            imaging_res_pd=np.array(
+                [0.0, 1.0, 0.0, 0.0, 2.0, 0.0],
+                dtype=np.float64,
+            ),
+        )
 
-            alignment = detect_recording_photodiode_events(
-                recording,
-                high_res_threshold=0.5,
-                imaging_res_threshold=0.5,
-            )
+        alignment = detect_recording_photodiode_events(
+            recording,
+            high_res_threshold=0.5,
+            imaging_res_threshold=0.5,
+        )
 
-            self.assertEqual(len(alignment.paired_events), 2)
-            self.assertEqual(
-                [event.imaging_frame for event in alignment.paired_events],
-                [1, 4],
-            )
+        self.assertEqual(len(alignment.paired_events), 2)
+        self.assertEqual(
+            [event.imaging_frame for event in alignment.paired_events],
+            [1, 4],
+        )
 
     def test_rejects_event_count_mismatch(self) -> None:
         """Confirm pairing fails instead of silently dropping events.
@@ -126,7 +121,6 @@ class SynchronizationTest(unittest.TestCase):
 
     def _recording(
         self,
-        root: Path,
         *,
         high_res_pd: np.ndarray,
         imaging_res_pd: np.ndarray,
@@ -134,43 +128,17 @@ class SynchronizationTest(unittest.TestCase):
         """Create a minimal loaded recording for synchronization tests.
 
         Args:
-            root: Temporary directory used for placeholder paths.
             high_res_pd: Synthetic high-resolution photodiode signal.
             imaging_res_pd: Synthetic imaging-resolution photodiode signal.
 
         Returns:
             ``RecordingData`` object with the provided photodiode vectors.
         """
-        return RecordingData(
-            path=root / "recording_data.h5",
-            movie=ConvertedMovie(
-                path=root / "aligned_movie.h5",
-                dataset_name="movie/aligned",
-                shape=(len(imaging_res_pd), 2, 2),
-                dtype="float64",
-            ),
-            source_session_dir=root / "source",
-            acquisition_metadata={},
-            run_metadata={},
-            synchronization_metadata={},
-            stimulus_data=np.zeros((0, 0), dtype=np.float64),
-            stimulus_data_column_names=(),
-            stimulus_parameters=(),
-            stimulus_function_lookup={},
-            stimulus_specific_columns={},
+        return minimal_recording_data(
+            frame_count=len(imaging_res_pd),
             imaging_res_pd=imaging_res_pd,
             high_res_pd=high_res_pd,
-            mean_image=np.zeros((2, 2), dtype=np.float64),
-            alignment_valid_crop=full_frame_crop((2, 2)),
-            alignment_shift_pixels=np.zeros(len(imaging_res_pd), dtype=np.float64),
-            motion_artifact_mask=np.zeros(len(imaging_res_pd), dtype=np.bool_),
-            frame_counts=FrameCountAudit(
-                aligned_movie_frames=len(imaging_res_pd),
-                imaging_res_pd_samples=len(imaging_res_pd),
-                acquisition_number_of_frames=len(imaging_res_pd) - 1,
-                imaging_res_pd_minus_movie=0,
-                acquisition_minus_movie=-1,
-            ),
+            acquisition_frame_count=len(imaging_res_pd) - 1,
         )
 
 

@@ -6,14 +6,12 @@ metadata.
 """
 
 import unittest
-from pathlib import Path
 
 import numpy as np
+from tests.recording_data import minimal_recording_data
 
 from twopy import classify_recording_photodiode_events
-from twopy.conversion.types import FrameCountAudit
-from twopy.converted import ConvertedMovie, RecordingData
-from twopy.spatial import full_frame_crop
+from twopy.converted import RecordingData
 from twopy.synchronization import (
     AlignedPhotodiodeEvent,
     PhotodiodeAlignment,
@@ -183,38 +181,13 @@ class PhotodiodeClassificationTest(unittest.TestCase):
         """
         stimulus_data = np.column_stack((epoch_numbers, flash_values))
         frame_count = 40
-        return RecordingData(
-            path=Path("/tmp/recording_data.h5"),
-            movie=ConvertedMovie(
-                path=Path("/tmp/aligned_movie.h5"),
-                dataset_name="movie/aligned",
-                shape=(frame_count, 2, 2),
-                dtype="float64",
-            ),
-            source_session_dir=Path("/tmp/source"),
-            acquisition_metadata={},
-            run_metadata={},
-            synchronization_metadata={},
+        return minimal_recording_data(
+            frame_count=frame_count,
             stimulus_data=stimulus_data,
             stimulus_data_column_names=("epoch_number", "photodiode_flash"),
             stimulus_parameters=(
                 {"epochName": "Gray Interleave"},
                 {"epochName": "LR20"},
-            ),
-            stimulus_function_lookup={},
-            stimulus_specific_columns={},
-            imaging_res_pd=np.zeros(frame_count, dtype=np.float64),
-            high_res_pd=np.zeros(frame_count, dtype=np.float64),
-            mean_image=np.zeros((2, 2), dtype=np.float64),
-            alignment_valid_crop=full_frame_crop((2, 2)),
-            alignment_shift_pixels=np.zeros(frame_count, dtype=np.float64),
-            motion_artifact_mask=np.zeros(frame_count, dtype=np.bool_),
-            frame_counts=FrameCountAudit(
-                aligned_movie_frames=frame_count,
-                imaging_res_pd_samples=frame_count,
-                acquisition_number_of_frames=frame_count,
-                imaging_res_pd_minus_movie=0,
-                acquisition_minus_movie=0,
             ),
         )
 

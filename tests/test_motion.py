@@ -5,15 +5,13 @@ Outputs: dF/F values with high-motion frames marked as NaN.
 """
 
 import unittest
-from pathlib import Path
 
 import numpy as np
+from tests.recording_data import minimal_recording_data
 
 from twopy import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.dff import RoiDeltaFOverF
-from twopy.conversion.types import FrameCountAudit
-from twopy.converted import ConvertedMovie, RecordingData
-from twopy.spatial import full_frame_crop
+from twopy.converted import RecordingData
 
 
 class MotionArtifactMaskTest(unittest.TestCase):
@@ -67,36 +65,9 @@ class MotionArtifactMaskTest(unittest.TestCase):
         """
         frame_count = 5
         motion_mask = np.array([False, False, True, False, False])
-        return RecordingData(
-            path=Path("/tmp/recording_data.h5"),
-            movie=ConvertedMovie(
-                path=Path("/tmp/aligned_movie.h5"),
-                dataset_name="movie/aligned",
-                shape=(frame_count, 2, 2),
-                dtype="float64",
-            ),
-            source_session_dir=Path("/tmp/source"),
-            acquisition_metadata={},
-            run_metadata={},
-            synchronization_metadata={},
-            stimulus_data=np.zeros((0, 0), dtype=np.float64),
-            stimulus_data_column_names=(),
-            stimulus_parameters=(),
-            stimulus_function_lookup={},
-            stimulus_specific_columns={},
-            imaging_res_pd=np.zeros(frame_count, dtype=np.float64),
-            high_res_pd=np.zeros(frame_count, dtype=np.float64),
-            mean_image=np.zeros((2, 2), dtype=np.float64),
-            alignment_valid_crop=full_frame_crop((2, 2)),
-            alignment_shift_pixels=np.zeros(frame_count, dtype=np.float64),
+        return minimal_recording_data(
+            frame_count=frame_count,
             motion_artifact_mask=motion_mask,
-            frame_counts=FrameCountAudit(
-                aligned_movie_frames=frame_count,
-                imaging_res_pd_samples=frame_count,
-                acquisition_number_of_frames=frame_count,
-                imaging_res_pd_minus_movie=0,
-                acquisition_minus_movie=0,
-            ),
         )
 
 
