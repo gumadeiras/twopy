@@ -191,7 +191,7 @@ class NapariPlotDataTest(unittest.TestCase):
         """Confirm saved analysis reloads the response-window Auto choice.
 
         Inputs: grouped responses persisted with ``response_window_auto`` true.
-        Outputs: loaded plot data hydrates ``ResponseWindowOptions.auto`` true.
+        Outputs: loaded plot data restores ``ResponseWindowOptions.auto`` true.
         """
         with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "analysis_outputs.h5"
@@ -221,7 +221,7 @@ class NapariPlotDataTest(unittest.TestCase):
         """Confirm saved analysis reloads the baseline epoch selector.
 
         Inputs: persisted dF/F metadata with a non-default baseline epoch.
-        Outputs: loaded plot data hydrates the dF/F Plot-tab selector.
+        Outputs: loaded plot data restores the dF/F Plot-tab selector.
         """
         with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "analysis_outputs.h5"

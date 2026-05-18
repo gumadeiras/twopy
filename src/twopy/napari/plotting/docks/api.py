@@ -4,8 +4,8 @@ Inputs: a napari viewer, optional converted recording, and optional ROI layer
 state.
 Outputs: response plotting dock widgets and the response-options widget.
 
-This module keeps napari-facing factory functions separate from the larger Qt
-widget implementation so import callers see a small, stable API.
+This module keeps napari-facing dock creation functions separate from the larger
+Qt widget implementation so import callers see a small, stable API.
 """
 
 from pathlib import Path

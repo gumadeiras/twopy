@@ -1,13 +1,12 @@
-"""Response-analysis request boundary for the twopy napari adapter.
+"""Build napari ROI response requests for twopy analysis.
 
 Inputs: a loaded converted recording, ROI labels or masks, and Plot-tab
 analysis options.
-Outputs: one explicit request object and plot-ready response data.
+Outputs: one object that carries those values plus plot-ready response data.
 
-This module translates napari ROI editing state into the GUI-independent
-analysis workflow. The request is the shared contract for preview, cached live
-preview, and save actions so those paths cannot drift in how they apply
-response-window, dF/F, or processing options.
+Preview, live update, and Save Analysis all use the same request object. That
+keeps plotted previews and saved outputs on the same ROI masks, response
+windows, dF/F settings, and processing options.
 """
 
 from collections.abc import Callable
@@ -54,11 +53,11 @@ class ResponseAnalysisRequest:
         response_processing_options: smoothing, filtering, normalization, and
             correlation-QC settings.
 
-    The request stores the core ROI object rather than a napari layer so
-    preview and save actions share one analysis contract after GUI validation.
-    Requests built from napari Labels layers use labels such as ``roi_0004``.
-    The number comes from the integer label painted in the layer, so each drawn
-    ROI has a stable name while the user edits its pixels.
+    The request stores the ROI masks instead of the napari layer. Preview and
+    Save Analysis therefore run on the same masks after the layer has been
+    checked. Requests built from napari Labels layers use labels such as
+    ``roi_0004``. The number comes from the integer label painted in the layer,
+    so each drawn ROI has the same name while the user edits its pixels.
     """
 
     recording: RecordingData

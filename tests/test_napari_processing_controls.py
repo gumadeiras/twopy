@@ -210,7 +210,7 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             self.assertEqual(normalization_widget.options().epoch_name, "Odor A")
 
     def test_saved_processing_options_update_plot_tab_controls(self) -> None:
-        """Confirm saved analysis settings hydrate Plot-tab controls.
+        """Confirm saved analysis settings restore Plot-tab controls.
 
         Inputs: plot data carrying persisted response-processing options.
         Outputs: response widget controls show the saved smoothing settings.
@@ -248,7 +248,7 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
         self.assertEqual(response_widget._response_processing_options, options)
 
     def test_saved_delta_f_over_f_options_update_plot_tab_controls(self) -> None:
-        """Confirm saved dF/F settings hydrate Plot-tab controls.
+        """Confirm saved dF/F settings restore Plot-tab controls.
 
         Inputs: plot data carrying persisted dF/F options.
         Outputs: response widget controls show the saved dF/F settings.

@@ -156,7 +156,7 @@ def add_twopy_magicgui_controls(
 
     The sidebar keeps twopy's right-side controls in one tabbed dock. The loader
     itself stays small and uses the same helpers as scripts, so a future plugin
-    can wrap this without changing recording-load semantics.
+    can wrap this without changing how recordings load.
     """
     state = NapariControlState(
         viewer=viewer,

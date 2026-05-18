@@ -1,11 +1,11 @@
-"""Cached live response analysis for napari ROI editing.
+"""Reuse ROI traces while a user edits napari Labels.
 
-Inputs: one response-analysis request from the napari adapter.
-Outputs: plot-ready response data with movie-derived ROI traces reused across
-interactive edits when the masks and trace context are unchanged.
+Inputs: one response-analysis request from the napari UI.
+Outputs: plot-ready response data, reusing movie traces when the recording,
+frame range, background method, and ROI masks have not changed.
 
-This module keeps the performance policy in the napari adapter while calling
-public analysis workflow helpers for the scientific math.
+The cache only avoids repeated movie reads. Each update still reruns dF/F,
+response grouping, normalization, and QC through the normal analysis helpers.
 """
 
 from collections.abc import Callable
@@ -40,7 +40,7 @@ __all__ = ["LiveResponseAnalysisCache"]
 
 @dataclass(frozen=True)
 class _TraceContextKey:
-    """Trace-cache identity for one recording and extraction context."""
+    """Cache key for one recording and trace-extraction setup."""
 
     recording_path: Path
     movie_path: Path
@@ -67,14 +67,14 @@ class _CachedTrace:
 
 
 class LiveResponseAnalysisCache:
-    """Reuse unchanged ROI traces while preserving full response math.
+    """Reuse movie traces without reusing finished response results.
 
     Inputs: the same response-analysis request used by preview and Save Analysis.
     Outputs: plot-ready response data.
 
-    The cache stores movie-derived traces only. Each live update still recomputes
-    dF/F, response grouping, normalization, and QC across the full current ROI
-    set, preserving shared-tau fitting and cross-ROI option behavior.
+    The cache stores only raw/background-corrected ROI traces. Each live update
+    still recomputes dF/F, response grouping, normalization, and QC for the full
+    current ROI set.
     """
 
     def __init__(self) -> None:
@@ -228,7 +228,7 @@ def _trace_context_key(
     context: ResponseAnalysisContext,
     dff_options: DeltaFOverFOptions,
 ) -> _TraceContextKey:
-    """Return the trace-cache identity for one live update."""
+    """Return the cache key for one live update."""
     return _TraceContextKey(
         recording_path=recording.path,
         movie_path=recording.movie.path,
