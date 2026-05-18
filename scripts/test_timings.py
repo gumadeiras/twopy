@@ -57,6 +57,7 @@ TEST_GROUPS = {
         "tests.test_background_subtraction",
         "tests.test_dff",
         "tests.test_motion",
+        "tests.test_recording_timing",
         "tests.test_response_maps",
         "tests.test_response_processing",
         "tests.test_response_roi_extraction",

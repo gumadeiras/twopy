@@ -19,10 +19,6 @@ from twopy.analysis.dff import (
     compute_roi_delta_f_over_f,
 )
 from twopy.analysis.dff_options import DeltaFOverFBaselineMode, DeltaFOverFOptions
-from twopy.analysis.epoch_mapping import (
-    InterpolatedEpochMapping,
-    interpolate_stimulus_epochs_to_frame_windows,
-)
 from twopy.analysis.group_matching import (
     ManualFovGroupRow,
     ManualRoiMatchGroup,
@@ -77,15 +73,18 @@ from twopy.analysis.responses import (
     summarize_grouped_responses,
     validate_grouped_roi_responses,
 )
+from twopy.analysis.timing import (
+    RecordingTiming,
+    TimingSource,
+    resolve_recording_timing,
+)
 from twopy.analysis.trials import (
     EpochFrameWindow,
     FrameWindow,
     WindowedRoiResponse,
     default_baseline_epoch_number,
-    frame_windows_from_photodiode_alignment,
     is_baseline_epoch_name,
     make_frame_windows,
-    map_stimulus_epochs_to_frame_windows,
     no_baseline_epoch_frame_windows,
     resolve_baseline_frame_windows,
     select_baseline_frame_windows,
@@ -122,13 +121,10 @@ __all__ = [
     "EpochResponseMap",
     "EpochFrameWindow",
     "extract_background_corrected_roi_traces",
-    "frame_windows_from_photodiode_alignment",
     "FrameWindow",
     "group_delta_f_over_f_by_epoch",
     "GroupedRoiResponseSummary",
     "GroupedRoiResponses",
-    "InterpolatedEpochMapping",
-    "interpolate_stimulus_epochs_to_frame_windows",
     "is_baseline_epoch_name",
     "load_analysis_outputs",
     "load_response_map_data",
@@ -142,9 +138,9 @@ __all__ = [
     "make_frame_windows",
     "make_manual_fov_group_rows",
     "make_manual_roi_match_rows",
-    "map_stimulus_epochs_to_frame_windows",
     "no_baseline_epoch_frame_windows",
     "next_group_cell_id",
+    "RecordingTiming",
     "RoiDeltaFOverF",
     "ResponseMapData",
     "ResponseMapMode",
@@ -154,6 +150,7 @@ __all__ = [
     "RoiResponseSummary",
     "RoiResponseTrial",
     "resolve_baseline_frame_windows",
+    "resolve_recording_timing",
     "add_manual_roi_match_group",
     "append_manual_roi_match_rows",
     "load_manual_fov_group_rows",
@@ -169,6 +166,7 @@ __all__ = [
     "SmoothingOptions",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
+    "TimingSource",
     "validate_grouped_roi_responses",
     "WindowedRoiResponse",
     "write_response_summary_grouped_csv",

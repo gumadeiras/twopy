@@ -17,7 +17,6 @@ import numpy.typing as npt
 from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import DeltaFOverFFitMode, RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFBaselineMode, DeltaFOverFOptions
-from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
 from twopy.analysis.persistence import LoadedAnalysisOutputs, load_analysis_outputs
 from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
@@ -36,8 +35,9 @@ from twopy.analysis.responses import (
     group_delta_f_over_f_by_epoch,
     summarize_roi_response_trials,
 )
+from twopy.analysis.timing import resolve_recording_timing
 from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
-from twopy.converted import RecordingData, recording_frame_rate_hz
+from twopy.converted import RecordingData
 from twopy.filenames import ANALYSIS_OUTPUT_FILENAME
 from twopy.stimulus import stimulus_epoch_names_by_number
 from twopy.typing_guards import require_string_choice
@@ -297,12 +297,11 @@ def _response_plot_baseline_window_seconds_for_recording(
     Manual Plot-tab response windows are capped by this value so pre/post
     context cannot exceed the available baseline epoch duration.
     """
-    mapping = interpolate_stimulus_epochs_to_frame_windows(recording)
-    frame_rate_hz = recording_frame_rate_hz(recording)
+    timing = resolve_recording_timing(recording)
     durations = tuple(
         (epoch_window.window.stop_frame - epoch_window.window.start_frame)
-        / frame_rate_hz
-        for epoch_window in mapping.windows
+        / timing.frame_rate_hz
+        for epoch_window in timing.epoch_windows
         if is_baseline_epoch_name(epoch_window.epoch_name)
     )
     if len(durations) == 0:
@@ -341,14 +340,13 @@ def response_plot_min_epoch_duration_for_recording(
         ``None`` when timing evidence is unavailable.
     """
     try:
-        mapping = interpolate_stimulus_epochs_to_frame_windows(recording)
-        frame_rate_hz = recording_frame_rate_hz(recording)
+        timing = resolve_recording_timing(recording)
     except ValueError:
         return None
     durations = tuple(
         (epoch_window.window.stop_frame - epoch_window.window.start_frame)
-        / frame_rate_hz
-        for epoch_window in mapping.windows
+        / timing.frame_rate_hz
+        for epoch_window in timing.epoch_windows
         if epoch_window.window.stop_frame > epoch_window.window.start_frame
     )
     return _minimum_positive_duration(durations)

@@ -39,7 +39,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.ndimage import gaussian_filter
 
-from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
+from twopy.analysis.timing import resolve_recording_timing
 from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData, recording_frame_rate_hz
 from twopy.spatial import SpatialCrop
@@ -165,11 +165,14 @@ def compute_recording_response_maps(
     converted synchronization metadata.
     """
     resolved_options = options or ResponseMapOptions()
-    resolved_windows = (
-        tuple(epoch_windows)
-        if epoch_windows is not None
-        else interpolate_stimulus_epochs_to_frame_windows(recording).windows
-    )
+    if epoch_windows is None:
+        timing = resolve_recording_timing(recording)
+        resolved_windows = timing.epoch_windows
+        frame_rate_hz = timing.frame_rate_hz
+    else:
+        resolved_windows = tuple(epoch_windows)
+        frame_rate_hz = recording_frame_rate_hz(recording)
+
     _validate_options(resolved_options, recording.alignment_valid_crop.shape)
     if len(resolved_windows) == 0:
         msg = "Response maps require at least one epoch window."
@@ -183,7 +186,6 @@ def compute_recording_response_maps(
         msg = "Response-map foreground mask is empty."
         raise ValueError(msg)
 
-    frame_rate_hz = recording_frame_rate_hz(recording)
     baseline_frames = max(
         1,
         int(round(resolved_options.baseline_sample_seconds * frame_rate_hz)),

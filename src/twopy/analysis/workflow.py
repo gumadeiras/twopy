@@ -22,7 +22,6 @@ from twopy.analysis.dff import (
     compute_roi_delta_f_over_f,
 )
 from twopy.analysis.dff_options import DeltaFOverFBaselineMode
-from twopy.analysis.epoch_mapping import InterpolatedEpochMapping
 from twopy.analysis.motion import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.persistence import save_analysis_outputs
 from twopy.analysis.response_context import (
@@ -45,6 +44,7 @@ from twopy.analysis.responses import (
     GroupedRoiResponses,
     group_delta_f_over_f_by_epoch,
 )
+from twopy.analysis.timing import RecordingTiming
 from twopy.analysis.trials import (
     EpochFrameWindow,
     FrameWindow,
@@ -91,7 +91,7 @@ class AnalysisResponseComputation:
     roi_set: RoiSet
     traces: BackgroundCorrectedRoiTraces
     dff: RoiDeltaFOverF
-    epoch_mapping: InterpolatedEpochMapping | None
+    timing: RecordingTiming | None
     epoch_windows: tuple[EpochFrameWindow, ...]
     baseline_windows: tuple[FrameWindow, ...]
     grouped_responses: GroupedRoiResponses
@@ -297,7 +297,7 @@ def _save_response_analysis_run(
         roi_set=computation.roi_set,
         traces=computation.traces,
         dff=computation.dff,
-        epoch_mapping=computation.epoch_mapping,
+        timing=computation.timing,
         epoch_windows=computation.epoch_windows,
         baseline_windows=computation.baseline_windows,
         grouped_responses=computation.grouped_responses,
@@ -473,7 +473,7 @@ def compute_recording_responses_from_traces(
         recording,
         roi_set,
         traces=traces,
-        mapping=context.epoch_mapping,
+        timing=context.timing,
         resolved_epoch_windows=context.epoch_windows,
         baseline_windows=context.baseline_windows,
         frame_rate_hz=context.frame_rate_hz,
@@ -501,7 +501,7 @@ def _compute_recording_responses_from_baseline(
     roi_set: RoiSet,
     *,
     traces: BackgroundCorrectedRoiTraces,
-    mapping: InterpolatedEpochMapping | None,
+    timing: RecordingTiming | None,
     resolved_epoch_windows: Sequence[EpochFrameWindow],
     baseline_windows: tuple[FrameWindow, ...],
     frame_rate_hz: float,
@@ -519,7 +519,7 @@ def _compute_recording_responses_from_baseline(
         recording: Loaded converted recording.
         roi_set: ROI masks to extract from the recording.
         traces: Background-corrected ROI traces.
-        mapping: Optional interpolated epoch mapping used to audit timing.
+        timing: Optional native timing audit used to resolve epoch windows.
         resolved_epoch_windows: Stimulus windows used for grouping.
         baseline_windows: Baseline windows used for dF/F fitting.
         frame_rate_hz: Effective analysis frame rate.
@@ -579,7 +579,7 @@ def _compute_recording_responses_from_baseline(
         roi_set=roi_set,
         traces=traces,
         dff=dff,
-        epoch_mapping=mapping,
+        timing=timing,
         epoch_windows=tuple(resolved_epoch_windows),
         baseline_windows=baseline_windows,
         grouped_responses=grouped_responses,

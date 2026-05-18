@@ -20,7 +20,7 @@ from qtpy.QtCore import QPoint, QRectF, Qt, Signal
 from qtpy.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen
 from qtpy.QtWidgets import QSizePolicy, QWidget
 
-from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
+from twopy.analysis.timing import resolve_recording_timing
 from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData
 from twopy.napari.dims import current_step_index, set_current_step_index
@@ -148,11 +148,11 @@ def resolve_trial_timeline_data(recording: RecordingData) -> TrialTimelineData |
         photodiode-aligned epoch mapping.
     """
     try:
-        mapping = interpolate_stimulus_epochs_to_frame_windows(recording)
+        timing = resolve_recording_timing(recording)
     except ValueError:
         return None
     windows = tuple(
-        _timeline_window(index, item) for index, item in enumerate(mapping.windows)
+        _timeline_window(index, item) for index, item in enumerate(timing.epoch_windows)
     )
     if len(windows) == 0:
         return None

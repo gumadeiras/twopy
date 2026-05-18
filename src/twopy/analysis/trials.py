@@ -1,7 +1,6 @@
 """Split ROI traces into frame windows for response analysis.
 
-Inputs: converted recordings, ROI traces, frame boundaries, and photodiode
-alignment.
+Inputs: ROI traces and explicit stimulus frame windows.
 Outputs: frame windows, stimulus-epoch labels, and windowed ROI response
 arrays.
 
@@ -16,20 +15,15 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from twopy.converted import RecordingData
-from twopy.photodiode_classification import classify_recording_photodiode_events
 from twopy.roi import RoiTraces
-from twopy.synchronization import PhotodiodeAlignment
 
 __all__ = [
     "EpochFrameWindow",
     "FrameWindow",
     "WindowedRoiResponse",
     "default_baseline_epoch_number",
-    "frame_windows_from_photodiode_alignment",
     "is_baseline_epoch_name",
     "make_frame_windows",
-    "map_stimulus_epochs_to_frame_windows",
     "no_baseline_epoch_frame_windows",
     "resolve_baseline_frame_windows",
     "select_baseline_frame_windows",
@@ -133,69 +127,6 @@ def make_frame_windows(
             label=resolved_labels[index],
         )
         for index in range(window_count)
-    )
-
-
-def frame_windows_from_photodiode_alignment(
-    alignment: PhotodiodeAlignment,
-    *,
-    frame_count: int,
-    labels: Sequence[str] | None = None,
-) -> tuple[FrameWindow, ...]:
-    """Create frame windows from paired photodiode event frames.
-
-    Args:
-        alignment: Photodiode events paired to imaging frames.
-        frame_count: Total number of aligned movie frames.
-        labels: Optional label for each neighboring event interval.
-
-    Returns:
-        Frame windows between consecutive paired photodiode events.
-
-    This turns decoded photodiode boundaries into frame intervals without
-    assuming what each event means in a stimulus-specific protocol.
-    """
-    return make_frame_windows(
-        tuple(event.imaging_frame for event in alignment.paired_events),
-        frame_count=frame_count,
-        labels=labels,
-    )
-
-
-def map_stimulus_epochs_to_frame_windows(
-    recording: RecordingData,
-    alignment: PhotodiodeAlignment,
-) -> tuple[EpochFrameWindow, ...]:
-    """Map stimulus epoch runs onto photodiode-aligned imaging-frame windows.
-
-    Args:
-        recording: Loaded converted recording with ``stimulus/data`` and epoch
-            parameter metadata.
-        alignment: Photodiode events paired to imaging frames.
-
-    Returns:
-        One ``EpochFrameWindow`` per nonzero stimulus epoch run.
-
-    Raises:
-        ValueError: If the stimulus epoch runs and photodiode windows do not
-            have the same count.
-
-    This wraps the stricter photodiode classifier and returns the older
-    ``EpochFrameWindow`` shape used by response helpers.
-    """
-    timing = classify_recording_photodiode_events(recording, alignment)
-    return tuple(
-        EpochFrameWindow(
-            window=FrameWindow(
-                index=window.index,
-                start_frame=window.start_frame,
-                stop_frame=window.stop_frame,
-                label=_epoch_window_label(window.epoch_number, window.epoch_name),
-            ),
-            epoch_number=window.epoch_number,
-            epoch_name=window.epoch_name,
-        )
-        for window in timing.windows
     )
 
 
@@ -382,20 +313,6 @@ def split_traces_by_frame_windows(
         )
 
     return tuple(responses)
-
-
-def _epoch_window_label(epoch_number: int, epoch_name: str) -> str:
-    """Create a readable label for a stimulus epoch frame window.
-
-    Args:
-        epoch_number: One-indexed stimulus epoch number.
-        epoch_name: Human-readable epoch name from converted stimulus metadata.
-
-    Returns:
-        Label suitable for plots and logs.
-    """
-    safe_name = epoch_name.strip().replace(" ", "_") or "unnamed"
-    return f"epoch_{epoch_number:04d}_{safe_name}"
 
 
 def _matches_baseline_epoch_window(

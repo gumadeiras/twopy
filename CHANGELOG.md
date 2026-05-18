@@ -12,6 +12,7 @@
 - Routed napari manual, CSV-list, and database recording loads through one shared Load-tab workflow with consistent load-failure wording.
 - Unified napari response preview, live update, and Save Analysis handling around one ROI analysis request so plotted previews and saved outputs use the same ROI masks and Plot-tab settings.
 - Moved manual Group Matching ROI match-table mutation rules into GUI-independent analysis helpers while keeping the napari view focused on rendering and interaction wiring.
+- Routed native response timing through one audited recording-timing boundary that prefers classified photodiode boundary evidence and keeps interpolation as the non-boundary-flash fallback.
 - Split napari response-map display scaling coverage into a pure helper test module and reused shared converted-HDF5 fixture writers across more analysis tests.
 
 ### Fixes

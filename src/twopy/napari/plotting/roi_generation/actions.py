@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
+from twopy.analysis.timing import resolve_recording_timing
 from twopy.analysis.trials import EpochFrameWindow
 from twopy.converted import RecordingData
 from twopy.napari.plotting.roi_generation.options import RoiGenerationOptions
@@ -84,7 +84,7 @@ def generate_roi_labels(
         resolved_epoch_windows = (
             tuple(epoch_windows)
             if epoch_windows is not None
-            else interpolate_stimulus_epochs_to_frame_windows(recording).windows
+            else resolve_recording_timing(recording).epoch_windows
         )
         roi_set = response_watershed_roi_set(
             recording,
