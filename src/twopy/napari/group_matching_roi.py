@@ -41,11 +41,13 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.analysis.group_matching import (
+    ManualRoiMatchGroup,
     ManualRoiMatchRow,
-    append_manual_roi_match_rows,
+    add_manual_roi_match_group,
     load_manual_roi_match_rows,
-    make_manual_roi_match_rows,
-    next_group_cell_id,
+    matched_manual_roi_groups,
+    remove_manual_roi_match_group,
+    replace_manual_roi_match_group,
     save_manual_roi_match_rows,
 )
 from twopy.analysis.response_processing import (
@@ -386,11 +388,16 @@ class RoiAssignmentView(QWidget):
         if len(selected_rois) == 0:
             self._status_label.setText("Choose at least one ROI before adding a group.")
             return
-        rows = self._new_rows_for_recording_rois(selected_rois)
-        self._append_rows(rows)
-        group_cell_id = rows[0].group_cell_id
+        existing_rows = self._existing_rows()
+        rows, group_cell_id = add_manual_roi_match_group(
+            existing_rows,
+            selected_rois,
+            fov_group_id=self._fov_filter.currentText(),
+            note=self._note_edit.text(),
+        )
+        save_manual_roi_match_rows(rows, self.output_path())
         self._status_label.setText(
-            f"Added group {group_cell_id} with {len(rows)} ROIs.",
+            f"Added group {group_cell_id} with {len(selected_rois)} ROIs.",
         )
         self._refresh_group_table()
         self._select_group_in_table(group_cell_id)
@@ -407,13 +414,16 @@ class RoiAssignmentView(QWidget):
         if len(selected_rois) == 0:
             self._status_label.setText("Choose at least one ROI before saving a group.")
             return
-        rows = self._rows_for_group_cell_id(
+        rows = replace_manual_roi_match_group(
+            self._existing_rows(),
             selected_rois,
+            fov_group_id=self._fov_filter.currentText(),
             group_cell_id=group_cell_id,
+            note=self._note_edit.text(),
         )
-        self._replace_group_rows(group_cell_id, rows)
+        save_manual_roi_match_rows(rows, self.output_path())
         self._status_label.setText(
-            f"Overwrote group {group_cell_id} with {len(rows)} ROIs.",
+            f"Overwrote group {group_cell_id} with {len(selected_rois)} ROIs.",
         )
         self._refresh_group_table()
         self._select_group_in_table(group_cell_id)
@@ -426,7 +436,12 @@ class RoiAssignmentView(QWidget):
         if group_cell_id is None:
             self._status_label.setText("Select a saved group before removing.")
             return
-        self._replace_group_rows(group_cell_id, ())
+        rows = remove_manual_roi_match_group(
+            self._existing_rows(),
+            fov_group_id=self._fov_filter.currentText(),
+            group_cell_id=group_cell_id,
+        )
+        save_manual_roi_match_rows(rows, self.output_path())
         self._clear_group_table_selection()
         self._set_note_text("")
         self._selected_group_dirty = False
@@ -558,32 +573,6 @@ class RoiAssignmentView(QWidget):
             self._current_rois.pop(recording_path, None)
         self._current_rois.update(self._selected_rois_by_recording())
 
-    def _new_rows_for_recording_rois(
-        self,
-        recording_rois: dict[Path, str],
-    ) -> tuple[ManualRoiMatchRow, ...]:
-        """Build rows for one new ROI group decision."""
-        existing_rows = self._existing_rows()
-        return self._rows_for_group_cell_id(
-            recording_rois,
-            group_cell_id=next_group_cell_id(existing_rows),
-        )
-
-    def _rows_for_group_cell_id(
-        self,
-        recording_rois: dict[Path, str],
-        *,
-        group_cell_id: int,
-    ) -> tuple[ManualRoiMatchRow, ...]:
-        """Build rows for one existing or new ROI group decision."""
-        return make_manual_roi_match_rows(
-            recording_rois,
-            group_cell_id=group_cell_id,
-            fov_group_id=self._fov_filter.currentText(),
-            status="matched",
-            note=self._note_edit.text(),
-        )
-
     def _handle_roi_selection_changed(self) -> None:
         """Refresh previews and remember selected saved groups with edits."""
         self._mark_selected_group_dirty()
@@ -602,46 +591,20 @@ class RoiAssignmentView(QWidget):
         finally:
             self._note_edit.blockSignals(False)
 
-    def _append_rows(self, rows: tuple[ManualRoiMatchRow, ...]) -> None:
-        """Append rows to the current output path."""
-        append_manual_roi_match_rows(self.output_path(), rows)
-
-    def _replace_group_rows(
-        self,
-        group_cell_id: int,
-        rows: tuple[ManualRoiMatchRow, ...],
-    ) -> None:
-        """Replace one saved group in the match CSV."""
-        output_path = self.output_path()
-        existing_rows = self._existing_rows()
-        selected_fov = self._fov_filter.currentText()
-        retained_rows = tuple(
-            row
-            for row in existing_rows
-            if not (
-                row.status == "matched"
-                and row.fov_group_id == selected_fov
-                and row.group_cell_id == group_cell_id
-            )
-        )
-        save_manual_roi_match_rows((*retained_rows, *rows), output_path)
-
     def _existing_rows(self) -> tuple[ManualRoiMatchRow, ...]:
         """Load existing saved rows, treating a missing file as empty."""
         output_path = self.output_path()
         return load_manual_roi_match_rows(output_path) if output_path.exists() else ()
 
-    def _matched_groups_for_filter(self) -> dict[int, tuple[ManualRoiMatchRow, ...]]:
+    def _matched_groups_for_filter(self) -> tuple[ManualRoiMatchGroup, ...]:
         """Return saved matched groups for the active FOV filter."""
-        groups: dict[int, list[ManualRoiMatchRow]] = {}
-        selected_fov = self._fov_filter.currentText()
-        for row in self._existing_rows():
-            if row.status != "matched" or row.fov_group_id != selected_fov:
-                continue
-            groups.setdefault(row.group_cell_id, []).append(row)
-        return {
-            group_cell_id: tuple(rows) for group_cell_id, rows in sorted(groups.items())
-        }
+        fov_group_id = self._fov_filter.currentText()
+        if fov_group_id == "":
+            return ()
+        return matched_manual_roi_groups(
+            self._existing_rows(),
+            fov_group_id=fov_group_id,
+        )
 
     def _refresh_group_table(self) -> None:
         """Refresh the saved matched-group table for the selected FOV."""
@@ -649,20 +612,20 @@ class RoiAssignmentView(QWidget):
         self._group_table.blockSignals(True)
         try:
             self._group_table.setRowCount(0)
-            for row_index, (group_cell_id, rows) in enumerate(groups.items()):
+            for row_index, group in enumerate(groups):
                 self._group_table.insertRow(row_index)
-                group_item = QTableWidgetItem(str(group_cell_id))
-                group_item.setData(Qt.ItemDataRole.UserRole, group_cell_id)
+                group_item = QTableWidgetItem(str(group.group_cell_id))
+                group_item.setData(Qt.ItemDataRole.UserRole, group.group_cell_id)
                 self._group_table.setItem(row_index, 0, group_item)
                 self._group_table.setItem(
                     row_index,
                     1,
-                    QTableWidgetItem(self._group_summary(rows)),
+                    QTableWidgetItem(self._group_summary(group.rows)),
                 )
                 self._group_table.setItem(
                     row_index,
                     2,
-                    QTableWidgetItem(_shared_note(rows)),
+                    QTableWidgetItem(group.note),
                 )
         finally:
             self._group_table.blockSignals(False)
@@ -682,18 +645,25 @@ class RoiAssignmentView(QWidget):
         group_cell_id = self._selected_group_cell_id()
         if group_cell_id is None:
             return
-        groups = self._matched_groups_for_filter()
-        rows_by_path = {
-            row.recording_path.expanduser(): row
-            for row in groups.get(group_cell_id, ())
+        group = self._matched_group_by_id(group_cell_id)
+        if group is None:
+            return
+        rois_by_path = {
+            row.recording_path.expanduser(): row.roi_label for row in group.rows
         }
         for card in self._cards:
-            row = rows_by_path.get(card.recording_path)
-            card.set_selected_roi(row.roi_label if row is not None else "")
-        self._set_note_text(_shared_note(groups.get(group_cell_id, ())))
+            card.set_selected_roi(rois_by_path.get(card.recording_path, ""))
+        self._set_note_text(group.note)
         self._selected_group_dirty = False
         self._status_label.setText(f"Loaded saved group {group_cell_id}.")
         self.refresh_response_preview()
+
+    def _matched_group_by_id(self, group_cell_id: int) -> ManualRoiMatchGroup | None:
+        """Return the active-FOV matched group with this id, if present."""
+        for group in self._matched_groups_for_filter():
+            if group.group_cell_id == group_cell_id:
+                return group
+        return None
 
     def _selected_group_cell_id(self) -> int | None:
         """Return the currently selected saved group id, if any."""
@@ -1027,12 +997,6 @@ def _visible_response_epoch_indices(plot_data: ResponsePlotData) -> tuple[int, .
 def _epoch_title(epoch: EpochResponsePlotData) -> str:
     """Return the compact title shown above one ROI comparison plot."""
     return f"{epoch.epoch_number}: {epoch.epoch_name}"
-
-
-def _shared_note(rows: tuple[ManualRoiMatchRow, ...]) -> str:
-    """Return the common note for one saved group."""
-    notes = {row.note for row in rows}
-    return notes.pop() if len(notes) == 1 else ""
 
 
 def _trace_colors_with_opacity(colors: tuple[QColor, ...]) -> tuple[QColor, ...]:
