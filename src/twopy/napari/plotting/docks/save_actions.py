@@ -1,7 +1,6 @@
 """Save Analysis action for response plotting docks.
 
-Inputs: current recording, napari ROI Labels layer, Plot-tab analysis options,
-and selected output paths.
+Inputs: one response-analysis request and selected output paths.
 Outputs: persisted ROI HDF5 plus normal twopy analysis response outputs.
 
 This module keeps persistence side effects out of the response plot widget so
@@ -11,27 +10,18 @@ the widget only coordinates UI state and displays the result.
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-
-from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_maps import ResponseMapData, save_response_map_data
-from twopy.analysis.response_processing import ResponseProcessingOptions
-from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.workflow import analyze_recording_responses
 from twopy.analysis_cache import AnalysisSyncPlan, build_analysis_sync_plan
-from twopy.converted import RecordingData
 from twopy.filenames import RESPONSE_HEATMAPS_FILENAME
 from twopy.napari.display_paths import format_output_folder
-from twopy.napari.plotting.data import response_plot_window_seconds_for_recording
 from twopy.napari.plotting.docks.paths import (
     resolved_analysis_path,
     resolved_roi_save_file,
 )
-from twopy.napari.roi import (
-    roi_label_image_from_layer_for_recording,
-    save_napari_label_rois,
-)
+from twopy.napari.responses import ResponseAnalysisRequest
 from twopy.napari.text import counted_noun
+from twopy.roi import save_roi_set
 
 
 @dataclass(frozen=True)
@@ -57,26 +47,18 @@ class SaveAnalysisResult:
 
 
 def save_current_roi_analysis(
+    request: ResponseAnalysisRequest,
     *,
-    recording: RecordingData | None,
-    roi_labels_layer: object | None,
     roi_save_file: Path | None,
     analysis_path: Path | None,
-    delta_f_over_f_options: DeltaFOverFOptions,
-    response_window_options: ResponseWindowOptions,
-    response_processing_options: ResponseProcessingOptions,
     response_map_data: ResponseMapData | None = None,
 ) -> SaveAnalysisResult:
     """Persist current Labels ROIs and run response analysis.
 
     Args:
-        recording: Optional loaded converted recording.
-        roi_labels_layer: Optional napari Labels layer containing ROIs.
+        request: Response-analysis request from the current napari state.
         roi_save_file: Explicit ROI output path, if one is loaded.
         analysis_path: Explicit analysis output path, if one is loaded.
-        delta_f_over_f_options: Plot-tab dF/F settings to apply.
-        response_window_options: Plot-tab response-window settings to apply.
-        response_processing_options: Plot-tab processing settings to apply.
         response_map_data: Optional recording-level heatmaps to persist beside
             ROI analysis outputs.
 
@@ -84,56 +66,37 @@ def save_current_roi_analysis(
         Saved output paths and status text for the Metadata tab.
 
     Raises:
-        ValueError: If recording, ROI layer, ROI labels, or analysis settings are
-            invalid for saving.
+        ValueError: If analysis settings are invalid for saving.
     """
-    if recording is None:
-        msg = "No recording loaded."
-        raise ValueError(msg)
-    if roi_labels_layer is None:
-        msg = "No ROI Labels layer is available."
-        raise ValueError(msg)
-
-    label_image = roi_label_image_from_layer_for_recording(
-        roi_labels_layer,
-        recording,
-    )
-    if not np.any(label_image > 0):
-        msg = "No ROI labels to save or analyze."
-        raise ValueError(msg)
-
-    roi_output_path = resolved_roi_save_file(roi_save_file, recording)
-    analysis_output_path = resolved_analysis_path(analysis_path, recording)
-    roi_set = save_napari_label_rois(label_image, roi_output_path)
-    pre_window_seconds, post_window_seconds = (
-        response_plot_window_seconds_for_recording(
-            recording,
-            response_window_options,
-        )
-    )
+    roi_output_path = resolved_roi_save_file(roi_save_file, request.recording)
+    analysis_output_path = resolved_analysis_path(analysis_path, request.recording)
+    save_roi_set(request.roi_set, roi_output_path)
+    dff_options = request.delta_f_over_f_options
+    pre_window_seconds, post_window_seconds = request.response_window_seconds()
     run = analyze_recording_responses(
-        recording.path,
-        roi_set,
+        request.recording.path,
+        request.roi_set,
         output_path=analysis_output_path,
-        baseline_mode=delta_f_over_f_options.baseline_mode,
-        baseline_epoch_number=delta_f_over_f_options.baseline_epoch_number,
-        baseline_epoch_name=delta_f_over_f_options.baseline_epoch_name,
-        background_method=delta_f_over_f_options.background_method,
-        baseline_sample_seconds=delta_f_over_f_options.baseline_sample_seconds,
-        fit_mode=delta_f_over_f_options.fit_mode,
-        apply_motion_mask=delta_f_over_f_options.apply_motion_mask,
+        baseline_mode=dff_options.baseline_mode,
+        baseline_epoch_number=dff_options.baseline_epoch_number,
+        baseline_epoch_name=dff_options.baseline_epoch_name,
+        background_method=dff_options.background_method,
+        baseline_sample_seconds=dff_options.baseline_sample_seconds,
+        fit_mode=dff_options.fit_mode,
+        apply_motion_mask=dff_options.apply_motion_mask,
         response_pre_window_seconds=pre_window_seconds,
         response_post_window_seconds=post_window_seconds,
-        response_window_auto=response_window_options.auto,
-        response_processing_options=response_processing_options,
+        response_window_auto=request.response_window_options.auto,
+        response_processing_options=request.response_processing_options,
     )
-    response_heatmap_path = _save_response_heatmaps(recording, response_map_data)
-    output_folder = format_output_folder(run.output_path, recording)
+    response_heatmap_path = _save_response_heatmaps(request, response_map_data)
+    output_folder = format_output_folder(run.output_path, request.recording)
     status_text = (
-        f"Saved {counted_noun(len(roi_set.labels), 'ROI', 'ROIs')} to {output_folder}"
+        f"Saved {counted_noun(len(request.roi_set.labels), 'ROI', 'ROIs')} "
+        f"to {output_folder}"
     )
     sync_plan = build_analysis_sync_plan(
-        recording=recording,
+        recording=request.recording,
         local_paths=(
             roi_output_path,
             run.output_path,
@@ -143,7 +106,7 @@ def save_current_roi_analysis(
         ),
     )
     if sync_plan is not None:
-        sync_folder = format_output_folder(sync_plan.publish_root, recording)
+        sync_folder = format_output_folder(sync_plan.publish_root, request.recording)
         status_text = f"{status_text}; syncing to {sync_folder}"
     return SaveAnalysisResult(
         roi_output_path=roi_output_path,
@@ -155,12 +118,12 @@ def save_current_roi_analysis(
 
 
 def _save_response_heatmaps(
-    recording: RecordingData,
+    request: ResponseAnalysisRequest,
     response_map_data: ResponseMapData | None,
 ) -> Path | None:
     """Persist recording-level response heatmaps when they are available."""
     if response_map_data is None:
         return None
-    path = recording.path.parent / RESPONSE_HEATMAPS_FILENAME
+    path = request.recording.path.parent / RESPONSE_HEATMAPS_FILENAME
     save_response_map_data(path, response_map_data)
     return path

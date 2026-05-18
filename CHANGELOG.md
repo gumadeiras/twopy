@@ -6,6 +6,10 @@
 
 - Added database search favorites in the napari Load-tab search window, with Save favorite, Use, and Remove actions backed by a machine-local YAML file.
 
+### Changes
+
+- Unified napari response preview, live update, and Save Analysis handling around one ROI analysis request so plotted previews and saved outputs use the same ROI masks and Plot-tab settings.
+
 ### Fixes
 
 - Prevented database search favorites from changing the dialog state or overwriting a corrupt favorites file when local YAML persistence fails.

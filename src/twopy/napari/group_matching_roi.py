@@ -62,7 +62,10 @@ from twopy.napari.plotting.widgets import (
     global_time_bounds,
     global_value_bounds,
 )
-from twopy.napari.responses import compute_response_plot_data_from_labels
+from twopy.napari.responses import (
+    compute_response_preview,
+    response_analysis_request_from_labels,
+)
 from twopy.napari.session import LoadedNapariRecording
 from twopy.stimulus import stimulus_epoch_names_by_number
 
@@ -885,7 +888,7 @@ def _selected_roi_response_plot_data(
         raise ValueError(msg)
     label_image = np.asarray(cast(_LayerWithData, recording.roi_labels_layer).data)
     selected = np.where(label_image.astype(np.int64, copy=False) == label_value, 1, 0)
-    return compute_response_plot_data_from_labels(
+    request = response_analysis_request_from_labels(
         recording.recording,
         _SelectedRoiLayer(data=selected.astype(np.int64, copy=False)),
         source_path=recording.recording.source_session_dir.expanduser(),
@@ -893,6 +896,7 @@ def _selected_roi_response_plot_data(
             normalization=normalization_options,
         ),
     )
+    return compute_response_preview(request)
 
 
 def _combined_response_plot_data(

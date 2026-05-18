@@ -1,7 +1,6 @@
 """Cached live response analysis for napari ROI editing.
 
-Inputs: full-frame Labels images, one loaded recording, and GUI analysis
-options.
+Inputs: one response-analysis request from the napari adapter.
 Outputs: plot-ready response data with movie-derived ROI traces reused across
 interactive edits when the masks and trace context are unchanged.
 
@@ -19,6 +18,7 @@ import numpy.typing as npt
 
 from twopy.analysis.background_subtraction import (
     BackgroundCorrectedRoiTraces,
+    BackgroundCorrectionMethod,
     extract_background_corrected_roi_traces,
 )
 from twopy.analysis.dff_options import DeltaFOverFOptions
@@ -26,14 +26,12 @@ from twopy.analysis.response_context import (
     ResponseAnalysisContext,
     resolve_response_analysis_context,
 )
-from twopy.analysis.response_processing import ResponseProcessingOptions
-from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.workflow import compute_recording_responses_from_traces
 from twopy.converted import RecordingData
-from twopy.napari.plotting.data import (
-    ResponsePlotData,
-    response_plot_data_from_grouped,
-    response_plot_window_seconds_for_recording,
+from twopy.napari.plotting.data import ResponsePlotData
+from twopy.napari.responses import (
+    ResponseAnalysisRequest,
+    response_plot_data_from_computation,
 )
 from twopy.roi import RoiSet, make_roi_set
 
@@ -56,7 +54,7 @@ class _PreparedRoiSet:
     """Current ROI masks plus stable mask signatures."""
 
     roi_set: RoiSet
-    label_values: tuple[int, ...]
+    labels: tuple[str, ...]
     signatures: tuple[str, ...]
 
 
@@ -71,7 +69,7 @@ class _CachedTrace:
 class LiveResponseAnalysisCache:
     """Reuse unchanged ROI traces while preserving full response math.
 
-    Inputs: a full-frame label image and the same options used by Save Analysis.
+    Inputs: the same response-analysis request used by preview and Save Analysis.
     Outputs: plot-ready response data.
 
     The cache stores movie-derived traces only. Each live update still recomputes
@@ -82,7 +80,7 @@ class LiveResponseAnalysisCache:
     def __init__(self) -> None:
         """Create an empty live-analysis trace cache."""
         self._context_key: _TraceContextKey | None = None
-        self._traces_by_label_value: dict[int, _CachedTrace] = {}
+        self._traces_by_label: dict[str, _CachedTrace] = {}
 
     def clear(self) -> None:
         """Remove all cached ROI traces.
@@ -94,50 +92,36 @@ class LiveResponseAnalysisCache:
             None.
         """
         self._context_key = None
-        self._traces_by_label_value.clear()
+        self._traces_by_label.clear()
 
-    def compute_response_plot_data(
+    def compute_response_preview(
         self,
-        recording: RecordingData,
-        label_image: npt.NDArray[np.int64],
+        request: ResponseAnalysisRequest,
         *,
-        source_path: Path | None = None,
-        delta_f_over_f_options: DeltaFOverFOptions | None = None,
-        response_window_options: ResponseWindowOptions | None = None,
-        response_processing_options: ResponseProcessingOptions | None = None,
         check_cancelled: Callable[[], None] | None = None,
     ) -> ResponsePlotData:
         """Compute plot data while reusing unchanged ROI traces.
 
         Args:
-            recording: Loaded converted recording shown in napari.
-            label_image: Full-frame integer ROI label image.
-            source_path: Optional display path attached to plot data.
-            delta_f_over_f_options: Optional dF/F analysis settings.
-            response_window_options: Optional response-window settings.
-            response_processing_options: Optional smoothing, low-pass, and
-                correlation-QC settings.
+            request: Response-analysis request.
             check_cancelled: Optional callback that raises when work is obsolete.
 
         Returns:
             Plot-ready response data for all current ROIs.
         """
-        dff_options = delta_f_over_f_options or DeltaFOverFOptions()
-        window_options = response_window_options or ResponseWindowOptions()
-        pre_window_seconds, post_window_seconds = (
-            response_plot_window_seconds_for_recording(recording, window_options)
-        )
+        dff_options = request.delta_f_over_f_options
+        pre_window_seconds, post_window_seconds = request.response_window_seconds()
         context = resolve_response_analysis_context(
-            recording,
+            request.recording,
             baseline_mode=dff_options.baseline_mode,
             baseline_epoch_number=dff_options.baseline_epoch_number,
             baseline_epoch_name=dff_options.baseline_epoch_name,
             response_pre_window_seconds=pre_window_seconds,
             response_post_window_seconds=post_window_seconds,
-            response_processing_options=response_processing_options,
+            response_processing_options=request.response_processing_options,
         )
-        current = _prepare_roi_set(label_image)
-        context_key = _trace_context_key(recording, context, dff_options)
+        current = _prepare_roi_set(request.roi_set)
+        context_key = _trace_context_key(request.recording, context, dff_options)
         if context_key != self._context_key:
             self.clear()
             self._context_key = context_key
@@ -147,17 +131,17 @@ class LiveResponseAnalysisCache:
         changed_indices = self._changed_trace_indices(current, dff_options)
         if len(changed_indices) > 0:
             self._refresh_traces(
-                recording,
+                request.recording,
                 current,
                 changed_indices=changed_indices,
                 context=context,
-                dff_options=dff_options,
+                background_method=dff_options.background_method,
                 check_cancelled=check_cancelled,
             )
-        self._drop_absent_traces(current.label_values)
+        self._drop_absent_traces(current.labels)
         traces = _combine_cached_traces(self._cached_traces(current))
         computation = compute_recording_responses_from_traces(
-            recording,
+            request.recording,
             current.roi_set,
             traces,
             context=context,
@@ -166,14 +150,7 @@ class LiveResponseAnalysisCache:
             apply_motion_mask=dff_options.apply_motion_mask,
             check_cancelled=check_cancelled,
         )
-        return response_plot_data_from_grouped(
-            computation.grouped_responses,
-            source_path=source_path,
-            delta_f_over_f_options=dff_options,
-            response_window_options=window_options,
-            response_processing_options=computation.response_processing_options,
-            correlation_scores=computation.correlation_scores,
-        )
+        return response_plot_data_from_computation(request, computation)
 
     def _changed_trace_indices(
         self,
@@ -183,24 +160,22 @@ class LiveResponseAnalysisCache:
         """Return ROI indices whose cached traces are absent or stale."""
         stale_indices = self._stale_trace_indices(current)
         if dff_options.background_method == "roi_y_stripe_percentile":
-            if len(stale_indices) == 0 and self._cached_label_values() == set(
-                current.label_values
-            ):
+            if len(stale_indices) == 0 and self._cached_labels() == set(current.labels):
                 return ()
-            return tuple(range(len(current.label_values)))
+            return tuple(range(len(current.labels)))
         return stale_indices
 
-    def _cached_label_values(self) -> set[int]:
-        """Return the label values represented by cached traces."""
-        return set(self._traces_by_label_value)
+    def _cached_labels(self) -> set[str]:
+        """Return the ROI labels represented by cached traces."""
+        return set(self._traces_by_label)
 
     def _stale_trace_indices(self, current: _PreparedRoiSet) -> tuple[int, ...]:
         """Return ROI indices missing from the cache or using stale masks."""
         changed: list[int] = []
-        for index, (label_value, signature) in enumerate(
-            zip(current.label_values, current.signatures, strict=True)
+        for index, (label, signature) in enumerate(
+            zip(current.labels, current.signatures, strict=True)
         ):
-            cached = self._traces_by_label_value.get(label_value)
+            cached = self._traces_by_label.get(label)
             if cached is None or cached.signature != signature:
                 changed.append(index)
         return tuple(changed)
@@ -210,10 +185,7 @@ class LiveResponseAnalysisCache:
         current: _PreparedRoiSet,
     ) -> tuple[BackgroundCorrectedRoiTraces, ...]:
         """Return cached traces in current ROI order."""
-        return tuple(
-            self._traces_by_label_value[label_value].trace
-            for label_value in current.label_values
-        )
+        return tuple(self._traces_by_label[label].trace for label in current.labels)
 
     def _refresh_traces(
         self,
@@ -222,7 +194,7 @@ class LiveResponseAnalysisCache:
         *,
         changed_indices: tuple[int, ...],
         context: ResponseAnalysisContext,
-        dff_options: DeltaFOverFOptions,
+        background_method: BackgroundCorrectionMethod,
         check_cancelled: Callable[[], None] | None,
     ) -> None:
         """Extract traces for changed ROIs and update the cache."""
@@ -230,25 +202,25 @@ class LiveResponseAnalysisCache:
         traces = extract_background_corrected_roi_traces(
             recording,
             changed_roi_set,
-            method=dff_options.background_method,
+            method=background_method,
             start_frame=context.trace_start,
             stop_frame=context.trace_stop,
             spatial_domain="alignment_valid_crop",
             check_cancelled=check_cancelled,
         )
         for output_index, source_index in enumerate(changed_indices):
-            label_value = current.label_values[source_index]
-            self._traces_by_label_value[label_value] = _CachedTrace(
+            label = current.labels[source_index]
+            self._traces_by_label[label] = _CachedTrace(
                 signature=current.signatures[source_index],
                 trace=_single_roi_trace(traces, output_index),
             )
 
-    def _drop_absent_traces(self, label_values: tuple[int, ...]) -> None:
+    def _drop_absent_traces(self, labels: tuple[str, ...]) -> None:
         """Remove cache entries for deleted ROI labels."""
-        current_values = set(label_values)
-        for label_value in tuple(self._traces_by_label_value):
-            if label_value not in current_values:
-                del self._traces_by_label_value[label_value]
+        current_labels = set(labels)
+        for label in tuple(self._traces_by_label):
+            if label not in current_labels:
+                del self._traces_by_label[label]
 
 
 def _trace_context_key(
@@ -266,24 +238,12 @@ def _trace_context_key(
     )
 
 
-def _prepare_roi_set(label_image: npt.NDArray[np.int64]) -> _PreparedRoiSet:
-    """Return current ROI masks and signatures from a full-frame label image."""
-    label_values = tuple(int(value) for value in np.unique(label_image) if value > 0)
-    if len(label_values) == 0:
-        msg = "No ROI labels to analyze."
-        raise ValueError(msg)
-
-    masks: list[npt.NDArray[np.bool_]] = []
-    signatures: list[str] = []
-    for label_value in label_values:
-        mask = label_image == label_value
-        masks.append(mask)
-        signatures.append(_mask_signature(mask))
-    labels = tuple(f"roi_{label_value:04d}" for label_value in label_values)
+def _prepare_roi_set(roi_set: RoiSet) -> _PreparedRoiSet:
+    """Return current ROI masks and stable signatures from a ROI set."""
     return _PreparedRoiSet(
-        roi_set=make_roi_set(np.stack(masks), labels=labels),
-        label_values=label_values,
-        signatures=tuple(signatures),
+        roi_set=roi_set,
+        labels=roi_set.labels,
+        signatures=tuple(_mask_signature(mask) for mask in roi_set.masks),
     )
 
 

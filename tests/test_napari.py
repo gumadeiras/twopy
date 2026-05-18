@@ -67,6 +67,7 @@ from twopy import (
     make_roi_set,
     open_recording_in_napari,
     roi_label_image_from_layer,
+    roi_set_to_label_image,
     save_manual_fov_group_rows,
     save_napari_label_rois,
     save_roi_set,
@@ -177,7 +178,10 @@ from twopy.napari.plotting.widgets import (
     global_value_bounds,
     roi_colors_from_layer,
 )
-from twopy.napari.responses import compute_response_plot_data_from_roi_set
+from twopy.napari.responses import (
+    compute_response_preview,
+    response_analysis_request_from_label_image,
+)
 from twopy.napari.roi import remove_roi_label_values_from_layer
 from twopy.napari.sidebar import TWOPY_SIDEBAR_MINIMUM_WIDTH
 from twopy.napari.state import write_last_recording_folder
@@ -1216,7 +1220,7 @@ class NapariAdapterTest(unittest.TestCase):
             response_widget = cast(Any, opened.response_plot_widget)
 
             with patch(
-                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+                "twopy.napari.interactive.compute_response_preview",
                 return_value=_tiny_response_plot_data(),
             ):
                 response_widget.update_from_current_rois()
@@ -1269,7 +1273,11 @@ class NapariAdapterTest(unittest.TestCase):
                 "twopy.napari.responses.compute_recording_responses",
                 return_value=computation,
             ) as compute:
-                plot_data = compute_response_plot_data_from_roi_set(recording, roi_set)
+                request = response_analysis_request_from_label_image(
+                    recording,
+                    roi_set_to_label_image(roi_set),
+                )
+                plot_data = compute_response_preview(request)
 
             self.assertIsNotNone(plot_data)
             self.assertIs(plot_data.correlation_scores, computation.correlation_scores)
@@ -1315,7 +1323,11 @@ class NapariAdapterTest(unittest.TestCase):
                 "twopy.napari.responses.compute_recording_responses",
                 return_value=computation,
             ) as compute:
-                plot_data = compute_response_plot_data_from_roi_set(recording, roi_set)
+                request = response_analysis_request_from_label_image(
+                    recording,
+                    roi_set_to_label_image(roi_set),
+                )
+                plot_data = compute_response_preview(request)
 
             self.assertIsNotNone(plot_data)
             self.assertEqual(
@@ -1354,15 +1366,16 @@ class NapariAdapterTest(unittest.TestCase):
                 "twopy.napari.responses.compute_recording_responses",
                 return_value=computation,
             ) as compute:
-                plot_data = compute_response_plot_data_from_roi_set(
+                request = response_analysis_request_from_label_image(
                     recording,
-                    roi_set,
+                    roi_set_to_label_image(roi_set),
                     response_window_options=ResponseWindowOptions(
                         auto=False,
                         pre_window_seconds=0.5,
                         post_window_seconds=1.5,
                     ),
                 )
+                plot_data = compute_response_preview(request)
 
             self.assertIsNotNone(plot_data)
             self.assertEqual(
@@ -2529,7 +2542,7 @@ class NapariAdapterTest(unittest.TestCase):
             controller.set_context(recording, layer)
 
             with patch(
-                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+                "twopy.napari.interactive.compute_response_preview",
                 return_value=_tiny_response_plot_data(),
             ):
                 events.paint.emit()
@@ -2582,7 +2595,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             with patch.object(
                 controller._analysis_cache,
-                "compute_response_plot_data",
+                "compute_response_preview",
                 return_value=plot_data,
             ) as compute:
                 controller.request_update()
@@ -2637,7 +2650,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             with patch.object(
                 controller._analysis_cache,
-                "compute_response_plot_data",
+                "compute_response_preview",
                 side_effect=compute,
             ):
                 controller.request_update()
@@ -2683,7 +2696,7 @@ class NapariAdapterTest(unittest.TestCase):
                 def clear(self) -> None:
                     self.clear_calls += 1
 
-                def compute_response_plot_data(
+                def compute_response_preview(
                     self,
                     *args: object,
                     **kwargs: object,
@@ -2772,13 +2785,21 @@ class NapariAdapterTest(unittest.TestCase):
                     return_value=computation,
                 ),
                 patch(
-                    "twopy.napari.live_analysis.response_plot_data_from_grouped",
+                    "twopy.napari.live_analysis.response_plot_data_from_computation",
                     return_value=_tiny_response_plot_data(),
                 ),
             ):
-                cache.compute_response_plot_data(recording, first_labels)
-                cache.compute_response_plot_data(recording, first_labels)
-                cache.compute_response_plot_data(recording, edited_labels)
+                first_request = response_analysis_request_from_label_image(
+                    recording,
+                    first_labels,
+                )
+                edited_request = response_analysis_request_from_label_image(
+                    recording,
+                    edited_labels,
+                )
+                cache.compute_response_preview(first_request)
+                cache.compute_response_preview(first_request)
+                cache.compute_response_preview(edited_request)
 
             self.assertEqual(
                 extracted,
@@ -2849,20 +2870,22 @@ class NapariAdapterTest(unittest.TestCase):
                     return_value=computation,
                 ),
                 patch(
-                    "twopy.napari.live_analysis.response_plot_data_from_grouped",
+                    "twopy.napari.live_analysis.response_plot_data_from_computation",
                     return_value=_tiny_response_plot_data(),
                 ),
             ):
-                cache.compute_response_plot_data(
+                first_request = response_analysis_request_from_label_image(
                     recording,
                     first_labels,
                     delta_f_over_f_options=options,
                 )
-                cache.compute_response_plot_data(
+                deleted_request = response_analysis_request_from_label_image(
                     recording,
                     deleted_labels,
                     delta_f_over_f_options=options,
                 )
+                cache.compute_response_preview(first_request)
+                cache.compute_response_preview(deleted_request)
 
             self.assertEqual(
                 extracted,
@@ -2898,7 +2921,7 @@ class NapariAdapterTest(unittest.TestCase):
 
             controller.shutdown()
             with patch(
-                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+                "twopy.napari.interactive.compute_response_preview",
             ) as compute:
                 events.paint.emit()
                 controller.request_update()
@@ -2934,7 +2957,7 @@ class NapariAdapterTest(unittest.TestCase):
             controller.set_context(recording, layer)
 
             with patch(
-                "twopy.napari.interactive.compute_response_plot_data_from_roi_set",
+                "twopy.napari.interactive.compute_response_preview",
                 return_value=_tiny_response_plot_data(),
             ) as compute:
                 events.labels_update.emit()

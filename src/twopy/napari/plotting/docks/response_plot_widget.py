@@ -89,6 +89,10 @@ from twopy.napari.plotting.widgets import (
     resolved_value_bounds,
     roi_colors_from_label_values,
 )
+from twopy.napari.responses import (
+    ResponseAnalysisRequest,
+    response_analysis_request_from_labels,
+)
 from twopy.napari.roi import (
     load_roi_file_on_layer,
     remove_roi_label_values_from_layer,
@@ -476,14 +480,11 @@ class _ResponsePlotWidget(QWidget):
         and response CSV outputs.
         """
         try:
+            request = self._response_analysis_request()
             result = save_current_roi_analysis(
-                recording=self._recording,
-                roi_labels_layer=self._roi_labels_layer,
+                request,
                 roi_save_file=self._roi_save_file,
                 analysis_path=self._analysis_path,
-                delta_f_over_f_options=self._delta_f_over_f_options,
-                response_window_options=self._response_window_options,
-                response_processing_options=self._response_processing_options,
                 response_map_data=self._response_map_data,
             )
         except ValueError as error:
@@ -496,6 +497,16 @@ class _ResponsePlotWidget(QWidget):
         self._update_status_label.setText(result.status_text)
         if result.sync_plan is not None:
             self._start_sync(result.sync_plan)
+
+    def _response_analysis_request(self) -> ResponseAnalysisRequest:
+        """Return the current ROI response-analysis request."""
+        return response_analysis_request_from_labels(
+            self._recording,
+            self._roi_labels_layer,
+            delta_f_over_f_options=self._delta_f_over_f_options,
+            response_window_options=self._response_window_options,
+            response_processing_options=self._response_processing_options,
+        )
 
     def _start_sync(self, sync_plan: AnalysisSyncPlan) -> None:
         """Start background sync for just-saved analysis outputs.

@@ -25,9 +25,11 @@ from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.converted import RecordingData
 from twopy.napari.live_analysis import LiveResponseAnalysisCache
 from twopy.napari.plotting.data import ResponsePlotData
-from twopy.napari.responses import compute_response_plot_data_from_roi_set
+from twopy.napari.responses import (
+    compute_response_preview,
+    response_analysis_request_from_label_image,
+)
 from twopy.napari.roi import roi_label_image_from_layer_for_recording
-from twopy.roi import make_roi_set_from_label_image
 
 __all__ = ["LiveResponseController"]
 
@@ -314,28 +316,25 @@ class LiveResponseController:
 
         version = self._version
         try:
-            label_image = self._current_label_image()
+            request = response_analysis_request_from_label_image(
+                self._require_recording(),
+                self._current_label_image(),
+                source_path=None,
+                delta_f_over_f_options=self._delta_f_over_f_options,
+                response_window_options=self._response_window_options,
+                response_processing_options=self._response_processing_options,
+            )
         except ValueError as error:
             if version == self._version:
                 self._show_response_status(str(error))
             return
-        if not np.any(label_image > 0):
-            if version == self._version:
-                self._show_response_status("No ROI labels to analyze.")
-            return
 
-        recording = self._require_recording()
         job = _LiveResponseJob(version=version, cancel_event=Event())
         self._active_job = job
         self._active_version = version
         self._future = self._executor.submit(
-            self._analysis_cache.compute_response_plot_data,
-            recording,
-            label_image,
-            source_path=None,
-            delta_f_over_f_options=self._delta_f_over_f_options,
-            response_window_options=self._response_window_options,
-            response_processing_options=self._response_processing_options,
+            self._analysis_cache.compute_response_preview,
+            request,
             check_cancelled=job.check_cancelled,
         )
         self._poll_timer.start()
@@ -376,18 +375,15 @@ class LiveResponseController:
 
     def _compute_current_plot_data(self) -> ResponsePlotData:
         """Return plot data for the current recording and Labels layer."""
-        label_image = self._current_label_image()
-        if not np.any(label_image > 0):
-            msg = "No ROI labels to analyze."
-            raise ValueError(msg)
-        return compute_response_plot_data_from_roi_set(
+        request = response_analysis_request_from_label_image(
             self._require_recording(),
-            make_roi_set_from_label_image(label_image),
+            self._current_label_image(),
             source_path=None,
             delta_f_over_f_options=self._delta_f_over_f_options,
             response_window_options=self._response_window_options,
             response_processing_options=self._response_processing_options,
         )
+        return compute_response_preview(request)
 
     def _current_label_image(self) -> np.ndarray:
         """Return full-frame ROI labels from the current Labels layer."""
