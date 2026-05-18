@@ -3,9 +3,8 @@
 Inputs: user or script-selected processing parameters.
 Outputs: immutable option objects validated before math is run.
 
-These objects are intentionally plain dataclasses so GUI controls, scripts, and
-future persistence code can all pass the same explicit contract without pulling
-Qt or HDF5 concerns into the analysis layer.
+These objects are plain dataclasses so GUI controls, scripts, and saved files
+can all pass the same processing choices without importing Qt or HDF5 code.
 """
 
 from dataclasses import dataclass, field
@@ -39,7 +38,7 @@ class SmoothingOptions:
     """Response-trace smoothing settings.
 
     Inputs: a smoothing method and window length in imaging frames.
-    Outputs: a typed contract consumed by signal-processing kernels.
+    Outputs: smoothing values passed to signal-processing code.
 
     ``method="none"`` leaves values unchanged. ``window_frames`` and
     ``polynomial_order`` are still kept explicit so saved options can report
@@ -58,7 +57,7 @@ class LowPassFilterOptions:
     """Low-pass filter settings for ROI response traces.
 
     Inputs: filter method, cutoff frequency, and Butterworth order.
-    Outputs: a typed contract consumed by low-pass kernels.
+    Outputs: low-pass values passed to filtering code.
 
     ``cutoff_hz`` is optional because disabled filters do not need a cutoff.
     Enabled Butterworth filters must provide a positive cutoff below Nyquist.
@@ -75,7 +74,7 @@ class NormalizationOptions:
 
     Inputs: a normalization method and the stimulus epoch used as the scale
     reference.
-    Outputs: a typed contract consumed after trial grouping.
+    Outputs: normalization values applied after trial grouping.
 
     ``method="none"`` leaves grouped responses unchanged. ``method="epoch_peak"``
     divides every response for each ROI by that ROI's mean-response peak in the
@@ -114,8 +113,8 @@ class ResponseProcessingOptions:
 
     Inputs: optional smoothing, low-pass filtering, epoch-peak normalization,
     and correlation QC settings.
-    Outputs: one immutable object passed through workflow, plotting, and future
-    persistence boundaries.
+    Outputs: one immutable object used by workflow, plotting, and saved analysis
+    metadata.
     """
 
     smoothing: SmoothingOptions = field(default_factory=SmoothingOptions)

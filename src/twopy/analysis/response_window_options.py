@@ -5,7 +5,7 @@ window limits.
 Outputs: resolved pre- and post-stimulus seconds for response grouping.
 
 This module is GUI-independent so napari preview and script-facing analysis
-save paths can share the same response-window semantics.
+save paths can use the same pre- and post-stimulus seconds.
 """
 
 from dataclasses import dataclass

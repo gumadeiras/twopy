@@ -317,7 +317,7 @@ def _dff_with_analysis_options(
     baseline_epoch_number: int | None,
     baseline_epoch_name: str | None,
 ) -> RoiDeltaFOverF:
-    """Return dF/F with workflow-selected option provenance in metadata.
+    """Return dF/F with the selected baseline options saved in metadata.
 
     Args:
         dff: Computed dF/F output.
@@ -326,7 +326,7 @@ def _dff_with_analysis_options(
         baseline_epoch_name: Optional baseline epoch name selector.
 
     Returns:
-        dF/F output with metadata needed to hydrate saved GUI controls.
+        dF/F output with metadata used to restore saved Plot-tab controls.
     """
     metadata = dict(dff.metadata)
     metadata["baseline_mode"] = baseline_mode
@@ -519,7 +519,7 @@ def _compute_recording_responses_from_baseline(
         recording: Loaded converted recording.
         roi_set: ROI masks to extract from the recording.
         traces: Background-corrected ROI traces.
-        mapping: Optional interpolated epoch mapping provenance.
+        mapping: Optional interpolated epoch mapping used to audit timing.
         resolved_epoch_windows: Stimulus windows used for grouping.
         baseline_windows: Baseline windows used for dF/F fitting.
         frame_rate_hz: Effective analysis frame rate.

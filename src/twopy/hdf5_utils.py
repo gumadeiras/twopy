@@ -120,8 +120,8 @@ def plain_hdf5_attr_value(
         scalar_only: Whether unsupported values should be coerced to text.
 
     Returns:
-        A decoded string, Python scalar, list, or original value depending on
-        the requested boundary contract.
+        A decoded string, Python scalar, list, or original value, depending on
+        what the caller allows this HDF5 attribute reader to return.
     """
     if isinstance(value, bytes):
         return value.decode("utf-8")

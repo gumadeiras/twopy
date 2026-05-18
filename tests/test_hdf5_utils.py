@@ -1,8 +1,7 @@
 """Tests for shared HDF5 attribute and string helpers.
 
 Inputs: temporary HDF5 files with string datasets and mixed attribute values.
-Outputs: assertions that helpers preserve twopy's persistence-boundary
-semantics.
+Outputs: assertions that helpers preserve twopy's saved HDF5 values.
 """
 
 import unittest
