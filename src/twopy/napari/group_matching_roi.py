@@ -896,6 +896,7 @@ def _combined_response_plot_data(
                 time_seconds=reference_epoch.time_seconds,
                 mean_values=mean_values,
                 sem_values=sem_values,
+                epoch_time_spans=reference_epoch.epoch_time_spans,
             ),
         )
     return ResponsePlotData(source_path=None, epochs=tuple(combined_epochs))

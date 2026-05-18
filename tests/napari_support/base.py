@@ -138,6 +138,7 @@ from twopy.napari.plotting.data import (
 from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget
 from twopy.napari.plotting.docks import create_response_plot_widget
 from twopy.napari.plotting.export import (
+    draw_epoch_response_plot,
     draw_response_heatmap,
     draw_roi_contours,
     export_epoch_plots,

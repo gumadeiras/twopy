@@ -63,7 +63,8 @@ class EpochResponsePlotData:
     """Mean and SEM traces for one stimulus epoch type.
 
     Inputs: grouped response trials for one epoch.
-    Outputs: one mean and SEM trace per ROI on a shared time axis.
+    Outputs: one mean and SEM trace per ROI on a shared time axis, plus
+    epoch-time spans for unobtrusive plot markers.
     """
 
     epoch_name: str
@@ -72,6 +73,7 @@ class EpochResponsePlotData:
     time_seconds: npt.NDArray[np.float64]
     mean_values: npt.NDArray[np.float64]
     sem_values: npt.NDArray[np.float64]
+    epoch_time_spans: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -99,6 +101,7 @@ def response_plot_data_from_grouped(
     grouped: GroupedRoiResponses,
     *,
     source_path: Path | None = None,
+    epoch_windows: Sequence[EpochFrameWindow] = (),
     delta_f_over_f_options: DeltaFOverFOptions | None = None,
     response_window_options: ResponseWindowOptions | None = None,
     response_processing_options: ResponseProcessingOptions | None = None,
@@ -110,6 +113,8 @@ def response_plot_data_from_grouped(
     Args:
         grouped: Grouped response object from analysis.
         source_path: Optional analysis output path used for display.
+        epoch_windows: Optional stimulus windows used to compute the grouped
+            responses. When supplied, plots mark the epoch span.
         delta_f_over_f_options: Optional dF/F settings used to produce the
             grouped responses.
         response_window_options: Optional response-window settings used to
@@ -133,6 +138,10 @@ def response_plot_data_from_grouped(
             trials_by_epoch[key] = []
         trials_by_epoch[key].append(trial)
 
+    epoch_spans_by_epoch = _epoch_time_spans_by_epoch(
+        epoch_windows,
+        data_rate_hz=grouped.data_rate_hz,
+    )
     epochs = tuple(
         _epoch_plot_data(
             epoch_number=epoch_number,
@@ -140,6 +149,7 @@ def response_plot_data_from_grouped(
             trials=tuple(trials_by_epoch[(epoch_number, epoch_name)]),
             roi_labels=grouped.roi_labels,
             data_rate_hz=grouped.data_rate_hz,
+            epoch_time_spans=epoch_spans_by_epoch.get((epoch_number, epoch_name), ()),
         )
         for epoch_number, epoch_name in sorted(epoch_keys)
     )
@@ -191,6 +201,7 @@ def filter_response_plot_data_rois(
                 time_seconds=epoch.time_seconds,
                 mean_values=epoch.mean_values[keep_rows, :],
                 sem_values=epoch.sem_values[keep_rows, :],
+                epoch_time_spans=epoch.epoch_time_spans,
             )
             for epoch in plot_data.epochs
         ),
@@ -414,6 +425,7 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
         return response_plot_data_from_grouped(
             outputs.grouped_responses,
             source_path=outputs.path,
+            epoch_windows=outputs.epoch_windows,
             delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
                 traces=outputs.traces,
                 dff=outputs.dff,
@@ -447,6 +459,7 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
             return response_plot_data_from_grouped(
                 grouped,
                 source_path=outputs.path,
+                epoch_windows=outputs.epoch_windows,
                 delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
                     traces=outputs.traces,
                     dff=outputs.dff,
@@ -463,6 +476,7 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
     return response_plot_data_from_grouped(
         outputs.grouped_responses,
         source_path=outputs.path,
+        epoch_windows=outputs.epoch_windows,
         delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
             traces=outputs.traces,
             dff=outputs.dff,
@@ -612,6 +626,7 @@ def _epoch_plot_data(
     trials: tuple[RoiResponseTrial, ...],
     roi_labels: tuple[str, ...],
     data_rate_hz: float,
+    epoch_time_spans: tuple[tuple[float, float], ...],
 ) -> EpochResponsePlotData:
     """Build plot data for one epoch type.
 
@@ -621,6 +636,7 @@ def _epoch_plot_data(
         trials: Trial responses for this epoch type.
         roi_labels: ROI labels in column order.
         data_rate_hz: Imaging frame rate in hertz.
+        epoch_time_spans: Epoch intervals in epoch-relative seconds.
 
     Returns:
         Mean and SEM traces with shape ``(rois, frames)``.
@@ -637,7 +653,28 @@ def _epoch_plot_data(
         time_seconds=summary.time_seconds,
         mean_values=summary.mean_values,
         sem_values=summary.sem_values,
+        epoch_time_spans=epoch_time_spans,
     )
+
+
+def _epoch_time_spans_by_epoch(
+    epoch_windows: Sequence[EpochFrameWindow],
+    *,
+    data_rate_hz: float,
+) -> dict[tuple[int, str], tuple[tuple[float, float], ...]]:
+    """Return coarse epoch spans for each plotted epoch type."""
+    if not np.isfinite(data_rate_hz) or data_rate_hz <= 0.0:
+        return {}
+    duration_by_epoch: dict[tuple[int, str], float] = {}
+    for epoch_window in epoch_windows:
+        duration = (
+            epoch_window.window.stop_frame - epoch_window.window.start_frame
+        ) / data_rate_hz
+        if not np.isfinite(duration) or duration <= 0.0:
+            continue
+        key = (epoch_window.epoch_number, epoch_window.epoch_name)
+        duration_by_epoch[key] = max(duration_by_epoch.get(key, 0.0), float(duration))
+    return {key: ((0.0, duration),) for key, duration in duration_by_epoch.items()}
 
 
 def _correlation_stop_default_from_outputs(

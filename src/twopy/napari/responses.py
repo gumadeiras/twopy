@@ -233,6 +233,7 @@ def response_plot_data_from_computation(
     return response_plot_data_from_grouped(
         computation.grouped_responses,
         source_path=request.source_path,
+        epoch_windows=computation.epoch_windows,
         delta_f_over_f_options=request.delta_f_over_f_options,
         response_window_options=request.response_window_options,
         response_processing_options=computation.response_processing_options,

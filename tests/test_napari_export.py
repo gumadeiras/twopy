@@ -23,6 +23,7 @@ from tests.napari_support import (
     cast,
     chdir,
     create_response_export_tab,
+    draw_epoch_response_plot,
     draw_response_heatmap,
     draw_roi_contours,
     export_epoch_plots,
@@ -31,6 +32,7 @@ from tests.napari_support import (
     load_converted_recording,
     np,
     open_recording_in_napari,
+    replace,
     roi_boundary_segments,
     temporary_directory,
     unittest,
@@ -127,6 +129,38 @@ class NapariExportTest(NapariAdapterTestCase):
 
         self.assertEqual(len(fig.axes), 2)
         np.testing.assert_allclose(fig.axes[1].get_yticks(), (-0.2, 0.0, 0.2))
+
+    def test_response_plot_export_draws_epoch_marker(self) -> None:
+        """Confirm exported response plots show the coarse epoch top rail.
+
+        Inputs: one epoch with a marked span from zero to one second.
+        Outputs: a quiet gold line is drawn at the top of the response axis.
+        """
+        plot_data = _tiny_response_plot_data()
+        epoch = replace(plot_data.epochs[0], epoch_time_spans=((0.0, 1.0),))
+        fig = Figure()
+        ax = fig.add_subplot(111)
+
+        draw_epoch_response_plot(
+            ax,
+            epoch=epoch,
+            roi_indices=(0,),
+            roi_colors=("#ff0000",),
+            show_sem=False,
+            time_bounds=(-0.5, 1.5),
+            value_bounds=(0.0, 1.0),
+        )
+
+        active_lines = [line for line in ax.lines if line.get_color() == "#f2c14e"]
+        self.assertEqual(len(active_lines), 1)
+        np.testing.assert_allclose(
+            np.asarray(active_lines[0].get_xdata(), dtype=np.float64),
+            np.array([0.0, 1.0], dtype=np.float64),
+        )
+        np.testing.assert_allclose(
+            np.asarray(active_lines[0].get_ydata(), dtype=np.float64),
+            np.array([0.965, 0.965], dtype=np.float64),
+        )
 
     def test_response_export_tab_syncs_cached_exports_to_publish_root(self) -> None:
         """Confirm Export-tab files are published when analysis caching is on.

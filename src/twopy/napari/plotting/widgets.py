@@ -23,6 +23,7 @@ _LEFT_MARGIN = 88.0
 _TOP_MARGIN = 12.0
 _RIGHT_MARGIN = 18.0
 _BOTTOM_MARGIN = 46.0
+_STIMULUS_MARKER_Y_OFFSET = 8.0
 
 __all__ = [
     "EpochPlotWidget",
@@ -183,6 +184,13 @@ class EpochPlotWidget(QWidget):
             time_max=self._time_max,
             value_min=self._value_min,
             value_max=self._value_max,
+        )
+        _draw_epoch_time_spans(
+            painter=painter,
+            rect=plot_rect,
+            spans=self._data.epoch_time_spans,
+            time_min=self._time_min,
+            time_max=self._time_max,
         )
         for roi_index in self._roi_indices:
             color = self._roi_colors[roi_index]
@@ -675,6 +683,43 @@ def _draw_trace(
     painter.drawPath(path)
 
 
+def _draw_epoch_time_spans(
+    *,
+    painter: QPainter,
+    rect: QRectF,
+    spans: tuple[tuple[float, float], ...],
+    time_min: float,
+    time_max: float,
+) -> None:
+    """Draw a quiet top rail showing coarse epoch spans.
+
+    Args:
+        painter: Active Qt painter.
+        rect: Plot rectangle.
+        spans: Epoch-relative intervals to mark.
+        time_min: X-axis minimum.
+        time_max: X-axis maximum.
+
+    Returns:
+        None.
+    """
+    if len(spans) == 0:
+        return
+    color = QColor("#f2c14e")
+    color.setAlpha(170)
+    painter.setPen(QPen(color, 3))
+    y = rect.top() + _STIMULUS_MARKER_Y_OFFSET
+    for start, stop in spans:
+        clipped_start = max(float(start), time_min)
+        clipped_stop = min(float(stop), time_max)
+        if clipped_stop <= clipped_start:
+            continue
+        painter.drawLine(
+            QPointF(_time_position(rect, clipped_start, time_min, time_max), y),
+            QPointF(_time_position(rect, clipped_stop, time_min, time_max), y),
+        )
+
+
 def _draw_sem_band(
     *,
     painter: QPainter,
@@ -807,3 +852,25 @@ def _plot_point(
     x = rect.left() + x_fraction * rect.width()
     y = rect.bottom() - y_fraction * rect.height()
     return QPointF(x, y)
+
+
+def _time_position(
+    rect: QRectF,
+    time_value: float,
+    time_min: float,
+    time_max: float,
+) -> float:
+    """Map one time value into the plot rectangle's x coordinate.
+
+    Args:
+        rect: Plot rectangle.
+        time_value: X value in seconds.
+        time_min: Minimum time value.
+        time_max: Maximum time value.
+
+    Returns:
+        Widget x coordinate.
+    """
+    time_span = time_max - time_min
+    x_fraction = 0.0 if time_span == 0 else (time_value - time_min) / time_span
+    return rect.left() + x_fraction * rect.width()

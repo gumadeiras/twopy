@@ -186,6 +186,45 @@ class NapariPlotDataTest(unittest.TestCase):
             np.array([[0.0, 1.0, 2.0, 3.0]]),
         )
 
+    def test_response_plot_data_marks_epoch_span(self) -> None:
+        """Confirm plot data carries the coarse epoch interval.
+
+        Inputs: dF/F grouped with pre/post context and matching epoch windows.
+        Outputs: plot data marks only the epoch window.
+        """
+        dff = RoiDeltaFOverF(
+            fluorescence=np.ones((6, 1), dtype=np.float64),
+            baseline=np.ones((6, 1), dtype=np.float64),
+            values=np.arange(6, dtype=np.float64).reshape(6, 1),
+            labels=("roi_1",),
+            start_frame=0,
+            stop_frame=6,
+            tau=0.0,
+            amplitudes=np.ones(1, dtype=np.float64),
+            baseline_frame_numbers=np.array([0.0]),
+            baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
+            metadata={"method": "test"},
+        )
+        epoch_windows = (EpochFrameWindow(FrameWindow(0, 2, 4, "odor"), 2, "Odor"),)
+        grouped = group_delta_f_over_f_by_epoch(
+            dff,
+            epoch_windows,
+            data_rate_hz=2.0,
+            pre_window_seconds=1.0,
+            post_window_seconds=1.0,
+        )
+
+        plot_data = response_plot_data_from_grouped(
+            grouped,
+            epoch_windows=epoch_windows,
+        )
+
+        np.testing.assert_allclose(
+            plot_data.epochs[0].time_seconds,
+            np.array([-1.0, -0.5, 0.0, 0.5, 1.0, 1.5]),
+        )
+        self.assertEqual(plot_data.epochs[0].epoch_time_spans, ((0.0, 1.0),))
+
     def test_load_response_plot_data_restores_saved_auto_response_window(self) -> None:
         """Confirm saved analysis reloads the response-window Auto choice.
 
@@ -198,8 +237,13 @@ class NapariPlotDataTest(unittest.TestCase):
                 tiny_grouped_responses(),
                 response_window_auto=True,
             )
+            epoch_windows = (EpochFrameWindow(FrameWindow(0, 0, 2, "odor"), 1, "Odor"),)
 
-            save_analysis_outputs(path, grouped_responses=grouped)
+            save_analysis_outputs(
+                path,
+                epoch_windows=epoch_windows,
+                grouped_responses=grouped,
+            )
 
             result = load_response_plot_data(path)
 
@@ -212,6 +256,7 @@ class NapariPlotDataTest(unittest.TestCase):
                 post_window_seconds=0.0,
             ),
         )
+        self.assertEqual(result.epochs[0].epoch_time_spans, ((0.0, 2.0),))
 
     def test_load_response_plot_data_restores_saved_baseline_epoch_selection(
         self,

@@ -732,6 +732,7 @@ def draw_epoch_response_plot(
             linewidth=0.75,
             zorder=2,
         )
+    _draw_epoch_time_spans(ax, epoch.epoch_time_spans, time_bounds)
     ax.axhline(0.0, color="#6d7683", linewidth=0.5, linestyle=(0, (6, 4)), zorder=0)
     ax.axvline(0.0, color="#6d7683", linewidth=0.5, linestyle=(0, (6, 4)), zorder=0)
     ax.set_xlim(*time_bounds)
@@ -740,6 +741,42 @@ def draw_epoch_response_plot(
     ax.set_yticks(tuple(np.linspace(value_bounds[0], value_bounds[1], 6)))
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("dF/F")
+
+
+def _draw_epoch_time_spans(
+    ax: Axes,
+    spans: tuple[tuple[float, float], ...],
+    time_bounds: tuple[float, float],
+) -> None:
+    """Draw the coarse epoch-span top rail on an exported response plot.
+
+    Args:
+        ax: Matplotlib axis to draw into.
+        spans: Epoch-relative intervals to mark.
+        time_bounds: Current x-axis bounds.
+
+    Returns:
+        None.
+    """
+    if len(spans) == 0:
+        return
+    time_min, time_max = time_bounds
+    transform = ax.get_xaxis_transform()
+    for start, stop in spans:
+        clipped_start = max(float(start), time_min)
+        clipped_stop = min(float(stop), time_max)
+        if clipped_stop <= clipped_start:
+            continue
+        ax.plot(
+            (clipped_start, clipped_stop),
+            (0.965, 0.965),
+            color="#f2c14e",
+            linewidth=1.0,
+            alpha=0.72,
+            solid_capstyle="butt",
+            transform=transform,
+            zorder=3,
+        )
 
 
 def save_figure_bundle(

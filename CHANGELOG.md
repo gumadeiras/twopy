@@ -5,6 +5,7 @@
 ### Features
 
 - Added database search favorites in the napari Load-tab search window, with Save favorite, Use, and Remove actions backed by a machine-local YAML file.
+- Added a thin epoch-span marker to napari response plots and exported response figures.
 
 ### Changes
 
