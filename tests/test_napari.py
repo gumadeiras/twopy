@@ -101,6 +101,7 @@ from twopy.napari.database_favorites import (
     save_database_search_favorites,
 )
 from twopy.napari.database_search import (
+    ExperimentFavoriteErrorDialog,
     ExperimentLoadErrorDialog,
     ExperimentLoadFailure,
     ExperimentLoadResult,
@@ -3551,6 +3552,141 @@ class NapariAdapterTest(unittest.TestCase):
             self.assertFalse(dialog._use_favorite_button.isEnabled())
             self.assertFalse(dialog._remove_favorite_button.isEnabled())
             self.assertEqual(load_database_search_favorites(favorites_path), ())
+
+    def test_database_search_dialog_keeps_memory_when_favorite_save_fails(
+        self,
+    ) -> None:
+        """Confirm failed favorite writes do not update in-memory state.
+
+        Inputs: one loaded favorite and a simulated disk-write failure.
+        Outputs: the dialog still shows and uses the last successfully saved
+        favorite list.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            favorites_path = Path(temp_dir) / "favorites.yml"
+            saved = ExperimentSearchFavorite(
+                name="saved",
+                filters=ExperimentSearchFilters(user="Gus"),
+            )
+            save_database_search_favorites((saved,), favorites_path)
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                    loaded_count=len(paths),
+                ),
+                favorites_path=favorites_path,
+            )
+
+            dialog._stimulus_filter.setText("combo")
+            errors: list[Exception] = []
+            with (
+                patch(
+                    "twopy.napari.database_search.save_database_search_favorites",
+                    side_effect=OSError("disk full"),
+                ),
+                patch.object(
+                    dialog,
+                    "_favorite_name_from_user",
+                    return_value="new favorite",
+                ),
+                patch.object(
+                    dialog,
+                    "_show_favorite_error",
+                    side_effect=lambda error: errors.append(error),
+                ),
+            ):
+                dialog.save_current_favorite()
+
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(dialog._favorites, (saved,))
+            self.assertEqual(dialog._favorites_list.count(), 1)
+            item = dialog._favorites_list.item(0)
+            assert item is not None
+            self.assertEqual(item.text(), "saved")
+
+    def test_database_search_dialog_keeps_memory_when_favorite_remove_fails(
+        self,
+    ) -> None:
+        """Confirm failed favorite removal does not update in-memory state.
+
+        Inputs: one selected favorite and a simulated disk-write failure.
+        Outputs: the selected favorite remains visible and usable.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            favorites_path = Path(temp_dir) / "favorites.yml"
+            saved = ExperimentSearchFavorite(
+                name="saved",
+                filters=ExperimentSearchFilters(user="Gus"),
+            )
+            save_database_search_favorites((saved,), favorites_path)
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                    loaded_count=len(paths),
+                ),
+                favorites_path=favorites_path,
+            )
+            dialog._favorites_list.setCurrentRow(0)
+
+            errors: list[Exception] = []
+            with (
+                patch(
+                    "twopy.napari.database_search.save_database_search_favorites",
+                    side_effect=OSError("disk full"),
+                ),
+                patch.object(
+                    dialog,
+                    "_show_favorite_error",
+                    side_effect=lambda error: errors.append(error),
+                ),
+            ):
+                dialog.remove_selected_favorite()
+
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(dialog._favorites, (saved,))
+            self.assertEqual(dialog._favorites_list.count(), 1)
+            self.assertTrue(dialog._use_favorite_button.isEnabled())
+            self.assertTrue(dialog._remove_favorite_button.isEnabled())
+
+    def test_database_search_dialog_blocks_favorite_writes_after_load_failure(
+        self,
+    ) -> None:
+        """Confirm corrupt favorites are not overwritten as an empty list.
+
+        Inputs: an invalid favorites YAML file and edited search filters.
+        Outputs: save stays disabled and direct save reports the original load
+        error without rewriting the corrupt file.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            favorites_path = Path(temp_dir) / "favorites.yml"
+            original_text = "favorites: invalid\n"
+            favorites_path.write_text(original_text, encoding="utf-8")
+            with patch.object(
+                ExperimentFavoriteErrorDialog,
+                "exec",
+                return_value=QDialog.DialogCode.Rejected,
+            ):
+                dialog = ExperimentSearchDialog(
+                    on_load_recording_paths=lambda paths: ExperimentLoadResult(
+                        loaded_count=len(paths),
+                    ),
+                    favorites_path=favorites_path,
+                )
+
+            dialog._user_filter.setText("Gus")
+            self.assertFalse(dialog._save_favorite_button.isEnabled())
+            errors: list[Exception] = []
+            with patch.object(
+                dialog,
+                "_show_favorite_error",
+                side_effect=lambda error: errors.append(error),
+            ):
+                dialog.save_current_favorite()
+
+            self.assertEqual(len(errors), 1)
+            self.assertIsInstance(errors[0], ValueError)
+            self.assertEqual(favorites_path.read_text(encoding="utf-8"), original_text)
 
     def test_database_search_dialog_loads_multiple_selected_lines(self) -> None:
         """Confirm DB search can load several selected result rows at once.

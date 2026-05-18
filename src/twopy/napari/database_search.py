@@ -170,6 +170,7 @@ class ExperimentSearchDialog(QDialog):
         self._config_path = config_path
         self._favorites_path = favorites_path
         self._config: TwopyConfig | None = None
+        self._favorites_load_error: Exception | None = None
         self._favorites = self._load_favorites()
 
         self._user_filter = self._filter_line_edit(FILTER_HINTS["user"])
@@ -268,6 +269,10 @@ class ExperimentSearchDialog(QDialog):
         Blank filter sets are ignored because a favorite should represent a
         real reusable query, not an accidental all-database search.
         """
+        if self._favorites_load_error is not None:
+            self._show_favorite_error(self._favorites_load_error)
+            return
+
         try:
             filters = normalized_database_search_filters(self._current_filters())
             if database_search_favorite_filters_are_empty(filters):
@@ -282,15 +287,16 @@ class ExperimentSearchDialog(QDialog):
             favorite = normalized_database_search_favorite(
                 ExperimentSearchFavorite(name=name, filters=filters),
             )
-            self._favorites = replace_database_search_favorite(
+            updated_favorites = replace_database_search_favorite(
                 self._favorites,
                 favorite,
             )
-            save_database_search_favorites(self._favorites, self._favorites_path)
+            save_database_search_favorites(updated_favorites, self._favorites_path)
         except (OSError, ValueError) as error:
             self._show_favorite_error(error)
             return
 
+        self._favorites = updated_favorites
         self._render_favorites(selected=favorite)
         self._update_favorite_action_states()
 
@@ -324,15 +330,20 @@ class ExperimentSearchDialog(QDialog):
         Removal targets the selected favorite row, not the current filter text,
         so users can safely edit filters while a favorite remains selected.
         """
+        if self._favorites_load_error is not None:
+            self._show_favorite_error(self._favorites_load_error)
+            return
+
         selected = self._selected_favorite_index()
         if selected is None:
             return
-        self._favorites = self._favorites[:selected] + self._favorites[selected + 1 :]
+        updated_favorites = self._favorites[:selected] + self._favorites[selected + 1 :]
         try:
-            save_database_search_favorites(self._favorites, self._favorites_path)
+            save_database_search_favorites(updated_favorites, self._favorites_path)
         except (OSError, ValueError) as error:
             self._show_favorite_error(error)
             return
+        self._favorites = updated_favorites
         self._render_favorites(
             selected_index=min(selected, len(self._favorites) - 1),
         )
@@ -457,10 +468,13 @@ class ExperimentSearchDialog(QDialog):
     def _load_favorites(self) -> tuple[ExperimentSearchFavorite, ...]:
         """Load persisted favorites for this dialog instance."""
         try:
-            return load_database_search_favorites(self._favorites_path)
+            favorites = load_database_search_favorites(self._favorites_path)
         except (OSError, ValueError) as error:
+            self._favorites_load_error = error
             self._show_favorite_error(error)
             return ()
+        self._favorites_load_error = None
+        return favorites
 
     def _render_favorites(
         self,
@@ -500,10 +514,13 @@ class ExperimentSearchDialog(QDialog):
 
     def _update_favorite_action_states(self) -> None:
         """Enable favorite actions only when their targets are valid."""
-        self._save_favorite_button.setEnabled(self._current_filters_can_be_saved())
+        can_write_favorites = self._favorites_load_error is None
+        self._save_favorite_button.setEnabled(
+            can_write_favorites and self._current_filters_can_be_saved()
+        )
         has_selection = self._selected_favorite_index() is not None
         self._use_favorite_button.setEnabled(has_selection)
-        self._remove_favorite_button.setEnabled(has_selection)
+        self._remove_favorite_button.setEnabled(can_write_favorites and has_selection)
 
     def _current_filters_can_be_saved(self) -> bool:
         """Return whether current filters are valid favorite contents."""

@@ -6,6 +6,10 @@
 
 - Added database search favorites in the napari Load-tab search window, with Save favorite, Use, and Remove actions backed by a machine-local YAML file.
 
+### Fixes
+
+- Prevented database search favorites from changing the dialog state or overwriting a corrupt favorites file when local YAML persistence fails.
+
 ## 0.1.9 - 2026-05-17
 
 ### Features
