@@ -32,31 +32,23 @@ class PackagingTest(unittest.TestCase):
             "twopy.napari:main",
         )
 
-    def test_twopy_cli_prints_version(self) -> None:
-        """Confirm ``twopy --version`` reports package metadata.
+    def test_twopy_cli_prints_version_aliases(self) -> None:
+        """Confirm version flags report package metadata.
 
-        Inputs: launcher argument parser and installed package metadata.
-        Outputs: version text and a clean parser exit.
+        Inputs: long and short launcher version flags.
+        Outputs: version text and a clean parser exit for each alias.
         """
-        output = StringIO()
-        with self.assertRaises(SystemExit) as exit_context, redirect_stdout(output):
-            parse_launch_args(["--version"])
+        for flag in ("--version", "-v"):
+            with self.subTest(flag=flag):
+                output = StringIO()
+                with (
+                    self.assertRaises(SystemExit) as exit_context,
+                    redirect_stdout(output),
+                ):
+                    parse_launch_args([flag])
 
-        self.assertEqual(exit_context.exception.code, 0)
-        self.assertEqual(output.getvalue().strip(), f"twopy {version('twopy')}")
-
-    def test_twopy_cli_prints_short_version(self) -> None:
-        """Confirm ``twopy -v`` is an alias for ``twopy --version``.
-
-        Inputs: launcher argument parser and installed package metadata.
-        Outputs: version text and a clean parser exit.
-        """
-        output = StringIO()
-        with self.assertRaises(SystemExit) as exit_context, redirect_stdout(output):
-            parse_launch_args(["-v"])
-
-        self.assertEqual(exit_context.exception.code, 0)
-        self.assertEqual(output.getvalue().strip(), f"twopy {version('twopy')}")
+                self.assertEqual(exit_context.exception.code, 0)
+                self.assertEqual(output.getvalue().strip(), f"twopy {version('twopy')}")
 
 
 if __name__ == "__main__":
