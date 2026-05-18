@@ -8,8 +8,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import h5py
 import numpy as np
+from tests.converted_files import write_aligned_movie_file
+from tests.recording_data import minimal_recording_data
 from tests.tempdir import temporary_directory
 
 from twopy import (
@@ -20,7 +21,6 @@ from twopy import (
     load_response_map_data,
     save_response_map_data,
 )
-from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
 from twopy.spatial import SpatialCrop, full_frame_crop
 
@@ -270,40 +270,14 @@ def _recording(
 ) -> RecordingData:
     """Create a minimal loaded recording backed by a temporary movie file."""
     movie_path = root / "aligned_movie.h5"
-    with h5py.File(movie_path, "w") as h5_file:
-        h5_file.attrs["twopy_format"] = "aligned-movie"
-        h5_file.create_dataset("movie/aligned", data=movie_values)
+    write_aligned_movie_file(movie_path, movie_values)
     spatial_crop = full_frame_crop(movie_values.shape[1:]) if crop is None else crop
-    return RecordingData(
-        path=root / "recording_data.h5",
-        movie=ConvertedMovie(
-            path=movie_path,
-            dataset_name="movie/aligned",
-            shape=movie_values.shape,
-            dtype="float64",
-        ),
-        source_session_dir=root / "source",
+    return minimal_recording_data(
+        root=root,
+        movie_shape=movie_values.shape,
         acquisition_metadata={"acq.frameRate": 1.0},
-        run_metadata={},
-        synchronization_metadata={},
-        stimulus_data=np.zeros((0, 0), dtype=np.float64),
-        stimulus_data_column_names=(),
-        stimulus_parameters=(),
-        stimulus_function_lookup={},
-        stimulus_specific_columns={},
-        imaging_res_pd=np.zeros(movie_values.shape[0], dtype=np.float64),
-        high_res_pd=np.zeros(0, dtype=np.float64),
         mean_image=movie_values.mean(axis=0),
         alignment_valid_crop=spatial_crop,
-        alignment_shift_pixels=np.zeros(movie_values.shape[0], dtype=np.float64),
-        motion_artifact_mask=np.zeros(movie_values.shape[0], dtype=np.bool_),
-        frame_counts=FrameCountAudit(
-            aligned_movie_frames=movie_values.shape[0],
-            imaging_res_pd_samples=movie_values.shape[0],
-            acquisition_number_of_frames=movie_values.shape[0],
-            imaging_res_pd_minus_movie=0,
-            acquisition_minus_movie=0,
-        ),
     )
 
 

@@ -7,13 +7,13 @@ Outputs: ROI sets, dF/F comparisons, and validation errors.
 import unittest
 from pathlib import Path
 
-import h5py
 import numpy as np
+from tests.converted_files import write_aligned_movie_file
+from tests.recording_data import minimal_recording_data
 from tests.tempdir import temporary_directory
 
 from twopy.analysis.trials import FrameWindow
-from twopy.conversion.types import FrameCountAudit
-from twopy.converted import ConvertedMovie, RecordingData
+from twopy.converted import RecordingData
 from twopy.parity import (
     SavedAnalysisLastRoi,
     compare_saved_analysis_delta_f_over_f,
@@ -160,30 +160,17 @@ class ParityTest(unittest.TestCase):
             ``RecordingData`` with enough fields for parity extraction.
         """
         movie_path = root / "aligned_movie.h5"
-        with h5py.File(movie_path, "w") as h5_file:
-            h5_file.create_dataset("movie/aligned", data=np.full((4, 3, 3), 10.0))
-
+        movie_values = np.full((4, 3, 3), 10.0, dtype=np.float64)
+        write_aligned_movie_file(movie_path, movie_values)
         frame_count = 4
-        return RecordingData(
-            path=root / "recording_data.h5",
-            movie=ConvertedMovie(
-                path=movie_path,
-                dataset_name="movie/aligned",
-                shape=(frame_count, 3, 3),
-                dtype="float64",
-            ),
-            source_session_dir=root / "source",
+        return minimal_recording_data(
+            root=root,
+            movie_shape=(frame_count, 3, 3),
             acquisition_metadata={"acq.frameRate": 1.0},
-            run_metadata={},
-            synchronization_metadata={},
             stimulus_data=np.zeros((1, 2), dtype=np.float64),
             stimulus_data_column_names=("time_seconds", "epoch_number"),
             stimulus_parameters=({"epochName": "Gray Interleave"},),
-            stimulus_function_lookup={},
-            stimulus_specific_columns={},
-            imaging_res_pd=np.zeros(frame_count, dtype=np.float64),
-            high_res_pd=np.zeros(frame_count, dtype=np.float64),
-            mean_image=np.full((3, 3), 10.0, dtype=np.float64),
+            mean_image=movie_values.mean(axis=0),
             alignment_valid_crop=SpatialCrop(
                 axis0_start=1,
                 axis0_stop=3,
@@ -191,15 +178,6 @@ class ParityTest(unittest.TestCase):
                 axis1_stop=3,
                 original_shape=(3, 3),
                 source="test_crop",
-            ),
-            alignment_shift_pixels=np.zeros(frame_count, dtype=np.float64),
-            motion_artifact_mask=np.zeros(frame_count, dtype=np.bool_),
-            frame_counts=FrameCountAudit(
-                aligned_movie_frames=frame_count,
-                imaging_res_pd_samples=frame_count,
-                acquisition_number_of_frames=frame_count,
-                imaging_res_pd_minus_movie=0,
-                acquisition_minus_movie=0,
             ),
         )
 

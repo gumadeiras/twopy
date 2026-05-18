@@ -10,6 +10,7 @@ from typing import cast
 
 import h5py
 import numpy as np
+from tests.converted_files import write_aligned_movie_file
 from tests.tempdir import temporary_directory
 
 from twopy import load_converted_recording, recording_frame_rate_hz
@@ -285,13 +286,11 @@ class ConvertedRecordingTest(unittest.TestCase):
         Returns:
             None.
         """
-        with h5py.File(path, "w") as h5_file:
-            h5_file.attrs["twopy_format"] = "aligned-movie"
-            h5_file.create_dataset(
-                "movie/aligned",
-                data=np.arange(12, dtype=np.float64).reshape(3, 2, 2),
-                compression="gzip",
-            )
+        write_aligned_movie_file(
+            path,
+            np.arange(12, dtype=np.float64).reshape(3, 2, 2),
+            compression="gzip",
+        )
 
     def _write_recording_data_file(
         self,
