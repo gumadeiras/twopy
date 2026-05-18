@@ -17,14 +17,19 @@ from typing import Literal
 
 __all__ = [
     "ManualFovGroupRow",
+    "ManualRoiMatchGroup",
     "ManualRoiMatchRow",
     "ManualRoiMatchStatus",
+    "add_manual_roi_match_group",
     "append_manual_roi_match_rows",
     "load_manual_fov_group_rows",
     "load_manual_roi_match_rows",
     "make_manual_fov_group_rows",
     "make_manual_roi_match_rows",
+    "matched_manual_roi_groups",
     "next_group_cell_id",
+    "remove_manual_roi_match_group",
+    "replace_manual_roi_match_group",
     "save_manual_fov_group_rows",
     "save_manual_roi_match_rows",
 ]
@@ -84,6 +89,19 @@ class ManualRoiMatchRow:
     recording_path: Path
     roi_label: str
     status: ManualRoiMatchStatus
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class ManualRoiMatchGroup:
+    """Matched rows for one manually assigned cell group.
+
+    Inputs: existing ``ManualRoiMatchRow`` objects from a match table.
+    Outputs: one grouped decision for display or downstream group analysis.
+    """
+
+    group_cell_id: int
+    rows: tuple[ManualRoiMatchRow, ...]
     note: str = ""
 
 
@@ -169,6 +187,112 @@ def make_manual_roi_match_rows(
             ),
         )
     return tuple(rows)
+
+
+def matched_manual_roi_groups(
+    rows: Sequence[ManualRoiMatchRow],
+    *,
+    fov_group_id: str,
+) -> tuple[ManualRoiMatchGroup, ...]:
+    """Return matched ROI groups for one FOV id.
+
+    Args:
+        rows: Manual ROI match rows from memory or CSV.
+        fov_group_id: FOV id whose matched groups should be returned.
+
+    Returns:
+        Groups sorted by ``group_cell_id``. Non-matched statuses and other FOVs
+        are ignored.
+    """
+    _validate_fov_group_id(fov_group_id)
+    grouped: dict[int, list[ManualRoiMatchRow]] = {}
+    for row in rows:
+        if row.status != "matched" or row.fov_group_id != fov_group_id:
+            continue
+        grouped.setdefault(row.group_cell_id, []).append(row)
+    groups: list[ManualRoiMatchGroup] = []
+    for group_cell_id, group_rows in sorted(grouped.items()):
+        row_tuple = tuple(group_rows)
+        groups.append(
+            ManualRoiMatchGroup(
+                group_cell_id=group_cell_id,
+                rows=row_tuple,
+                note=_shared_row_note(row_tuple),
+            ),
+        )
+    return tuple(groups)
+
+
+def add_manual_roi_match_group(
+    rows: Sequence[ManualRoiMatchRow],
+    recording_rois: Mapping[Path, str],
+    *,
+    fov_group_id: str,
+    note: str = "",
+) -> tuple[tuple[ManualRoiMatchRow, ...], int]:
+    """Append one new matched ROI group to existing rows.
+
+    Args:
+        rows: Existing manual ROI match rows.
+        recording_rois: Mapping from recording path to selected ROI label.
+        fov_group_id: FOV id for the new matched group.
+        note: Optional note copied to every new row.
+
+    Returns:
+        Updated row tuple and the assigned ``group_cell_id``.
+    """
+    _validate_fov_group_id(fov_group_id)
+    group_cell_id = next_group_cell_id(rows)
+    group_rows = make_manual_roi_match_rows(
+        recording_rois,
+        group_cell_id=group_cell_id,
+        fov_group_id=fov_group_id,
+        status="matched",
+        note=note,
+    )
+    return (*tuple(rows), *group_rows), group_cell_id
+
+
+def replace_manual_roi_match_group(
+    rows: Sequence[ManualRoiMatchRow],
+    recording_rois: Mapping[Path, str],
+    *,
+    fov_group_id: str,
+    group_cell_id: int,
+    note: str = "",
+) -> tuple[ManualRoiMatchRow, ...]:
+    """Replace one matched group inside one FOV while preserving other rows.
+
+    Args:
+        rows: Existing manual ROI match rows.
+        recording_rois: Replacement recording-to-ROI selections.
+        fov_group_id: FOV id containing the group.
+        group_cell_id: Existing group id to replace.
+        note: Optional note copied to every replacement row.
+
+    Returns:
+        Updated row tuple.
+    """
+    _validate_fov_group_id(fov_group_id)
+    replacement_rows = make_manual_roi_match_rows(
+        recording_rois,
+        group_cell_id=group_cell_id,
+        fov_group_id=fov_group_id,
+        status="matched",
+        note=note,
+    )
+    retained_rows = _rows_without_matched_group(rows, fov_group_id, group_cell_id)
+    return (*retained_rows, *replacement_rows)
+
+
+def remove_manual_roi_match_group(
+    rows: Sequence[ManualRoiMatchRow],
+    *,
+    fov_group_id: str,
+    group_cell_id: int,
+) -> tuple[ManualRoiMatchRow, ...]:
+    """Remove one matched group inside one FOV while preserving other rows."""
+    return _rows_without_matched_group(rows, fov_group_id, group_cell_id)
 
 
 def save_manual_fov_group_rows(
@@ -287,6 +411,31 @@ def next_group_cell_id(rows: Sequence[ManualRoiMatchRow]) -> int:
     if len(rows) == 0:
         return 1
     return max(row.group_cell_id for row in rows) + 1
+
+
+def _rows_without_matched_group(
+    rows: Sequence[ManualRoiMatchRow],
+    fov_group_id: str,
+    group_cell_id: int,
+) -> tuple[ManualRoiMatchRow, ...]:
+    """Return rows after removing one matched group in one FOV."""
+    _validate_fov_group_id(fov_group_id)
+    _validate_group_cell_id(group_cell_id)
+    return tuple(
+        row
+        for row in rows
+        if not (
+            row.status == "matched"
+            and row.fov_group_id == fov_group_id
+            and row.group_cell_id == group_cell_id
+        )
+    )
+
+
+def _shared_row_note(rows: tuple[ManualRoiMatchRow, ...]) -> str:
+    """Return the common note for one matched group."""
+    notes = {row.note for row in rows}
+    return notes.pop() if len(notes) == 1 else ""
 
 
 def _write_csv_rows(

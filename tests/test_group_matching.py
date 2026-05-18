@@ -11,12 +11,16 @@ from pathlib import Path
 from tests.tempdir import temporary_directory
 
 from twopy import (
+    add_manual_roi_match_group,
     append_manual_roi_match_rows,
     load_manual_fov_group_rows,
     load_manual_roi_match_rows,
     make_manual_fov_group_rows,
     make_manual_roi_match_rows,
+    matched_manual_roi_groups,
     next_group_cell_id,
+    remove_manual_roi_match_group,
+    replace_manual_roi_match_group,
     save_manual_fov_group_rows,
     save_manual_roi_match_rows,
 )
@@ -112,6 +116,206 @@ class GroupMatchingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "roi_label"):
             make_manual_roi_match_rows(
                 {Path("/recordings/a"): ""},
+                group_cell_id=1,
+            )
+
+    def test_add_manual_roi_match_group_assigns_next_id(self) -> None:
+        """Confirm new matched groups are appended with the next table id.
+
+        Inputs: one existing group and a new FOV-scoped ROI selection.
+        Outputs: appended rows use the next id and shared note.
+        """
+        first = make_manual_roi_match_rows(
+            {Path("/recordings/a"): "roi_0001"},
+            group_cell_id=1,
+            fov_group_id="fov_1",
+            note="first",
+        )
+
+        rows, group_cell_id = add_manual_roi_match_group(
+            first,
+            {
+                Path("/recordings/a"): "roi_0002",
+                Path("/recordings/b"): "roi_0004",
+            },
+            fov_group_id="fov_1",
+            note="second",
+        )
+
+        self.assertEqual(group_cell_id, 2)
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(
+            {row.roi_label for row in rows if row.group_cell_id == 2},
+            {"roi_0002", "roi_0004"},
+        )
+        self.assertEqual(
+            {row.note for row in rows if row.group_cell_id == 2},
+            {"second"},
+        )
+
+    def test_matched_manual_roi_groups_filters_fov_and_status(self) -> None:
+        """Confirm group listing ignores other FOVs and reviewed-only rows.
+
+        Inputs: matched, unmatched, and different-FOV rows.
+        Outputs: only matched rows in the selected FOV are grouped.
+        """
+        rows = (
+            *make_manual_roi_match_rows(
+                {Path("/recordings/a"): "roi_0001"},
+                group_cell_id=1,
+                fov_group_id="fov_1",
+                note="same",
+            ),
+            *make_manual_roi_match_rows(
+                {Path("/recordings/b"): "roi_0002"},
+                group_cell_id=2,
+                fov_group_id="fov_1",
+                status="unmatched",
+            ),
+            *make_manual_roi_match_rows(
+                {Path("/recordings/c"): "roi_0003"},
+                group_cell_id=3,
+                fov_group_id="fov_2",
+            ),
+        )
+
+        groups = matched_manual_roi_groups(rows, fov_group_id="fov_1")
+
+        self.assertEqual(tuple(group.group_cell_id for group in groups), (1,))
+        self.assertEqual(groups[0].note, "same")
+        self.assertEqual(
+            {row.recording_path: row.roi_label for row in groups[0].rows},
+            {Path("/recordings/a"): "roi_0001"},
+        )
+
+    def test_replace_manual_roi_match_group_preserves_unrelated_rows(self) -> None:
+        """Confirm replacement touches only one matched group in one FOV.
+
+        Inputs: target rows plus same-id rows in another FOV and non-matched
+        review rows.
+        Outputs: only the selected matched group is replaced.
+        """
+        target = make_manual_roi_match_rows(
+            {
+                Path("/recordings/a"): "roi_0001",
+                Path("/recordings/b"): "roi_0002",
+            },
+            group_cell_id=1,
+            fov_group_id="fov_1",
+            note="old",
+        )
+        other_fov = make_manual_roi_match_rows(
+            {Path("/recordings/c"): "roi_0003"},
+            group_cell_id=1,
+            fov_group_id="fov_2",
+            note="other",
+        )
+        reviewed = make_manual_roi_match_rows(
+            {Path("/recordings/d"): "roi_0004"},
+            group_cell_id=1,
+            fov_group_id="fov_1",
+            status="unmatched",
+            note="reviewed",
+        )
+
+        rows = replace_manual_roi_match_group(
+            (*target, *other_fov, *reviewed),
+            {Path("/recordings/a"): "roi_0005"},
+            fov_group_id="fov_1",
+            group_cell_id=1,
+            note="new",
+        )
+
+        self.assertEqual(len(rows), 3)
+        self.assertIn(other_fov[0], rows)
+        self.assertIn(reviewed[0], rows)
+        replacement = rows[-1]
+        self.assertEqual(replacement.recording_path, Path("/recordings/a"))
+        self.assertEqual(replacement.roi_label, "roi_0005")
+        self.assertEqual(replacement.note, "new")
+
+    def test_remove_manual_roi_match_group_preserves_unrelated_rows(self) -> None:
+        """Confirm removal is scoped to one matched FOV group.
+
+        Inputs: target and unrelated rows.
+        Outputs: selected matched rows are removed and unrelated rows remain.
+        """
+        target = make_manual_roi_match_rows(
+            {Path("/recordings/a"): "roi_0001"},
+            group_cell_id=1,
+            fov_group_id="fov_1",
+        )
+        unrelated = make_manual_roi_match_rows(
+            {Path("/recordings/b"): "roi_0002"},
+            group_cell_id=1,
+            fov_group_id="fov_2",
+        )
+
+        rows = remove_manual_roi_match_group(
+            (*target, *unrelated),
+            fov_group_id="fov_1",
+            group_cell_id=1,
+        )
+
+        self.assertEqual(rows, unrelated)
+
+    def test_mixed_group_notes_have_no_shared_note(self) -> None:
+        """Confirm differing row notes do not collapse into a misleading value.
+
+        Inputs: one matched group with different notes per row.
+        Outputs: group note is empty.
+        """
+        rows = (
+            ManualRoiMatchRow(
+                "fov_1",
+                1,
+                Path("/recordings/a"),
+                "roi_0001",
+                "matched",
+                "a",
+            ),
+            ManualRoiMatchRow(
+                "fov_1",
+                1,
+                Path("/recordings/b"),
+                "roi_0002",
+                "matched",
+                "b",
+            ),
+        )
+
+        groups = matched_manual_roi_groups(rows, fov_group_id="fov_1")
+
+        self.assertEqual(groups[0].note, "")
+
+    def test_manual_roi_match_group_helpers_reject_blank_fov(self) -> None:
+        """Confirm FOV-scoped group helpers cannot create unlistable groups.
+
+        Inputs: valid ROI selections with a blank FOV id.
+        Outputs: clear validation errors before rows are created or queried.
+        """
+        rows = make_manual_roi_match_rows(
+            {Path("/recordings/a"): "roi_0001"},
+            group_cell_id=1,
+            fov_group_id="fov_1",
+        )
+        recording_rois = {Path("/recordings/a"): "roi_0002"}
+
+        with self.assertRaisesRegex(ValueError, "FOV"):
+            matched_manual_roi_groups(rows, fov_group_id="")
+        with self.assertRaisesRegex(ValueError, "FOV"):
+            add_manual_roi_match_group(rows, recording_rois, fov_group_id="")
+        with self.assertRaisesRegex(ValueError, "FOV"):
+            replace_manual_roi_match_group(
+                rows,
+                recording_rois,
+                fov_group_id="",
+                group_cell_id=1,
+            )
+        with self.assertRaisesRegex(ValueError, "FOV"):
+            remove_manual_roi_match_group(
+                rows,
+                fov_group_id="",
                 group_cell_id=1,
             )
 
