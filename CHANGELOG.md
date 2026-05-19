@@ -4,6 +4,11 @@
 
 ### Features
 
+- Added a napari Custom tab for built-in and local Python workflows.
+- Added a native Direction selectivity workflow with recording epoch dropdowns, metric window controls, optional response rectification, an absolute-DSI plot threshold, and a direct ROI DSI table preview.
+- Added versioned workflow metadata for custom outputs, including workflow id, version, source path, source hash, twopy version, parameters, and recording path.
+- Added a stable `twopy.custom` API for workflow parameters, recording metadata, ROI selection, response metrics, tables, plots, output paths, and response plot data.
+- Added a reference custom workflow example that shows every supported parameter and result type.
 - Added database search favorites in the napari Load-tab search window, with Save favorite, Use, and Remove actions backed by a machine-local YAML file.
 - Added a thin epoch-span marker to napari response plots and exported response figures.
 
@@ -20,6 +25,9 @@
 - Restored saved-analysis reload for source recordings routed through the stable external analysis cache.
 - Deleted local cached PDF and PNG export figures after they successfully sync to the configured analysis output destination.
 - Prevented database search favorites from changing the dialog state or overwriting a corrupt favorites file when local YAML persistence fails.
+- Kept custom workflow ROI visibility filters, including the Direction selectivity threshold, from removing nonpassing ROIs from the ROIs tab.
+- Kept custom workflow epoch-window defaults from being overwritten by recording duration caps.
+- Made DSI threshold and epoch-window controls show three decimals, and showed synced custom table outputs at their publish paths instead of cache paths.
 
 ## 0.1.9 - 2026-05-17
 

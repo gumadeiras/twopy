@@ -33,6 +33,8 @@ from tests.napari_support import (
     unittest,
 )
 
+from twopy.custom import discover_custom_workflows, native_custom_workflow_paths
+
 
 class NapariProcessingControlsTest(NapariAdapterTestCase):
     """Napari response processing-control tests."""
@@ -138,6 +140,53 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 dff_widget.options().baseline_epoch_name,
                 "Odor A",
             )
+
+    def test_native_dsi_epoch_parameters_use_recording_epoch_dropdowns(self) -> None:
+        """Confirm native DSI uses recording-aware Custom tab controls."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    '[{"epochName": "Left"}, {"epochName": "Right"}]'
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            workflows = discover_custom_workflows(native_custom_workflow_paths())
+            workflow = next(
+                item
+                for item in workflows.workflows
+                if item.id == "direction-selectivity"
+            )
+
+            specs = {
+                spec.name: spec
+                for spec in response_widget._custom_parameter_specs_for_workflow(
+                    workflow,
+                )
+            }
+
+            self.assertEqual(specs["preferred_epoch"].kind, "choice")
+            self.assertEqual(specs["null_epoch"].kind, "choice")
+            self.assertEqual(specs["preferred_epoch"].choices, ("1: Left", "2: Right"))
+            self.assertEqual(specs["null_epoch"].choices, ("1: Left", "2: Right"))
+            self.assertEqual(specs["metric"].kind, "choice")
+            self.assertEqual(specs["metric"].choices, ("mean", "peak", "minimum"))
+            self.assertEqual(specs["roi_selector"].kind, "choice")
+            self.assertEqual(
+                specs["roi_selector"].choices,
+                ("all_rois", "visible_rois"),
+            )
+            self.assertEqual(specs["window_start_seconds"].minimum, 0.0)
+            self.assertEqual(specs["window_start_seconds"].step, 0.1)
+            self.assertEqual(specs["window_stop_seconds"].default, 3.3)
+            self.assertEqual(specs["window_stop_seconds"].minimum, 0.0)
+            self.assertEqual(specs["window_stop_seconds"].step, 0.1)
+            self.assertEqual(specs["dsi_threshold"].minimum, 0.0)
+            self.assertEqual(specs["dsi_threshold"].step, 0.05)
+            self.assertEqual(specs["dsi_threshold"].decimals, 3)
 
     def test_baseline_epoch_dropdown_defaults_to_gray_like_epoch(self) -> None:
         """Confirm the dF/F baseline defaults to the gray/interleave epoch.

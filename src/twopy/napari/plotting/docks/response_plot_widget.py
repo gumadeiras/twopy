@@ -1,9 +1,5 @@
 """Response plotting widgets for the twopy napari adapter.
 
-Inputs: loaded twopy analysis outputs or the current napari Labels ROI layer.
-Outputs: Qt widgets showing one response plot per stimulus epoch and a
-separate options panel.
-
 The plotting code only owns GUI state and drawing. When the user asks to update
 responses from the current Labels layer, this module converts labels to a
 ``RoiSet`` and calls the normal analysis workflow.
@@ -38,11 +34,26 @@ from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis_cache import (
     AnalysisSyncPlan,
     AnalysisSyncResult,
+    build_analysis_sync_plan,
     start_analysis_sync,
 )
 from twopy.config import load_config
 from twopy.converted import RecordingData
+from twopy.custom import (
+    CustomParameterSpec,
+    CustomResult,
+    CustomRunContext,
+    CustomWorkflow,
+    custom_result_artifact_paths,
+    native_custom_workflow_paths,
+    parameter_specs,
+    parameter_values,
+    validate_custom_result,
+    workflow_provenance,
+    write_result_provenance,
+)
 from twopy.filenames import EXPORTS_DIRNAME
+from twopy.napari.custom_tab import CustomWorkflowPanel
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.latest_worker import LatestWorker
 from twopy.napari.paths import DEFAULT_PATH_TEXT
@@ -52,6 +63,7 @@ from twopy.napari.plotting.data import (
     load_response_plot_data,
     response_plot_baseline_window_limit_for_recording,
     response_plot_min_epoch_duration_for_recording,
+    response_plot_window_seconds_for_recording,
 )
 from twopy.napari.plotting.docks.dynamic_options import (
     add_plot_display_options_group,
@@ -108,7 +120,14 @@ from twopy.pixel_calibration_profiles import (
     PixelCalibrationProfileMapping,
     load_pixel_calibration_profile_mappings,
 )
+from twopy.roi import RoiSet, roi_set_to_label_image
 from twopy.stimulus import stimulus_epoch_names_by_number
+
+_CUSTOM_EPOCH_WINDOW_MIN_SECONDS = 0.0
+_CUSTOM_EPOCH_WINDOW_STEP_SECONDS = 0.1
+_CUSTOM_RESPONSE_WINDOW_STEP_SECONDS = 0.1
+_CUSTOM_RESPONSE_METRIC_CHOICES = ("mean", "peak", "minimum")
+_CUSTOM_ROI_SELECTOR_CHOICES = ("all_rois", "visible_rois")
 
 
 class _ResponsePlotWidget(QWidget):
@@ -223,6 +242,16 @@ class _ResponsePlotWidget(QWidget):
             options_panel.delta_f_over_f_options_widget
         )
         self._normalization_options_widget = options_panel.normalization_options_widget
+        self._custom_workflow_panel = CustomWorkflowPanel(
+            workflow_paths=_load_custom_workflow_paths_for_ui(),
+            on_run=self._run_custom_workflow,
+            parameter_specs_for_workflow=self._custom_parameter_specs_for_workflow,
+        )
+        self._options_tabs.insertTab(
+            max(0, self._options_tabs.count() - 1),
+            self._custom_workflow_panel,
+            "Custom",
+        )
         self._add_default_plot_display_options()
 
     def options_widget(self) -> object:
@@ -355,6 +384,7 @@ class _ResponsePlotWidget(QWidget):
         self._response_window_options_widget.set_max_window_seconds(None)
         self._response_map_options_widget.set_spatial_shape(None)
         self._processing_options_widget.set_correlation_window_stop_default(None)
+        self._custom_workflow_panel.refresh_parameters()
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
         self._microscope_summary_label.setText("No microscope metadata.")
@@ -399,6 +429,7 @@ class _ResponsePlotWidget(QWidget):
         self._processing_options_widget.set_correlation_window_stop_default(
             response_plot_min_epoch_duration_for_recording(recording),
         )
+        self._custom_workflow_panel.refresh_parameters()
         self._delta_f_over_f_options = self._delta_f_over_f_options_widget.options()
         self._live_controller.set_delta_f_over_f_options(
             self._delta_f_over_f_options,
@@ -507,6 +538,143 @@ class _ResponsePlotWidget(QWidget):
             response_window_options=self._response_window_options,
             response_processing_options=self._response_processing_options,
         )
+
+    def _run_custom_workflow(
+        self,
+        workflow: CustomWorkflow,
+        params: object | None,
+    ) -> CustomResult:
+        """Run a custom workflow on the current recording.
+
+        Args:
+            workflow: Workflow selected in the Custom tab.
+            params: Parameter values from the Custom tab.
+
+        Returns:
+            Result after validation and output sync setup.
+        """
+        if self._recording is None:
+            msg = "Load a recording before running a custom workflow."
+            raise ValueError(msg)
+        roi_set = self._current_roi_set_for_custom_workflow(workflow)
+        pre_window_seconds, post_window_seconds = (
+            response_plot_window_seconds_for_recording(
+                self._recording,
+                self._response_window_options,
+            )
+        )
+        parameters = parameter_values(params)
+        provenance = workflow_provenance(
+            workflow,
+            parameters=parameters,
+            recording=self._recording,
+        )
+        output_dir = _custom_workflow_output_dir(self._recording, workflow)
+        context = CustomRunContext(
+            recording=self._recording,
+            roi_set=roi_set,
+            output_dir=output_dir,
+            delta_f_over_f_options=self._delta_f_over_f_options,
+            response_processing_options=self._response_processing_options,
+            response_pre_window_seconds=pre_window_seconds,
+            response_post_window_seconds=post_window_seconds,
+            provenance=provenance,
+            visible_roi_indices=self._custom_workflow_visible_roi_indices(roi_set),
+        )
+        if params is None:
+            raw_result = workflow.function(context)
+        else:
+            raw_result = workflow.function(context, params)
+        result = validate_custom_result(
+            raw_result,
+            output_dir=output_dir,
+            expected_roi_shape=self._recording.movie.shape[1:],
+        )
+        provenance_paths = write_result_provenance(result, provenance)
+        sync_plan = build_analysis_sync_plan(
+            recording=self._recording,
+            local_paths=(
+                *custom_result_artifact_paths(result),
+                *provenance_paths,
+            ),
+        )
+        if sync_plan is not None:
+            self._start_sync(sync_plan)
+        self._apply_custom_workflow_result(result)
+        return _custom_workflow_display_result(result, sync_plan)
+
+    def _custom_parameter_specs_for_workflow(
+        self,
+        workflow: CustomWorkflow,
+    ) -> tuple[CustomParameterSpec, ...]:
+        """Return parameter controls adjusted for the loaded recording."""
+        if workflow.params_type is None:
+            return ()
+        specs = parameter_specs(workflow.params_type)
+        if self._recording is None:
+            return specs
+        epoch_choices = _custom_epoch_choices(self._recording)
+        metric_stop_seconds = response_plot_min_epoch_duration_for_recording(
+            self._recording,
+        )
+        pre_window_seconds, post_window_seconds = (
+            response_plot_window_seconds_for_recording(
+                self._recording,
+                self._response_window_options,
+            )
+        )
+        response_stop_seconds = None
+        if metric_stop_seconds is not None:
+            response_stop_seconds = metric_stop_seconds + post_window_seconds
+        return tuple(
+            _recording_parameter_spec(
+                spec,
+                recording=self._recording,
+                epoch_choices=epoch_choices,
+                metric_stop_seconds=metric_stop_seconds,
+                response_start_seconds=-pre_window_seconds,
+                response_stop_seconds=response_stop_seconds,
+            )
+            for spec in specs
+        )
+
+    def _custom_workflow_visible_roi_indices(
+        self,
+        roi_set: RoiSet | None,
+    ) -> tuple[int, ...]:
+        """Return ROI visibility for custom workflows."""
+        if roi_set is None:
+            return ()
+        if self._plot_data is None:
+            return tuple(range(len(roi_set.labels)))
+        return self._visible_roi_indices()
+
+    def _current_roi_set_for_custom_workflow(
+        self,
+        workflow: CustomWorkflow,
+    ) -> RoiSet | None:
+        """Return current ROIs, or raise only when the workflow needs them."""
+        try:
+            return self._response_analysis_request().roi_set
+        except ValueError:
+            if workflow.requires_rois:
+                raise
+            return None
+
+    def _apply_custom_workflow_result(self, result: CustomResult) -> None:
+        """Apply returned ROIs or responses to napari."""
+        if result.roi_set is not None:
+            if self._roi_labels_layer is None or self._recording is None:
+                msg = "Custom workflow returned ROIs, but no Labels layer is available."
+                raise ValueError(msg)
+            set_roi_label_image_on_layer(
+                self._roi_labels_layer,
+                self._recording,
+                roi_set_to_label_image(result.roi_set),
+            )
+            self._live_controller.request_update()
+        if result.response_plot_data is not None:
+            self.set_response_plot_data(result.response_plot_data, reset_axes=True)
 
     def _start_sync(self, sync_plan: AnalysisSyncPlan) -> None:
         """Start background sync for just-saved analysis outputs.
@@ -1002,6 +1170,16 @@ class _ResponsePlotWidget(QWidget):
 
     def _sync_roi_visibility_from_plot_data(self, roi_labels: tuple[str, ...]) -> None:
         """Update ROI visibility from correlation QC or existing user choices."""
+        if (
+            self._plot_data is not None
+            and self._plot_data.visible_roi_indices is not None
+        ):
+            visible_indices_set = set(self._plot_data.visible_roi_indices)
+            self._roi_visibility = {
+                index: index in visible_indices_set for index in range(len(roi_labels))
+            }
+            self._correlation_roi_visibility = None
+            return
         correlation_visibility = _correlation_roi_visibility(
             self._plot_data,
             roi_labels,
@@ -1243,6 +1421,212 @@ def _load_pixel_calibrations_for_ui() -> tuple[PixelCalibrationRow, ...]:
     except FileNotFoundError:
         calibration_path = DEFAULT_PIXEL_CALIBRATION_PATH
     return load_pixel_calibrations(calibration_path)
+
+
+def _load_custom_workflow_paths_for_ui() -> tuple[Path, ...]:
+    """Load workflow paths for the Custom tab.
+
+    Returns:
+        Built-in workflow paths plus paths from ``config.yml``.
+    """
+    try:
+        configured_paths = load_config().custom_workflow_paths
+    except FileNotFoundError:
+        configured_paths = ()
+    return (*native_custom_workflow_paths(), *configured_paths)
+
+
+def _custom_workflow_output_dir(
+    recording: RecordingData,
+    workflow: CustomWorkflow,
+) -> Path:
+    """Return the output folder for one workflow run.
+
+    Args:
+        recording: Active converted recording.
+        workflow: Workflow being run.
+
+    Returns:
+        Folder for custom output files.
+    """
+    return (
+        recording.path.parent
+        / "custom_outputs"
+        / workflow.output_prefix
+        / workflow.version
+    )
+
+
+def _custom_workflow_display_result(
+    result: CustomResult,
+    sync_plan: AnalysisSyncPlan | None,
+) -> CustomResult:
+    """Show publish paths for tables when sync is active."""
+    if sync_plan is None:
+        return result
+    return replace(
+        result,
+        tables=tuple(
+            replace(
+                table,
+                display_path=_custom_workflow_publish_path(table.path, sync_plan),
+            )
+            for table in result.tables
+        ),
+    )
+
+
+def _custom_workflow_publish_path(
+    path: Path,
+    sync_plan: AnalysisSyncPlan,
+) -> Path | None:
+    """Return the publish path for a local custom output."""
+    try:
+        relative_path = path.expanduser().relative_to(sync_plan.local_root)
+    except ValueError:
+        return None
+    return sync_plan.publish_root / relative_path
+
+
+def _custom_epoch_choices(recording: RecordingData) -> tuple[str, ...]:
+    """Return epoch dropdown choices for custom workflows."""
+    epoch_names = stimulus_epoch_names_by_number(recording)
+    return tuple(
+        _custom_epoch_choice_label(epoch_number, epoch_name)
+        for epoch_number, epoch_name in sorted(epoch_names.items())
+    )
+
+
+def _recording_parameter_spec(
+    spec: CustomParameterSpec,
+    *,
+    recording: RecordingData,
+    epoch_choices: tuple[str, ...],
+    metric_stop_seconds: float | None,
+    response_start_seconds: float,
+    response_stop_seconds: float | None,
+) -> CustomParameterSpec:
+    """Apply recording-specific defaults to one parameter control."""
+    if spec.role in {"comparison_epoch", "epoch"} and len(epoch_choices) > 0:
+        return replace(
+            spec,
+            kind="choice",
+            choices=epoch_choices,
+            default=_matched_epoch_choice(epoch_choices, str(spec.default)),
+        )
+    if spec.role == "baseline_epoch" and len(epoch_choices) > 0:
+        return replace(
+            spec,
+            kind="choice",
+            choices=epoch_choices,
+            default=_baseline_epoch_choice(recording, epoch_choices, str(spec.default)),
+        )
+    if spec.role == "epoch_window_stop":
+        return replace(
+            spec,
+            minimum=_CUSTOM_EPOCH_WINDOW_MIN_SECONDS,
+            maximum=metric_stop_seconds,
+            step=_CUSTOM_EPOCH_WINDOW_STEP_SECONDS,
+        )
+    if spec.role == "epoch_window_start":
+        return replace(
+            spec,
+            minimum=_CUSTOM_EPOCH_WINDOW_MIN_SECONDS,
+            maximum=metric_stop_seconds,
+            step=_CUSTOM_EPOCH_WINDOW_STEP_SECONDS,
+        )
+    if spec.role == "response_metric":
+        default = str(spec.default)
+        if default not in _CUSTOM_RESPONSE_METRIC_CHOICES:
+            default = _CUSTOM_RESPONSE_METRIC_CHOICES[0]
+        return replace(
+            spec,
+            kind="choice",
+            choices=_CUSTOM_RESPONSE_METRIC_CHOICES,
+            default=default,
+        )
+    if spec.role == "response_window_start":
+        return replace(
+            spec,
+            minimum=response_start_seconds,
+            maximum=response_stop_seconds,
+            step=_CUSTOM_RESPONSE_WINDOW_STEP_SECONDS,
+            decimals=spec.decimals if spec.decimals is not None else 3,
+        )
+    if spec.role == "response_window_stop":
+        return replace(
+            spec,
+            minimum=response_start_seconds,
+            maximum=response_stop_seconds,
+            step=_CUSTOM_RESPONSE_WINDOW_STEP_SECONDS,
+            decimals=spec.decimals if spec.decimals is not None else 3,
+        )
+    if spec.role == "roi_limit":
+        return replace(
+            spec,
+            minimum=spec.minimum if spec.minimum is not None else 1.0,
+            step=spec.step if spec.step is not None else 1.0,
+        )
+    if spec.role == "roi_selector":
+        default = str(spec.default)
+        if default not in _CUSTOM_ROI_SELECTOR_CHOICES:
+            default = _CUSTOM_ROI_SELECTOR_CHOICES[0]
+        return replace(
+            spec,
+            kind="choice",
+            choices=_CUSTOM_ROI_SELECTOR_CHOICES,
+            default=default,
+        )
+    if spec.role == "table_highlight_threshold":
+        return replace(
+            spec,
+            minimum=spec.minimum if spec.minimum is not None else 0.0,
+            step=spec.step if spec.step is not None else 0.05,
+            decimals=spec.decimals if spec.decimals is not None else 3,
+        )
+    return spec
+
+
+def _matched_epoch_choice(
+    choices: tuple[str, ...],
+    preferred_name: str,
+) -> str:
+    """Return the matching epoch choice or the first choice."""
+    preferred = preferred_name.casefold()
+    for choice in choices:
+        if _custom_epoch_name_from_choice(choice).casefold() == preferred:
+            return choice
+    return choices[0]
+
+
+def _baseline_epoch_choice(
+    recording: RecordingData,
+    choices: tuple[str, ...],
+    preferred_name: str,
+) -> str:
+    """Return the default baseline epoch choice for one recording."""
+    if preferred_name != "":
+        return _matched_epoch_choice(choices, preferred_name)
+    baseline_epoch_number = default_recording_baseline_epoch_number(recording)
+    prefix = f"{baseline_epoch_number}:"
+    for choice in choices:
+        if choice.startswith(prefix):
+            return choice
+    return choices[0]
+
+
+def _custom_epoch_choice_label(epoch_number: int, epoch_name: str) -> str:
+    """Return one readable custom epoch choice."""
+    if epoch_name == "":
+        return f"Epoch {epoch_number}"
+    return f"{epoch_number}: {epoch_name}"
+
+
+def _custom_epoch_name_from_choice(choice: str) -> str:
+    """Return the epoch-name part of a custom epoch choice."""
+    if ":" not in choice:
+        return choice
+    return choice.split(":", maxsplit=1)[1].strip()
 
 
 def _load_pixel_calibration_profile_mappings_for_ui() -> tuple[

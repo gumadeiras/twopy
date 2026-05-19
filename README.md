@@ -55,6 +55,7 @@ When a source recording has not been converted yet, twopy converts it first. Con
 
 - [GUI guide](docs/gui.md): napari loading, ROI editing, plotting, and saved outputs.
 - [Python API guide](docs/python_api.md): find recordings, convert data, run analysis, and open napari from scripts.
+- [Custom workflow guide](docs/custom_workflows.md): add versioned local analyses to the napari Custom tab.
 - [Development guide](docs/development.md): source setup and local checks.
 - [Input data spec](docs/input_data_spec.md): short recording folder contract.
 - [Recording file reference](docs/recording_file_schema.md): detailed source and converted file schema.

@@ -1,10 +1,8 @@
 """Load twopy configuration from a small YAML file.
 
-Inputs: a YAML config file with lab paths, cache policy, and database access mode.
-Outputs: a typed ``TwopyConfig`` object with normalized values.
-
-The config layer keeps machine-specific paths out of analysis code and makes the
-GUI easy to point at the right database and recording roots.
+The config layer keeps machine-specific paths out of analysis code. GUI and
+script callers get one typed object with database paths, cache paths, custom
+workflow paths, and output settings.
 """
 
 import hashlib
@@ -37,10 +35,6 @@ AnalysisOutputMode = Path | Literal["source"]
 class TwopyConfig:
     """Machine-local paths used by twopy.
 
-    Inputs: lab paths, DB access mode, analysis cache settings, and analysis
-        output from ``config.yml``.
-    Outputs: immutable config values that GUI and analysis code can pass around.
-
     The paths are not required to exist during parsing so tests and machines
     without mounted lab drives can still load and inspect configuration.
     """
@@ -52,6 +46,7 @@ class TwopyConfig:
     analysis_caching: bool = True
     analysis_cache_dir: Path = DEFAULT_ANALYSIS_CACHE_DIR
     pixel_calibration_path: Path = DEFAULT_PIXEL_CALIBRATION_PATH
+    custom_workflow_paths: tuple[Path, ...] = ()
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
@@ -106,6 +101,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
             "pixel_calibration_path",
             config_path,
             default=DEFAULT_PIXEL_CALIBRATION_PATH,
+        ),
+        custom_workflow_paths=_optional_path_tuple(
+            raw_config,
+            "custom_workflow_paths",
+            config_path,
         ),
     )
 
@@ -356,6 +356,39 @@ def _optional_path_value(value: object, key: str, config_path: Path) -> Path:
         msg = f"twopy config key {key!r} must be a non-empty string: {config_path}"
         raise ValueError(msg)
     return _path_from_config_value(value)
+
+
+def _optional_path_tuple(
+    config: dict[object, object],
+    key: str,
+    config_path: Path,
+) -> tuple[Path, ...]:
+    """Read an optional list of paths from config.
+
+    Args:
+        config: Parsed YAML mapping.
+        key: Optional path-list key to read.
+        config_path: Source config file path, used for clear errors.
+
+    Returns:
+        Expanded paths in config order.
+    """
+    value = config.get(key)
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        msg = f"twopy config key {key!r} must be a list of paths: {config_path}"
+        raise ValueError(msg)
+    paths: list[Path] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or item == "":
+            msg = (
+                f"twopy config key {key!r} item {index} must be a "
+                f"non-empty path string: {config_path}"
+            )
+            raise ValueError(msg)
+        paths.append(_path_from_config_value(item))
+    return tuple(paths)
 
 
 def _path_from_config_value(value: str) -> Path:

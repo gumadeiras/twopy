@@ -36,6 +36,14 @@ analysis_cache_dir: ~/.cache/twopy/recordings
 # Omit this to use twopy's tracked default calibration registry.
 # pixel_calibration_path: /path/to/alternative_pixel_size.csv
 
+# Optional Python files or folders with extra custom workflows.
+# twopy always lists its built-in workflows, including Direction selectivity.
+# Workflow files are trusted local Python code. twopy checks their metadata
+# before listing them and records workflow version/source hash with outputs.
+# custom_workflow_paths:
+#   - ~/git/twopy-workflows
+#   - /Volumes/magic/clarklab/shared/twopy_workflows
+
 # Where twopy should write converted data and analysis outputs.
 # With analysis_caching enabled, this is the publish location used after saving.
 # Use "source" to publish into a twopy folder inside each recording folder.

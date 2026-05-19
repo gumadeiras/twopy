@@ -21,6 +21,7 @@ from tests.napari_support import (
     global_value_bounds,
     interior_random_frame_indices,
     np,
+    replace,
     resolve_movie_frame_range,
     unittest,
     visibility_options_widget,
@@ -53,6 +54,21 @@ class NapariRoiVisibilityTest(NapariAdapterTestCase):
         )
 
         self.assertEqual(response_widget._visible_roi_indices(), (0, 1))
+
+    def test_initial_visible_roi_indices_do_not_remove_roi_rows(self) -> None:
+        """Confirm custom visibility filters uncheck ROIs without deleting rows."""
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        plot_data = replace(
+            _two_roi_response_plot_data(),
+            visible_roi_indices=(0,),
+        )
+
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+
+        self.assertEqual(response_widget._roi_labels(), ("roi_0001", "roi_0002"))
+        self.assertEqual(response_widget._visible_roi_indices(), (0,))
+        self.assertEqual(response_widget._roi_visibility, {0: True, 1: False})
 
     def test_global_value_bounds_accepts_empty_roi_selection(self) -> None:
         """Confirm empty ROI selection uses stable default y-axis bounds.

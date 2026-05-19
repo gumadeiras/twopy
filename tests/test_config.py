@@ -55,6 +55,7 @@ class LoadConfigTest(unittest.TestCase):
                 config.pixel_calibration_path,
                 DEFAULT_PIXEL_CALIBRATION_PATH,
             )
+            self.assertEqual(config.custom_workflow_paths, ())
 
     def test_database_access_defaults_to_copy(self) -> None:
         """Confirm missing DB access uses fast local-copy mode.
@@ -123,6 +124,46 @@ class LoadConfigTest(unittest.TestCase):
             config = load_config(config_path)
 
             self.assertEqual(config.pixel_calibration_path, calibration_path)
+
+    def test_loads_custom_workflow_paths(self) -> None:
+        """Confirm config can list local custom workflow files or folders."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            first_path = root / "workflows"
+            second_path = root / "dsi.py"
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {root / 'data'}\n"
+                "database_access: copy\n"
+                "analysis_output: source\n"
+                "custom_workflow_paths:\n"
+                f"  - {first_path}\n"
+                f"  - {second_path}\n",
+                encoding="utf-8",
+            )
+
+            config = load_config(config_path)
+
+            self.assertEqual(config.custom_workflow_paths, (first_path, second_path))
+
+    def test_invalid_custom_workflow_paths_raise_clear_error(self) -> None:
+        """Confirm custom workflow paths must be listed as strings."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_path: {root / 'data'}\n"
+                "database_access: copy\n"
+                "analysis_output: source\n"
+                "custom_workflow_paths:\n"
+                "  - 5\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "custom_workflow_paths"):
+                load_config(config_path)
 
     def test_invalid_analysis_caching_raises_clear_error(self) -> None:
         """Confirm analysis cache policy must be a YAML boolean.

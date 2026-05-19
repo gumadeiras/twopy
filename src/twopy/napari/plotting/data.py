@@ -1,8 +1,5 @@
 """Build plot-ready response data for the twopy napari adapter.
 
-Inputs: grouped response analysis outputs and saved analysis HDF5 files.
-Outputs: mean/SEM traces with direct response time vectors for plotting.
-
 This module has no Qt imports. It keeps response-data preparation testable and
 separate from the napari widgets that draw and control the plots.
 """
@@ -62,9 +59,8 @@ __all__ = [
 class EpochResponsePlotData:
     """Mean and SEM traces for one stimulus epoch type.
 
-    Inputs: grouped response trials for one epoch.
-    Outputs: one mean and SEM trace per ROI on a shared time axis, plus
-    epoch-time spans for unobtrusive plot markers.
+    Each ROI gets one mean trace and one SEM trace on a shared time axis. Epoch
+    time spans are optional markers for the plot.
     """
 
     epoch_name: str
@@ -80,12 +76,9 @@ class EpochResponsePlotData:
 class ResponsePlotData:
     """Plot-ready ROI responses grouped by stimulus epoch.
 
-    Inputs: grouped response analysis output.
-    Outputs: epoch plot data plus the source analysis path.
-
-    Each epoch carries its own direct ``time_seconds`` vector. The analysis HDF5
-    stores the same vector per trial, so the plot never has to infer time from
-    array position alone.
+    Each epoch carries its own ``time_seconds`` vector, so plots do not infer
+    time from array position. ``visible_roi_indices`` can preselect rows without
+    removing hidden ROIs from the ROIs tab.
     """
 
     source_path: Path | None
@@ -95,6 +88,7 @@ class ResponsePlotData:
     response_processing_options: ResponseProcessingOptions | None = None
     correlation_scores: RoiCorrelationScores | None = None
     correlation_window_stop_default_seconds: float | None = None
+    visible_roi_indices: tuple[int, ...] | None = None
 
 
 def response_plot_data_from_grouped(
@@ -215,6 +209,25 @@ def filter_response_plot_data_rois(
         correlation_window_stop_default_seconds=(
             plot_data.correlation_window_stop_default_seconds
         ),
+        visible_roi_indices=_filter_visible_roi_indices(
+            plot_data.visible_roi_indices,
+            keep_indices,
+        ),
+    )
+
+
+def _filter_visible_roi_indices(
+    visible_indices: tuple[int, ...] | None,
+    keep_indices: tuple[int, ...],
+) -> tuple[int, ...] | None:
+    """Return visible ROI rows remapped after row filtering."""
+    if visible_indices is None:
+        return None
+    visible_set = set(visible_indices)
+    return tuple(
+        new_index
+        for new_index, old_index in enumerate(keep_indices)
+        if old_index in visible_set
     )
 
 

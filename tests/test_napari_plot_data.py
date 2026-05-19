@@ -64,6 +64,18 @@ class NapariPlotDataTest(unittest.TestCase):
             np.array([False]),
         )
 
+    def test_filter_response_plot_data_rois_remaps_initial_visibility(self) -> None:
+        """Confirm row filtering remaps explicit visible ROI indices."""
+        filtered = filter_response_plot_data_rois(
+            replace(
+                two_roi_response_plot_data_with_correlation_scores(),
+                visible_roi_indices=(1,),
+            ),
+            (1,),
+        )
+
+        self.assertEqual(filtered.visible_roi_indices, (0,))
+
     def test_response_plot_data_summarizes_epoch_roi_mean_and_sem(self) -> None:
         """Confirm plotting data has one mean and SEM trace per ROI.
 

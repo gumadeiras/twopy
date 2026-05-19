@@ -9,10 +9,14 @@ from tests.napari_support import (
     TWOPY_SIDEBAR_MINIMUM_WIDTH,
     NapariAdapterTestCase,
     Path,
+    QApplication,
+    QColor,
+    QDoubleSpinBox,
     QGroupBox,
     QLabel,
     QPushButton,
     QScrollArea,
+    QTableWidget,
     QTabWidget,
     QWidget,
     __version__,
@@ -32,9 +36,164 @@ from tests.napari_support import (
     unittest,
 )
 
+from twopy.analysis_cache import AnalysisSyncPlan
+from twopy.custom import CustomParameterSpec, CustomResult, CustomTable, CustomWorkflow
+from twopy.napari.custom_tab import CustomWorkflowPanel, _parameter_widget
+from twopy.napari.plotting.docks.response_plot_widget import (
+    _custom_workflow_display_result,
+)
+
 
 class CoreNapariAdapterTest(NapariAdapterTestCase):
     """Core napari adapter tests."""
+
+    def test_epoch_window_parameters_show_three_decimals(self) -> None:
+        """Confirm role-backed window and threshold controls show three decimals."""
+        _ = QApplication.instance() or QApplication([])
+        epoch_window_widget = _parameter_widget(
+            CustomParameterSpec(
+                name="window_stop_seconds",
+                label="Window end (s)",
+                kind="float",
+                default=1.23456,
+                description="",
+                role="epoch_window_stop",
+            )
+        )
+        response_window_widget = _parameter_widget(
+            CustomParameterSpec(
+                name="response_window_stop_seconds",
+                label="Response window end (s)",
+                kind="float",
+                default=1.23456,
+                description="",
+                role="response_window_stop",
+            )
+        )
+        threshold_widget = _parameter_widget(
+            CustomParameterSpec(
+                name="highlight_threshold",
+                label="Highlight threshold",
+                kind="float",
+                default=1.23456,
+                description="",
+                role="table_highlight_threshold",
+            )
+        )
+        ordinary_widget = _parameter_widget(
+            CustomParameterSpec(
+                name="amplitude_scale",
+                label="Amplitude scale",
+                kind="float",
+                default=1.23456,
+                description="",
+            )
+        )
+
+        self.assertIsInstance(epoch_window_widget, QDoubleSpinBox)
+        self.assertIsInstance(response_window_widget, QDoubleSpinBox)
+        self.assertIsInstance(threshold_widget, QDoubleSpinBox)
+        self.assertIsInstance(ordinary_widget, QDoubleSpinBox)
+        assert isinstance(epoch_window_widget, QDoubleSpinBox)
+        assert isinstance(response_window_widget, QDoubleSpinBox)
+        assert isinstance(threshold_widget, QDoubleSpinBox)
+        assert isinstance(ordinary_widget, QDoubleSpinBox)
+        self.assertEqual(epoch_window_widget.decimals(), 3)
+        self.assertEqual(response_window_widget.decimals(), 3)
+        self.assertEqual(threshold_widget.decimals(), 3)
+        self.assertEqual(ordinary_widget.decimals(), 6)
+
+    def test_custom_workflow_sync_result_shows_publish_table_path(self) -> None:
+        """Confirm cached custom tables display the publish path."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            local_path = (
+                root
+                / "cache"
+                / "custom_outputs"
+                / "direction-selectivity"
+                / "1.0"
+                / "dsi.csv"
+            )
+            sync_plan = AnalysisSyncPlan(
+                local_root=root / "cache",
+                publish_root=root / "publish",
+                local_paths=(local_path,),
+            )
+            result = CustomResult(
+                message="ok",
+                tables=(CustomTable("Direction selectivity", local_path),),
+            )
+
+            display_result = _custom_workflow_display_result(result, sync_plan)
+
+            self.assertEqual(display_result.tables[0].path, local_path)
+            self.assertEqual(
+                display_result.tables[0].display_path,
+                root
+                / "publish"
+                / "custom_outputs"
+                / "direction-selectivity"
+                / "1.0"
+                / "dsi.csv",
+            )
+
+    def test_custom_workflow_panel_previews_returned_tables(self) -> None:
+        """Confirm custom workflow tables render in the Custom tab."""
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            table_path = root / "direction_selectivity.csv"
+            table_path.write_text(
+                "roi_label,direction_selectivity_index\n"
+                "roi_0001,0.241\n"
+                "roi_0002,-0.341\n",
+                encoding="utf-8",
+            )
+            panel = CustomWorkflowPanel(workflow_paths=(), on_run=_unused_custom_run)
+
+            panel._render_result(
+                CustomResult(
+                    message="ok",
+                    tables=(
+                        CustomTable(
+                            "Direction selectivity",
+                            table_path,
+                            highlighted_rows=(1,),
+                        ),
+                    ),
+                )
+            )
+            table = panel.findChild(QTableWidget)
+
+            self.assertIsNotNone(table)
+            assert table is not None
+            header_roi = table.horizontalHeaderItem(0)
+            header_dsi = table.horizontalHeaderItem(1)
+            roi_item = table.item(0, 0)
+            dsi_item = table.item(0, 1)
+            highlighted_item = table.item(1, 1)
+            self.assertIsNotNone(header_roi)
+            self.assertIsNotNone(header_dsi)
+            self.assertIsNotNone(roi_item)
+            self.assertIsNotNone(dsi_item)
+            self.assertIsNotNone(highlighted_item)
+            assert header_roi is not None
+            assert header_dsi is not None
+            assert roi_item is not None
+            assert dsi_item is not None
+            assert highlighted_item is not None
+            self.assertEqual(header_roi.text(), "roi_label")
+            self.assertEqual(
+                header_dsi.text(),
+                "direction_selectivity_index",
+            )
+            self.assertEqual(roi_item.text(), "roi_0001")
+            self.assertEqual(dsi_item.text(), "0.241")
+            background = highlighted_item.background().color()
+            foreground = highlighted_item.foreground().color()
+            self.assertNotEqual(background.getRgb(), QColor("#fff2a8").getRgb())
+            self.assertNotEqual(background.getRgb(), foreground.getRgb())
 
     def test_create_viewer_uses_twopy_version_window_title(self) -> None:
         """Confirm the launcher brands the top-level napari window.
@@ -137,6 +296,7 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
                     "Plot",
                     "ROIs",
                     "Epochs",
+                    "Custom",
                     "Export",
                 ),
             )
@@ -245,6 +405,14 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             self.assertEqual(saved.labels, ("drawn_0001", "drawn_0002"))
             self.assertEqual(loaded.labels, saved.labels)
             np.testing.assert_array_equal(loaded.masks, saved.masks)
+
+
+def _unused_custom_run(
+    workflow: CustomWorkflow,
+    params: object | None,
+) -> CustomResult:
+    """Raise if a custom workflow panel test unexpectedly runs a workflow."""
+    raise AssertionError((workflow, params))
 
 
 if __name__ == "__main__":
