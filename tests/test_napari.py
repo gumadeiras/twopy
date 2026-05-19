@@ -309,6 +309,7 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             self.assertIn("Load manually", options_buttons)
             self.assertIn("Load CSV list", options_buttons)
             self.assertIn("Open Group Matching", options_buttons)
+            self.assertIn("Reconvert selected", options_buttons)
             self.assertIn("Save loaded list", options_buttons)
             self.assertIn("Save ROIs + analysis", options_buttons)
             self.assertNotIn("Recompute preview now", options_buttons)
@@ -319,6 +320,7 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             }
             self.assertTrue(action_buttons["Open Group Matching"].isEnabled())
             self.assertTrue(action_buttons["Reload saved analysis"].isEnabled())
+            self.assertTrue(action_buttons["Reconvert selected"].isEnabled())
             self.assertTrue(action_buttons["Save loaded list"].isEnabled())
             group_titles = {
                 group.title() for group in options_widget.findChildren(QGroupBox)

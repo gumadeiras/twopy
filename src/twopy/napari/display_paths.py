@@ -107,6 +107,7 @@ def microscope_display_lines(recording: RecordingData) -> tuple[str, ...]:
     run = recording.run_metadata
     return (
         f"Rig: {_metadata_text(run, 'rig_name')}",
+        f"Hemisphere: {_hemisphere_text(run)}",
         f"Config: {_metadata_text(acquisition, 'configName')}",
         f"Zoom: {_metadata_text(acquisition, 'acq.zoomFactor')}",
         f"Frame rate: {_metadata_number(acquisition, 'acq.frameRate', ' Hz')}",
@@ -143,6 +144,15 @@ def _metadata_number(metadata: dict[str, object], key: str, suffix: str) -> str:
     if isinstance(value, Real) and not isinstance(value, bool):
         return f"{value:g}{suffix}"
     return _metadata_text(metadata, key)
+
+
+def _hemisphere_text(metadata: dict[str, object]) -> str:
+    """Return the stored hemisphere display text from run metadata."""
+    for key in ("hemisphere", "eye"):
+        value = metadata.get(key)
+        if value is not None and value != "":
+            return str(value)
+    return "unknown"
 
 
 def format_output_folder(path: Path, recording: RecordingData | None) -> str:

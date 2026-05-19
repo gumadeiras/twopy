@@ -15,9 +15,14 @@ from pathlib import Path
 from typing import Protocol
 
 from twopy.napari.errors import exception_message_for_user
-from twopy.napari.loading import ResolvedNapariRecording, resolve_or_convert_recording
+from twopy.napari.loading import (
+    ResolvedNapariRecording,
+    reconvert_recording_to_output,
+    resolve_or_convert_recording,
+)
 from twopy.napari.paths import (
     DEFAULT_PATH_TEXT,
+    NapariRecordingPaths,
     PathInput,
     is_default_path,
 )
@@ -25,6 +30,7 @@ from twopy.napari.session import (
     NapariSessionState,
     record_loaded_view,
     select_loaded_recording,
+    selected_loaded_recording,
 )
 from twopy.napari.state import recording_folder_for_state, write_last_recording_folder
 from twopy.napari.types import NapariRecordingView
@@ -34,6 +40,7 @@ __all__ = [
     "RecordingLoadResult",
     "SourceUnavailableWarning",
     "load_recording_paths",
+    "reconvert_selected_recording",
 ]
 
 
@@ -228,6 +235,34 @@ def _load_one_recording_path(
             source_warnings=source_warnings,
         )
 
+    _open_resolved_recording(
+        state,
+        paths,
+        roi_file_to_load=roi_file_to_load,
+        replace_selected=replace_selected,
+        open_recording=open_recording,
+    )
+    if remember_selected_folder:
+        _remember_recording_folder(
+            selected_recording_path,
+            paths.recording_data_path,
+        )
+    status = "Converted and loaded" if resolved_recording.was_converted else "Loaded"
+    return _SingleRecordingLoad(
+        status_text=f"{status} {paths.recording_data_path}",
+        source_warnings=source_warnings,
+    )
+
+
+def _open_resolved_recording(
+    state: RecordingLoadState,
+    paths: NapariRecordingPaths,
+    *,
+    roi_file_to_load: PathInput,
+    replace_selected: bool,
+    open_recording: Callable[..., NapariRecordingView] | None,
+) -> None:
+    """Open resolved converted paths and register the resulting napari layers."""
     roi_path = (
         paths.roi_file_to_load
         if is_default_path(roi_file_to_load)
@@ -257,15 +292,79 @@ def _load_one_recording_path(
         roi_save_file=paths.roi_save_file,
         replace_selected=replace_selected,
     )
-    if remember_selected_folder:
-        _remember_recording_folder(
-            selected_recording_path,
-            paths.recording_data_path,
+
+
+def reconvert_selected_recording(
+    state: RecordingLoadState,
+    *,
+    reconvert_recording: Callable[[Path, Path], ResolvedNapariRecording] = (
+        reconvert_recording_to_output
+    ),
+    open_recording: Callable[..., NapariRecordingView] | None = None,
+) -> RecordingLoadResult:
+    """Reconvert the selected loaded recording and reload it in place.
+
+    Args:
+        state: Mutable napari session state.
+        reconvert_recording: Conversion callback. Tests can provide a fake;
+            production rewrites the selected output folder from source data.
+        open_recording: Converted-recording opener. Tests can provide a fake;
+            production uses ``open_recording_in_napari``.
+
+    Returns:
+        Structured result with status text or one failure.
+
+    The action is intentionally tied to the selected loaded row. That keeps the
+    overwrite target auditable: source data comes from the recording metadata
+    and converted files are rewritten in the same folder currently being read.
+    """
+    if state.is_loading:
+        message = "Recording load already in progress."
+        return RecordingLoadResult(
+            loaded_count=0,
+            failures=(RecordingLoadFailure(path=None, message=message),),
+            status_text=message,
         )
-    status = "Converted and loaded" if resolved_recording.was_converted else "Loaded"
-    return _SingleRecordingLoad(
-        status_text=f"{status} {paths.recording_data_path}",
-        source_warnings=source_warnings,
+
+    selected = selected_loaded_recording(state)
+    if selected is None:
+        message = "No recording selected."
+        return RecordingLoadResult(
+            loaded_count=0,
+            failures=(RecordingLoadFailure(path=None, message=message),),
+            status_text=message,
+        )
+
+    source_dir = selected.recording.source_session_dir.expanduser()
+    output_dir = selected.recording.path.parent.expanduser()
+    state.is_loading = True
+    state.defer_timeline_updates = True
+    try:
+        try:
+            resolved = reconvert_recording(source_dir, output_dir)
+            _open_resolved_recording(
+                state,
+                resolved.paths,
+                roi_file_to_load=Path(DEFAULT_PATH_TEXT),
+                replace_selected=True,
+                open_recording=open_recording,
+            )
+        except Exception as error:
+            message = exception_message_for_user(error)
+            return RecordingLoadResult(
+                loaded_count=0,
+                failures=(RecordingLoadFailure(path=source_dir, message=message),),
+                status_text=message,
+            )
+    finally:
+        state.is_loading = False
+        state.defer_timeline_updates = False
+        if state.selected_recording_index is not None:
+            select_loaded_recording(state, state.selected_recording_index)
+
+    return RecordingLoadResult(
+        loaded_count=0,
+        status_text=f"Reconverted and loaded {resolved.paths.recording_data_path}",
     )
 
 

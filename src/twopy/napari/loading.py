@@ -28,6 +28,7 @@ from twopy.session import discover_session_files
 
 __all__ = [
     "ResolvedNapariRecording",
+    "reconvert_recording_to_output",
     "resolve_or_convert_launch_recording",
     "resolve_or_convert_recording",
 ]
@@ -107,6 +108,33 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
     )
     return ResolvedNapariRecording(
         paths=resolve_converted_paths(converted.path),
+        was_converted=True,
+    )
+
+
+def reconvert_recording_to_output(
+    source_dir: Path,
+    output_dir: Path,
+) -> ResolvedNapariRecording:
+    """Rebuild converted files for one source recording in a chosen output folder.
+
+    Args:
+        source_dir: Source microscope recording folder.
+        output_dir: Existing converted output folder to overwrite.
+
+    Returns:
+        Resolved converted paths after the recording and movie files are
+        rewritten.
+
+    The Load-tab Reconvert selected action already has an active converted
+    recording, so it should not route through the normal resolver that reuses
+    existing files. This helper forces conversion while preserving the current
+    local/cache output location.
+    """
+    converted = convert_recording_to_twopy(source_dir, output_dir=output_dir)
+    return _refresh_cached_analysis_outputs(
+        paths=resolve_converted_paths(converted.path),
+        source_dir=source_dir,
         was_converted=True,
     )
 

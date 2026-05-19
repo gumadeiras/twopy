@@ -19,7 +19,10 @@ from tests.tempdir import temporary_directory
 
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
-from twopy.napari.load_workflow import load_recording_paths
+from twopy.napari.load_workflow import (
+    load_recording_paths,
+    reconvert_selected_recording,
+)
 from twopy.napari.loading import ResolvedNapariRecording
 from twopy.napari.paths import NapariRecordingPaths, PathInput
 from twopy.napari.protocols import NapariViewer
@@ -393,6 +396,73 @@ class LoadWorkflowTest(unittest.TestCase):
         self.assertEqual(len(result.source_warnings), 1)
         self.assertEqual(result.source_warnings[0].source_path, source)
         self.assertEqual(result.source_warnings[0].cache_path, cache)
+
+    def test_reconvert_selected_recording_reloads_row_in_place(self) -> None:
+        """Confirm reconversion overwrites and reloads the selected row.
+
+        Inputs: one loaded recording and a reconverter fake returning the same
+        output paths.
+        Outputs: old layers are replaced and conversion receives source and
+        output paths from the loaded recording.
+        """
+        state = _State()
+        viewer = cast(_Viewer, state.viewer)
+        source = Path("/source/first")
+        recording_path = Path("/cache/first/recording_data.h5")
+        load_recording_paths(
+            state,
+            (source,),
+            remember_selected_folder=False,
+            resolve_recording=_resolver({source: _resolved_recording(recording_path)}),
+            open_recording=_open_recording,
+        )
+        old_layers = (*viewer.images, *viewer.labels)
+        reconvert_calls: list[tuple[Path, Path]] = []
+
+        def reconvert(
+            source_dir: Path,
+            output_dir: Path,
+        ) -> ResolvedNapariRecording:
+            """Record reconversion arguments and return fresh converted paths."""
+            reconvert_calls.append((source_dir, output_dir))
+            return _resolved_recording(output_dir / "recording_data.h5")
+
+        result = reconvert_selected_recording(
+            state,
+            reconvert_recording=reconvert,
+            open_recording=_open_recording,
+        )
+
+        self.assertEqual(result.failures, ())
+        self.assertEqual(
+            result.status_text,
+            "Reconverted and loaded /cache/first/recording_data.h5",
+        )
+        self.assertEqual(
+            reconvert_calls, [(Path("/cache/first"), Path("/cache/first"))]
+        )
+        self.assertEqual(len(state.loaded_recordings), 1)
+        self.assertEqual(state.selected_recording_index, 0)
+        self.assertEqual(len(viewer.images), 2)
+        self.assertEqual(len(viewer.labels), 1)
+        for layer in old_layers:
+            for remaining_layer in (*viewer.images, *viewer.labels):
+                self.assertIsNot(layer, remaining_layer)
+
+    def test_reconvert_selected_recording_reports_missing_selection(self) -> None:
+        """Confirm reconversion needs a selected loaded recording.
+
+        Inputs: empty session state.
+        Outputs: structured failure and load flag reset.
+        """
+        state = _State()
+
+        result = reconvert_selected_recording(state, open_recording=_open_recording)
+
+        self.assertEqual(result.loaded_count, 0)
+        self.assertEqual(len(result.failures), 1)
+        self.assertEqual(result.failures[0].message, "No recording selected.")
+        self.assertFalse(state.is_loading)
 
 
 def _resolver(

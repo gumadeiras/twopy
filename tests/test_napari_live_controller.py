@@ -40,7 +40,10 @@ from tests.napari_support import (
     sleep,
     temporary_directory,
     unittest,
+    write_converted_recording_files,
 )
+
+from twopy.napari.display_paths import microscope_display_lines
 
 
 class NapariLiveControllerTest(NapariAdapterTestCase):
@@ -98,6 +101,23 @@ class NapariLiveControllerTest(NapariAdapterTestCase):
                 ),
                 "./twopy/exports/plots",
             )
+
+    def test_metadata_tab_shows_hemisphere(self) -> None:
+        """Confirm Metadata-tab microscope details include fly hemisphere.
+
+        Inputs: converted recording with run-level hemisphere metadata.
+        Outputs: compact microscope summary lines include that hemisphere.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = write_converted_recording_files(
+                root,
+                acquisition_metadata={"acq.frameRate": 10.0},
+                run_metadata={"rig_name": "TestRig", "hemisphere": "left"},
+            )
+            recording = load_converted_recording(recording_path)
+
+            self.assertIn("Hemisphere: left", microscope_display_lines(recording))
 
     def test_live_response_controller_updates_after_paint_event(self) -> None:
         """Confirm committed Labels painting triggers a response plot refresh.

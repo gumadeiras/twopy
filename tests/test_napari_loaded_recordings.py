@@ -77,8 +77,10 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 )
             }
             self.assertIn("Open Group Matching", sidebar_buttons)
+            self.assertIn("Reconvert selected", sidebar_buttons)
             self.assertIn("Save loaded list", sidebar_buttons)
             self.assertFalse(sidebar_buttons["Open Group Matching"].isEnabled())
+            self.assertFalse(sidebar_buttons["Reconvert selected"].isEnabled())
             self.assertFalse(sidebar_buttons["Save loaded list"].isEnabled())
 
             load_widget(recording_folder=first)
@@ -97,6 +99,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             self.assertTrue(viewer.images[3].visible)
             self.assertTrue(viewer.labels[1].visible)
             self.assertTrue(sidebar_buttons["Open Group Matching"].isEnabled())
+            self.assertTrue(sidebar_buttons["Reconvert selected"].isEnabled())
             self.assertTrue(sidebar_buttons["Save loaded list"].isEnabled())
             sidebar_buttons["Open Group Matching"].click()
             group_matching_button = cast(
@@ -423,6 +426,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
 
             self.assertEqual(loaded_list.count(), 0)
             self.assertFalse(sidebar_buttons["Open Group Matching"].isEnabled())
+            self.assertFalse(sidebar_buttons["Reconvert selected"].isEnabled())
             self.assertEqual(len(viewer.images), 0)
             self.assertEqual(len(viewer.labels), 0)
             self.assertEqual(load_widget.recording_folder.value, Path("default"))

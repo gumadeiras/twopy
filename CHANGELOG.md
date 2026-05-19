@@ -15,6 +15,8 @@
 
 ### Changes
 
+- Show converted recording hemisphere in the napari Metadata tab.
+- Added a Load-tab Reconvert selected action that confirms and rebuilds the selected recording's converted HDF5 files in place.
 - Routed napari manual, CSV-list, and database recording loads through one shared Load-tab workflow with consistent load-failure wording.
 - Unified napari response preview, live update, and Save Analysis handling around one ROI analysis request so plotted previews and saved outputs use the same ROI masks and Plot-tab settings.
 - Let custom line plots set their y-axis label, and label native response-kernel plots as `Weight`.

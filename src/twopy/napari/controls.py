@@ -35,6 +35,7 @@ from twopy.napari.load_workflow import (
     RecordingLoadResult,
     SourceUnavailableWarning,
     load_recording_paths,
+    reconvert_selected_recording,
 )
 from twopy.napari.loaded_recordings_csv import (
     load_recording_paths_csv,
@@ -51,6 +52,7 @@ from twopy.napari.session import (
     LoadedRecordingsPanel,
     render_loaded_recordings_panel,
     select_loaded_recording,
+    selected_loaded_recording,
     unload_all_loaded_recordings,
     unload_loaded_recording,
 )
@@ -183,11 +185,13 @@ def add_twopy_magicgui_controls(
     response_load_button = _response_load_tab_button(response_plot_widget)
     group_matching_button = GroupMatchingWindowButton(group_matching_widget)
     save_recording_list_button = _save_loaded_recordings_button(state)
+    reconvert_recording_button = _reconvert_selected_recording_button(state)
     state.recording_required_widgets = [
         widget
         for widget in (
             save_recording_list_button,
             response_load_button,
+            reconvert_recording_button,
             group_matching_button,
         )
         if widget is not None
@@ -197,6 +201,7 @@ def add_twopy_magicgui_controls(
         load_widget=load_widget,
         loaded_recordings_widget=loaded_recordings_widget,
         save_recording_list_button=save_recording_list_button,
+        reconvert_recording_button=reconvert_recording_button,
         group_matching_button=group_matching_button,
         response_load_button=response_load_button,
         response_options_widget=response_options_widget,
@@ -341,6 +346,15 @@ def _save_loaded_recordings_button(state: NapariControlState) -> QPushButton:
     button = QPushButton("Save loaded list")
     button.clicked.connect(
         lambda _checked=False: _save_loaded_recordings_from_dialog(state)
+    )
+    return button
+
+
+def _reconvert_selected_recording_button(state: NapariControlState) -> QPushButton:
+    """Return the Load-tab button that rebuilds the selected conversion."""
+    button = QPushButton("Reconvert selected")
+    button.clicked.connect(
+        lambda _checked=False: _reconvert_selected_recording_from_dialog(state)
     )
     return button
 
@@ -610,6 +624,38 @@ def _choose_loaded_recordings_csv_save_path(state: NapariControlState) -> Path |
     if output_path.suffix == "":
         output_path = output_path.with_suffix(".csv")
     return output_path
+
+
+def _reconvert_selected_recording_from_dialog(state: NapariControlState) -> None:
+    """Confirm, reconvert, and reload the selected recording."""
+    selected = selected_loaded_recording(state)
+    if selected is None:
+        return
+    source_dir = selected.recording.source_session_dir.expanduser()
+    output_dir = selected.recording.path.parent.expanduser()
+    response = QMessageBox.question(
+        None,
+        "Reconvert selected recording",
+        (
+            "Rebuild converted files for the selected recording?\n\n"
+            f"Source:\n{source_dir}\n\n"
+            f"Converted output:\n{output_dir}\n\n"
+            "This overwrites recording_data.h5 and aligned_movie.h5 in that "
+            "output folder. ROI and analysis output files are not part of "
+            "conversion."
+        ),
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No,
+    )
+    if response != QMessageBox.StandardButton.Yes:
+        return
+
+    result = reconvert_selected_recording(state)
+    _sync_recording_picker_to_selected(state)
+    if result.failures:
+        _show_load_errors(result)
+        return
+    QMessageBox.information(None, "Reconversion complete", result.status_text)
 
 
 def _show_selection_error(paths: tuple[Path, ...], error: Exception) -> None:

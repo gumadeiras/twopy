@@ -35,6 +35,7 @@ __all__ = [
     "remove_loaded_recording_layers",
     "render_loaded_recordings_panel",
     "select_loaded_recording",
+    "selected_loaded_recording",
     "set_loaded_recording_visibility",
     "unload_all_loaded_recordings",
     "unload_loaded_recording",
@@ -314,6 +315,27 @@ def select_loaded_recording(
             movie_layer=selected.movie_layer,
         )
     render_loaded_recordings_panel(state)
+
+
+def selected_loaded_recording(
+    state: NapariSessionState,
+) -> LoadedNapariRecording | None:
+    """Return the active loaded-recording row, if one is selected.
+
+    Args:
+        state: Mutable napari session state.
+
+    Returns:
+        Selected loaded-recording row, or ``None`` when no valid row is active.
+
+    Load-tab actions use this helper to resolve the same selected row that the
+    visible Loaded Recordings list uses. Keeping this lookup here prevents
+    button callbacks and workflow helpers from drifting apart.
+    """
+    index = state.selected_recording_index
+    if index is None or index < 0 or index >= len(state.loaded_recordings):
+        return None
+    return state.loaded_recordings[index]
 
 
 def refresh_trial_timeline_controller(
