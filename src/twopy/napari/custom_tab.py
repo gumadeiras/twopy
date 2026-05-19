@@ -36,6 +36,7 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.custom import (
+    CustomLineBand,
     CustomLinePlot,
     CustomParameterSpec,
     CustomResult,
@@ -46,6 +47,7 @@ from twopy.custom import (
     discover_custom_workflows,
     parameter_specs,
 )
+from twopy.napari.text import configure_placeholder
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -300,6 +302,7 @@ def _parameter_widget(spec: CustomParameterSpec) -> QWidget:
         return widget
     if spec.kind in {"str", "path"}:
         widget = QLineEdit(str(spec.default))
+        configure_placeholder(widget, _parameter_placeholder(spec))
         if spec.description:
             widget.setToolTip(spec.description)
         return widget
@@ -343,6 +346,15 @@ def _choice_label(value: object) -> str:
     return _CUSTOM_CHOICE_LABELS.get(text, text)
 
 
+def _parameter_placeholder(spec: CustomParameterSpec) -> str:
+    """Return a short placeholder for a text-backed workflow parameter."""
+    if spec.role == "output_name":
+        return "Output path"
+    if spec.description:
+        return spec.description
+    return spec.label
+
+
 def _line_plot_widget(
     plot: CustomLinePlot,
     *,
@@ -359,12 +371,14 @@ def _line_plot_widget(
     labels = plot.labels or tuple(
         f"series {index + 1}" for index in range(y_values.shape[0])
     )
+    for band in plot.bands:
+        _draw_line_plot_band(axes, plot.x, band, colors=plot.colors)
     for index, values in enumerate(y_values):
         axes.plot(
             plot.x,
             values,
             label=labels[index],
-            color=_PLOT_TRACE_COLORS[index % len(_PLOT_TRACE_COLORS)],
+            color=_line_plot_color(index, plot.colors),
             linewidth=1.8,
         )
     if y_bounds is not None:
@@ -374,6 +388,32 @@ def _line_plot_widget(
         _style_line_plot_legend(axes)
     figure.tight_layout()
     return _line_plot_canvas(figure)
+
+
+def _draw_line_plot_band(
+    axes: Axes,
+    x_values: np.ndarray,
+    band: CustomLineBand,
+    *,
+    colors: tuple[str, ...],
+) -> None:
+    """Draw one filled uncertainty band behind its owning line series."""
+    axes.fill_between(
+        x_values,
+        band.lower,
+        band.upper,
+        color=_line_plot_color(band.series_index, colors),
+        alpha=0.2,
+        linewidth=0.0,
+        label=band.label or None,
+    )
+
+
+def _line_plot_color(index: int, colors: tuple[str, ...]) -> str:
+    """Return the explicit or fallback color for one custom line series."""
+    if index < len(colors):
+        return colors[index]
+    return _PLOT_TRACE_COLORS[index % len(_PLOT_TRACE_COLORS)]
 
 
 def _line_plot_y_bounds(
@@ -386,6 +426,11 @@ def _line_plot_y_bounds(
         finite = values[np.isfinite(values)]
         if finite.size > 0:
             finite_values.append(finite)
+        for band in plot.bands:
+            band_values = np.asarray((band.lower, band.upper), dtype=np.float64)
+            finite_band = band_values[np.isfinite(band_values)]
+            if finite_band.size > 0:
+                finite_values.append(finite_band)
     if not finite_values:
         return None
 

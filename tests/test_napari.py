@@ -14,6 +14,7 @@ from tests.napari_support import (
     QDoubleSpinBox,
     QGroupBox,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QTableWidget,
@@ -37,10 +38,18 @@ from tests.napari_support import (
 )
 
 from twopy.analysis_cache import AnalysisSyncPlan
-from twopy.custom import CustomParameterSpec, CustomResult, CustomTable, CustomWorkflow
+from twopy.custom import (
+    CustomLinePlot,
+    CustomParameterSpec,
+    CustomResult,
+    CustomRunContext,
+    CustomTable,
+    CustomWorkflow,
+)
 from twopy.napari.custom_tab import CustomWorkflowPanel, _parameter_widget
 from twopy.napari.plotting.docks.response_plot_widget import (
     _custom_workflow_display_result,
+    _custom_workflow_result_with_roi_colors,
 )
 
 
@@ -103,6 +112,45 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
         self.assertEqual(threshold_widget.decimals(), 3)
         self.assertEqual(ordinary_widget.decimals(), 6)
 
+    def test_text_parameters_use_shared_placeholder_style(self) -> None:
+        """Confirm custom workflow text fields use napari placeholders.
+
+        Inputs: string and path workflow parameter specs.
+        Outputs: line edits with shared ellipsis placeholder text.
+        """
+        _ = QApplication.instance() or QApplication([])
+        note_widget = _parameter_widget(
+            CustomParameterSpec(
+                name="note",
+                label="Note",
+                kind="str",
+                default="",
+                description="Free text saved with this run",
+            )
+        )
+        path_widget = _parameter_widget(
+            CustomParameterSpec(
+                name="output_name",
+                label="Output file",
+                kind="path",
+                default=Path("result.csv"),
+                description="Relative output path",
+                role="output_name",
+            )
+        )
+
+        self.assertIsInstance(note_widget, QLineEdit)
+        self.assertIsInstance(path_widget, QLineEdit)
+        assert isinstance(note_widget, QLineEdit)
+        assert isinstance(path_widget, QLineEdit)
+        self.assertEqual(
+            note_widget.placeholderText(),
+            "Free text saved with this run...",
+        )
+        self.assertTrue(note_widget.font().italic())
+        self.assertEqual(path_widget.placeholderText(), "Output path...")
+        self.assertFalse(path_widget.font().italic())
+
     def test_custom_workflow_sync_result_shows_publish_table_path(self) -> None:
         """Confirm cached custom tables display the publish path."""
         with temporary_directory() as temp_dir:
@@ -137,6 +185,24 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
                 / "1.0"
                 / "dsi.csv",
             )
+
+    def test_custom_workflow_result_auto_colors_roi_labeled_plots(self) -> None:
+        """Confirm custom ROI plots inherit current ROI colors by label."""
+        plot = CustomLinePlot(
+            "ROI kernels",
+            np.array([0.0, 1.0], dtype=np.float64),
+            np.array([[1.0, 2.0], [2.0, 3.0]], dtype=np.float64),
+            labels=("roi_0002", "roi_0001"),
+        )
+        result = CustomResult(message="ok", plots=(plot,))
+        context = cast(
+            CustomRunContext,
+            _FakeColorContext({"roi_0001": "#111111", "roi_0002": "#222222"}),
+        )
+
+        colored = _custom_workflow_result_with_roi_colors(result, context)
+
+        self.assertEqual(colored.plots[0].colors, ("#222222", "#111111"))
 
     def test_custom_workflow_panel_previews_returned_tables(self) -> None:
         """Confirm custom workflow tables render in the Custom tab."""
@@ -415,6 +481,24 @@ def _unused_custom_run(
 ) -> CustomResult:
     """Raise if a custom workflow panel test unexpectedly runs a workflow."""
     raise AssertionError((workflow, params))
+
+
+class _FakeColorContext:
+    """Small context double for custom plot color routing tests."""
+
+    def __init__(self, colors: dict[str, str]) -> None:
+        """Store ROI colors keyed by label."""
+        self._colors = colors
+
+    def roi_colors_for_labels(self, labels: tuple[str, ...]) -> tuple[str, ...]:
+        """Return colors only when every label is known."""
+        colors: list[str] = []
+        for label in labels:
+            color = self._colors.get(label)
+            if color is None:
+                return ()
+            colors.append(color)
+        return tuple(colors)
 
 
 if __name__ == "__main__":

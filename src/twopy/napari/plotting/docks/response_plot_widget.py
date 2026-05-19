@@ -40,6 +40,7 @@ from twopy.analysis_cache import (
 from twopy.config import load_config
 from twopy.converted import RecordingData
 from twopy.custom import (
+    CustomLinePlot,
     CustomParameterSpec,
     CustomResult,
     CustomRunContext,
@@ -120,7 +121,7 @@ from twopy.pixel_calibration_profiles import (
     PixelCalibrationProfileMapping,
     load_pixel_calibration_profile_mappings,
 )
-from twopy.roi import RoiSet, roi_set_to_label_image
+from twopy.roi import RoiSet, roi_label_values_from_labels, roi_set_to_label_image
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 _CUSTOM_EPOCH_WINDOW_MIN_SECONDS = 0.0
@@ -589,6 +590,7 @@ class _ResponsePlotWidget(QWidget):
             provenance=provenance,
             visible_roi_indices=self._custom_workflow_visible_roi_indices(roi_set),
             visible_epoch_numbers=self._custom_workflow_visible_epoch_numbers(),
+            roi_colors=self._custom_workflow_roi_colors(roi_set),
         )
         if params is None:
             raw_result = workflow.function(context)
@@ -599,6 +601,7 @@ class _ResponsePlotWidget(QWidget):
             output_dir=output_dir,
             expected_roi_shape=self._recording.movie.shape[1:],
         )
+        result = _custom_workflow_result_with_roi_colors(result, context)
         provenance_paths = write_result_provenance(result, provenance)
         sync_plan = build_analysis_sync_plan(
             recording=self._recording,
@@ -671,6 +674,19 @@ class _ResponsePlotWidget(QWidget):
                 if epoch_number not in numbers:
                     numbers.append(epoch_number)
         return tuple(numbers)
+
+    def _custom_workflow_roi_colors(self, roi_set: RoiSet | None) -> tuple[str, ...]:
+        """Return current ROI colors aligned to one workflow ROI set."""
+        if roi_set is None:
+            return ()
+        colors = opaque_colors(
+            roi_colors_from_label_values(
+                self._roi_labels_layer,
+                roi_label_values_from_labels(roi_set.labels),
+                fallback_count=len(roi_set.labels),
+            )
+        )
+        return tuple(color.name() for color in colors)
 
     def _current_roi_set_for_custom_workflow(
         self,
@@ -1555,6 +1571,36 @@ def _custom_workflow_display_result(
             for table in result.tables
         ),
     )
+
+
+def _custom_workflow_result_with_roi_colors(
+    result: CustomResult,
+    context: CustomRunContext,
+) -> CustomResult:
+    """Apply current ROI colors to ROI-labeled custom line plots."""
+    updated_plots: list[CustomLinePlot] = []
+    changed = False
+    for plot in result.plots:
+        updated = _custom_line_plot_with_roi_colors(plot, context)
+        updated_plots.append(updated)
+        if updated is not plot:
+            changed = True
+    if not changed:
+        return result
+    return replace(result, plots=tuple(updated_plots))
+
+
+def _custom_line_plot_with_roi_colors(
+    plot: CustomLinePlot,
+    context: CustomRunContext,
+) -> CustomLinePlot:
+    """Return one plot with ROI colors when labels identify current ROIs."""
+    if len(plot.colors) > 0 or len(plot.labels) == 0:
+        return plot
+    colors = context.roi_colors_for_labels(plot.labels)
+    if len(colors) != len(plot.labels):
+        return plot
+    return replace(plot, colors=colors)
 
 
 def _custom_workflow_publish_path(

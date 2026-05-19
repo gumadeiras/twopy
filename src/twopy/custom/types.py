@@ -33,6 +33,7 @@ from twopy.stimulus import stimulus_epoch_names_by_number
 
 __all__ = [
     "CustomEpoch",
+    "CustomLineBand",
     "CustomLinePlot",
     "CustomParameterValue",
     "CustomResult",
@@ -84,6 +85,26 @@ class CustomTable:
 
 
 @dataclass(frozen=True)
+class CustomLineBand:
+    """Filled uncertainty band shown behind one custom line-plot series.
+
+    Args:
+        series_index: Zero-based line series that owns the band color.
+        lower: One-dimensional lower bound values.
+        upper: One-dimensional upper bound values.
+        label: Optional legend label for the band.
+
+    Returns:
+        Immutable band descriptor.
+    """
+
+    series_index: int
+    lower: npt.NDArray[np.float64]
+    upper: npt.NDArray[np.float64]
+    label: str = ""
+
+
+@dataclass(frozen=True)
 class CustomLinePlot:
     """Line plot shown in the Custom tab.
 
@@ -94,6 +115,8 @@ class CustomLinePlot:
             values.
         labels: Optional series labels.
         y_label: Y-axis label shown beside the plot.
+        bands: Optional filled uncertainty bands that share the x-axis.
+        colors: Optional ``#RRGGBB`` line colors matching the plotted series.
 
     Returns:
         Immutable plot descriptor.
@@ -104,6 +127,8 @@ class CustomLinePlot:
     y: npt.NDArray[np.float64]
     labels: tuple[str, ...] = ()
     y_label: str = "Value"
+    bands: tuple[CustomLineBand, ...] = ()
+    colors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -287,6 +312,7 @@ class CustomRunContext:
         visible_epoch_numbers: One-based stimulus epoch numbers currently
             visible in the response dock. Empty means no visibility state is
             available.
+        roi_colors: ``#RRGGBB`` colors matching ``current_rois().labels``.
 
     Returns:
         Run context with file, ROI, and analysis helpers.
@@ -302,6 +328,7 @@ class CustomRunContext:
     provenance: CustomWorkflowProvenance
     visible_roi_indices: tuple[int, ...] = ()
     visible_epoch_numbers: tuple[int, ...] = ()
+    roi_colors: tuple[str, ...] = ()
 
     def current_rois(self) -> RoiSet:
         """Return current ROI masks or raise a clear error."""
@@ -326,6 +353,43 @@ class CustomRunContext:
             return self._visible_rois()
         msg = f"Unknown ROI selector {selector!r}."
         raise ValueError(msg)
+
+    def roi_color_map(self) -> dict[str, str]:
+        """Return current ROI plot colors keyed by ROI label.
+
+        Args:
+            None.
+
+        Returns:
+            Mapping from current ROI labels to ``#RRGGBB`` colors. Missing
+            colors are omitted so callers can fall back to the default plot
+            palette.
+        """
+        if self.roi_set is None:
+            return {}
+        return dict(zip(self.roi_set.labels, self.roi_colors, strict=False))
+
+    def roi_colors_for_labels(self, labels: Sequence[str]) -> tuple[str, ...]:
+        """Return ROI colors for a plot whose series labels are ROI labels.
+
+        Args:
+            labels: Plot series labels, usually from a selected ``RoiSet``.
+
+        Returns:
+            ``#RRGGBB`` colors in ``labels`` order, or an empty tuple when any
+            label is not a current ROI label.
+
+        This helper lets workflow plots opt into the same ROI colors used by
+        the napari ROIs tab without depending on napari objects.
+        """
+        color_by_label = self.roi_color_map()
+        colors: list[str] = []
+        for label in labels:
+            color = color_by_label.get(label)
+            if color is None:
+                return ()
+            colors.append(color)
+        return tuple(colors)
 
     def epoch_numbers_for_selector(self, selector: str) -> tuple[int, ...] | None:
         """Return the epoch numbers selected in an ``epoch_selector`` control.

@@ -16,7 +16,6 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-import numpy.typing as npt
 
 from twopy.analysis.background_subtraction import (
     BackgroundCorrectedRoiTraces,
@@ -35,6 +34,7 @@ from twopy.analysis.response_processing.persistence import (
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseTrial,
+    finite_mean_and_sem,
     validate_grouped_roi_responses,
 )
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
@@ -958,7 +958,7 @@ def _values_by_time_column(
             trial.values[:, roi_index],
             strict=True,
         ):
-            if not np.isnan(value):
+            if np.isfinite(value):
                 values_by_time[_time_column_name(float(time_seconds))].append(
                     float(value),
                 )
@@ -995,24 +995,15 @@ def _epoch_roi_statistic_rows(
     count_row = {**base_row, "statistic": "n_trials"}
     for column in time_columns:
         values = np.asarray(values_by_time[column], dtype=np.float64)
-        mean_row[column] = float(np.nanmean(values)) if values.size > 0 else ""
-        sem_row[column] = _sem(values) if values.size > 0 else ""
+        if values.size > 0:
+            mean, sem = finite_mean_and_sem(values, axis=0)
+            mean_row[column] = float(mean)
+            sem_row[column] = float(sem)
+        else:
+            mean_row[column] = ""
+            sem_row[column] = ""
         count_row[column] = int(values.size)
     return mean_row, sem_row, count_row
-
-
-def _sem(values: npt.NDArray[np.float64]) -> float:
-    """Return the standard error for repeated-trial values.
-
-    Args:
-        values: One-dimensional response values at a single timepoint.
-
-    Returns:
-        SEM value, or ``0`` when only one trial contributes.
-    """
-    if values.size <= 1:
-        return 0.0
-    return float(np.nanstd(values, ddof=1) / np.sqrt(values.size))
 
 
 def _require_analysis_format(h5_file: h5py.File, path: Path) -> None:

@@ -15,11 +15,13 @@ from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.converted import load_converted_recording
 from twopy.custom import (
+    CustomLineBand,
     CustomLinePlot,
     CustomResult,
     CustomRunContext,
     CustomWorkflowProvenance,
     discover_custom_workflows,
+    finite_mean_and_sem,
     native_custom_workflow_paths,
     parameter_specs,
     provenance_sidecar_path,
@@ -36,6 +38,7 @@ from twopy.custom.native_workflows.response_kernels import (
     ResponseKernelParams,
     _kernel_output_stem,
     _lag_column_labels,
+    _mean_sem_plot_series,
 )
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.roi import RoiSet, make_roi_set
@@ -292,6 +295,51 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
                 expected_roi_shape=(1, 1),
             )
 
+    def test_custom_line_plot_validates_band_shape(self) -> None:
+        """Confirm custom line plot bands must match the plotted x-axis."""
+        plot = CustomLinePlot(
+            "Plot",
+            np.array([0.0, 1.0], dtype=np.float64),
+            np.array([1.0, 2.0], dtype=np.float64),
+            bands=(
+                CustomLineBand(
+                    series_index=0,
+                    lower=np.array([0.5], dtype=np.float64),
+                    upper=np.array([1.5], dtype=np.float64),
+                ),
+            ),
+        )
+
+        with (
+            temporary_directory() as temp_dir,
+            self.assertRaisesRegex(ValueError, "CustomLineBand"),
+        ):
+            validate_custom_result(
+                CustomResult(message="ok", plots=(plot,)),
+                output_dir=Path(temp_dir) / "custom_outputs",
+                expected_roi_shape=(1, 1),
+            )
+
+    def test_custom_line_plot_validates_explicit_colors(self) -> None:
+        """Confirm custom line plot colors must be hex colors per series."""
+        plot = CustomLinePlot(
+            "Plot",
+            np.array([0.0, 1.0], dtype=np.float64),
+            np.array([[1.0, 2.0], [2.0, 3.0]], dtype=np.float64),
+            labels=("roi_0001", "roi_0002"),
+            colors=("#123456", "not-a-color"),
+        )
+
+        with (
+            temporary_directory() as temp_dir,
+            self.assertRaisesRegex(ValueError, "colors"),
+        ):
+            validate_custom_result(
+                CustomResult(message="ok", plots=(plot,)),
+                output_dir=Path(temp_dir) / "custom_outputs",
+                expected_roi_shape=(1, 1),
+            )
+
     def test_reference_showcase_uses_all_parameter_kinds(self) -> None:
         """Confirm the reference example covers every parameter role."""
         workflow_path = Path("examples/custom_workflows/reference_showcase.py")
@@ -379,6 +427,19 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
                 for fragment in forbidden_fragments:
                     self.assertNotIn(fragment, source)
 
+    def test_custom_api_exposes_mean_sem_helper(self) -> None:
+        """Confirm workflow files can import shared mean/SEM without internals.
+
+        Inputs: public ``twopy.custom`` import.
+        Outputs: finite-sample mean and sample SEM.
+        """
+        values = np.array([[1.0, 2.0], [3.0, np.inf]], dtype=np.float64)
+
+        means, sems = finite_mean_and_sem(values, axis=0)
+
+        np.testing.assert_allclose(means, np.array([2.0, 2.0]))
+        np.testing.assert_allclose(sems, np.array([1.0, 0.0]))
+
 
 class CustomRunContextApiTest(unittest.TestCase):
     """Tests the public context API exposed to workflows."""
@@ -454,6 +515,30 @@ class CustomRunContextApiTest(unittest.TestCase):
 
             self.assertEqual(all_rois.labels, roi_set.labels)
             self.assertEqual(visible_rois.labels, ("roi_0001", "roi_0003"))
+
+    def test_roi_colors_for_labels_returns_selected_roi_order(self) -> None:
+        """Confirm workflows can color ROI-labeled plots without napari imports."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = write_converted_recording_files(
+                root,
+                movie_values=np.ones((3, 2, 2), dtype=np.float64),
+            )
+            roi_set = make_roi_set(
+                np.ones((3, 1, 1), dtype=np.bool_),
+                labels=("roi_0001", "roi_0002", "roi_0003"),
+            )
+            ctx = _custom_context(
+                recording_path,
+                roi_set=roi_set,
+                roi_colors=("#111111", "#222222", "#333333"),
+            )
+
+            self.assertEqual(
+                ctx.roi_colors_for_labels(("roi_0003", "roi_0001")),
+                ("#333333", "#111111"),
+            )
+            self.assertEqual(ctx.roi_colors_for_labels(("not_roi",)), ())
 
     def test_matrix_csv_accepts_explicit_column_labels(self) -> None:
         """Confirm workflow matrix CSVs can carry scientific axis labels."""
@@ -570,6 +655,28 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
             self.assertIn("roi_0001,nan", table_text)
             self.assertEqual(ctx.plotted_roi_indices, (2,))
             self.assertEqual(result.tables[0].highlighted_rows, (2,))
+
+
+class NativeResponseKernelWorkflowTest(unittest.TestCase):
+    """Tests for packaged response-kernel workflow helpers."""
+
+    def test_mean_sem_plot_series_use_shared_sample_sem(self) -> None:
+        """Confirm native kernel mean plots use the public workflow SEM helper.
+
+        Inputs: two ROI kernel rows.
+        Outputs: mean row plus a filled SEM band descriptor for the line plot.
+        """
+        mean, band = _mean_sem_plot_series(
+            np.array([[1.0, 3.0], [3.0, 7.0]], dtype=np.float64),
+            series_index=2,
+            label="odor ipsi",
+        )
+
+        np.testing.assert_allclose(mean, np.array([2.0, 5.0]))
+        np.testing.assert_allclose(band.lower, np.array([1.0, 3.0]))
+        np.testing.assert_allclose(band.upper, np.array([3.0, 7.0]))
+        self.assertEqual(band.series_index, 2)
+        self.assertEqual(band.label, "odor ipsi SEM")
 
 
 class CustomWorkflowProvenanceTest(unittest.TestCase):
@@ -779,6 +886,7 @@ def _custom_context(
     *,
     roi_set: RoiSet | None = None,
     visible_roi_indices: tuple[int, ...] = (),
+    roi_colors: tuple[str, ...] = (),
 ) -> CustomRunContext:
     """Return a minimal custom workflow context for one converted recording."""
     recording = load_converted_recording(recording_path)
@@ -802,6 +910,7 @@ def _custom_context(
             recording_path=recording_path,
         ),
         visible_roi_indices=visible_roi_indices,
+        roi_colors=roi_colors,
     )
 
 

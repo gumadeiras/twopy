@@ -21,7 +21,14 @@ from twopy.analysis import (
     default_kernel_stimulus_column,
     fit_recording_stimulus_kernels,
 )
-from twopy.custom import CustomLinePlot, CustomResult, CustomRunContext, workflow
+from twopy.custom import (
+    CustomLineBand,
+    CustomLinePlot,
+    CustomResult,
+    CustomRunContext,
+    finite_mean_and_sem,
+    workflow,
+)
 
 _SAFE_FILENAME_PART = re.compile(r"[^A-Za-z0-9_.-]+")
 _KERNEL_Y_LABEL = "Weight"
@@ -183,6 +190,7 @@ def _olfactory_kernel_result(
     summary_path = ctx.output_path(f"{params.output_prefix}_summary.csv")
     files: list[Path] = []
     plots: list[CustomLinePlot] = []
+    roi_colors = ctx.roi_colors_for_labels(kernels.roi_labels)
     lag_columns = _lag_column_labels(kernels.time_seconds)
     for epoch_index, epoch_name in enumerate(kernels.epoch_names):
         stem = _kernel_output_stem(
@@ -216,6 +224,7 @@ def _olfactory_kernel_result(
                     ipsi,
                     kernels.roi_labels,
                     y_label=_KERNEL_Y_LABEL,
+                    colors=roi_colors,
                 ),
                 CustomLinePlot(
                     f"Contra kernels - {epoch_name}",
@@ -223,24 +232,39 @@ def _olfactory_kernel_result(
                     contra,
                     kernels.roi_labels,
                     y_label=_KERNEL_Y_LABEL,
+                    colors=roi_colors,
                 ),
             )
         )
     _write_kernel_summary(summary_path, kernels)
     mean_rows: list[np.ndarray] = []
     mean_labels: list[str] = []
+    mean_bands: list[CustomLineBand] = []
     for epoch_index, epoch_name in enumerate(kernels.epoch_names):
-        mean_rows.append(np.nanmean(kernels.ipsilateral[epoch_index], axis=0))
+        ipsi_mean, ipsi_band = _mean_sem_plot_series(
+            kernels.ipsilateral[epoch_index],
+            series_index=len(mean_rows),
+            label=f"{epoch_name} ipsi",
+        )
+        mean_rows.append(ipsi_mean)
         mean_labels.append(f"{epoch_name} ipsi")
-        mean_rows.append(np.nanmean(kernels.contralateral[epoch_index], axis=0))
+        mean_bands.append(ipsi_band)
+        contra_mean, contra_band = _mean_sem_plot_series(
+            kernels.contralateral[epoch_index],
+            series_index=len(mean_rows),
+            label=f"{epoch_name} contra",
+        )
+        mean_rows.append(contra_mean)
         mean_labels.append(f"{epoch_name} contra")
+        mean_bands.append(contra_band)
     plots.append(
         CustomLinePlot(
-            "Mean ipsi/contra kernels",
+            "Mean +/- SEM ipsi/contra kernels",
             kernels.time_seconds,
             np.stack(mean_rows, axis=0),
             tuple(mean_labels),
             y_label=_KERNEL_Y_LABEL,
+            bands=tuple(mean_bands),
         )
     )
     return CustomResult(
@@ -266,7 +290,10 @@ def _visual_kernel_result(
     summary_path = ctx.output_path(f"{params.output_prefix}_summary.csv")
     files: list[Path] = []
     plots: list[CustomLinePlot] = []
+    roi_colors = ctx.roi_colors_for_labels(kernels.roi_labels)
     mean_rows: list[np.ndarray] = []
+    mean_labels: list[str] = []
+    mean_bands: list[CustomLineBand] = []
     lag_columns = _lag_column_labels(kernels.time_seconds)
     for epoch_index, epoch_name in enumerate(kernels.epoch_names):
         stem = _kernel_output_stem(
@@ -291,17 +318,26 @@ def _visual_kernel_result(
                 contrast,
                 kernels.roi_labels,
                 y_label=_KERNEL_Y_LABEL,
+                colors=roi_colors,
             )
         )
-        mean_rows.append(np.nanmean(contrast, axis=0))
+        contrast_mean, contrast_band = _mean_sem_plot_series(
+            contrast,
+            series_index=len(mean_rows),
+            label=epoch_name,
+        )
+        mean_rows.append(contrast_mean)
+        mean_labels.append(epoch_name)
+        mean_bands.append(contrast_band)
     _write_kernel_summary(summary_path, kernels)
     plots.append(
         CustomLinePlot(
-            "Mean contrast kernels",
+            "Mean +/- SEM contrast kernels",
             kernels.time_seconds,
             np.stack(mean_rows, axis=0),
-            kernels.epoch_names,
+            tuple(mean_labels),
             y_label=_KERNEL_Y_LABEL,
+            bands=tuple(mean_bands),
         )
     )
     return CustomResult(
@@ -312,6 +348,22 @@ def _visual_kernel_result(
         ),
         files=(*files, summary_path),
         plots=tuple(plots),
+    )
+
+
+def _mean_sem_plot_series(
+    values: np.ndarray,
+    *,
+    series_index: int,
+    label: str,
+) -> tuple[np.ndarray, CustomLineBand]:
+    """Return one mean row and filled SEM band for one kernel matrix."""
+    mean, sem = finite_mean_and_sem(values, axis=0)
+    return mean, CustomLineBand(
+        series_index=series_index,
+        lower=mean - sem,
+        upper=mean + sem,
+        label=f"{label} SEM",
     )
 
 

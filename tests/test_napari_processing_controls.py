@@ -35,6 +35,7 @@ from tests.napari_support import (
 )
 
 from twopy.custom import (
+    CustomLineBand,
     CustomLinePlot,
     CustomParameterSpec,
     discover_custom_workflows,
@@ -270,6 +271,36 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
         self.assertEqual(widget.focusPolicy(), Qt.FocusPolicy.NoFocus)
         self.assertGreaterEqual(len(axes.lines), 3)
 
+    def test_custom_line_plot_draws_filled_bands(self) -> None:
+        """Confirm custom line plot bands render as filled uncertainty regions."""
+        from matplotlib.colors import to_hex
+
+        _ = QApplication.instance() or QApplication([])
+        plot = CustomLinePlot(
+            "Kernel",
+            np.array([-1.0, 0.0, 1.0], dtype=np.float64),
+            np.array([[0.0, 1.0, 0.0]], dtype=np.float64),
+            ("mean",),
+            y_label="Weight",
+            colors=("#123456",),
+            bands=(
+                CustomLineBand(
+                    series_index=0,
+                    lower=np.array([-0.5, 0.5, -0.5], dtype=np.float64),
+                    upper=np.array([0.5, 1.5, 0.5], dtype=np.float64),
+                    label="SEM",
+                ),
+            ),
+        )
+
+        widget = cast(Any, _line_plot_widget(plot, y_bounds=None))
+        axes = widget.figure.axes[0]
+
+        self.assertEqual(len(axes.collections), 1)
+        self.assertEqual(axes.collections[0].get_label(), "SEM")
+        self.assertEqual(to_hex(axes.lines[0].get_color()), "#123456")
+        self.assertEqual(to_hex(axes.collections[0].get_facecolor()[0]), "#123456")
+
     def test_custom_line_plot_y_bounds_span_all_result_plots(self) -> None:
         """Confirm a workflow result can use one y scale for every line plot."""
         plots = (
@@ -278,6 +309,13 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 np.array([0.0, 1.0], dtype=np.float64),
                 np.array([[1.0, 2.0]], dtype=np.float64),
                 ("a",),
+                bands=(
+                    CustomLineBand(
+                        series_index=0,
+                        lower=np.array([-20.0, -10.0], dtype=np.float64),
+                        upper=np.array([10.0, 12.0], dtype=np.float64),
+                    ),
+                ),
             ),
             CustomLinePlot(
                 "B",
@@ -287,7 +325,7 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             ),
         )
 
-        self.assertEqual(_line_plot_y_bounds(plots), (-10.75, 5.75))
+        self.assertEqual(_line_plot_y_bounds(plots), (-21.6, 13.6))
 
     def test_native_kernel_modality_parameter_uses_dropdown(self) -> None:
         """Confirm native kernel stimulus mode is a dropdown."""

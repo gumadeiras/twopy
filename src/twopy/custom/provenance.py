@@ -12,6 +12,7 @@ import numpy as np
 import yaml
 
 from twopy.custom.types import (
+    CustomLineBand,
     CustomLinePlot,
     CustomResult,
     CustomWorkflowProvenance,
@@ -181,6 +182,15 @@ def _validate_line_plot(plot: CustomLinePlot) -> None:
     if plot.x.ndim != 1:
         msg = f"CustomLinePlot.x must be one-dimensional; got {plot.x.shape}"
         raise ValueError(msg)
+    series_count = _validate_line_plot_y(plot)
+    _validate_line_plot_colors(plot.colors, series_count=series_count)
+    _validate_line_plot_bands(
+        plot.bands, x_length=plot.x.shape[0], series_count=series_count
+    )
+
+
+def _validate_line_plot_y(plot: CustomLinePlot) -> int:
+    """Check line values and return the number of plotted series."""
     if plot.y.ndim == 1:
         if plot.y.shape[0] != plot.x.shape[0]:
             msg = "CustomLinePlot 1D y length must match x length."
@@ -188,7 +198,7 @@ def _validate_line_plot(plot: CustomLinePlot) -> None:
         if len(plot.labels) not in {0, 1}:
             msg = "CustomLinePlot 1D y can have zero or one label."
             raise ValueError(msg)
-        return
+        return 1
     if plot.y.ndim == 2:
         if plot.y.shape[1] != plot.x.shape[0]:
             msg = "CustomLinePlot 2D y sample count must match x length."
@@ -196,9 +206,53 @@ def _validate_line_plot(plot: CustomLinePlot) -> None:
         if len(plot.labels) not in {0, plot.y.shape[0]}:
             msg = "CustomLinePlot labels must match the number of y rows."
             raise ValueError(msg)
-        return
+        return int(plot.y.shape[0])
     msg = f"CustomLinePlot.y must be one- or two-dimensional; got {plot.y.shape}"
     raise ValueError(msg)
+
+
+def _validate_line_plot_colors(
+    colors: tuple[str, ...],
+    *,
+    series_count: int,
+) -> None:
+    """Check optional custom line colors before GUI rendering."""
+    if len(colors) not in {0, series_count}:
+        msg = "CustomLinePlot colors must match the number of plotted series."
+        raise ValueError(msg)
+    for color in colors:
+        if not _is_hex_color(color):
+            msg = f"CustomLinePlot colors must be #RRGGBB strings; got {color!r}."
+            raise ValueError(msg)
+
+
+def _is_hex_color(value: str) -> bool:
+    """Return whether a string is a six-digit RGB hex color."""
+    if not isinstance(value, str) or len(value) != 7 or value[0] != "#":
+        return False
+    return all(character in "0123456789abcdefABCDEF" for character in value[1:])
+
+
+def _validate_line_plot_bands(
+    bands: tuple[CustomLineBand, ...],
+    *,
+    x_length: int,
+    series_count: int,
+) -> None:
+    """Check custom line-plot bands before GUI rendering."""
+    for band in bands:
+        if band.series_index < 0 or band.series_index >= series_count:
+            msg = (
+                "CustomLineBand.series_index must point at a plot series; "
+                f"got {band.series_index} for {series_count} series"
+            )
+            raise ValueError(msg)
+        if band.lower.ndim != 1 or band.upper.ndim != 1:
+            msg = "CustomLineBand lower and upper values must be one-dimensional."
+            raise ValueError(msg)
+        if band.lower.shape[0] != x_length or band.upper.shape[0] != x_length:
+            msg = "CustomLineBand lower and upper values must match x length."
+            raise ValueError(msg)
 
 
 def _validate_response_plot_data(plot_data: object) -> None:

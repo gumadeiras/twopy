@@ -9,11 +9,12 @@ from implementation details like SQLite table names.
 
 from pathlib import Path
 
-from twopy.config import DEFAULT_CONFIG_PATH, load_config
-from twopy.database import DatabaseAccess, DatabaseExperiment
+from twopy.analysis import finite_mean_and_sem
+from twopy.config import DEFAULT_CONFIG_PATH, DatabaseAccess, load_config
+from twopy.database import DatabaseExperiment
 from twopy.database import find_recordings as _find_recordings
 
-__all__ = ["find_recordings"]
+__all__ = ["find_recordings", "finite_mean_and_sem"]
 
 
 def find_recordings(

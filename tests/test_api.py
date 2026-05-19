@@ -10,11 +10,20 @@ from pathlib import Path
 
 from tests.tempdir import temporary_directory
 
-from twopy import find_recordings
+from twopy import find_recordings, finite_mean_and_sem
+from twopy.api import finite_mean_and_sem as api_finite_mean_and_sem
 
 
 class PublicApiTest(unittest.TestCase):
     """Tests script-level twopy entrypoints."""
+
+    def test_script_api_exposes_mean_sem_helper(self) -> None:
+        """Confirm scripts can import the shared mean/SEM helper from public APIs.
+
+        Inputs: top-level and ``twopy.api`` imports.
+        Outputs: both names resolve to the same public helper.
+        """
+        self.assertIs(api_finite_mean_and_sem, finite_mean_and_sem)
 
     def test_find_recordings_uses_configured_database_path(self) -> None:
         """Confirm the public API loads config and applies filters.

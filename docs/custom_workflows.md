@@ -4,7 +4,7 @@ Custom workflows are trusted Python files shown in the napari Custom tab. twopy 
 
 Direction selectivity uses the loaded recording's epoch names for its preferred and null epoch dropdowns. It computes DSI per ROI, shows the table in the Custom tab, highlights rows that pass the absolute DSI threshold, and sends only passing ROIs to the response plot.
 
-Response kernels is a separate workflow. It fits random-noise temporal kernels for the current ROIs, supports olfactory antenna activation and visual contrast with a Stimulus dropdown, uses a Baseline epoch dropdown to exclude gray or interleave samples, writes one CSV matrix per unique epoch name and kernel stream, and shows per-ROI plus mean kernel plots.
+Response kernels is a separate workflow. It fits random-noise temporal kernels for the current ROIs, supports olfactory antenna activation and visual contrast with a Stimulus dropdown, uses a Baseline epoch dropdown to exclude gray or interleave samples, writes one CSV matrix per unique epoch name and kernel stream, and shows per-ROI plus mean +/- SEM kernel plots.
 
 ## Configure
 
@@ -78,7 +78,9 @@ twopy rejects workflows that are missing `id`, `name`, `version`, `description`,
 - `ctx.response_window(start, stop)` validates a response-plot-relative window. Negative starts are allowed because response plots can include pre-epoch baseline.
 - `ctx.epoch_metric(grouped, epoch, metric, window_seconds=(start, stop))` computes mean, peak, or minimum per ROI over one epoch and optional epoch-relative time window. The `epoch` value can be a `CustomEpoch`, epoch number, epoch name, or GUI dropdown label such as `2: Odor`.
 - `ctx.response_plot_data(grouped, source_path=..., max_rois=..., roi_indices=...)` creates response plot data for `CustomResult.response_plot_data`.
+- `ctx.roi_colors_for_labels(labels)` returns current ROI plot colors as `#RRGGBB` strings for ROI-labeled line plots. In the napari Custom tab, `CustomLinePlot` outputs with labels that exactly match current ROI labels are colorized automatically when `colors` is omitted.
 - `ctx.output_path(...)`, `ctx.write_roi_table(...)`, and `ctx.write_matrix_csv(...)` write outputs below the workflow output folder and attach workflow metadata.
+- `finite_mean_and_sem(values, axis=...)` is exported from `twopy.custom` for workflow plots or tables that need the same finite-sample mean and sample-SEM rule used by twopy response plots and CSV exports.
 
 ## Parameters
 
@@ -106,7 +108,7 @@ Roles are not tied to field names. A field named `start`, `window_start_seconds`
 
 ## Outputs And Provenance
 
-Workflows return `CustomResult` objects. A result can list files, tables, line plots, replacement ROIs, or response plot data. File and table outputs must be below `ctx.output_dir`; use `ctx.output_path("name.csv")` instead of building paths by hand. Returned CSV and TSV tables are previewed in the Custom tab, `CustomTable(..., highlighted_rows=(...))` marks zero-based data rows, and `CustomLinePlot(..., y_label="Weight")` sets the plot y-axis label when the default `Value` is too generic. Files written through `ctx.write_roi_table()` and `ctx.write_matrix_csv()` automatically receive workflow metadata; pass `column_labels=(...)` to `ctx.write_matrix_csv()` when matrix columns have scientific coordinates such as lag seconds. Files returned in `CustomResult.files` or `CustomResult.tables` receive metadata after the workflow returns.
+Workflows return `CustomResult` objects. A result can list files, tables, line plots, replacement ROIs, or response plot data. File and table outputs must be below `ctx.output_dir`; use `ctx.output_path("name.csv")` instead of building paths by hand. Returned CSV and TSV tables are previewed in the Custom tab, `CustomTable(..., highlighted_rows=(...))` marks zero-based data rows, `CustomLinePlot(..., y_label="Weight")` sets the plot y-axis label when the default `Value` is too generic, `CustomLinePlot(..., colors=("#4cc9f0",))` can explicitly color each series, and `CustomLineBand(...)` draws filled uncertainty bands behind line-plot series. Files written through `ctx.write_roi_table()` and `ctx.write_matrix_csv()` automatically receive workflow metadata; pass `column_labels=(...)` to `ctx.write_matrix_csv()` when matrix columns have scientific coordinates such as lag seconds. Files returned in `CustomResult.files` or `CustomResult.tables` receive metadata after the workflow returns.
 
 For CSV, PDF, PNG, and other non-HDF5 outputs, twopy writes a sidecar like `direction_selectivity.twopy-workflow.yml`. For HDF5 outputs, twopy writes a `twopy_workflow` metadata group. The metadata records the workflow id, name, version, source path, source hash, twopy version, run time, parameters, and recording path. When analysis caching is enabled, custom outputs and their metadata sync to the configured analysis output folder.
 
@@ -130,6 +132,10 @@ Both current native modes default to `stimulus_specific_05`, but the meaning dif
 A local kernel workflow can still return custom line plots if it needs experimental fitting code:
 
 ```python
+import numpy as np
+
+from twopy.custom import CustomLineBand, CustomLinePlot, CustomResult, CustomRunContext, finite_mean_and_sem, workflow
+
 @workflow(
     id="response-kernels",
     name="Response kernels",
@@ -143,7 +149,28 @@ def run(ctx: CustomRunContext, params: KernelParams) -> CustomResult:
     kernels = fit_kernels(computation.grouped_responses, params)
     csv_path = ctx.output_path("kernels.csv")
     ctx.write_matrix_csv(csv_path, kernels.values, row_labels=rois.labels)
-    return CustomResult(message=f"Fit kernels for {len(rois.labels)} ROIs.", plots=(CustomLinePlot("Kernels", kernels.time_seconds, kernels.values, rois.labels, y_label="Weight"),), files=(csv_path,))
+    mean, sem = finite_mean_and_sem(kernels.values, axis=0)
+    return CustomResult(
+        message=f"Fit kernels for {len(rois.labels)} ROIs.",
+        plots=(
+            CustomLinePlot(
+                "Mean +/- SEM kernels",
+                kernels.time_seconds,
+                mean,
+                ("mean",),
+                y_label="Weight",
+                bands=(
+                    CustomLineBand(
+                        series_index=0,
+                        lower=mean - sem,
+                        upper=mean + sem,
+                        label="SEM",
+                    ),
+                ),
+            ),
+        ),
+        files=(csv_path,),
+    )
 ```
 
 Keep long-running or experimental code inside the workflow file or imported lab modules. Keep the values passed to twopy small and explicit.

@@ -23,6 +23,7 @@ __all__ = [
     "RoiResponseTraceSummary",
     "RoiResponseSummary",
     "RoiResponseTrial",
+    "finite_mean_and_sem",
     "group_delta_f_over_f_by_epoch",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
@@ -269,7 +270,7 @@ def summarize_epoch_roi_responses(
     trial_summaries = summarize_grouped_responses(grouped)
     grouped_values: dict[tuple[int, str, str], list[float]] = {}
     for summary in trial_summaries:
-        if np.isnan(summary.mean_response):
+        if not np.isfinite(summary.mean_response):
             continue
         key = (summary.epoch_number, summary.epoch_name, summary.roi_label)
         grouped_values.setdefault(key, []).append(summary.mean_response)
@@ -279,22 +280,49 @@ def summarize_epoch_roi_responses(
         epoch_number, epoch_name, roi_label = key
         response_values = np.asarray(values, dtype=np.float64)
         trial_count = int(response_values.size)
-        sem = (
-            float(np.nanstd(response_values, ddof=1) / np.sqrt(trial_count))
-            if trial_count > 1
-            else 0.0
-        )
+        mean, sem = finite_mean_and_sem(response_values, axis=0)
         rows.append(
             GroupedRoiResponseSummary(
                 epoch_number=epoch_number,
                 epoch_name=epoch_name,
                 roi_label=roi_label,
-                mean_response=float(np.nanmean(response_values)),
-                sem_response=sem,
+                mean_response=float(mean),
+                sem_response=float(sem),
                 n_trials=trial_count,
             ),
         )
     return tuple(rows)
+
+
+def finite_mean_and_sem(
+    values: npt.ArrayLike,
+    *,
+    axis: int,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Return finite-sample mean and SEM along one axis.
+
+    Args:
+        values: Numeric values to summarize. NaN and infinite samples are
+            ignored.
+        axis: Axis containing repeated observations.
+
+    Returns:
+        ``(mean, sem)`` arrays with ``axis`` removed. Means are NaN when no
+        finite samples contribute. SEM uses sample variance and is zero when
+        only one finite sample contributes.
+
+    This helper centralizes the mean-plus-SEM convention used by response
+    plots, CSV exports, and group-matching previews so uncertainty bands have
+    the same statistical meaning everywhere in twopy.
+    """
+    array = np.asarray(values, dtype=np.float64)
+    samples_first = np.moveaxis(array, axis, 0)
+    finite = np.isfinite(samples_first)
+    finite_values = np.where(finite, samples_first, 0.0)
+    counts = np.sum(finite, axis=0)
+    sums = np.sum(finite_values, axis=0)
+    squared_sums = np.sum(finite_values * finite_values, axis=0)
+    return _mean_and_sem_from_sums(sums, squared_sums, counts)
 
 
 def summarize_roi_response_trials(
@@ -345,22 +373,38 @@ def summarize_roi_response_trials(
         squared_sums[:, offsets] += finite_values * finite_values
         valid_counts[:, offsets] += finite
 
-    mean_values = np.full((roi_count, max_frames), np.nan, dtype=np.float64)
-    valid_mask = valid_counts > 0
-    mean_values[valid_mask] = sums[valid_mask] / valid_counts[valid_mask]
-    sem_values = np.zeros((roi_count, max_frames), dtype=np.float64)
-    variable_mask = valid_counts > 1
-    if np.any(variable_mask):
-        counts = valid_counts[variable_mask].astype(np.float64)
-        variance = squared_sums[variable_mask] - (sums[variable_mask] ** 2 / counts)
-        variance /= counts - 1.0
-        variance = np.maximum(variance, 0.0)
-        sem_values[variable_mask] = np.sqrt(variance) / np.sqrt(counts)
+    mean_values, sem_values = _mean_and_sem_from_sums(
+        sums,
+        squared_sums,
+        valid_counts,
+    )
     return RoiResponseTraceSummary(
         time_seconds=time_seconds,
         mean_values=mean_values,
         sem_values=sem_values,
     )
+
+
+def _mean_and_sem_from_sums(
+    sums: npt.NDArray[np.float64],
+    squared_sums: npt.NDArray[np.float64],
+    counts: npt.NDArray[np.integer],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Return finite means and sample SEM from aggregate sums."""
+    mean_values = np.full(sums.shape, np.nan, dtype=np.float64)
+    valid_mask = counts > 0
+    mean_values[valid_mask] = sums[valid_mask] / counts[valid_mask]
+    sem_values = np.zeros(sums.shape, dtype=np.float64)
+    variable_mask = counts > 1
+    if np.any(variable_mask):
+        sample_counts = counts[variable_mask].astype(np.float64)
+        variance = squared_sums[variable_mask] - (
+            sums[variable_mask] ** 2 / sample_counts
+        )
+        variance /= sample_counts - 1.0
+        variance = np.maximum(variance, 0.0)
+        sem_values[variable_mask] = np.sqrt(variance) / np.sqrt(sample_counts)
+    return mean_values, sem_values
 
 
 def validate_grouped_roi_responses(grouped: GroupedRoiResponses) -> None:

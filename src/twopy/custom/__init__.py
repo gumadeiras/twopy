@@ -4,6 +4,7 @@ Workflow files should import from this module instead of twopy internals. twopy
 validates workflow metadata before showing a workflow in the napari Custom tab.
 """
 
+from twopy.analysis.responses import finite_mean_and_sem
 from twopy.custom.discovery import (
     CustomWorkflowError,
     WorkflowDiscoveryResult,
@@ -28,6 +29,7 @@ from twopy.custom.provenance import (
 from twopy.custom.registry import workflow
 from twopy.custom.types import (
     CustomEpoch,
+    CustomLineBand,
     CustomLinePlot,
     CustomResult,
     CustomRunContext,
@@ -39,6 +41,7 @@ from twopy.custom.types import (
 
 __all__ = [
     "CustomEpoch",
+    "CustomLineBand",
     "CustomLinePlot",
     "CustomParameterSpec",
     "CustomResult",
@@ -52,6 +55,7 @@ __all__ = [
     "build_parameter_object",
     "custom_result_artifact_paths",
     "discover_custom_workflows",
+    "finite_mean_and_sem",
     "native_custom_workflow_paths",
     "parameter_specs",
     "parameter_values",

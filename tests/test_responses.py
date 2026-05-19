@@ -13,6 +13,7 @@ from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.responses import (
     GroupedRoiResponses,
     RoiResponseTrial,
+    finite_mean_and_sem,
     group_delta_f_over_f_by_epoch,
     summarize_grouped_responses,
     validate_grouped_roi_responses,
@@ -22,6 +23,26 @@ from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 
 class ResponseGroupingTest(unittest.TestCase):
     """Tests response grouping helpers."""
+
+    def test_finite_mean_and_sem_uses_sample_sem(self) -> None:
+        """Confirm shared mean/SEM helper ignores invalid values consistently.
+
+        Inputs: repeated values with invalid values and one single-sample timepoint.
+        Outputs: finite means plus sample SEM, with zero SEM for one sample.
+        """
+        values = np.array(
+            [
+                [1.0, 4.0, np.nan],
+                [3.0, np.nan, 5.0],
+                [5.0, 8.0, np.inf],
+            ],
+            dtype=np.float64,
+        )
+
+        means, sems = finite_mean_and_sem(values, axis=0)
+
+        np.testing.assert_allclose(means, np.array([3.0, 6.0, 5.0]))
+        np.testing.assert_allclose(sems, np.array([2.0 / np.sqrt(3.0), 2.0, 0.0]))
 
     def test_groups_dff_by_epoch_and_trial(self) -> None:
         """Confirm windows slice dF/F and count trials within each epoch.
