@@ -138,19 +138,29 @@ def selected_epoch_numbers(
     segments: Sequence[StimulusSegment],
     *,
     discard_first: bool,
+    included_epoch_numbers: Sequence[int] | None = None,
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """Return selected and discarded non-baseline epoch numbers."""
     ordered_numbers: list[int] = []
     for segment in segments:
         if segment.epoch_number not in ordered_numbers:
             ordered_numbers.append(segment.epoch_number)
-    if discard_first:
+    if included_epoch_numbers is not None:
+        included = {int(number) for number in included_epoch_numbers}
+        selected = tuple(
+            epoch_number for epoch_number in ordered_numbers if epoch_number in included
+        )
+        discarded: tuple[int, ...] = ()
+    elif discard_first:
         discarded = tuple(ordered_numbers[:1])
         selected = tuple(ordered_numbers[1:])
     else:
         discarded = ()
         selected = tuple(ordered_numbers)
     if len(selected) == 0:
+        if included_epoch_numbers is not None:
+            msg = "No requested non-baseline stimulus epochs remain for kernel fitting."
+            raise ValueError(msg)
         msg = "No stimulus epochs remain after the requested first-epoch discard."
         raise ValueError(msg)
     return selected, discarded

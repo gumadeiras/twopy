@@ -56,8 +56,10 @@ __all__ = ["CustomWorkflowPanel"]
 WorkflowRunner = Callable[[CustomWorkflow, object | None], CustomResult]
 ParameterSpecProvider = Callable[[CustomWorkflow], tuple[CustomParameterSpec, ...]]
 _CUSTOM_CHOICE_LABELS = {
+    "all_epochs": "all epochs",
     "all_rois": "all ROIs",
     "recording_metadata": "auto",
+    "visible_epochs": "visible epochs",
     "visible_rois": "visible ROIs",
 }
 _PLOT_BACKGROUND = "#20252d"

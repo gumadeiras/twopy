@@ -9,6 +9,7 @@
 - Added versioned workflow metadata for custom outputs, including workflow id, version, source path, source hash, twopy version, parameters, and recording path.
 - Added a stable `twopy.custom` API for workflow parameters, recording metadata, ROI selection, response metrics, tables, plots, output paths, and response plot data.
 - Added a reference custom workflow example that shows every supported parameter and result type.
+- Added all/visible epoch selection to the native Response kernels Custom-tab workflow.
 - Added native random-noise response kernel fitting with a stimulus-mode dropdown for olfactory antenna activation or visual contrast, automatic default stimulus-column selection, metadata-driven hemisphere mapping for olfaction, one kernel per unique epoch name, modality-specific CSV outputs, and a packaged napari Custom-tab workflow.
 - Added database search favorites in the napari Load-tab search window, with Save favorite, Use, and Remove actions backed by a machine-local YAML file.
 - Added a thin epoch-span marker to napari response plots and exported response figures.
@@ -27,6 +28,7 @@
 
 ### Fixes
 
+- Used interpolated timing for older flash-train recordings whose `photodiode_flash` pulses are not one-per-epoch-boundary, while still rejecting incomplete boundary-flash evidence, restoring response plots and response-watershed ROI generation for older recordings.
 - Restored saved-analysis reload for source recordings routed through the stable external analysis cache.
 - Allowed source recording conversion to load older `chosenparams.mat` stimulus epoch parameters when `stimParams.mat` is absent.
 - Deleted local cached PDF and PNG export figures after they successfully sync to the configured analysis output destination.

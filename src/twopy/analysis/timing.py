@@ -13,7 +13,7 @@ from typing import Literal
 import numpy as np
 import numpy.typing as npt
 
-from twopy._segments import constant_segments
+from twopy._segments import constant_segments, true_segments
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.converted import RecordingData, recording_frame_rate_hz
 from twopy.photodiode import stimulus_frame_bounds_from_photodiode
@@ -33,6 +33,11 @@ __all__ = [
 
 TimingSource = Literal["classified_photodiode", "interpolated_epochs"]
 TimingMetadataValue = str | int | float | bool
+_PhotodiodeFlashTimingEvidence = Literal[
+    "boundary_flash",
+    "interpolation",
+    "incomplete_boundary_flash",
+]
 
 
 @dataclass(frozen=True)
@@ -67,13 +72,26 @@ def resolve_recording_timing(recording: RecordingData) -> RecordingTiming:
             evidence but that evidence is internally inconsistent, or if the
             fallback interpolation path cannot produce windows.
 
-    Native twopy prefers classified boundary-flash timing when the converted
-    stimulus table contains active ``photodiode_flash`` evidence. Recordings
-    without that contract use the interpolation timing path.
+    Native twopy prefers classified boundary-flash timing when
+    ``photodiode_flash`` has one event for stimulus start, one for each epoch
+    boundary, and one for stimulus end. Recordings without that contract use
+    the interpolation timing path.
     """
     frame_rate_hz = recording_frame_rate_hz(recording)
-    if _has_active_photodiode_flash_column(recording):
+    evidence, flash_count, epoch_run_count = _photodiode_flash_timing_evidence(
+        recording,
+    )
+    if evidence == "boundary_flash":
         return _classified_recording_timing(recording, frame_rate_hz=frame_rate_hz)
+    if evidence == "incomplete_boundary_flash":
+        expected = epoch_run_count + 1
+        msg = (
+            "Incomplete photodiode boundary evidence: "
+            f"photodiode_flash_segments={flash_count}, "
+            f"stimulus_epoch_runs={epoch_run_count}, "
+            f"expected at least {expected} boundary flashes"
+        )
+        raise ValueError(msg)
     return _interpolated_recording_timing(recording, frame_rate_hz=frame_rate_hz)
 
 
@@ -159,14 +177,34 @@ def _interpolated_recording_timing(
     )
 
 
-def _has_active_photodiode_flash_column(recording: RecordingData) -> bool:
-    """Return whether the recording has active boundary-flash stimulus evidence."""
+def _photodiode_flash_timing_evidence(
+    recording: RecordingData,
+) -> tuple[_PhotodiodeFlashTimingEvidence, int, int]:
+    """Classify whether stimulus flash rows select classified timing."""
     try:
         flash_column = stimulus_column_index(recording, "photodiode_flash")
     except ValueError:
-        return False
+        return "interpolation", 0, 0
     flash_values = recording.stimulus_data[:, flash_column]
-    return bool(np.any(flash_values > 0.5))
+    flash_segments = true_segments(np.asarray(flash_values > 0.5, dtype=np.bool_))
+    if len(flash_segments) == 0:
+        return "interpolation", 0, 0
+
+    epoch_column = stimulus_column_index(recording, "epoch_number")
+    epoch_numbers = recording.stimulus_data[:, epoch_column].astype(np.int64)
+    epoch_runs = tuple(
+        (start, stop)
+        for start, stop in constant_segments(epoch_numbers)
+        if epoch_numbers[start] > 0
+    )
+    flash_count = len(flash_segments)
+    epoch_run_count = len(epoch_runs)
+    expected_boundary_count = epoch_run_count + 1
+    if flash_count == expected_boundary_count:
+        return "boundary_flash", flash_count, epoch_run_count
+    if flash_count > expected_boundary_count:
+        return "interpolation", flash_count, epoch_run_count
+    return "incomplete_boundary_flash", flash_count, epoch_run_count
 
 
 def _epoch_window_from_classified(

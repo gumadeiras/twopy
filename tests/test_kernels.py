@@ -75,38 +75,7 @@ class StimulusKernelFitTest(unittest.TestCase):
     def test_recording_kernel_maps_right_hemisphere_to_ipsi(self) -> None:
         """Confirm recording-level fitting reads hemisphere metadata by default."""
         with temporary_directory() as temp_dir:
-            recording_path = write_converted_recording_files(
-                temp_dir,
-                movie_values=np.ones((8, 2, 2), dtype=np.float64),
-                stimulus_data=np.array(
-                    [
-                        [0.0, 1.0, 2.0],
-                        [0.1, 1.0, 0.0],
-                        [0.2, 2.0, 2.0],
-                        [0.3, 2.0, 0.0],
-                        [0.4, 2.0, 2.0],
-                        [0.5, 2.0, 0.0],
-                        [0.6, 3.0, 0.0],
-                        [0.7, 3.0, 1.0],
-                        [0.8, 3.0, 3.0],
-                        [0.9, 3.0, 1.0],
-                    ],
-                    dtype=np.float64,
-                ),
-                stimulus_data_column_names=(
-                    "time_seconds",
-                    "epoch_number",
-                    "stimulus_specific_05",
-                ),
-                stimulus_parameters_json=json.dumps(
-                    [
-                        {"epochName": "gray"},
-                        {"epochName": "noise_a"},
-                        {"epochName": "noise_b"},
-                    ]
-                ),
-                run_metadata={"hemisphere": "right"},
-            )
+            recording_path = _write_olfactory_kernel_recording(temp_dir)
             computation = _kernel_computation(recording_path=recording_path)
 
             result = fit_recording_stimulus_kernels(
@@ -139,6 +108,30 @@ class StimulusKernelFitTest(unittest.TestCase):
             np.testing.assert_array_equal(result.contralateral, result.raw_left)
             self.assertEqual(result.response_sample_counts.tolist(), [[3], [3]])
             self.assertEqual(result.stimulus_sample_counts, (4, 4))
+
+    def test_recording_kernel_limits_fit_to_selected_epochs(self) -> None:
+        """Confirm explicit epoch selection limits kernel fitting."""
+        with temporary_directory() as temp_dir:
+            recording_path = _write_olfactory_kernel_recording(temp_dir)
+            computation = _kernel_computation(recording_path=recording_path)
+
+            result = fit_recording_stimulus_kernels(
+                computation,
+                StimulusKernelOptions(
+                    baseline_epoch_number=1,
+                    selected_epoch_numbers=(3,),
+                    num_stim_past=1,
+                    num_stim_future=0,
+                    method="xcorr",
+                ),
+            )
+
+            self.assertEqual(result.epoch_names, ("noise_b",))
+            self.assertEqual(result.selected_epoch_numbers, (3,))
+            self.assertEqual(result.selected_epoch_numbers_by_name, ((3,),))
+            self.assertEqual(result.discarded_epoch_numbers, ())
+            self.assertEqual(result.response_sample_counts.tolist(), [[3]])
+            self.assertEqual(result.stimulus_sample_counts, (4,))
 
     def test_recording_kernel_fits_visual_contrast_without_hemisphere(self) -> None:
         """Confirm visual kernels use signed contrast without hemisphere metadata."""
@@ -222,6 +215,42 @@ class StimulusKernelFitTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "does not include hemisphere"):
                 recording_hemisphere(recording)
+
+
+def _write_olfactory_kernel_recording(temp_dir: Path) -> Path:
+    """Return a converted recording with two non-baseline stimulus epochs."""
+    return write_converted_recording_files(
+        temp_dir,
+        movie_values=np.ones((8, 2, 2), dtype=np.float64),
+        stimulus_data=np.array(
+            [
+                [0.0, 1.0, 2.0],
+                [0.1, 1.0, 0.0],
+                [0.2, 2.0, 2.0],
+                [0.3, 2.0, 0.0],
+                [0.4, 2.0, 2.0],
+                [0.5, 2.0, 0.0],
+                [0.6, 3.0, 0.0],
+                [0.7, 3.0, 1.0],
+                [0.8, 3.0, 3.0],
+                [0.9, 3.0, 1.0],
+            ],
+            dtype=np.float64,
+        ),
+        stimulus_data_column_names=(
+            "time_seconds",
+            "epoch_number",
+            "stimulus_specific_05",
+        ),
+        stimulus_parameters_json=json.dumps(
+            [
+                {"epochName": "gray"},
+                {"epochName": "noise_a"},
+                {"epochName": "noise_b"},
+            ]
+        ),
+        run_metadata={"hemisphere": "right"},
+    )
 
 
 def _kernel_computation(recording_path: Path) -> AnalysisResponseComputation:

@@ -58,11 +58,40 @@ class RecordingTimingTest(unittest.TestCase):
             ],
         )
 
+    def test_falls_back_to_interpolation_for_flash_train_protocol(self) -> None:
+        """Confirm old multi-pulse flash trains do not select classified timing."""
+        recording = self._interpolation_recording(
+            epoch_values=np.array([1, 1, 1, 2, 2, 2, 2], dtype=np.float64),
+            flash_values=np.array([1, 0, 1, 0, 1, 0, 1], dtype=np.float64),
+        )
+
+        timing = resolve_recording_timing(recording)
+
+        self.assertEqual(timing.source, "interpolated_epochs")
+        self.assertEqual(timing.metadata["window_count"], 2)
+        self.assertEqual(
+            _window_summary(timing.epoch_windows),
+            [
+                (1, 4, "Gray Interleave"),
+                (4, 8, "LR20"),
+            ],
+        )
+
+    def test_rejects_incomplete_boundary_flash_evidence(self) -> None:
+        """Confirm missing boundary flashes fail instead of interpolating."""
+        recording = self._interpolation_recording(
+            epoch_values=np.array([1, 1, 2, 2, 1, 1, 1], dtype=np.float64),
+            flash_values=np.array([1, 0, 1, 0, 1, 0, 0], dtype=np.float64),
+        )
+
+        with self.assertRaisesRegex(ValueError, "Incomplete photodiode"):
+            resolve_recording_timing(recording)
+
     def test_rejects_inconsistent_classified_photodiode_evidence(self) -> None:
         """Confirm applicable but inconsistent boundary evidence fails loudly."""
         recording = self._classified_recording(
             epoch_numbers=np.array([1, 1, 2, 2, 0], dtype=np.float64),
-            flash_values=np.array([1, 0, 1, 0, 0], dtype=np.float64),
+            flash_values=np.array([1, 0, 1, 0, 1], dtype=np.float64),
         )
 
         with self.assertRaisesRegex(ValueError, "classified photodiode timing"):
@@ -96,27 +125,39 @@ class RecordingTimingTest(unittest.TestCase):
             high_res_pd=high_res_pd,
         )
 
-    def _interpolation_recording(self) -> RecordingData:
+    def _interpolation_recording(
+        self,
+        *,
+        epoch_values: np.ndarray | None = None,
+        flash_values: np.ndarray | None = None,
+    ) -> RecordingData:
         """Create a recording with only interpolation timing evidence."""
         high_res_pd = np.zeros(100, dtype=np.float64)
         high_res_pd[10] = 1.0
         high_res_pd[80:84] = 1.0
-        stimulus_data = np.column_stack(
+        stimulus_columns = [
+            np.arange(7, dtype=np.float64),
+            np.arange(1, 8, dtype=np.float64),
             (
-                np.arange(7, dtype=np.float64),
-                np.arange(1, 8, dtype=np.float64),
-                np.array([1, 1, 2, 2, 1, 1, 1], dtype=np.float64),
+                np.array([1, 1, 2, 2, 1, 1, 1], dtype=np.float64)
+                if epoch_values is None
+                else epoch_values
             ),
-        )
+        ]
+        column_names = [
+            "time_seconds",
+            "stimulus_frame_number",
+            "epoch_number",
+        ]
+        if flash_values is not None:
+            stimulus_columns.append(flash_values)
+            column_names.append("photodiode_flash")
+        stimulus_data = np.column_stack(stimulus_columns)
         return minimal_recording_data(
             frame_count=10,
             acquisition_metadata={"acq.frameRate": 1.0},
             stimulus_data=stimulus_data,
-            stimulus_data_column_names=(
-                "time_seconds",
-                "stimulus_frame_number",
-                "epoch_number",
-            ),
+            stimulus_data_column_names=tuple(column_names),
             stimulus_parameters=(
                 {"epochName": "Gray Interleave"},
                 {"epochName": "LR20"},

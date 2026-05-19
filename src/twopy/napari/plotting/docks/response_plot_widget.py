@@ -126,6 +126,7 @@ from twopy.stimulus import stimulus_epoch_names_by_number
 _CUSTOM_EPOCH_WINDOW_MIN_SECONDS = 0.0
 _CUSTOM_EPOCH_WINDOW_STEP_SECONDS = 0.1
 _CUSTOM_RESPONSE_WINDOW_STEP_SECONDS = 0.1
+_CUSTOM_EPOCH_SELECTOR_CHOICES = ("all_epochs", "visible_epochs")
 _CUSTOM_RESPONSE_METRIC_CHOICES = ("mean", "peak", "minimum")
 _CUSTOM_ROI_SELECTOR_CHOICES = ("all_rois", "visible_rois")
 _CUSTOM_STIMULUS_COLUMN_EXCLUSIONS = frozenset(("time_seconds", "epoch_number"))
@@ -587,6 +588,7 @@ class _ResponsePlotWidget(QWidget):
             response_post_window_seconds=post_window_seconds,
             provenance=provenance,
             visible_roi_indices=self._custom_workflow_visible_roi_indices(roi_set),
+            visible_epoch_numbers=self._custom_workflow_visible_epoch_numbers(),
         )
         if params is None:
             raw_result = workflow.function(context)
@@ -657,6 +659,18 @@ class _ResponsePlotWidget(QWidget):
         if self._plot_data is None:
             return tuple(range(len(roi_set.labels)))
         return self._visible_roi_indices()
+
+    def _custom_workflow_visible_epoch_numbers(self) -> tuple[int, ...]:
+        """Return visible epoch numbers for custom workflows."""
+        if self._plot_data is None:
+            return ()
+        numbers: list[int] = []
+        for index in self._visible_epoch_indices():
+            if 0 <= index < len(self._plot_data.epochs):
+                epoch_number = self._plot_data.epochs[index].epoch_number
+                if epoch_number not in numbers:
+                    numbers.append(epoch_number)
+        return tuple(numbers)
 
     def _current_roi_set_for_custom_workflow(
         self,
@@ -1610,6 +1624,8 @@ def _recording_parameter_spec(
         )
     if spec.role == "response_metric":
         return _custom_choice_parameter_spec(spec, _CUSTOM_RESPONSE_METRIC_CHOICES)
+    if spec.role == "epoch_selector":
+        return _custom_choice_parameter_spec(spec, _CUSTOM_EPOCH_SELECTOR_CHOICES)
     if spec.role in _CUSTOM_RESPONSE_WINDOW_ROLES:
         return replace(
             spec,

@@ -57,7 +57,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Photodiode event segmentation for converted `high_res_pd` and `imaging_res_pd` signals.
 - Order-based pairing of high-resolution photodiode events to imaging-frame photodiode events, with mismatched event counts treated as an error.
 - Photodiode event classification into stimulus start, trial transition, and stimulus end events.
-- Classified stimulus timing cross-checks paired photodiode events against `stimulus/data` `photodiode_flash` segments and positive epoch runs before producing frame windows.
+- Classified stimulus timing cross-checks paired photodiode events against `stimulus/data` `photodiode_flash` segments and positive epoch runs before producing frame windows when flash segments match epoch boundaries.
 - Frame-window response objects for splitting ROI traces by explicit imaging frame boundaries.
 - ROI dF/F responses can be grouped by epoch and trial, with one response matrix per trial and spreadsheet-friendly time-series CSV rows.
 - Analysis outputs can be persisted to one inspectable HDF5 file containing ROI masks, fluorescence/background traces, dF/F arrays, epoch windows, and grouped responses, with optional trial-level and epoch-grouped CSV response time series under `exports/csvs/`.

@@ -32,6 +32,7 @@ class ResponseKernelParams:
 
     Args:
         roi_selector: Which ROI subset to fit.
+        epoch_selector: Which epoch subset to fit.
         stimulus_modality: Sensory modality that defines how the default
             stimulus column is interpreted.
         hemisphere: Recording hemisphere used to map raw left/right streams to
@@ -54,6 +55,14 @@ class ResponseKernelParams:
             "label": "ROIs",
             "description": "ROI subset used for kernel fitting.",
             "twopy_role": "roi_selector",
+        },
+    )
+    epoch_selector: str = field(
+        default="all_epochs",
+        metadata={
+            "label": "Epochs",
+            "description": "Epoch subset used for kernel fitting.",
+            "twopy_role": "epoch_selector",
         },
     )
     stimulus_modality: Literal["olfaction", "vision"] = field(
@@ -146,6 +155,9 @@ def run(ctx: CustomRunContext, params: ResponseKernelParams) -> CustomResult:
             stimulus_column=default_kernel_stimulus_column(params.stimulus_modality),
             baseline_epoch_number=params.baseline_epoch_number,
             discard_first_stimulus_epoch=params.discard_first_stimulus_epoch,
+            selected_epoch_numbers=ctx.epoch_numbers_for_selector(
+                params.epoch_selector,
+            ),
             num_stim_past=params.num_stim_past,
             num_stim_future=params.num_stim_future,
             method=params.fit_method,

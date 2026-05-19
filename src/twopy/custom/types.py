@@ -284,6 +284,9 @@ class CustomRunContext:
         provenance: Workflow metadata saved with files written through this context.
         visible_roi_indices: Zero-based ROI indices currently visible in the
             response dock. Empty means no visibility state is available.
+        visible_epoch_numbers: One-based stimulus epoch numbers currently
+            visible in the response dock. Empty means no visibility state is
+            available.
 
     Returns:
         Run context with file, ROI, and analysis helpers.
@@ -298,6 +301,7 @@ class CustomRunContext:
     response_post_window_seconds: float
     provenance: CustomWorkflowProvenance
     visible_roi_indices: tuple[int, ...] = ()
+    visible_epoch_numbers: tuple[int, ...] = ()
 
     def current_rois(self) -> RoiSet:
         """Return current ROI masks or raise a clear error."""
@@ -321,6 +325,24 @@ class CustomRunContext:
         if normalized in {"visible", "visible_rois"}:
             return self._visible_rois()
         msg = f"Unknown ROI selector {selector!r}."
+        raise ValueError(msg)
+
+    def epoch_numbers_for_selector(self, selector: str) -> tuple[int, ...] | None:
+        """Return the epoch numbers selected in an ``epoch_selector`` control.
+
+        Args:
+            selector: ``all_epochs`` or ``visible_epochs``.
+
+        Returns:
+            ``None`` for all epochs, or a tuple of visible one-based epoch
+            numbers.
+        """
+        normalized = selector.strip().casefold()
+        if normalized in {"", "all", "all_epochs"}:
+            return None
+        if normalized in {"visible", "visible_epochs"}:
+            return self._visible_epoch_numbers()
+        msg = f"Unknown epoch selector {selector!r}."
         raise ValueError(msg)
 
     def compute_standard_responses(
@@ -541,6 +563,17 @@ class CustomRunContext:
             rois.masks[np.array(indices, dtype=np.int64), :, :],
             labels=tuple(rois.labels[index] for index in indices),
         )
+
+    def _visible_epoch_numbers(self) -> tuple[int, ...]:
+        """Return visible stimulus epoch numbers without duplicates."""
+        numbers: list[int] = []
+        for epoch_number in self.visible_epoch_numbers:
+            if epoch_number > 0 and epoch_number not in numbers:
+                numbers.append(epoch_number)
+        if len(numbers) == 0:
+            msg = "Epoch selector 'visible_epochs' has no visible epochs."
+            raise ValueError(msg)
+        return tuple(numbers)
 
     def write_roi_table(
         self,

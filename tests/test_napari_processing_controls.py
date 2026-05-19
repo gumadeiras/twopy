@@ -201,9 +201,9 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             self.assertEqual(specs["dsi_threshold"].decimals, 3)
 
     def test_roi_selector_dropdown_uses_readable_labels(self) -> None:
-        """Confirm ROI selector values keep stable IDs but display readable text."""
+        """Confirm selector values keep stable IDs but display readable text."""
         _ = QApplication.instance() or QApplication([])
-        spec = CustomParameterSpec(
+        roi_spec = CustomParameterSpec(
             name="roi_selector",
             label="ROIs",
             kind="choice",
@@ -212,8 +212,18 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             role="roi_selector",
             choices=("all_rois", "visible_rois"),
         )
+        epoch_spec = CustomParameterSpec(
+            name="epoch_selector",
+            label="Epochs",
+            kind="choice",
+            default="visible_epochs",
+            description="",
+            role="epoch_selector",
+            choices=("all_epochs", "visible_epochs"),
+        )
 
-        widget = cast(Any, _parameter_widget(spec))
+        widget = cast(Any, _parameter_widget(roi_spec))
+        epoch_widget = cast(Any, _parameter_widget(epoch_spec))
 
         self.assertEqual(
             [widget.itemText(index) for index in range(widget.count())],
@@ -224,6 +234,15 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             ["all_rois", "visible_rois"],
         )
         self.assertEqual(widget.currentData(), "visible_rois")
+        self.assertEqual(
+            [epoch_widget.itemText(index) for index in range(epoch_widget.count())],
+            ["all epochs", "visible epochs"],
+        )
+        self.assertEqual(
+            [epoch_widget.itemData(index) for index in range(epoch_widget.count())],
+            ["all_epochs", "visible_epochs"],
+        )
+        self.assertEqual(epoch_widget.currentData(), "visible_epochs")
 
     def test_custom_line_plot_uses_response_plot_style(self) -> None:
         """Confirm custom line plots share the response-widget visual palette."""
@@ -305,6 +324,12 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 ("olfaction", "vision"),
             )
             self.assertEqual(specs["stimulus_modality"].default, "olfaction")
+            self.assertEqual(specs["epoch_selector"].kind, "choice")
+            self.assertEqual(
+                specs["epoch_selector"].choices,
+                ("all_epochs", "visible_epochs"),
+            )
+            self.assertEqual(specs["epoch_selector"].default, "all_epochs")
             hemisphere_widget = cast(Any, _parameter_widget(specs["hemisphere"]))
 
             self.assertEqual(

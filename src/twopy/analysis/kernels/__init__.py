@@ -60,6 +60,9 @@ class StimulusKernelOptions:
             excluded from fitting.
         discard_first_stimulus_epoch: Whether to discard the first remaining
             non-baseline stimulus epoch.
+        selected_epoch_numbers: Optional one-based epoch numbers to fit
+            directly after baseline removal. ``None`` keeps all non-baseline
+            epochs and applies ``discard_first_stimulus_epoch``.
         num_stim_past: Number of stimulus samples before a response sample.
         num_stim_future: Number of stimulus samples after a response sample.
         method: Fitting method. ``"ols"`` solves a least-squares design matrix;
@@ -76,6 +79,7 @@ class StimulusKernelOptions:
     stimulus_column: str | None = None
     baseline_epoch_number: int = 1
     discard_first_stimulus_epoch: bool = True
+    selected_epoch_numbers: tuple[int, ...] | None = None
     num_stim_past: int = 150
     num_stim_future: int = 25
     method: KernelFitMethod = "ols"
@@ -182,6 +186,7 @@ def fit_recording_stimulus_kernels(
     selected_numbers, discarded_numbers = selected_epoch_numbers(
         segments,
         discard_first=options.discard_first_stimulus_epoch,
+        included_epoch_numbers=options.selected_epoch_numbers,
     )
     epoch_groups = selected_epoch_groups(
         recording,
@@ -307,6 +312,14 @@ def _validate_options(options: StimulusKernelOptions) -> None:
     if options.baseline_epoch_number < 0:
         msg = "baseline_epoch_number must be nonnegative."
         raise ValueError(msg)
+    if options.selected_epoch_numbers is not None:
+        if len(options.selected_epoch_numbers) == 0:
+            msg = "selected_epoch_numbers must not be empty."
+            raise ValueError(msg)
+        for epoch_number in options.selected_epoch_numbers:
+            if epoch_number < 1:
+                msg = "selected_epoch_numbers must contain positive epoch numbers."
+                raise ValueError(msg)
     if options.num_stim_past < 0 or options.num_stim_future < 0:
         msg = "num_stim_past and num_stim_future must be nonnegative."
         raise ValueError(msg)
