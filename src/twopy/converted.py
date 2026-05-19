@@ -327,12 +327,12 @@ def _recording_hemisphere_from_default_database(
 
     try:
         config = load_config(DEFAULT_CONFIG_PATH)
-        value = database_hemisphere_for_recording_path(
-            config,
-            recording.source_session_dir,
-        )
     except (FileNotFoundError, ValueError):
         return None
+    value = database_hemisphere_for_recording_path(
+        config,
+        recording.source_session_dir,
+    )
     if value is None:
         return None
     return cast(Hemisphere, value)

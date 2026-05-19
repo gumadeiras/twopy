@@ -116,6 +116,11 @@ class RecordingKernelFit:
             fitter per epoch name and ROI after history/future-window filtering.
         stimulus_sample_counts: Number of complete stimulus samples used per
             epoch name.
+        fitted_stimulus_segment_counts: Number of regular stimulus segments fit
+            per epoch name.
+        skipped_irregular_stimulus_segment_counts: Number of selected stimulus
+            segments skipped per epoch name because their sample times were not
+            regular enough for fixed-lag kernel fitting.
         method: Fitting method used for every kernel.
         hemisphere: Recording hemisphere used for ipsi/contra mapping, or
             ``None`` for vision.
@@ -139,6 +144,8 @@ class RecordingKernelFit:
     discarded_epoch_numbers: tuple[int, ...]
     response_sample_counts: npt.NDArray[np.int64]
     stimulus_sample_counts: tuple[int, ...]
+    fitted_stimulus_segment_counts: tuple[int, ...]
+    skipped_irregular_stimulus_segment_counts: tuple[int, ...]
     method: KernelFitMethod
     hemisphere: Hemisphere | None
 
@@ -200,6 +207,8 @@ def fit_recording_stimulus_kernels(
     contrast_by_name: list[npt.NDArray[np.float64]] = []
     response_sample_counts: list[npt.NDArray[np.int64]] = []
     stimulus_sample_counts: list[int] = []
+    fitted_stimulus_segment_counts: list[int] = []
+    skipped_irregular_stimulus_segment_counts: list[int] = []
     time_seconds: npt.NDArray[np.float64] | None = None
 
     for epoch_group in epoch_groups:
@@ -217,6 +226,7 @@ def fit_recording_stimulus_kernels(
             assembled.stimulus,
             assembled.response_times_by_roi,
             assembled.responses_by_roi,
+            stimulus_segment_bounds=assembled.stimulus_segment_bounds,
             num_stim_past=options.num_stim_past,
             num_stim_future=options.num_stim_future,
             method=options.method,
@@ -228,16 +238,21 @@ def fit_recording_stimulus_kernels(
             raise ValueError(msg)
         response_sample_counts.append(primary_fit.response_sample_counts)
         stimulus_sample_counts.append(int(assembled.stimulus_times.size))
+        fitted_stimulus_segment_counts.append(len(assembled.fitted_segments))
+        skipped_irregular_stimulus_segment_counts.append(
+            assembled.skipped_irregular_segment_count,
+        )
         if options.stimulus_modality == "olfaction":
             right_fit = fit_stimulus_kernel_by_roi(
                 assembled.stimulus_times,
                 antenna_activation_to_right_stream(
                     computation.recording.stimulus_data[:, stimulus_column],
-                    segments=segments,
+                    segments=assembled.fitted_segments,
                     selected_epoch_numbers=epoch_group.epoch_numbers,
                 ),
                 assembled.response_times_by_roi,
                 assembled.responses_by_roi,
+                stimulus_segment_bounds=assembled.stimulus_segment_bounds,
                 num_stim_past=options.num_stim_past,
                 num_stim_future=options.num_stim_future,
                 method=options.method,
@@ -299,6 +314,10 @@ def fit_recording_stimulus_kernels(
         discarded_epoch_numbers=discarded_numbers,
         response_sample_counts=np.stack(response_sample_counts, axis=0),
         stimulus_sample_counts=tuple(stimulus_sample_counts),
+        fitted_stimulus_segment_counts=tuple(fitted_stimulus_segment_counts),
+        skipped_irregular_stimulus_segment_counts=tuple(
+            skipped_irregular_stimulus_segment_counts,
+        ),
         method=options.method,
         hemisphere=hemisphere,
     )

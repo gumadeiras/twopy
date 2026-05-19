@@ -77,6 +77,26 @@ class RecordingTimingTest(unittest.TestCase):
             ],
         )
 
+    def test_falls_back_when_flash_count_matches_but_rows_are_not_boundaries(
+        self,
+    ) -> None:
+        """Confirm equal-count flash trains still need boundary row evidence."""
+        recording = self._interpolation_recording(
+            epoch_values=np.array([1, 1, 1, 2, 2, 2, 2], dtype=np.float64),
+            flash_values=np.array([1, 0, 1, 0, 1, 0, 0], dtype=np.float64),
+        )
+
+        timing = resolve_recording_timing(recording)
+
+        self.assertEqual(timing.source, "interpolated_epochs")
+        self.assertEqual(
+            _window_summary(timing.epoch_windows),
+            [
+                (1, 4, "Gray Interleave"),
+                (4, 8, "LR20"),
+            ],
+        )
+
     def test_rejects_incomplete_boundary_flash_evidence(self) -> None:
         """Confirm missing boundary flashes fail instead of interpolating."""
         recording = self._interpolation_recording(

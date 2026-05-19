@@ -17,6 +17,7 @@ from twopy.analysis import (
     Hemisphere,
     RecordingKernelFit,
     StimulusKernelOptions,
+    default_baseline_epoch_number,
     default_kernel_stimulus_column,
     fit_recording_stimulus_kernels,
 )
@@ -40,7 +41,7 @@ class ResponseKernelParams:
         fit_method: Linear fitting method for the design matrix.
         num_stim_past: Number of stimulus samples before each response.
         num_stim_future: Number of future stimulus samples used as a timing QC.
-        baseline_epoch_number: Gray or baseline epoch number excluded from fit.
+        baseline_epoch: Gray or baseline epoch excluded from fit.
         discard_first_stimulus_epoch: Whether to discard the first non-baseline
             stimulus epoch after baseline removal.
         output_prefix: Relative output filename prefix.
@@ -102,12 +103,12 @@ class ResponseKernelParams:
             "min": 0,
         },
     )
-    baseline_epoch_number: int = field(
-        default=1,
+    baseline_epoch: str = field(
+        default="",
         metadata={
             "label": "Baseline epoch",
-            "description": "Epoch number excluded as gray or baseline.",
-            "min": 0,
+            "description": "Epoch excluded as gray or baseline.",
+            "twopy_role": "baseline_epoch",
         },
     )
     discard_first_stimulus_epoch: bool = field(
@@ -153,7 +154,7 @@ def run(ctx: CustomRunContext, params: ResponseKernelParams) -> CustomResult:
         StimulusKernelOptions(
             stimulus_modality=params.stimulus_modality,
             stimulus_column=default_kernel_stimulus_column(params.stimulus_modality),
-            baseline_epoch_number=params.baseline_epoch_number,
+            baseline_epoch_number=_baseline_epoch_number(ctx, params.baseline_epoch),
             discard_first_stimulus_epoch=params.discard_first_stimulus_epoch,
             selected_epoch_numbers=ctx.epoch_numbers_for_selector(
                 params.epoch_selector,
@@ -245,7 +246,8 @@ def _olfactory_kernel_result(
     return CustomResult(
         message=(
             f"Fit olfactory kernels for {len(kernels.roi_labels)} ROIs across "
-            f"{len(kernels.epoch_names)} epoch names."
+            f"{len(kernels.epoch_names)} epoch names. "
+            f"{_skipped_segments_message(kernels)}"
         ),
         files=(*files, summary_path),
         plots=tuple(plots),
@@ -306,7 +308,7 @@ def _visual_kernel_result(
         message=(
             f"Fit visual contrast kernels for {len(kernels.roi_labels)} ROIs "
             f"across {len(kernels.epoch_names)} epoch names from "
-            f"{kernels.stimulus_column}."
+            f"{kernels.stimulus_column}. {_skipped_segments_message(kernels)}"
         ),
         files=(*files, summary_path),
         plots=tuple(plots),
@@ -338,6 +340,8 @@ def _write_kernel_summary(path: Path, kernels: RecordingKernelFit) -> None:
                 "hemisphere",
                 "selected_epochs",
                 "discarded_epochs",
+                "fitted_stimulus_segments",
+                "skipped_irregular_stimulus_segments",
             )
         )
         for epoch_index, epoch_name in enumerate(kernels.epoch_names):
@@ -346,6 +350,12 @@ def _write_kernel_summary(path: Path, kernels: RecordingKernelFit) -> None:
                 for value in kernels.selected_epoch_numbers_by_name[epoch_index]
             )
             stimulus_samples = str(kernels.stimulus_sample_counts[epoch_index])
+            fitted_segments = str(
+                kernels.fitted_stimulus_segment_counts[epoch_index],
+            )
+            skipped_segments = str(
+                kernels.skipped_irregular_stimulus_segment_counts[epoch_index],
+            )
             for label, count in zip(
                 kernels.roi_labels,
                 kernels.response_sample_counts[epoch_index],
@@ -363,8 +373,22 @@ def _write_kernel_summary(path: Path, kernels: RecordingKernelFit) -> None:
                         "" if kernels.hemisphere is None else kernels.hemisphere,
                         selected,
                         discarded,
+                        fitted_segments,
+                        skipped_segments,
                     )
                 )
+
+
+def _skipped_segments_message(kernels: RecordingKernelFit) -> str:
+    """Return a compact audit phrase for irregular stimulus segment skips."""
+    skipped = sum(kernels.skipped_irregular_stimulus_segment_counts)
+    fitted = sum(kernels.fitted_stimulus_segment_counts)
+    if skipped == 0:
+        return f"Fitted {fitted} regular stimulus segments."
+    return (
+        f"Skipped {skipped} irregular stimulus segments; "
+        f"fitted {fitted} regular segments."
+    )
 
 
 def _safe_epoch_suffix(epoch_name: str) -> str:
@@ -400,6 +424,21 @@ def _clean_lag_value(value: float) -> float:
     if abs(as_float) < 5e-13:
         return 0.0
     return as_float
+
+
+def _baseline_epoch_number(ctx: CustomRunContext, baseline_epoch: str) -> int:
+    """Return the one-based baseline epoch selected in the Custom tab."""
+    if baseline_epoch.strip() == "":
+        return default_baseline_epoch_number(ctx.epoch_names())
+    selector = ctx.epoch_selector(baseline_epoch)
+    if isinstance(selector, int):
+        return selector
+    normalized = selector.strip().casefold()
+    for epoch_number, epoch_name in ctx.epoch_names().items():
+        if epoch_name.casefold() == normalized:
+            return epoch_number
+    msg = f"No baseline epoch matches {baseline_epoch!r}."
+    raise ValueError(msg)
 
 
 def _selected_hemisphere(params: ResponseKernelParams) -> Hemisphere | None:

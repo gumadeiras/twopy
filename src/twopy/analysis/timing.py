@@ -201,10 +201,23 @@ def _photodiode_flash_timing_evidence(
     epoch_run_count = len(epoch_runs)
     expected_boundary_count = epoch_run_count + 1
     if flash_count == expected_boundary_count:
+        if not _flash_segments_match_epoch_boundaries(flash_segments, epoch_runs):
+            return "interpolation", flash_count, epoch_run_count
         return "boundary_flash", flash_count, epoch_run_count
     if flash_count > expected_boundary_count:
         return "interpolation", flash_count, epoch_run_count
     return "incomplete_boundary_flash", flash_count, epoch_run_count
+
+
+def _flash_segments_match_epoch_boundaries(
+    flash_segments: tuple[tuple[int, int], ...],
+    epoch_runs: tuple[tuple[int, int], ...],
+) -> bool:
+    """Return whether flash starts match all positive epoch run boundaries."""
+    if len(epoch_runs) == 0:
+        return False
+    expected_starts = (epoch_runs[0][0],) + tuple(stop for _, stop in epoch_runs)
+    return tuple(start for start, _ in flash_segments) == expected_starts
 
 
 def _epoch_window_from_classified(

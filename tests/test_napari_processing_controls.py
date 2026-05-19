@@ -302,6 +302,9 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                     "stimulus_frame_number",
                     "stimulus_specific_05",
                 ),
+                stimulus_parameters_json=(
+                    '[{"epochName": "Noise"}, {"epochName": "Gray Interleave"}]'
+                ),
             )
             viewer = _FakeViewer()
             opened = open_recording_in_napari(recording_path, viewer=viewer)
@@ -330,6 +333,12 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 ("all_epochs", "visible_epochs"),
             )
             self.assertEqual(specs["epoch_selector"].default, "all_epochs")
+            self.assertEqual(specs["baseline_epoch"].kind, "choice")
+            self.assertEqual(
+                specs["baseline_epoch"].choices,
+                ("1: Noise", "2: Gray Interleave"),
+            )
+            self.assertEqual(specs["baseline_epoch"].default, "2: Gray Interleave")
             hemisphere_widget = cast(Any, _parameter_widget(specs["hemisphere"]))
 
             self.assertEqual(

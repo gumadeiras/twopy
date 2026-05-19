@@ -21,6 +21,7 @@
 - Routed napari manual, CSV-list, and database recording loads through one shared Load-tab workflow with consistent load-failure wording.
 - Unified napari response preview, live update, and Save Analysis handling around one ROI analysis request so plotted previews and saved outputs use the same ROI masks and Plot-tab settings.
 - Let custom line plots set their y-axis label, and label native response-kernel plots as `Weight`.
+- Made the native Response kernels baseline epoch use the recording epoch dropdown and gray/interleave default instead of a numeric spinbox.
 - Moved manual Group Matching ROI match-table mutation rules into GUI-independent analysis helpers while keeping the napari view focused on rendering and interaction wiring.
 - Routed native response timing through one audited recording-timing boundary that prefers classified photodiode boundary evidence and keeps interpolation as the non-boundary-flash fallback.
 - Replaced the single configured data root with ordered `data_paths`, using the first available recording path for database loads and matching output/cache mirroring to the selected root.
@@ -38,6 +39,8 @@
 - Made DSI threshold and epoch-window controls show three decimals, and showed synced custom table outputs at their publish paths instead of cache paths.
 - Matched custom workflow epoch dropdown defaults from numeric selectors, full labels, and epoch names, including unnamed `Epoch N` labels.
 - Made response-kernel CSV columns encode lag seconds, kept per-epoch filenames collision-proof, and reported fitted sample counts after kernel-window filtering.
+- Made response-kernel fitting skip irregular stimulus-clock segments and report fitted/skipped segment counts instead of failing the whole workflow.
+- Kept pooled response-kernel epoch groups from using lag samples across stimulus-segment boundaries, and kept invalid database hemisphere metadata from being hidden as missing metadata.
 - Kept Epochs-tab visibility toggles from rebuilding cached response heatmap images.
 - Persisted database `fly.eye` metadata as converted recording `hemisphere`/`eye` run fields during conversion, with database lookup for older converted files that predate the field.
 - Made the Export-tab Save ROIs + analysis button show the same save and sync status message as the Metadata tab.

@@ -9,6 +9,7 @@ mapping.
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from tests.converted_files import write_converted_recording_files
@@ -108,6 +109,8 @@ class StimulusKernelFitTest(unittest.TestCase):
             np.testing.assert_array_equal(result.contralateral, result.raw_left)
             self.assertEqual(result.response_sample_counts.tolist(), [[3], [3]])
             self.assertEqual(result.stimulus_sample_counts, (4, 4))
+            self.assertEqual(result.fitted_stimulus_segment_counts, (1, 1))
+            self.assertEqual(result.skipped_irregular_stimulus_segment_counts, (0, 0))
 
     def test_recording_kernel_limits_fit_to_selected_epochs(self) -> None:
         """Confirm explicit epoch selection limits kernel fitting."""
@@ -132,6 +135,8 @@ class StimulusKernelFitTest(unittest.TestCase):
             self.assertEqual(result.discarded_epoch_numbers, ())
             self.assertEqual(result.response_sample_counts.tolist(), [[3]])
             self.assertEqual(result.stimulus_sample_counts, (4,))
+            self.assertEqual(result.fitted_stimulus_segment_counts, (1,))
+            self.assertEqual(result.skipped_irregular_stimulus_segment_counts, (0,))
 
     def test_recording_kernel_fits_visual_contrast_without_hemisphere(self) -> None:
         """Confirm visual kernels use signed contrast without hemisphere metadata."""
@@ -195,6 +200,131 @@ class StimulusKernelFitTest(unittest.TestCase):
             self.assertEqual(result.contrast.shape, (2, 1, 2))
             self.assertEqual(result.selected_epoch_numbers, (2, 3))
             self.assertEqual(result.response_sample_counts.tolist(), [[3], [3]])
+            self.assertEqual(result.fitted_stimulus_segment_counts, (1, 1))
+            self.assertEqual(result.skipped_irregular_stimulus_segment_counts, (0, 0))
+
+    def test_recording_kernel_skips_irregular_stimulus_segments(self) -> None:
+        """Confirm bad stimulus-clock repeats are excluded from fitting."""
+        with temporary_directory() as temp_dir:
+            recording_path = write_converted_recording_files(
+                temp_dir,
+                movie_values=np.ones((12, 2, 2), dtype=np.float64),
+                stimulus_data=np.array(
+                    [
+                        [0.0, 1.0, 0.0],
+                        [0.1, 1.0, 0.0],
+                        [0.2, 2.0, -0.2],
+                        [0.3, 2.0, 0.2],
+                        [0.4, 2.0, -0.2],
+                        [0.5, 2.0, 0.2],
+                        [0.6, 3.0, -0.9],
+                        [0.7, 3.0, 0.9],
+                        [0.8, 3.0, -0.9],
+                        [0.9, 3.0, 0.9],
+                        [1.0, 2.0, -0.2],
+                        [1.15, 2.0, 0.2],
+                        [1.16, 2.0, -0.2],
+                        [1.17, 2.0, 0.2],
+                    ],
+                    dtype=np.float64,
+                ),
+                stimulus_data_column_names=(
+                    "time_seconds",
+                    "epoch_number",
+                    "stimulus_specific_05",
+                ),
+                stimulus_parameters_json=json.dumps(
+                    [
+                        {"epochName": "gray"},
+                        {"epochName": "contrast 0.2"},
+                        {"epochName": "contrast 0.9"},
+                    ]
+                ),
+            )
+            epoch_windows = (
+                EpochFrameWindow(FrameWindow(0, 0, 4, "epoch_2"), 2, "contrast 0.2"),
+                EpochFrameWindow(FrameWindow(1, 4, 8, "epoch_3"), 3, "contrast 0.9"),
+                EpochFrameWindow(
+                    FrameWindow(2, 8, 12, "epoch_2"),
+                    2,
+                    "contrast 0.2",
+                ),
+            )
+            computation = _kernel_computation(
+                recording_path=recording_path,
+                frame_count=12,
+                epoch_windows=epoch_windows,
+            )
+
+            result = fit_recording_stimulus_kernels(
+                computation,
+                StimulusKernelOptions(
+                    stimulus_modality="vision",
+                    baseline_epoch_number=1,
+                    selected_epoch_numbers=(2,),
+                    num_stim_past=1,
+                    num_stim_future=0,
+                    method="xcorr",
+                ),
+            )
+
+            self.assertEqual(result.epoch_names, ("contrast 0.2",))
+            self.assertEqual(result.stimulus_sample_counts, (4,))
+            self.assertEqual(result.response_sample_counts.tolist(), [[3]])
+            self.assertEqual(result.fitted_stimulus_segment_counts, (1,))
+            self.assertEqual(result.skipped_irregular_stimulus_segment_counts, (1,))
+
+    def test_same_name_epoch_group_keeps_kernel_windows_within_segments(self) -> None:
+        """Confirm pooled same-name kernels do not cross stimulus boundaries."""
+        with temporary_directory() as temp_dir:
+            recording_path = write_converted_recording_files(
+                temp_dir,
+                movie_values=np.ones((8, 2, 2), dtype=np.float64),
+                stimulus_data=np.array(
+                    [
+                        [0.0, 1.0, 3.0],
+                        [0.1, 1.0, 3.0],
+                        [0.2, 2.0, 0.0],
+                        [0.3, 2.0, 2.0],
+                        [0.4, 2.0, 0.0],
+                        [0.5, 2.0, 2.0],
+                        [0.6, 3.0, 2.0],
+                        [0.7, 3.0, 0.0],
+                        [0.8, 3.0, 2.0],
+                        [0.9, 3.0, 0.0],
+                    ],
+                    dtype=np.float64,
+                ),
+                stimulus_data_column_names=(
+                    "time_seconds",
+                    "epoch_number",
+                    "stimulus_specific_05",
+                ),
+                stimulus_parameters_json=json.dumps(
+                    [
+                        {"epochName": "gray"},
+                        {"epochName": "noise"},
+                        {"epochName": "noise"},
+                    ]
+                ),
+                run_metadata={"hemisphere": "left"},
+            )
+            computation = _kernel_computation(recording_path=recording_path)
+
+            result = fit_recording_stimulus_kernels(
+                computation,
+                StimulusKernelOptions(
+                    baseline_epoch_number=1,
+                    discard_first_stimulus_epoch=False,
+                    num_stim_past=1,
+                    num_stim_future=1,
+                    method="xcorr",
+                ),
+            )
+
+            self.assertEqual(result.epoch_names, ("noise",))
+            self.assertEqual(result.selected_epoch_numbers_by_name, ((2, 3),))
+            self.assertEqual(result.response_sample_counts.tolist(), [[4]])
 
     def test_recording_hemisphere_reads_converted_metadata(self) -> None:
         """Confirm the public helper exposes the recording hemisphere."""
@@ -214,6 +344,22 @@ class StimulusKernelFitTest(unittest.TestCase):
             recording = load_converted_recording(recording_path)
 
             with self.assertRaisesRegex(ValueError, "does not include hemisphere"):
+                recording_hemisphere(recording)
+
+    def test_recording_hemisphere_propagates_invalid_database_metadata(self) -> None:
+        """Confirm corrupt database fly-eye values are not hidden as missing."""
+        with temporary_directory() as temp_dir:
+            recording_path = write_converted_recording_files(temp_dir)
+            recording = load_converted_recording(recording_path)
+
+            with (
+                patch("twopy.config.load_config", return_value=object()),
+                patch(
+                    "twopy.database.database_hemisphere_for_recording_path",
+                    side_effect=ValueError("fly.eye must be left or right"),
+                ),
+                self.assertRaisesRegex(ValueError, "fly.eye"),
+            ):
                 recording_hemisphere(recording)
 
 
@@ -253,14 +399,19 @@ def _write_olfactory_kernel_recording(temp_dir: Path) -> Path:
     )
 
 
-def _kernel_computation(recording_path: Path) -> AnalysisResponseComputation:
+def _kernel_computation(
+    recording_path: Path,
+    *,
+    frame_count: int = 8,
+    epoch_windows: tuple[EpochFrameWindow, ...] | None = None,
+) -> AnalysisResponseComputation:
     """Return a minimal response computation for kernel tests."""
     recording = load_converted_recording(recording_path)
     roi_set = make_roi_set(
         np.array([[[True, False], [False, False]]], dtype=np.bool_),
         labels=("roi_0001",),
     )
-    values = np.linspace(-1.0, 1.0, 8, dtype=np.float64)[:, None]
+    values = np.linspace(-1.0, 1.0, frame_count, dtype=np.float64)[:, None]
     traces = BackgroundCorrectedRoiTraces(
         raw_values=values,
         background_values=np.zeros_like(values),
@@ -285,10 +436,11 @@ def _kernel_computation(recording_path: Path) -> AnalysisResponseComputation:
         baseline_fluorescence=np.ones((1, 1), dtype=np.float64),
         metadata={"data_rate_hz": 10.0},
     )
-    epoch_windows = (
-        EpochFrameWindow(FrameWindow(0, 0, 4, "epoch_2"), 2, "noise_a"),
-        EpochFrameWindow(FrameWindow(1, 4, 8, "epoch_3"), 3, "noise_b"),
-    )
+    if epoch_windows is None:
+        epoch_windows = (
+            EpochFrameWindow(FrameWindow(0, 0, 4, "epoch_2"), 2, "noise_a"),
+            EpochFrameWindow(FrameWindow(1, 4, 8, "epoch_3"), 3, "noise_b"),
+        )
     timing = RecordingTiming(
         frame_rate_hz=10.0,
         epoch_windows=epoch_windows,

@@ -16,6 +16,7 @@ import numpy.typing as npt
 
 from twopy.analysis.kernels._fitting import (
     stimulus_dt,
+    stimulus_times_are_regular,
     validate_regular_stimulus_times,
 )
 from twopy.analysis.trials import EpochFrameWindow
@@ -61,8 +62,11 @@ class AssembledKernelInput:
 
     stimulus_times: npt.NDArray[np.float64]
     stimulus: npt.NDArray[np.float64]
+    stimulus_segment_bounds: tuple[tuple[int, int], ...]
     response_times_by_roi: tuple[npt.NDArray[np.float64], ...]
     responses_by_roi: tuple[npt.NDArray[np.float64], ...]
+    fitted_segments: tuple[StimulusSegment, ...]
+    skipped_irregular_segment_count: int
 
 
 def default_kernel_stimulus_column(
@@ -200,14 +204,18 @@ def assemble_kernel_input(
     """Build complete regular stimulus vectors and sparse ROI responses."""
     stimulus_times: list[npt.NDArray[np.float64]] = []
     stimulus_values: list[npt.NDArray[np.float64]] = []
+    stimulus_segment_bounds: list[tuple[int, int]] = []
     response_times_by_roi: list[list[npt.NDArray[np.float64]]] = [
         [] for _ in computation.roi_set.labels
     ]
     responses_by_roi: list[list[npt.NDArray[np.float64]]] = [
         [] for _ in computation.roi_set.labels
     ]
+    fitted_segments: list[StimulusSegment] = []
+    skipped_irregular_segment_count = 0
     epoch_windows_by_number = _epoch_windows_by_number(computation.epoch_windows)
     offset = 0.0
+    next_stimulus_index = 0
     for segment in segments:
         if segment.epoch_number not in selected_epoch_numbers:
             continue
@@ -227,11 +235,19 @@ def assemble_kernel_input(
             msg = f"Stimulus epoch {segment.epoch_number} has fewer than two samples."
             raise ValueError(msg)
         relative_stimulus_times = epoch_times - float(epoch_times[0])
+        if not stimulus_times_are_regular(relative_stimulus_times):
+            skipped_irregular_segment_count += 1
+            continue
         validate_regular_stimulus_times(
             relative_stimulus_times,
             context=f"stimulus epoch {segment.epoch_number}",
         )
+        segment_start = next_stimulus_index
+        segment_stop = segment_start + epoch_times.size
+        next_stimulus_index = segment_stop
         stimulus_times.append(relative_stimulus_times + offset)
+        stimulus_segment_bounds.append((segment_start, segment_stop))
+        fitted_segments.append(segment)
         stimulus_values.append(
             kernel_stimulus_values(
                 computation.recording.stimulus_data[rows, stimulus_column],
@@ -263,11 +279,18 @@ def assemble_kernel_input(
         )
 
     if len(stimulus_times) == 0:
+        if skipped_irregular_segment_count > 0:
+            msg = (
+                "All selected stimulus segments were skipped because their times "
+                "are not regular enough for kernel fitting."
+            )
+            raise ValueError(msg)
         msg = "No selected stimulus epochs were assembled for kernel fitting."
         raise ValueError(msg)
     return AssembledKernelInput(
         stimulus_times=np.concatenate(stimulus_times).astype(np.float64, copy=False),
         stimulus=np.concatenate(stimulus_values).astype(np.float64, copy=False),
+        stimulus_segment_bounds=tuple(stimulus_segment_bounds),
         response_times_by_roi=tuple(
             np.concatenate(values).astype(np.float64, copy=False)
             if len(values) > 0
@@ -280,6 +303,8 @@ def assemble_kernel_input(
             else np.array([], dtype=np.float64)
             for values in responses_by_roi
         ),
+        fitted_segments=tuple(fitted_segments),
+        skipped_irregular_segment_count=skipped_irregular_segment_count,
     )
 
 

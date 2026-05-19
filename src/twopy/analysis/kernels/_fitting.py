@@ -81,6 +81,7 @@ def fit_stimulus_kernel_with_count(
     response_times: npt.NDArray[np.float64],
     response: npt.NDArray[np.float64],
     *,
+    stimulus_segment_bounds: Sequence[tuple[int, int]] | None = None,
     num_stim_past: int,
     num_stim_future: int,
     method: KernelFitMethod = "ols",
@@ -103,6 +104,7 @@ def fit_stimulus_kernel_with_count(
         stimulus_indices=stimulus_indices,
         stimulus_size=stimulus.size,
         response=response,
+        stimulus_segment_bounds=stimulus_segment_bounds,
         num_stim_past=num_stim_past,
         num_stim_future=num_stim_future,
     )
@@ -142,6 +144,7 @@ def fit_stimulus_kernel_by_roi(
     response_times_by_roi: Sequence[npt.NDArray[np.float64]],
     responses_by_roi: Sequence[npt.NDArray[np.float64]],
     *,
+    stimulus_segment_bounds: Sequence[tuple[int, int]] | None = None,
     num_stim_past: int,
     num_stim_future: int,
     method: KernelFitMethod,
@@ -160,6 +163,7 @@ def fit_stimulus_kernel_by_roi(
             stimulus,
             response_times,
             responses,
+            stimulus_segment_bounds=stimulus_segment_bounds,
             num_stim_past=num_stim_past,
             num_stim_future=num_stim_future,
             method=method,
@@ -243,15 +247,43 @@ def _valid_response_sample_mask(
     stimulus_indices: npt.NDArray[np.int64],
     stimulus_size: int,
     response: npt.NDArray[np.float64],
+    stimulus_segment_bounds: Sequence[tuple[int, int]] | None,
     num_stim_past: int,
     num_stim_future: int,
 ) -> npt.NDArray[np.bool_]:
     """Return response samples that have complete stimulus context."""
-    return (
+    complete_global_window = (
         (stimulus_indices - num_stim_past >= 0)
         & (stimulus_indices + num_stim_future < stimulus_size)
         & np.isfinite(response)
     )
+    if stimulus_segment_bounds is None:
+        return complete_global_window
+    return complete_global_window & _segment_local_window_mask(
+        stimulus_indices=stimulus_indices,
+        stimulus_segment_bounds=stimulus_segment_bounds,
+        num_stim_past=num_stim_past,
+        num_stim_future=num_stim_future,
+    )
+
+
+def _segment_local_window_mask(
+    *,
+    stimulus_indices: npt.NDArray[np.int64],
+    stimulus_segment_bounds: Sequence[tuple[int, int]],
+    num_stim_past: int,
+    num_stim_future: int,
+) -> npt.NDArray[np.bool_]:
+    """Return samples whose lag window stays inside one stimulus segment."""
+    keep = np.zeros(stimulus_indices.shape, dtype=np.bool_)
+    for start, stop in stimulus_segment_bounds:
+        keep |= (
+            (stimulus_indices >= start)
+            & (stimulus_indices < stop)
+            & (stimulus_indices - num_stim_past >= start)
+            & (stimulus_indices + num_stim_future < stop)
+        )
+    return keep
 
 
 def _stimulus_design_matrix(
@@ -306,6 +338,21 @@ def validate_regular_stimulus_times(
     if float(np.std(diffs)) / mean_dt >= 0.1:
         msg = f"{context} times are not regular enough for kernel fitting."
         raise ValueError(msg)
+
+
+def stimulus_times_are_regular(times: npt.NDArray[np.float64]) -> bool:
+    """Return whether stimulus times can support fixed-lag kernel fitting."""
+    if times.ndim != 1:
+        return False
+    diffs = np.diff(times)
+    if diffs.size == 0:
+        return False
+    if not np.all(diffs > 0):
+        return False
+    mean_dt = float(np.mean(diffs))
+    if mean_dt <= 0:
+        return False
+    return float(np.std(diffs)) / mean_dt < 0.1
 
 
 def stimulus_dt(times: npt.NDArray[np.float64]) -> float:

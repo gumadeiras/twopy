@@ -265,6 +265,8 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
         }
         self.assertEqual(kernel_specs["epoch_selector"].kind, "str")
         self.assertEqual(kernel_specs["epoch_selector"].role, "epoch_selector")
+        self.assertEqual(kernel_specs["baseline_epoch"].kind, "str")
+        self.assertEqual(kernel_specs["baseline_epoch"].role, "baseline_epoch")
         self.assertEqual(kernel_specs["stimulus_modality"].kind, "choice")
         self.assertEqual(
             kernel_specs["stimulus_modality"].choices,

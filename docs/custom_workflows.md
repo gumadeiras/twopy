@@ -4,7 +4,7 @@ Custom workflows are trusted Python files shown in the napari Custom tab. twopy 
 
 Direction selectivity uses the loaded recording's epoch names for its preferred and null epoch dropdowns. It computes DSI per ROI, shows the table in the Custom tab, highlights rows that pass the absolute DSI threshold, and sends only passing ROIs to the response plot.
 
-Response kernels is a separate workflow. It fits random-noise temporal kernels for the current ROIs, supports olfactory antenna activation and visual contrast with a Stimulus dropdown, writes one CSV matrix per unique epoch name and kernel stream, and shows per-ROI plus mean kernel plots.
+Response kernels is a separate workflow. It fits random-noise temporal kernels for the current ROIs, supports olfactory antenna activation and visual contrast with a Stimulus dropdown, uses a Baseline epoch dropdown to exclude gray or interleave samples, writes one CSV matrix per unique epoch name and kernel stream, and shows per-ROI plus mean kernel plots.
 
 ## Configure
 
@@ -112,7 +112,7 @@ For CSV, PDF, PNG, and other non-HDF5 outputs, twopy writes a sidecar like `dire
 
 ## Kernel Workflow
 
-twopy ships a native Response kernels workflow. It runs through the same Custom tab as local workflows, uses the current Plot-tab dF/F and processing settings, keeps complete regular stimulus streams for selected non-baseline epochs, samples ROI responses from photodiode-aligned frame windows, and fits temporal kernels per ROI for each unique selected epoch name. The Stimulus dropdown selects how the default converted stimulus column is interpreted.
+twopy ships a native Response kernels workflow. It runs through the same Custom tab as local workflows, uses the current Plot-tab dF/F and processing settings, uses the Baseline epoch dropdown to choose the gray or interleave epoch excluded from fitting, keeps complete regular stimulus streams for selected non-baseline epochs, skips selected stimulus segments whose sample times are not regular enough for fixed-lag fitting, samples ROI responses from photodiode-aligned frame windows, and fits temporal kernels per ROI for each unique selected epoch name. The Stimulus dropdown selects how the default converted stimulus column is interpreted.
 
 For `olfaction`, the workflow fits one raw-left and raw-right antenna kernel per ROI and epoch name, maps those raw kernels to ipsi and contra from the recording hemisphere stored in converted metadata, with a manual override available for audits, then writes:
 
@@ -125,7 +125,7 @@ For `vision`, the workflow fits one signed-contrast kernel per ROI and epoch nam
 - `response_kernels_group_<index>_epochs_<numbers>_<epoch_name>_contrast.csv`
 - `response_kernels_summary.csv`
 
-Both current native modes default to `stimulus_specific_05`, but the meaning differs by modality. In olfactory LED recordings it matches the random-noise workflow's `antenna_stim` value after twopy's stable column naming; LED recordings encode `0=left`, `1=both`, `2=right`, and `3=blank`. In Matulis-style full-field visual contrast recordings it is signed contrast, such as `-0.2/+0.2` and `-0.9/+0.9`. Kernel CSV matrix columns are labeled as `lag_s_<seconds>` so the exported lag axis is inspectable without opening the plot. Negative kernel times are future stimulus samples and are useful as a timing diagnostic. Current native fitting is frame-aligned; per-ROI line timing maps are not yet part of converted HDF5 files, so line-precise psycho5 parity remains a separate timing-extension task.
+Both current native modes default to `stimulus_specific_05`, but the meaning differs by modality. In olfactory LED recordings it matches the random-noise workflow's `antenna_stim` value after twopy's stable column naming; LED recordings encode `0=left`, `1=both`, `2=right`, and `3=blank`. In Matulis-style full-field visual contrast recordings it is signed contrast, such as `-0.2/+0.2` and `-0.9/+0.9`. Kernel CSV matrix columns are labeled as `lag_s_<seconds>` so the exported lag axis is inspectable without opening the plot, and the summary CSV reports fitted and skipped stimulus segment counts so display-timing hitches remain visible. Negative kernel times are future stimulus samples and are useful as a timing diagnostic. Current native fitting is frame-aligned; per-ROI line timing maps are not yet part of converted HDF5 files, so line-precise psycho5 parity remains a separate timing-extension task.
 
 A local kernel workflow can still return custom line plots if it needs experimental fitting code:
 
