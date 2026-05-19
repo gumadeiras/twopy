@@ -17,6 +17,7 @@ from twopy.analysis_cache import copy_file_atomically, refresh_cached_analysis_o
 from twopy.config import (
     DEFAULT_CONFIG_PATH,
     TwopyConfig,
+    data_path_match,
     load_config,
     resolve_analysis_work_dir,
 )
@@ -326,20 +327,14 @@ def _source_is_under_data_path(config: TwopyConfig, source_dir: Path) -> bool:
     """Return whether a source folder belongs to the configured data root.
 
     Args:
-        config: Loaded twopy configuration with a ``data_path`` attribute.
+        config: Loaded twopy configuration with a ``data_paths`` attribute.
         source_dir: Source recording folder.
 
     Returns:
         ``True`` when direct converted-file selections should be localized into
         the configured cache mirror.
     """
-    resolved_data_path = config.data_path.expanduser().resolve(strict=False)
-    resolved_source_dir = source_dir.expanduser().resolve(strict=False)
-    try:
-        resolved_source_dir.relative_to(resolved_data_path)
-    except ValueError:
-        return False
-    return True
+    return data_path_match(config, source_dir.resolve(strict=False)) is not None
 
 
 def _source_file_is_newer(source: Path, target: Path) -> bool:

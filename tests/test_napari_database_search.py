@@ -56,7 +56,8 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             config_path = root / "config.yml"
             config_path.write_text(
                 f"database_path: {database_dir}\n"
-                f"data_path: {data_dir}\n"
+                "data_paths:\n"
+                f"  - {data_dir}\n"
                 "database_access: direct\n"
                 "analysis_output: source\n",
                 encoding="utf-8",
@@ -189,7 +190,8 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             favorites_path = root / "favorites.yml"
             config_path.write_text(
                 f"database_path: {database_dir}\n"
-                f"data_path: {data_dir}\n"
+                "data_paths:\n"
+                f"  - {data_dir}\n"
                 "database_access: direct\n"
                 "analysis_output: source\n",
                 encoding="utf-8",
@@ -426,7 +428,8 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             config_path = root / "config.yml"
             config_path.write_text(
                 f"database_path: {database_dir}\n"
-                f"data_path: {data_dir}\n"
+                "data_paths:\n"
+                f"  - {data_dir}\n"
                 "database_access: direct\n"
                 "analysis_output: source\n",
                 encoding="utf-8",
@@ -594,7 +597,8 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             config_path = root / "config.yml"
             config_path.write_text(
                 f"database_path: {database_dir}\n"
-                f"data_path: {data_dir}\n"
+                "data_paths:\n"
+                f"  - {data_dir}\n"
                 "database_access: direct\n"
                 "analysis_output: source\n",
                 encoding="utf-8",

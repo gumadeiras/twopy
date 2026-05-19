@@ -22,6 +22,7 @@
 - Let custom line plots set their y-axis label, and label native response-kernel plots as `Weight`.
 - Moved manual Group Matching ROI match-table mutation rules into GUI-independent analysis helpers while keeping the napari view focused on rendering and interaction wiring.
 - Routed native response timing through one audited recording-timing boundary that prefers classified photodiode boundary evidence and keeps interpolation as the non-boundary-flash fallback.
+- Replaced the single configured data root with ordered `data_paths`, using the first available recording path for database loads and matching output/cache mirroring to the selected root.
 - Split napari response-map display scaling coverage into a pure helper test module and reused shared converted-HDF5 fixture writers across more analysis tests.
 
 ### Fixes
@@ -34,8 +35,10 @@
 - Kept custom workflow epoch-window defaults from being overwritten by recording duration caps.
 - Made DSI threshold and epoch-window controls show three decimals, and showed synced custom table outputs at their publish paths instead of cache paths.
 - Matched custom workflow epoch dropdown defaults from numeric selectors, full labels, and epoch names, including unnamed `Epoch N` labels.
+- Made response-kernel CSV columns encode lag seconds, kept per-epoch filenames collision-proof, and reported fitted sample counts after kernel-window filtering.
 - Kept Epochs-tab visibility toggles from rebuilding cached response heatmap images.
 - Persisted database `fly.eye` metadata as converted recording `hemisphere`/`eye` run fields during conversion, with database lookup for older converted files that predate the field.
+- Made the Export-tab Save ROIs + analysis button show the same save and sync status message as the Metadata tab.
 
 ## 0.1.9 - 2026-05-17
 

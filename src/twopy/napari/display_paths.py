@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from numbers import Real
 from pathlib import Path
 
-from twopy.config import DEFAULT_CONFIG_PATH, load_config
+from twopy.config import DEFAULT_CONFIG_PATH, data_path_match, load_config
 from twopy.converted import RecordingData
 
 __all__ = [
@@ -78,8 +78,10 @@ def recording_display_summary(recording: RecordingData) -> RecordingDisplaySumma
     recording_label = _recording_label(recording_dir, date_index)
 
     try:
-        data_root = load_config(DEFAULT_CONFIG_PATH).data_path.expanduser()
-        relative = recording_dir.relative_to(data_root)
+        match = data_path_match(load_config(DEFAULT_CONFIG_PATH), recording_dir)
+        if match is None:
+            raise ValueError
+        data_root, relative = match
     except (FileNotFoundError, ValueError):
         data_root, genotype, stimulus = _fallback_path_parts(recording_dir, date_index)
     else:

@@ -107,7 +107,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
     ) -> None:
         """Confirm configured caching routes external source conversion to cache.
 
-        Inputs: source-shaped recording folder outside configured ``data_path``.
+        Inputs: source-shaped recording folder outside configured ``data_paths``.
         Outputs: converted paths in the stable external cache plus a flag saying
             conversion ran.
         """
@@ -120,7 +120,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             config_path = root / "config.yml"
             config_path.write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root}\n"
+                "data_paths:\n"
+                f"  - {data_root}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
@@ -160,7 +161,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
     def test_recording_path_resolution_uses_local_analysis_cache(self) -> None:
         """Confirm source loading converts into local cache when enabled.
 
-        Inputs: a source-shaped recording under configured ``data_path``.
+        Inputs: a source-shaped recording under configured ``data_paths``.
         Outputs: converted paths under ``analysis_cache_dir``.
         """
         with temporary_directory() as temp_dir:
@@ -171,7 +172,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             _write_source_recording_shape(source_dir)
             (root / "config.yml").write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root.resolve()}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
@@ -208,7 +210,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
     ) -> None:
         """Confirm unavailable source paths can reopen existing cached data.
 
-        Inputs: missing source recording folder under ``data_path`` and a
+        Inputs: missing source recording folder under ``data_paths`` and a
             matching converted cache folder.
         Outputs: resolved paths point at the existing cached HDF5 files.
         """
@@ -222,7 +224,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             _write_converted_recording(cache_dir, source_session_dir=source_dir)
             (root / "config.yml").write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root.resolve()}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
@@ -268,7 +271,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             (publish_dir / "rois.h5").write_text("published", encoding="utf-8")
             (root / "config.yml").write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root.resolve()}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
@@ -293,7 +297,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
     def test_external_source_cache_pulls_published_analysis_outputs(self) -> None:
         """Confirm external cached source loads refresh saved analysis files.
 
-        Inputs: source recording outside configured ``data_path``, an existing
+        Inputs: source recording outside configured ``data_paths``, an existing
             external cache entry, and published source-local analysis outputs.
         Outputs: the existing cache is reused and saved analysis files are
             copied beside the cached converted files.
@@ -314,7 +318,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             config_path = root / "config.yml"
             config_path.write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root}\n"
+                "data_paths:\n"
+                f"  - {data_root}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
@@ -372,7 +377,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             _write_converted_recording(publish_dir, source_session_dir=source_dir)
             (root / "config.yml").write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root.resolve()}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
@@ -422,7 +428,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             source_recording.touch()
             (root / "config.yml").write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root.resolve()}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
@@ -475,7 +482,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             config_path = root / "config.yml"
             config_path.write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root}\n"
+                "data_paths:\n"
+                f"  - {data_root}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"

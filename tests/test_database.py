@@ -187,7 +187,7 @@ class DatabaseQueryTest(unittest.TestCase):
             self._write_clark_style_log(database_dir / "experimentLog.db")
             config = TwopyConfig(
                 database_path=database_dir,
-                data_path=data_dir,
+                data_paths=(data_dir,),
                 database_access="direct",
                 analysis_output="source",
             )
@@ -229,7 +229,7 @@ class DatabaseQueryTest(unittest.TestCase):
             self._write_clark_style_log(database_dir / "experimentInitLog.db")
             config = TwopyConfig(
                 database_path=database_dir,
-                data_path=data_dir,
+                data_paths=(data_dir,),
                 database_access="direct",
                 analysis_output="source",
             )
@@ -279,7 +279,7 @@ class DatabaseQueryTest(unittest.TestCase):
             self._write_clark_style_log(database_dir / "experimentLog.db")
             config = TwopyConfig(
                 database_path=database_dir,
-                data_path=data_dir,
+                data_paths=(data_dir,),
                 database_access="direct",
                 analysis_output="source",
             )
@@ -316,7 +316,7 @@ class DatabaseQueryTest(unittest.TestCase):
             self._write_large_clark_style_log(database_dir / "experimentLog.db")
             config = TwopyConfig(
                 database_path=database_dir,
-                data_path=data_dir,
+                data_paths=(data_dir,),
                 database_access="direct",
                 analysis_output="source",
             )

@@ -32,7 +32,8 @@ class PublicApiTest(unittest.TestCase):
             config_path = root / "config.yml"
             config_path.write_text(
                 f"database_path: {database_dir}\n"
-                f"data_path: {data_dir}\n"
+                "data_paths:\n"
+                f"  - {data_dir}\n"
                 "database_access: copy\n"
                 "analysis_output: source\n",
                 encoding="utf-8",

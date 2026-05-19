@@ -38,7 +38,7 @@ print(converted.movie_path)
 
 Conversion writes `recording_data.h5` for metadata, stimulus tables, photodiode signals, and the mean image. The large aligned movie is written separately to `aligned_movie.h5`. By default the mean image uses the full movie; pass `mean_start_frame` and `mean_stop_frame` to use a frame range.
 
-By default, conversion writes to the configured analysis work directory. With `analysis_caching: true` this is the local `analysis_cache_dir`, mirrored by recording path under `data_path` for normal lab recordings and placed under `_external` for recordings outside `data_path`; with `analysis_caching: false` it is the configured `analysis_output`. Use `analysis_output: source` to publish saved analysis outputs into `recording/twopy`; use a path to mirror the recording directory structure under that output root. Pass `output_dir` only when overriding routing for a specific call.
+By default, conversion writes to the configured analysis work directory. With `analysis_caching: true` this is the local `analysis_cache_dir`, mirrored by recording path under the matched ordered `data_paths` root for normal lab recordings and placed under `_external` for recordings outside `data_paths`; with `analysis_caching: false` it is the configured `analysis_output`. Use `analysis_output: source` to publish saved analysis outputs into `recording/twopy`; use a path to mirror the recording directory structure under that output root. Pass `output_dir` only when overriding routing for a specific call.
 
 ## Analyze Converted Data
 

@@ -11,9 +11,12 @@
 # experimentInitLog.db.
 database_path: /Volumes/magic/clarklab/_Database
 
-# Folder that contains the two-photon microscope recording folders.
-# twopy uses this to connect database entries to recordings on disk.
-data_path: /Volumes/magic/clarklab/2p_microscope_data
+# Folders that contain the two-photon microscope recording folders.
+# twopy checks them in order when a database row could exist on more than one
+# volume. The first existing recording wins.
+data_paths:
+  - /Volumes/magic/clarklab/2p_microscope_data
+  - /Volumes/archive/clarklab/2p_microscope_data
 
 # How twopy should read the database.
 # Use "copy" for normal work. Database searches over the network can be slow,
@@ -29,7 +32,8 @@ database_access: copy
 analysis_caching: true
 
 # Local folder for cached converted recordings, ROIs, and analysis outputs.
-# twopy mirrors recording paths below data_path under this folder.
+# twopy mirrors recording paths below the matched data_paths root under this
+# folder.
 analysis_cache_dir: ~/.cache/twopy/recordings
 
 # Optional alternative dated CSV registry for microscope pixel-size calibration.

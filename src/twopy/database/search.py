@@ -18,6 +18,7 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal
 
+from twopy.config import data_path_match, resolve_data_recording_path
 from twopy.database.modeled import find_stimulus_presentations
 from twopy.database.types import DatabaseExperiment
 
@@ -280,7 +281,7 @@ def recording_path_for_database_experiment(
     """Resolve one database experiment into a source recording folder.
 
     Args:
-        config: Loaded twopy configuration with ``data_path``.
+        config: Loaded twopy configuration with ``data_paths``.
         experiment: Database row with a relative data path.
 
     Returns:
@@ -290,7 +291,7 @@ def recording_path_for_database_experiment(
         ValueError: If the database row does not contain a safe relative path.
 
     The database stores Windows-style separators in observed rows. Twopy treats
-    the value as relative path text and resolves it beneath ``data_path`` before
+    the value as relative path text and resolves it beneath ``data_paths`` before
     passing it to the existing recording loader.
     """
     relative_path = _normalized_relative_path(experiment.relative_data_path)
@@ -304,12 +305,12 @@ def recording_path_for_database_experiment(
     path_parts = PurePosixPath(relative_path).parts
     if any(part in {"", ".", ".."} for part in path_parts):
         msg = (
-            "Database experiment relativeDataPath must stay under data_path: "
+            "Database experiment relativeDataPath must stay under data_paths: "
             f"{experiment.relative_data_path!r}"
         )
         raise ValueError(msg)
 
-    return config.data_path.expanduser().joinpath(*path_parts)
+    return resolve_data_recording_path(config, path_parts)
 
 
 def recording_paths_for_database_experiments(
@@ -319,7 +320,7 @@ def recording_paths_for_database_experiments(
     """Resolve database experiments into unique source recording folders.
 
     Args:
-        config: Loaded twopy configuration with ``data_path``.
+        config: Loaded twopy configuration with ``data_paths``.
         experiments: Database rows to load.
 
     Returns:
@@ -429,11 +430,9 @@ def _candidate_database_relative_paths(
     """Return normalized DB path candidates for one source folder."""
     candidates: list[str] = []
     path = recording_dir.expanduser()
-    try:
-        relative = path.relative_to(config.data_path.expanduser())
-    except ValueError:
-        relative = None
-    if relative is not None:
+    match = data_path_match(config, path)
+    if match is not None:
+        _data_root, relative = match
         candidates.append(_normalized_relative_path(relative.as_posix()))
 
     parts = path.parts

@@ -12,7 +12,6 @@ from typing import Literal
 
 import yaml
 
-from twopy.database.types import DatabaseAccess
 from twopy.pixel_calibration import DEFAULT_PIXEL_CALIBRATION_PATH
 
 __all__ = [
@@ -20,7 +19,9 @@ __all__ = [
     "DEFAULT_ANALYSIS_CACHE_DIR",
     "AnalysisOutputMode",
     "TwopyConfig",
+    "data_path_match",
     "load_config",
+    "resolve_data_recording_path",
     "resolve_analysis_cache_dir",
     "resolve_analysis_output_dir",
     "resolve_analysis_work_dir",
@@ -28,6 +29,7 @@ __all__ = [
 
 DEFAULT_CONFIG_PATH = Path("config.yml")
 DEFAULT_ANALYSIS_CACHE_DIR = Path.home() / ".cache" / "twopy" / "recordings"
+DatabaseAccess = Literal["direct", "copy"]
 AnalysisOutputMode = Path | Literal["source"]
 
 
@@ -40,7 +42,7 @@ class TwopyConfig:
     """
 
     database_path: Path
-    data_path: Path
+    data_paths: tuple[Path, ...]
     database_access: DatabaseAccess
     analysis_output: AnalysisOutputMode
     analysis_caching: bool = True
@@ -71,7 +73,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
         raise FileNotFoundError(msg)
 
     with config_path.open("r", encoding="utf-8") as config_file:
-        loaded: object = yaml.safe_load(config_file)
+        try:
+            loaded: object = yaml.safe_load(config_file)
+        except yaml.YAMLError as error:
+            msg = f"Could not parse twopy config file {config_path}: {error}"
+            raise ValueError(msg) from error
 
     if not isinstance(loaded, dict):
         msg = f"twopy config must be a YAML mapping: {config_path}"
@@ -81,7 +87,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
 
     return TwopyConfig(
         database_path=_required_path(raw_config, "database_path", config_path),
-        data_path=_required_path(raw_config, "data_path", config_path),
+        data_paths=_required_path_tuple(raw_config, "data_paths", config_path),
         database_access=_database_access(raw_config, config_path),
         analysis_output=_analysis_output(raw_config, config_path),
         analysis_caching=_optional_bool(
@@ -110,6 +116,66 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
     )
 
 
+def resolve_data_recording_path(
+    config: TwopyConfig,
+    relative_parts: tuple[str, ...],
+) -> Path:
+    """Resolve a database-relative recording path against ordered data roots.
+
+    Args:
+        config: Loaded twopy configuration with ordered data roots.
+        relative_parts: Safe relative path pieces from a database row.
+
+    Returns:
+        The first existing recording candidate under ``data_paths``. If none
+        exists, the candidate under the first configured root is returned so the
+        loader can fail with the concrete path it tried.
+
+    The lab can keep the same relative recording tree on multiple volumes. This
+    function is the ordered availability check that picks the preferred mounted
+    copy without hiding missing-data errors behind a second abstraction.
+    """
+    candidates = tuple(
+        data_root.expanduser().joinpath(*relative_parts)
+        for data_root in config.data_paths
+    )
+    if not candidates:
+        msg = "twopy config must include at least one data path"
+        raise ValueError(msg)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def data_path_match(
+    config: TwopyConfig, recording_dir: Path
+) -> tuple[Path, Path] | None:
+    """Return the configured data root and relative path for one recording.
+
+    Args:
+        config: Loaded twopy configuration with ordered data roots.
+        recording_dir: Source recording folder.
+
+    Returns:
+        ``(data_root, relative_recording)`` for the first configured root that
+        contains ``recording_dir``, or ``None`` when the recording is external.
+
+    Output and cache routing need the same root-relative path that database
+    search used. Keeping that rule here avoids each caller inventing its own
+    root membership test.
+    """
+    source_dir = recording_dir.expanduser().resolve(strict=False)
+    for data_root in config.data_paths:
+        expanded_root = data_root.expanduser().resolve(strict=False)
+        try:
+            return expanded_root, source_dir.relative_to(expanded_root)
+        except ValueError:
+            continue
+    return None
+
+
 def resolve_analysis_output_dir(config: TwopyConfig, recording_dir: Path) -> Path:
     """Resolve the output directory for one recording.
 
@@ -122,26 +188,25 @@ def resolve_analysis_output_dir(config: TwopyConfig, recording_dir: Path) -> Pat
 
     Raises:
         ValueError: If ``analysis_output`` is a root path and the recording is
-            not inside ``config.data_path``.
+            not inside any configured data root.
 
     ``analysis_output: source`` writes into ``recording_dir/twopy``. A path
-    value mirrors the recording's path relative to ``data_path`` under that
-    output root.
+    value mirrors the recording's path relative to its matching data root under
+    that output root.
     """
     source_dir = recording_dir.expanduser()
     if config.analysis_output == "source":
         return source_dir / "twopy"
 
-    data_root = config.data_path.expanduser()
-    try:
-        relative_recording = source_dir.relative_to(data_root)
-    except ValueError as error:
+    match = data_path_match(config, source_dir)
+    if match is None:
         msg = (
-            f"Recording {source_dir} is not inside configured data_path "
-            f"{data_root}; cannot mirror analysis output directory"
+            f"Recording {source_dir} is not inside configured data_paths; "
+            "cannot mirror analysis output directory"
         )
-        raise ValueError(msg) from error
+        raise ValueError(msg)
 
+    _data_root, relative_recording = match
     return config.analysis_output / relative_recording
 
 
@@ -155,17 +220,15 @@ def resolve_analysis_cache_dir(config: TwopyConfig, recording_dir: Path) -> Path
     Returns:
         Directory where twopy should keep local working files.
 
-    The cache mirrors the same recording-relative directory shape as
-    ``analysis_output`` for normal lab data. External recordings still get a
-    stable cache path under ``_external`` so local-first conversion does not
-    depend on a perfect ``data_path`` match.
+    The cache mirrors the recording-relative directory shape under whichever
+    configured data root contains the recording. External recordings still get
+    a stable cache path under ``_external``.
     """
     source_dir = recording_dir.expanduser()
-    data_root = config.data_path.expanduser()
-    try:
-        relative_recording = source_dir.relative_to(data_root)
-    except ValueError:
+    match = data_path_match(config, source_dir)
+    if match is None:
         return _external_analysis_cache_dir(config, source_dir)
+    _data_root, relative_recording = match
     return config.analysis_cache_dir / relative_recording
 
 
@@ -213,11 +276,48 @@ def _required_path(config: dict[object, object], key: str, config_path: Path) ->
     return _path_from_config_value(value)
 
 
+def _required_path_tuple(
+    config: dict[object, object],
+    key: str,
+    config_path: Path,
+) -> tuple[Path, ...]:
+    """Read one required non-empty path list from parsed YAML.
+
+    Args:
+        config: Parsed YAML mapping.
+        key: Required key to read.
+        config_path: Source config file path, used for clear errors.
+
+    Returns:
+        Expanded paths in config order.
+
+    Raises:
+        ValueError: If the key is missing, empty, or contains non-string items.
+    """
+    value = config.get(key)
+    if not isinstance(value, list) or not value:
+        msg = (
+            f"twopy config key {key!r} must be a non-empty list of paths: {config_path}"
+        )
+        raise ValueError(msg)
+
+    paths: list[Path] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or item == "":
+            msg = (
+                f"twopy config key {key!r} item {index} must be a "
+                f"non-empty path string: {config_path}"
+            )
+            raise ValueError(msg)
+        paths.append(_path_from_config_value(item))
+    return tuple(paths)
+
+
 def _external_analysis_cache_dir(
     config: TwopyConfig,
     source_dir: Path,
 ) -> Path:
-    """Return a stable cache directory for recordings outside ``data_path``.
+    """Return a stable cache directory for recordings outside ``data_paths``.
 
     Args:
         config: Loaded twopy configuration.
