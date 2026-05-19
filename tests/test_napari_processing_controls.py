@@ -33,7 +33,12 @@ from tests.napari_support import (
     unittest,
 )
 
-from twopy.custom import discover_custom_workflows, native_custom_workflow_paths
+from twopy.custom import (
+    CustomParameterSpec,
+    discover_custom_workflows,
+    native_custom_workflow_paths,
+)
+from twopy.napari.plotting.docks.response_plot_widget import _recording_parameter_spec
 
 
 class NapariProcessingControlsTest(NapariAdapterTestCase):
@@ -187,6 +192,39 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             self.assertEqual(specs["dsi_threshold"].minimum, 0.0)
             self.assertEqual(specs["dsi_threshold"].step, 0.05)
             self.assertEqual(specs["dsi_threshold"].decimals, 3)
+
+    def test_custom_epoch_parameter_default_matches_supported_selectors(self) -> None:
+        """Confirm epoch dropdown defaults accept number, label, and name."""
+        with temporary_directory() as temp_dir:
+            recording_path = _write_converted_recording(
+                Path(temp_dir),
+                stimulus_parameters_json=(
+                    '[{"epochName": "Left"}, {"epochName": "Right"}]'
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            choices = ("1: Left", "2: Right")
+
+            for default in ("2", "2: Right", "Right"):
+                spec = CustomParameterSpec(
+                    name="epoch",
+                    label="Epoch",
+                    kind="str",
+                    default=default,
+                    description="",
+                    role="epoch",
+                )
+                adjusted = _recording_parameter_spec(
+                    spec,
+                    recording=opened.recording,
+                    epoch_choices=choices,
+                    metric_stop_seconds=None,
+                    response_start_seconds=-1.0,
+                    response_stop_seconds=2.0,
+                )
+
+                self.assertEqual(adjusted.default, "2: Right")
 
     def test_baseline_epoch_dropdown_defaults_to_gray_like_epoch(self) -> None:
         """Confirm the dF/F baseline defaults to the gray/interleave epoch.

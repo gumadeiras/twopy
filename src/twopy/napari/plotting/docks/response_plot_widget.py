@@ -128,6 +128,8 @@ _CUSTOM_EPOCH_WINDOW_STEP_SECONDS = 0.1
 _CUSTOM_RESPONSE_WINDOW_STEP_SECONDS = 0.1
 _CUSTOM_RESPONSE_METRIC_CHOICES = ("mean", "peak", "minimum")
 _CUSTOM_ROI_SELECTOR_CHOICES = ("all_rois", "visible_rois")
+_CUSTOM_EPOCH_WINDOW_ROLES = ("epoch_window_start", "epoch_window_stop")
+_CUSTOM_RESPONSE_WINDOW_ROLES = ("response_window_start", "response_window_stop")
 
 
 class _ResponsePlotWidget(QWidget):
@@ -1521,14 +1523,7 @@ def _recording_parameter_spec(
             choices=epoch_choices,
             default=_baseline_epoch_choice(recording, epoch_choices, str(spec.default)),
         )
-    if spec.role == "epoch_window_stop":
-        return replace(
-            spec,
-            minimum=_CUSTOM_EPOCH_WINDOW_MIN_SECONDS,
-            maximum=metric_stop_seconds,
-            step=_CUSTOM_EPOCH_WINDOW_STEP_SECONDS,
-        )
-    if spec.role == "epoch_window_start":
+    if spec.role in _CUSTOM_EPOCH_WINDOW_ROLES:
         return replace(
             spec,
             minimum=_CUSTOM_EPOCH_WINDOW_MIN_SECONDS,
@@ -1536,24 +1531,8 @@ def _recording_parameter_spec(
             step=_CUSTOM_EPOCH_WINDOW_STEP_SECONDS,
         )
     if spec.role == "response_metric":
-        default = str(spec.default)
-        if default not in _CUSTOM_RESPONSE_METRIC_CHOICES:
-            default = _CUSTOM_RESPONSE_METRIC_CHOICES[0]
-        return replace(
-            spec,
-            kind="choice",
-            choices=_CUSTOM_RESPONSE_METRIC_CHOICES,
-            default=default,
-        )
-    if spec.role == "response_window_start":
-        return replace(
-            spec,
-            minimum=response_start_seconds,
-            maximum=response_stop_seconds,
-            step=_CUSTOM_RESPONSE_WINDOW_STEP_SECONDS,
-            decimals=spec.decimals if spec.decimals is not None else 3,
-        )
-    if spec.role == "response_window_stop":
+        return _custom_choice_parameter_spec(spec, _CUSTOM_RESPONSE_METRIC_CHOICES)
+    if spec.role in _CUSTOM_RESPONSE_WINDOW_ROLES:
         return replace(
             spec,
             minimum=response_start_seconds,
@@ -1568,15 +1547,7 @@ def _recording_parameter_spec(
             step=spec.step if spec.step is not None else 1.0,
         )
     if spec.role == "roi_selector":
-        default = str(spec.default)
-        if default not in _CUSTOM_ROI_SELECTOR_CHOICES:
-            default = _CUSTOM_ROI_SELECTOR_CHOICES[0]
-        return replace(
-            spec,
-            kind="choice",
-            choices=_CUSTOM_ROI_SELECTOR_CHOICES,
-            default=default,
-        )
+        return _custom_choice_parameter_spec(spec, _CUSTOM_ROI_SELECTOR_CHOICES)
     if spec.role == "table_highlight_threshold":
         return replace(
             spec,
@@ -1587,14 +1558,30 @@ def _recording_parameter_spec(
     return spec
 
 
+def _custom_choice_parameter_spec(
+    spec: CustomParameterSpec,
+    choices: tuple[str, ...],
+) -> CustomParameterSpec:
+    """Return a dropdown spec with a valid default choice."""
+    default = str(spec.default)
+    if default not in choices:
+        default = choices[0]
+    return replace(spec, kind="choice", choices=choices, default=default)
+
+
 def _matched_epoch_choice(
     choices: tuple[str, ...],
     preferred_name: str,
 ) -> str:
     """Return the matching epoch choice or the first choice."""
-    preferred = preferred_name.casefold()
+    selector = preferred_name.strip()
+    preferred = selector.casefold()
     for choice in choices:
-        if _custom_epoch_name_from_choice(choice).casefold() == preferred:
+        if (
+            choice.casefold() == preferred
+            or _custom_epoch_number_from_choice(choice) == selector
+            or _custom_epoch_name_from_choice(choice).casefold() == preferred
+        ):
             return choice
     return choices[0]
 
@@ -1627,6 +1614,11 @@ def _custom_epoch_name_from_choice(choice: str) -> str:
     if ":" not in choice:
         return choice
     return choice.split(":", maxsplit=1)[1].strip()
+
+
+def _custom_epoch_number_from_choice(choice: str) -> str:
+    """Return the epoch-number part of a custom epoch choice."""
+    return choice.split(":", maxsplit=1)[0].strip()
 
 
 def _load_pixel_calibration_profile_mappings_for_ui() -> tuple[
