@@ -51,6 +51,7 @@ class ResponseOptionsPanel:
         analysis_path_label: Metadata-tab label showing the analysis output path.
         roi_save_path_label: Metadata-tab label showing the ROI output path.
         update_status_label: Metadata-tab label showing save or processing status.
+        export_status_label: Export-tab label showing save/export action status.
         reload_saved_button: Load-tab button that reloads persisted response
             outputs.
         plot_options_layout: Plot-tab layout containing static and dynamic
@@ -76,6 +77,7 @@ class ResponseOptionsPanel:
     analysis_path_label: QLabel
     roi_save_path_label: QLabel
     update_status_label: QLabel
+    export_status_label: QLabel
     reload_saved_button: QPushButton
     plot_options_layout: QVBoxLayout
     plot_display_options_layout: QVBoxLayout
@@ -149,6 +151,8 @@ def create_response_options_panel(
     roi_save_path_label.setWordWrap(True)
     update_status_label = QLabel("")
     update_status_label.setWordWrap(True)
+    export_status_label = QLabel("Exports save beside the recording.")
+    export_status_label.setWordWrap(True)
 
     plot_options_layout = QVBoxLayout()
     plot_options_layout.setSpacing(6)
@@ -212,6 +216,7 @@ def create_response_options_panel(
         create_response_export_tab(
             export_state,
             save_analysis_button=save_analysis_button,
+            status_label=export_status_label,
         ),
         "Export",
     )
@@ -223,6 +228,7 @@ def create_response_options_panel(
         analysis_path_label=analysis_path_label,
         roi_save_path_label=roi_save_path_label,
         update_status_label=update_status_label,
+        export_status_label=export_status_label,
         reload_saved_button=reload_saved_button,
         plot_options_layout=plot_options_layout,
         plot_display_options_layout=plot_display_options_layout,

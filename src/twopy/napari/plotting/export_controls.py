@@ -67,17 +67,21 @@ def create_response_export_tab(
     get_state: Callable[[], ResponseExportState],
     *,
     save_analysis_button: QPushButton,
+    status_label: QLabel | None = None,
 ) -> QWidget:
     """Create the response export tab.
 
     Args:
         get_state: Callback returning current response and napari state.
         save_analysis_button: Button that saves ROIs and persisted analysis.
+        status_label: Optional label owned by the caller for showing Export-tab
+            action status.
 
     Returns:
         Qt widget with export buttons and status text.
     """
-    status_label = QLabel("Exports save beside the recording.")
+    if status_label is None:
+        status_label = QLabel("Exports save beside the recording.")
     status_label.setWordWrap(True)
     layout = QVBoxLayout()
     layout.addWidget(save_analysis_button)

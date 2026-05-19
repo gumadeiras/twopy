@@ -535,6 +535,10 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
             self.assertIn("Analysis output: ./twopy/analysis_outputs.h5", labels_text)
             self.assertIn("ROI output: ./twopy/rois.h5", labels_text)
             self.assertIn("Saved 1 ROI to ./twopy", labels_text)
+            self.assertIn(
+                "Saved 1 ROI to ./twopy",
+                response_widget._export_status_label.text(),
+            )
             response_widget.shutdown()
 
     def test_save_analysis_button_syncs_cached_outputs_in_background(self) -> None:
@@ -557,7 +561,8 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
             )
             (root / "config.yml").write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root.resolve()}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {root / 'cache'}\n"

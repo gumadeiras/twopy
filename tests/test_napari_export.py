@@ -185,7 +185,8 @@ class NapariExportTest(NapariAdapterTestCase):
             )
             (root / "config.yml").write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root.resolve()}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {root / 'cache'}\n"

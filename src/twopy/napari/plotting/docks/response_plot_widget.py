@@ -230,6 +230,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path_label = options_panel.analysis_path_label
         self._roi_save_path_label = options_panel.roi_save_path_label
         self._update_status_label = options_panel.update_status_label
+        self._export_status_label = options_panel.export_status_label
         self._reload_saved_button = options_panel.reload_saved_button
         self._plot_options_layout = options_panel.plot_options_layout
         self._plot_display_options_layout = options_panel.plot_display_options_layout
@@ -394,6 +395,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path_label.setText(f"Analysis output: {DEFAULT_PATH_TEXT}")
         self._roi_save_path_label.setText(f"ROI output: {DEFAULT_PATH_TEXT}")
         self._update_status_label.setText("")
+        self._export_status_label.setText("Exports save beside the recording.")
         self._reset_empty_option_tabs()
         self._set_status("No recording loaded.")
 
@@ -523,12 +525,14 @@ class _ResponsePlotWidget(QWidget):
             )
         except ValueError as error:
             self._set_status(str(error))
+            self._export_status_label.setText(str(error))
             return
 
         self._roi_save_file = result.roi_output_path
         self._analysis_path = result.analysis_output_path
         self._refresh_update_path_labels()
         self._update_status_label.setText(result.status_text)
+        self._export_status_label.setText(result.status_text)
         if result.sync_plan is not None:
             self._start_sync(result.sync_plan)
 
@@ -710,15 +714,21 @@ class _ResponsePlotWidget(QWidget):
         try:
             result = future.result()
         except Exception as error:
-            self._update_status_label.setText(f"Saved locally; sync failed: {error}")
+            status_text = f"Saved locally; sync failed: {error}"
+            self._update_status_label.setText(status_text)
+            self._export_status_label.setText(status_text)
             return
         if len(result.copied_paths) == 0:
-            self._update_status_label.setText("Saved locally; sync already current")
+            status_text = "Saved locally; sync already current"
+            self._update_status_label.setText(status_text)
+            self._export_status_label.setText(status_text)
             return
         copied_count = len(result.copied_paths)
-        self._update_status_label.setText(
-            f"Saved locally; synced {copied_count} files to {result.publish_root}",
+        status_text = (
+            f"Saved locally; synced {copied_count} files to {result.publish_root}"
         )
+        self._update_status_label.setText(status_text)
+        self._export_status_label.setText(status_text)
 
     def set_response_plot_data(
         self,
