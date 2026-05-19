@@ -228,17 +228,16 @@ def run(ctx: CustomRunContext, params: ReferenceParams) -> CustomResult:
         for index in np.flatnonzero(np.abs(metric_values) >= params.highlight_threshold)
     )
 
+    roi_count = len(rois.labels)
     table_path = ctx.output_path(params.table_name)
     columns: dict[str, tuple[float | str, ...]] = {
-        "epoch": tuple(str(epoch) for _ in rois.labels),
-        "baseline_epoch": tuple(str(baseline_epoch) for _ in rois.labels),
-        "comparison_epoch": tuple(str(comparison_epoch) for _ in rois.labels),
+        "epoch": (str(epoch),) * roi_count,
+        "baseline_epoch": (str(baseline_epoch),) * roi_count,
+        "comparison_epoch": (str(comparison_epoch),) * roi_count,
         "scaled_metric": tuple(float(value) for value in metric_values),
     }
     if params.mode is SummaryMode.VERBOSE:
-        columns["roi_index"] = tuple(
-            float(index) for index, _ in enumerate(rois.labels)
-        )
+        columns["roi_index"] = tuple(float(index) for index in range(roi_count))
     ctx.write_roi_table(table_path, columns, roi_labels=rois.labels)
 
     note_path = ctx.output_path("reference_note.txt")
@@ -254,7 +253,7 @@ def run(ctx: CustomRunContext, params: ReferenceParams) -> CustomResult:
 
     metric_plot = CustomLinePlot(
         "Scaled metric by ROI",
-        np.arange(len(rois.labels), dtype=np.float64),
+        np.arange(roi_count, dtype=np.float64),
         metric_values.astype(np.float64, copy=False),
         ("scaled metric",),
     )
@@ -267,7 +266,7 @@ def run(ctx: CustomRunContext, params: ReferenceParams) -> CustomResult:
         )
 
     return CustomResult(
-        message=f"Reference workflow summarized {len(rois.labels)} ROIs.",
+        message=f"Reference workflow summarized {roi_count} ROIs.",
         files=(note_path,),
         tables=(
             CustomTable(

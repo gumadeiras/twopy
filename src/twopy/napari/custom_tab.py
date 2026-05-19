@@ -355,7 +355,11 @@ def _table_widget(table_result: CustomTable) -> QWidget:
         return _wrapped_label("Table is empty.")
     table = QTableWidget(len(rows), len(header))
     table.setHorizontalHeaderLabels(header)
-    highlighted_rows = _highlighted_row_set(table_result.highlighted_rows, len(rows))
+    highlighted_rows = {
+        row_index
+        for row_index in table_result.highlighted_rows
+        if 0 <= row_index < len(rows)
+    }
     for row_index, row in enumerate(rows):
         for column_index, value in enumerate(row):
             item = QTableWidgetItem(value)
@@ -365,14 +369,6 @@ def _table_widget(table_result: CustomTable) -> QWidget:
     table.resizeColumnsToContents()
     table.setMinimumHeight(min(360, 44 + 28 * max(1, len(rows))))
     return table
-
-
-def _highlighted_row_set(
-    highlighted_rows: tuple[int, ...],
-    row_count: int,
-) -> set[int]:
-    """Return valid highlighted row indices for a table preview."""
-    return {row_index for row_index in highlighted_rows if 0 <= row_index < row_count}
 
 
 def _apply_table_highlight(item: QTableWidgetItem, table: QTableWidget) -> None:

@@ -11,7 +11,6 @@ import csv
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
@@ -125,28 +124,14 @@ class CustomEpoch:
 
     @property
     def label(self) -> str:
-        """Return the label shown in epoch dropdowns.
-
-        Args:
-            None.
-
-        Returns:
-            Label such as ``"2: Odor A"``.
-        """
+        """Return the label shown in epoch dropdowns, such as ``2: Odor A``."""
         if self.name == "":
             return f"Epoch {self.number}"
         return f"{self.number}: {self.name}"
 
     @property
     def selector(self) -> int:
-        """Return the epoch number accepted by ``epoch_metric``.
-
-        Args:
-            None.
-
-        Returns:
-            Epoch number.
-        """
+        """Return the epoch number accepted by ``epoch_metric``."""
         return self.number
 
 
@@ -268,14 +253,7 @@ class CustomWorkflowProvenance:
     recording_path: Path
 
     def as_mapping(self) -> dict[str, object]:
-        """Return metadata values that can be written to YAML or HDF5.
-
-        Args:
-            None.
-
-        Returns:
-            Dictionary with workflow, package, parameter, and recording fields.
-        """
+        """Return workflow, package, parameter, and recording metadata."""
         return {
             "workflow_id": self.workflow_id,
             "workflow_name": self.workflow_name,
@@ -320,14 +298,7 @@ class CustomRunContext:
     visible_roi_indices: tuple[int, ...] = ()
 
     def current_rois(self) -> RoiSet:
-        """Return current ROIs or raise a clear error.
-
-        Args:
-            None.
-
-        Returns:
-            Active ROI masks.
-        """
+        """Return current ROI masks or raise a clear error."""
         if self.roi_set is None:
             msg = "This custom workflow needs ROIs, but no ROI Labels are available."
             raise ValueError(msg)
@@ -380,25 +351,11 @@ class CustomRunContext:
         )
 
     def epoch_names(self) -> dict[int, str]:
-        """Return stimulus epoch names for the active recording.
-
-        Args:
-            None.
-
-        Returns:
-            Mapping from one-based epoch number to display name.
-        """
+        """Return stimulus epoch names keyed by one-based epoch number."""
         return stimulus_epoch_names_by_number(self.recording)
 
     def epoch_choices(self) -> tuple[CustomEpoch, ...]:
-        """Return epochs with names and observed durations.
-
-        Args:
-            None.
-
-        Returns:
-            Sorted epoch descriptors.
-        """
+        """Return sorted epochs with names and observed durations."""
         durations = self.epoch_durations_seconds()
         return tuple(
             CustomEpoch(
@@ -437,15 +394,7 @@ class CustomRunContext:
         return durations
 
     def min_epoch_duration_seconds(self) -> float | None:
-        """Return the shortest known stimulus epoch duration.
-
-        Args:
-            None.
-
-        Returns:
-            Shortest positive epoch duration, or ``None`` when timing is
-            unavailable.
-        """
+        """Return the shortest positive epoch duration, when timing is available."""
         durations = tuple(self.epoch_durations_seconds().values())
         if len(durations) == 0:
             return None
@@ -766,23 +715,4 @@ def _metric_by_roi(
     if metric == "minimum":
         return np.nanmin(values, axis=0)
     msg = f"Unknown custom metric {metric!r}."
-    raise ValueError(msg)
-
-
-def parameter_value(value: object) -> CustomParameterValue:
-    """Convert a dataclass parameter value into metadata-safe data.
-
-    Args:
-        value: Raw parameter field value.
-
-    Returns:
-        Scalar value safe for YAML and HDF5 attributes.
-    """
-    if isinstance(value, Enum):
-        return str(value.value)
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, str | int | float | bool) or value is None:
-        return value
-    msg = f"Unsupported custom workflow parameter value {value!r}."
     raise ValueError(msg)

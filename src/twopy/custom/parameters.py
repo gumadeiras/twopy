@@ -13,7 +13,7 @@ from pathlib import Path
 from types import UnionType
 from typing import Literal, Union, get_args, get_origin, get_type_hints
 
-from twopy.custom.types import CustomParameterValue, parameter_value
+from twopy.custom.types import CustomParameterValue
 
 __all__ = [
     "CustomParameterSpec",
@@ -40,13 +40,26 @@ ParameterRole = Literal[
     "table_highlight_threshold",
 ]
 
+_ROLE_KINDS: dict[ParameterRole, tuple[ParameterKind, ...]] = {
+    "baseline_epoch": ("str",),
+    "comparison_epoch": ("str",),
+    "epoch": ("str",),
+    "epoch_window_start": ("float",),
+    "epoch_window_stop": ("float",),
+    "output_name": ("path", "str"),
+    "response_metric": ("str",),
+    "response_window_start": ("float",),
+    "response_window_stop": ("float",),
+    "roi_limit": ("int",),
+    "roi_selector": ("str",),
+    "table_highlight_threshold": ("float",),
+}
+_ROLE_VALUES: dict[object, ParameterRole] = {role: role for role in _ROLE_KINDS}
+_MISSING = object()
+
 
 class CustomParameterError(ValueError):
     """Raised when workflow parameters cannot be shown or saved."""
-
-
-class _Missing:
-    """Marker for metadata keys that were not provided."""
 
 
 @dataclass(frozen=True)
@@ -182,7 +195,7 @@ def parameter_values(params: object | None) -> dict[str, CustomParameterValue]:
         msg = "custom workflow parameters must be a dataclass instance"
         raise CustomParameterError(msg)
     return {
-        field.name: parameter_value(getattr(params, field.name))
+        field.name: _metadata_parameter_value(getattr(params, field.name))
         for field in fields(params)
     }
 
@@ -289,8 +302,8 @@ def _field_metadata_float(
     key: str,
 ) -> float | None:
     """Return one optional numeric field metadata value."""
-    value = metadata.get(key, _Missing)
-    if value is _Missing:
+    value = metadata.get(key, _MISSING)
+    if value is _MISSING:
         return None
     if isinstance(value, int | float):
         return float(value)
@@ -303,8 +316,8 @@ def _field_metadata_int(
     key: str,
 ) -> int | None:
     """Return one optional integer field metadata value."""
-    value = metadata.get(key, _Missing)
-    if value is _Missing:
+    value = metadata.get(key, _MISSING)
+    if value is _MISSING:
         return None
     if type(value) is int and value >= 0:
         return value
@@ -319,37 +332,11 @@ def _field_metadata_role(
     value = metadata.get("twopy_role", None)
     if value is None:
         return None
-    if value == "baseline_epoch":
-        return "baseline_epoch"
-    if value == "comparison_epoch":
-        return "comparison_epoch"
-    if value == "epoch":
-        return "epoch"
-    if value == "epoch_window_start":
-        return "epoch_window_start"
-    if value == "epoch_window_stop":
-        return "epoch_window_stop"
-    if value == "output_name":
-        return "output_name"
-    if value == "response_metric":
-        return "response_metric"
-    if value == "response_window_start":
-        return "response_window_start"
-    if value == "response_window_stop":
-        return "response_window_stop"
-    if value == "roi_limit":
-        return "roi_limit"
-    if value == "roi_selector":
-        return "roi_selector"
-    if value == "table_highlight_threshold":
-        return "table_highlight_threshold"
-    msg = (
-        "parameter metadata 'twopy_role' must be one of "
-        "'baseline_epoch', 'comparison_epoch', 'epoch', 'epoch_window_start', "
-        "'epoch_window_stop', 'output_name', 'response_metric', "
-        "'response_window_start', 'response_window_stop', 'roi_limit', "
-        "'roi_selector', or 'table_highlight_threshold'"
-    )
+    role = _ROLE_VALUES.get(value)
+    if role is not None:
+        return role
+    allowed = ", ".join(repr(role) for role in _ROLE_KINDS)
+    msg = f"parameter metadata 'twopy_role' must be one of {allowed}"
     raise CustomParameterError(msg)
 
 
@@ -359,28 +346,8 @@ def _validate_role_kind(
     kind: ParameterKind,
 ) -> None:
     """Check that a standard role uses the right field type."""
-    if role is None:
-        return
-    if role in {"baseline_epoch", "comparison_epoch", "epoch", "roi_selector"}:
-        _require_role_kind(name, role, kind, ("str",))
-        return
-    if role in {
-        "epoch_window_start",
-        "epoch_window_stop",
-        "response_window_start",
-        "response_window_stop",
-        "table_highlight_threshold",
-    }:
-        _require_role_kind(name, role, kind, ("float",))
-        return
-    if role == "response_metric":
-        _require_role_kind(name, role, kind, ("str",))
-        return
-    if role == "roi_limit":
-        _require_role_kind(name, role, kind, ("int",))
-        return
-    if role == "output_name":
-        _require_role_kind(name, role, kind, ("path", "str"))
+    if role is not None:
+        _require_role_kind(name, role, kind, _ROLE_KINDS[role])
 
 
 def _require_role_kind(
@@ -395,3 +362,15 @@ def _require_role_kind(
     allowed_text = " or ".join(allowed)
     msg = f"parameter {name!r} role {role!r} requires {allowed_text}; got {kind}"
     raise CustomParameterError(msg)
+
+
+def _metadata_parameter_value(value: object) -> CustomParameterValue:
+    """Return one parameter value in a metadata-safe form."""
+    if isinstance(value, Enum):
+        return str(value.value)
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    msg = f"Unsupported custom workflow parameter value {value!r}."
+    raise ValueError(msg)

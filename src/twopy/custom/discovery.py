@@ -183,10 +183,13 @@ def _validate_workflow_declaration(
     source_hash: str,
 ) -> CustomWorkflow:
     """Turn one declaration into a runnable workflow or raise a clear error."""
-    _validate_required_text("id", declaration.id)
-    _validate_required_text("name", declaration.name)
-    _validate_required_text("version", declaration.version)
-    _validate_required_text("description", declaration.description)
+    for field_name, value in (
+        ("id", declaration.id),
+        ("name", declaration.name),
+        ("version", declaration.version),
+        ("description", declaration.description),
+    ):
+        _validate_required_text(field_name, value)
     if _ID_PATTERN.fullmatch(declaration.id) is None:
         msg = f"workflow id {declaration.id!r} must be slug-like"
         raise ValueError(msg)
@@ -227,15 +230,12 @@ def _validate_workflow_signature(declaration: WorkflowDeclaration) -> None:
     parameters = tuple(signature.parameters.values())
     expected_count = 2 if declaration.params_type is not None else 1
     if len(parameters) != expected_count:
-        msg = (
-            "workflow function signature must be "
-            "run(ctx: CustomRunContext, params: Params) -> CustomResult"
-            if declaration.params_type is not None
-            else (
-                "workflow function signature must be "
-                "run(ctx: CustomRunContext) -> CustomResult"
+        signature_text = "run(ctx: CustomRunContext) -> CustomResult"
+        if declaration.params_type is not None:
+            signature_text = (
+                "run(ctx: CustomRunContext, params: Params) -> CustomResult"
             )
-        )
+        msg = f"workflow function signature must be {signature_text}"
         raise ValueError(msg)
     if any(
         parameter.kind is not inspect.Parameter.POSITIONAL_OR_KEYWORD

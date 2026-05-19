@@ -8,7 +8,7 @@ workflow paths, and output settings.
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 import yaml
 
@@ -77,7 +77,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
         msg = f"twopy config must be a YAML mapping: {config_path}"
         raise ValueError(msg)
 
-    raw_config = cast(dict[object, object], loaded)
+    raw_config: dict[object, object] = {key: value for key, value in loaded.items()}
 
     return TwopyConfig(
         database_path=_required_path(raw_config, "database_path", config_path),
@@ -250,8 +250,10 @@ def _database_access(
     verifies whether a copy is stale before copying again.
     """
     value = config.get("database_access", "copy")
-    if value in {"copy", "direct"}:
-        return cast(DatabaseAccess, value)
+    if value == "copy":
+        return "copy"
+    if value == "direct":
+        return "direct"
 
     msg = (
         f"twopy config key 'database_access' must be 'copy' or 'direct': {config_path}"

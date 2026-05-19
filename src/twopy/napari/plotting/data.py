@@ -433,20 +433,10 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
     else:
         saved_window_options = None
     if outputs.grouped_responses is not None and saved_window_options is not None:
-        return response_plot_data_from_grouped(
+        return _response_plot_data_from_outputs(
+            outputs,
             outputs.grouped_responses,
-            source_path=outputs.path,
-            epoch_windows=outputs.epoch_windows,
-            delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
-                traces=outputs.traces,
-                dff=outputs.dff,
-            ),
             response_window_options=saved_window_options,
-            response_processing_options=outputs.response_processing_options,
-            correlation_scores=outputs.correlation_scores,
-            correlation_window_stop_default_seconds=(
-                _correlation_stop_default_from_outputs(outputs)
-            ),
         )
     if outputs.dff is not None and len(outputs.epoch_windows) > 0:
         data_rate_hz = _analysis_output_data_rate_hz(
@@ -467,34 +457,38 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
                     grouped,
                     included_mask=outputs.correlation_scores.included_mask,
                 )
-            return response_plot_data_from_grouped(
+            return _response_plot_data_from_outputs(
+                outputs,
                 grouped,
-                source_path=outputs.path,
-                epoch_windows=outputs.epoch_windows,
-                delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
-                    traces=outputs.traces,
-                    dff=outputs.dff,
-                ),
                 response_window_options=_response_window_options_from_grouped(grouped),
-                response_processing_options=outputs.response_processing_options,
-                correlation_scores=outputs.correlation_scores,
-                correlation_window_stop_default_seconds=(
-                    _correlation_stop_default_from_outputs(outputs)
-                ),
             )
     if outputs.grouped_responses is None:
         return f"No grouped responses in: {path}"
-    return response_plot_data_from_grouped(
+    return _response_plot_data_from_outputs(
+        outputs,
         outputs.grouped_responses,
+        response_window_options=_response_window_options_from_grouped(
+            outputs.grouped_responses,
+        ),
+    )
+
+
+def _response_plot_data_from_outputs(
+    outputs: LoadedAnalysisOutputs,
+    grouped: GroupedRoiResponses,
+    *,
+    response_window_options: ResponseWindowOptions | None,
+) -> ResponsePlotData:
+    """Return plot data with shared saved-output metadata attached."""
+    return response_plot_data_from_grouped(
+        grouped,
         source_path=outputs.path,
         epoch_windows=outputs.epoch_windows,
         delta_f_over_f_options=_delta_f_over_f_options_from_outputs(
             traces=outputs.traces,
             dff=outputs.dff,
         ),
-        response_window_options=_response_window_options_from_grouped(
-            outputs.grouped_responses,
-        ),
+        response_window_options=response_window_options,
         response_processing_options=outputs.response_processing_options,
         correlation_scores=outputs.correlation_scores,
         correlation_window_stop_default_seconds=_correlation_stop_default_from_outputs(
