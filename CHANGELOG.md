@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-05-19
+
 ### Features
 
 - Added a napari Custom tab for built-in and local Python workflows.
