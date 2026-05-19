@@ -6,6 +6,7 @@ Outputs: a catalog of SQLite file paths, optionally copied to a local cache.
 
 from pathlib import Path
 
+from twopy.config import DatabaseAccess
 from twopy.database.cache import (
     DEFAULT_DATABASE_CACHE_DIR,
     ensure_local_database_copy,
@@ -13,7 +14,6 @@ from twopy.database.cache import (
 )
 from twopy.database.types import (
     DEFAULT_DATABASE_FILES,
-    DatabaseAccess,
     DatabaseCatalog,
 )
 

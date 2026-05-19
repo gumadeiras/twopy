@@ -327,7 +327,7 @@ def _recording_hemisphere_from_default_database(
 
     try:
         config = load_config(DEFAULT_CONFIG_PATH)
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError:
         return None
     value = database_hemisphere_for_recording_path(
         config,

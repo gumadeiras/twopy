@@ -9,11 +9,9 @@ These definitions are split out so query code can stay short and auditable.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 __all__ = [
     "DEFAULT_DATABASE_FILES",
-    "DatabaseAccess",
     "DatabaseCatalog",
     "DatabaseColumn",
     "DatabaseExperiment",
@@ -23,7 +21,6 @@ __all__ = [
 ]
 
 DatabaseValue = str | int | float | bytes | None
-DatabaseAccess = Literal["direct", "copy"]
 
 DEFAULT_DATABASE_FILES = ("experimentLog.db", "experimentInitLog.db")
 

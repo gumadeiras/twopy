@@ -141,7 +141,7 @@ def _load_config_for_conversion(
     """Load config, unless explicit output conversion can run without it."""
     try:
         return load_config(config_path)
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError:
         if require:
             raise
         return None

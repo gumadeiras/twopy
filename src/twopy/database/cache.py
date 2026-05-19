@@ -12,7 +12,7 @@ import json
 import shutil
 from pathlib import Path
 
-from twopy.database.types import DatabaseAccess
+from twopy.config import DatabaseAccess
 from twopy.typing_guards import string_key_mapping_or_none
 
 __all__ = [

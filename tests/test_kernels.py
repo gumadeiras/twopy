@@ -362,6 +362,18 @@ class StimulusKernelFitTest(unittest.TestCase):
             ):
                 recording_hemisphere(recording)
 
+    def test_recording_hemisphere_propagates_invalid_default_config(self) -> None:
+        """Confirm malformed config is not hidden as missing metadata."""
+        with temporary_directory() as temp_dir:
+            recording_path = write_converted_recording_files(temp_dir)
+            recording = load_converted_recording(recording_path)
+
+            with (
+                patch("twopy.config.load_config", side_effect=ValueError("bad config")),
+                self.assertRaisesRegex(ValueError, "bad config"),
+            ):
+                recording_hemisphere(recording)
+
 
 def _write_olfactory_kernel_recording(temp_dir: Path) -> Path:
     """Return a converted recording with two non-baseline stimulus epochs."""

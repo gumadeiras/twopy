@@ -18,6 +18,7 @@ __all__ = [
     "DEFAULT_CONFIG_PATH",
     "DEFAULT_ANALYSIS_CACHE_DIR",
     "AnalysisOutputMode",
+    "DatabaseAccess",
     "TwopyConfig",
     "data_path_match",
     "load_config",

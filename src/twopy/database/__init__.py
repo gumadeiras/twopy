@@ -23,7 +23,6 @@ from twopy.database.search import (
     recording_paths_for_database_experiments,
 )
 from twopy.database.types import (
-    DatabaseAccess,
     DatabaseCatalog,
     DatabaseColumn,
     DatabaseExperiment,
@@ -32,7 +31,6 @@ from twopy.database.types import (
 )
 
 __all__ = [
-    "DatabaseAccess",
     "DatabaseCatalog",
     "DatabaseColumn",
     "DatabaseExperiment",

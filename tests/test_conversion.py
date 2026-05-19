@@ -409,12 +409,33 @@ class ConversionTest(unittest.TestCase):
                 self.assertEqual(h5_file["run"].attrs["hemisphere"], "left")
                 self.assertEqual(h5_file["run"].attrs["eye"], "left")
 
-    def test_explicit_output_conversion_ignores_invalid_config(self) -> None:
+    def test_explicit_output_conversion_allows_missing_config(self) -> None:
         """Confirm explicit output conversion does not require machine config.
 
         Inputs: a valid source recording, explicit output directory, and a
-        malformed config file.
+        missing config file.
         Outputs: converted files are written under the explicit output.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            session_dir = root / "recording"
+            output_dir = root / "output"
+            self._write_session(session_dir)
+
+            converted = convert_recording_to_twopy(
+                session_dir,
+                output_dir,
+                config_path=root / "missing-config.yml",
+            )
+
+            self.assertEqual(converted.path.parent, output_dir)
+
+    def test_explicit_output_conversion_rejects_invalid_config(self) -> None:
+        """Confirm malformed config fails even with explicit output.
+
+        Inputs: a valid source recording, explicit output directory, and a
+        malformed config file.
+        Outputs: conversion raises the config parse error.
         """
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
@@ -424,13 +445,12 @@ class ConversionTest(unittest.TestCase):
             self._write_session(session_dir)
             config_path.write_text("database_path: [broken\n", encoding="utf-8")
 
-            converted = convert_recording_to_twopy(
-                session_dir,
-                output_dir,
-                config_path=config_path,
-            )
-
-            self.assertEqual(converted.path.parent, output_dir)
+            with self.assertRaisesRegex(ValueError, "Could not parse twopy config"):
+                convert_recording_to_twopy(
+                    session_dir,
+                    output_dir,
+                    config_path=config_path,
+                )
 
     def test_converts_mean_image_for_requested_frame_range(self) -> None:
         """Confirm conversion can compute a range-limited mean image.

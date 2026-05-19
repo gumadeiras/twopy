@@ -12,11 +12,11 @@ from collections.abc import Mapping, Sequence
 from contextlib import closing
 from pathlib import Path
 
+from twopy.config import DatabaseAccess
 from twopy.database.catalog import read_database_catalog
 from twopy.database.connection import connect_read_only
 from twopy.database.sql import quote_identifier, validate_filter_columns
 from twopy.database.types import (
-    DatabaseAccess,
     DatabaseColumn,
     DatabaseRecord,
     DatabaseTable,

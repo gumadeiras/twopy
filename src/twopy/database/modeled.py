@@ -12,9 +12,10 @@ from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
 
+from twopy.config import DatabaseAccess
 from twopy.database.catalog import read_database_catalog
 from twopy.database.connection import connect_read_only
-from twopy.database.types import DatabaseAccess, DatabaseExperiment, DatabaseValue
+from twopy.database.types import DatabaseExperiment, DatabaseValue
 
 __all__ = ["find_recordings", "find_stimulus_presentations"]
 
