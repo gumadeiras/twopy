@@ -14,6 +14,8 @@ from twopy.config import TwopyConfig
 from twopy.database import (
     ExperimentSearchFilters,
     build_experiment_search_tree,
+    database_hemisphere_for_recording_path,
+    find_database_experiment_for_recording_path,
     find_experiments,
     find_recording_search_results,
     find_recordings,
@@ -261,6 +263,41 @@ class DatabaseQueryTest(unittest.TestCase):
                 recording_paths_for_database_experiments(config, experiments),
                 (data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49",),
             )
+
+    def test_database_metadata_resolves_recording_path_hemisphere(self) -> None:
+        """Confirm source paths can recover mandatory fly-eye metadata.
+
+        Inputs: a Clark-style DB row and the matching source recording path.
+        Outputs: resolved experiment and hemisphere from the database row.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            database_dir = root / "db"
+            data_dir = root / "data"
+            database_dir.mkdir()
+            data_dir.mkdir()
+            self._write_clark_style_log(database_dir / "experimentLog.db")
+            config = TwopyConfig(
+                database_path=database_dir,
+                data_path=data_dir,
+                database_access="direct",
+                analysis_output="source",
+            )
+            recording_dir = (
+                data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49"
+            )
+
+            experiment = find_database_experiment_for_recording_path(
+                config,
+                recording_dir,
+            )
+            hemisphere = database_hemisphere_for_recording_path(config, recording_dir)
+
+            self.assertIsNotNone(experiment)
+            if experiment is None:
+                self.fail("database experiment should be resolved")
+            self.assertEqual(experiment.stimulus_presentation_id, 20005)
+            self.assertEqual(hemisphere, "left")
 
     def test_recording_search_uses_enough_rows_for_hierarchy_counts(self) -> None:
         """Confirm GUI search counts are not distorted by early query limits.

@@ -416,7 +416,7 @@ Minimum source-file load set for conversion:
 - `highResPd.mat`
 - `imageDescription.mat`
 - `stimulusData/runDetails.mat`
-- `stimulusData/stimParams.mat`
+- `stimulusData/stimParams.mat` or older `stimulusData/chosenparams.mat`
 - `stimulusData/stimdata.mat`
 - `stimulusData/filebackup.zip`
 - `imagingResPd.mat`

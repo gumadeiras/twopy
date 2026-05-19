@@ -208,7 +208,7 @@ def _write_stimulus_group(
     Args:
         h5_file: Open ``recording_data.h5`` file.
         stimulus_data: Stimulus data loaded from ``stimdata.mat``.
-        parameters: Stimulus epoch parameters loaded from ``stimParams.mat``.
+        parameters: Stimulus epoch parameters loaded from source MATLAB.
         code_metadata: Stimulus-code metadata decoded from ``filebackup.zip``.
 
     Returns:

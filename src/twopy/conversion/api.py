@@ -7,15 +7,26 @@ The workflow reads MATLAB/TIFF-derived source data only during conversion.
 Analysis code should operate on the converted HDF5 files.
 """
 
+from dataclasses import replace
 from pathlib import Path
 
-from twopy.config import DEFAULT_CONFIG_PATH, load_config, resolve_analysis_work_dir
+from twopy.config import (
+    DEFAULT_CONFIG_PATH,
+    TwopyConfig,
+    load_config,
+    resolve_analysis_work_dir,
+)
 from twopy.conversion.hdf5_writing import (
     write_aligned_movie_file,
     write_recording_data_file,
 )
 from twopy.conversion.source_loading import load_source_conversion_inputs
-from twopy.conversion.types import ConvertedRecording
+from twopy.conversion.types import (
+    ConvertedRecording,
+    RunMetadata,
+    SourceConversionInputs,
+)
+from twopy.database import database_hemisphere_for_recording_path
 from twopy.filenames import ALIGNED_MOVIE_FILENAME, RECORDING_DATA_FILENAME
 from twopy.frame_ranges import normalize_frame_range
 
@@ -48,6 +59,9 @@ def convert_recording_to_twopy(
     file keeps metadata, stimulus, photodiode, and the quick-look mean image.
     """
     inputs = load_source_conversion_inputs(session_dir)
+    config = _load_config_if_available(config_path)
+    if config is not None:
+        inputs = _with_database_run_metadata(inputs, config)
     start_frame, stop_frame = normalize_frame_range(
         frame_count=inputs.aligned_movie.shape[0],
         start_frame=mean_start_frame,
@@ -63,6 +77,7 @@ def convert_recording_to_twopy(
         session_dir=inputs.session_files.session_dir,
         output_dir=output_dir,
         config_path=config_path,
+        config=config,
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
     recording_data_path = destination_dir / RECORDING_DATA_FILENAME
@@ -92,6 +107,7 @@ def _resolve_conversion_output_dir(
     session_dir: Path,
     output_dir: Path | None,
     config_path: Path,
+    config: TwopyConfig | None,
 ) -> Path:
     """Choose where conversion output should be written.
 
@@ -99,6 +115,7 @@ def _resolve_conversion_output_dir(
         session_dir: Source recording folder.
         output_dir: Caller-provided output directory, if any.
         config_path: Config file used when ``output_dir`` is omitted.
+        config: Already loaded config, when available.
 
     Returns:
         Expanded output directory path.
@@ -110,5 +127,38 @@ def _resolve_conversion_output_dir(
     if output_dir is not None:
         return output_dir.expanduser()
 
-    config = load_config(config_path)
+    if config is None:
+        config = load_config(config_path)
     return resolve_analysis_work_dir(config, session_dir)
+
+
+def _load_config_if_available(config_path: Path) -> TwopyConfig | None:
+    """Load machine config when present without making explicit outputs depend on it."""
+    try:
+        return load_config(config_path)
+    except FileNotFoundError:
+        return None
+
+
+def _with_database_run_metadata(
+    inputs: SourceConversionInputs,
+    config: TwopyConfig,
+) -> SourceConversionInputs:
+    """Attach database recording metadata that is not stored in runDetails.mat."""
+    try:
+        hemisphere = database_hemisphere_for_recording_path(
+            config,
+            inputs.session_files.session_dir,
+        )
+    except FileNotFoundError:
+        return inputs
+    if hemisphere is None:
+        return inputs
+
+    fields = dict(inputs.run.fields)
+    fields.setdefault("hemisphere", hemisphere)
+    fields.setdefault("eye", hemisphere)
+    return replace(
+        inputs,
+        run=RunMetadata(path=inputs.run.path, fields=fields),
+    )

@@ -33,7 +33,7 @@ def load_stimulus_code_metadata(
 
     Args:
         filebackup_zip: ``stimulusData/filebackup.zip`` for one recording.
-        parameters: Stimulus epoch parameters loaded from ``stimParams.mat``.
+        parameters: Stimulus epoch parameters loaded from source MATLAB.
 
     Returns:
         Function lookup and slot assignments for the ``stimtype`` values used

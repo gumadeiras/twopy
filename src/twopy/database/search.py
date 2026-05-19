@@ -30,6 +30,8 @@ __all__ = [
     "ExperimentSearchNode",
     "build_experiment_search_tree",
     "date_label_for_experiment",
+    "database_hemisphere_for_recording_path",
+    "find_database_experiment_for_recording_path",
     "find_recording_search_results",
     "normalize_experiment_date_filter",
     "recording_path_for_database_experiment",
@@ -175,6 +177,100 @@ def build_experiment_search_tree(
             next_builder=_cell_type_nodes,
         ),
     )
+
+
+def find_database_experiment_for_recording_path(
+    config: TwopyConfig,
+    recording_dir: Path,
+    *,
+    cache_dir: Path | None = None,
+) -> DatabaseExperiment | None:
+    """Return the database row that owns one source recording folder.
+
+    Args:
+        config: Loaded twopy configuration with database and data roots.
+        recording_dir: Source microscope recording folder.
+        cache_dir: Optional local database-copy cache.
+
+    Returns:
+        Matching database experiment, or ``None`` when no row matches.
+
+    The microscope folder itself does not contain fly-eye metadata. The lab
+    database stores that mandatory recording metadata in ``fly.eye``; this
+    helper resolves the converted recording's source path back to that row.
+    """
+    candidates = _candidate_database_relative_paths(config, recording_dir)
+    if len(candidates) == 0:
+        return None
+
+    experiments: list[DatabaseExperiment] = []
+    seen_ids: set[tuple[Path, int]] = set()
+    for query_term in _path_query_terms(recording_dir):
+        for experiment in find_stimulus_presentations(
+            config.database_path,
+            path_contains=query_term,
+            limit=DEFAULT_EXPERIMENT_SEARCH_LIMIT,
+            database_access=config.database_access,
+            cache_dir=cache_dir,
+        ):
+            key = (
+                experiment.database_path.expanduser().resolve(strict=False),
+                experiment.stimulus_presentation_id,
+            )
+            if key in seen_ids:
+                continue
+            seen_ids.add(key)
+            experiments.append(experiment)
+
+    matches_by_path: dict[str, DatabaseExperiment] = {}
+    for experiment in experiments:
+        relative_path = _normalized_relative_path(experiment.relative_data_path)
+        if any(
+            _relative_path_matches(relative_path, candidate) for candidate in candidates
+        ):
+            matches_by_path.setdefault(relative_path, experiment)
+
+    if len(matches_by_path) > 1:
+        matched = ", ".join(sorted(matches_by_path))
+        msg = f"Multiple database rows match recording path {recording_dir}: {matched}"
+        raise ValueError(msg)
+    if len(matches_by_path) == 0:
+        return None
+    return next(iter(matches_by_path.values()))
+
+
+def database_hemisphere_for_recording_path(
+    config: TwopyConfig,
+    recording_dir: Path,
+    *,
+    cache_dir: Path | None = None,
+) -> str | None:
+    """Return ``fly.eye`` for one source recording folder.
+
+    Args:
+        config: Loaded twopy configuration.
+        recording_dir: Source microscope recording folder.
+        cache_dir: Optional local database-copy cache.
+
+    Returns:
+        ``"left"``, ``"right"``, or ``None`` when the database row is absent or
+        missing the field.
+    """
+    experiment = find_database_experiment_for_recording_path(
+        config,
+        recording_dir,
+        cache_dir=cache_dir,
+    )
+    if experiment is None or experiment.hemisphere is None:
+        return None
+    normalized = experiment.hemisphere.strip().casefold()
+    if normalized not in {"left", "right"}:
+        msg = (
+            f"Database fly.eye for recording {recording_dir} must be "
+            f"'left' or 'right'; got {experiment.hemisphere!r}."
+        )
+        raise ValueError(msg)
+    return normalized
 
 
 def recording_path_for_database_experiment(
@@ -324,6 +420,52 @@ def _date_time_parts_from_relative_path(
         ):
             return year, month_day, time
     return None
+
+
+def _candidate_database_relative_paths(
+    config: TwopyConfig,
+    recording_dir: Path,
+) -> tuple[str, ...]:
+    """Return normalized DB path candidates for one source folder."""
+    candidates: list[str] = []
+    path = recording_dir.expanduser()
+    try:
+        relative = path.relative_to(config.data_path.expanduser())
+    except ValueError:
+        relative = None
+    if relative is not None:
+        candidates.append(_normalized_relative_path(relative.as_posix()))
+
+    parts = path.parts
+    for index in range(2, len(parts) - 2):
+        if (
+            len(parts[index]) == 4
+            and parts[index].isdigit()
+            and _is_underscore_date(parts[index + 1])
+            and _is_underscore_time(parts[index + 2])
+        ):
+            candidates.append(
+                _normalized_relative_path(
+                    PurePosixPath(*parts[index - 2 : index + 3]).as_posix()
+                )
+            )
+            break
+    return tuple(dict.fromkeys(candidates))
+
+
+def _path_query_terms(recording_dir: Path) -> tuple[str, ...]:
+    """Return narrow SQL ``LIKE`` terms for path lookup before exact matching."""
+    parts = recording_dir.expanduser().parts
+    terms = [recording_dir.name]
+    if len(parts) >= 3:
+        terms.append("\\".join(parts[-3:]))
+        terms.append("/".join(parts[-3:]))
+    return tuple(dict.fromkeys(term for term in terms if term))
+
+
+def _relative_path_matches(relative_path: str, candidate: str) -> bool:
+    """Return whether a normalized DB path matches one candidate path."""
+    return relative_path == candidate or relative_path.endswith(f"/{candidate}")
 
 
 def _cell_type_nodes(

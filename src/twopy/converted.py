@@ -12,7 +12,7 @@ import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import h5py
 import numpy as np
@@ -36,10 +36,14 @@ from twopy.typing_guards import (
 
 __all__ = [
     "ConvertedMovie",
+    "Hemisphere",
     "RecordingData",
     "load_converted_recording",
+    "recording_hemisphere",
     "recording_frame_rate_hz",
 ]
+
+Hemisphere = Literal["left", "right"]
 
 
 @dataclass(frozen=True)
@@ -277,6 +281,61 @@ def load_converted_recording(
 
     _validate_loaded_recording(recording)
     return recording
+
+
+def recording_hemisphere(recording: RecordingData) -> Hemisphere:
+    """Return the recording hemisphere stored in converted metadata.
+
+    Args:
+        recording: Loaded converted recording.
+
+    Returns:
+        ``"left"`` or ``"right"``.
+
+    Raises:
+        ValueError: If the converted metadata does not include a usable
+            hemisphere value.
+
+    twopy uses hemisphere for ipsi/contra remapping. Database rows call this
+    value ``hemisphere`` even though the source DB column is ``fly.eye``.
+    """
+    for key in ("hemisphere", "eye"):
+        value = recording.run_metadata.get(key)
+        if value is None:
+            continue
+        normalized = str(value).strip().casefold()
+        if normalized in {"left", "right"}:
+            return cast(Hemisphere, normalized)
+        msg = f"Recording metadata field {key!r} must be 'left' or 'right'."
+        raise ValueError(msg)
+    database_value = _recording_hemisphere_from_default_database(recording)
+    if database_value is not None:
+        return database_value
+    msg = (
+        "Converted recording metadata does not include hemisphere; "
+        "set run metadata field 'hemisphere' before using metadata defaults."
+    )
+    raise ValueError(msg)
+
+
+def _recording_hemisphere_from_default_database(
+    recording: RecordingData,
+) -> Hemisphere | None:
+    """Read fly-eye metadata for old converted files that predate persistence."""
+    from twopy.config import DEFAULT_CONFIG_PATH, load_config
+    from twopy.database import database_hemisphere_for_recording_path
+
+    try:
+        config = load_config(DEFAULT_CONFIG_PATH)
+        value = database_hemisphere_for_recording_path(
+            config,
+            recording.source_session_dir,
+        )
+    except FileNotFoundError:
+        return None
+    if value is None:
+        return None
+    return cast(Hemisphere, value)
 
 
 def _resolve_movie_path(

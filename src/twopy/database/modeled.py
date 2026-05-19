@@ -52,7 +52,8 @@ def find_stimulus_presentations(
         sensor_contains: Optional substring matched against fly
             ``fluorescentProtein``.
         cell_type_contains: Optional substring matched against fly ``cellType``.
-        hemisphere: Optional exact match against fly ``eye``.
+        hemisphere: Optional exact recording hemisphere, matched against the
+            source fly ``eye`` column.
         person_contains: Optional substring matched against fly ``surgeon``.
         limit: Maximum number of experiments to return.
         database_access: ``direct`` queries DB files in place. ``copy`` queries
@@ -138,7 +139,8 @@ def find_recordings(
         stimulus: Optional stimulus-function substring.
         sensor: Optional sensor substring from fly ``fluorescentProtein``.
         cell_type: Optional cell-type substring from fly ``cellType``.
-        hemisphere: Optional exact fly-eye value, such as ``left`` or ``right``.
+        hemisphere: Optional exact recording hemisphere, such as ``left`` or
+            ``right``.
         person: Optional experimenter substring from fly ``surgeon``.
         limit: Maximum number of recordings to return.
         database_access: ``direct`` queries DB files in place. ``copy`` queries
@@ -222,7 +224,7 @@ def _query_stimulus_presentations(
         genotype_contains: Optional genotype substring.
         sensor_contains: Optional fluorescent-protein substring.
         cell_type_contains: Optional cell-type substring.
-        hemisphere: Optional exact fly-eye value.
+        hemisphere: Optional exact recording hemisphere.
         person_contains: Optional surgeon substring.
         limit: Maximum rows to return.
 

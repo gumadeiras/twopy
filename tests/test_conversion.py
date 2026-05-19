@@ -6,6 +6,7 @@ the large aligned movie stored in a separate file.
 """
 
 import json
+import sqlite3
 import unittest
 from pathlib import Path
 from zipfile import ZipFile
@@ -91,6 +92,38 @@ class ConversionTest(unittest.TestCase):
             np.testing.assert_array_equal(
                 loaded.photodiode.imaging_res_pd,
                 np.array([0.0, 1.0, 0.0]),
+            )
+
+    def test_loads_older_chosenparams_stimulus_parameters(self) -> None:
+        """Confirm older recordings without ``stimParams.mat`` still load.
+
+        Inputs: a temporary recording where stimulus epoch parameters are saved
+        as ``chosenparams.mat`` variable ``params``.
+        Outputs: loaded epoch parameters and decoded stimulus-code metadata.
+        """
+        with temporary_directory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_session(session_dir)
+            stimulus_dir = session_dir / "stimulusData"
+            stim_params_path = stimulus_dir / "stimParams.mat"
+            raw_params = scipy.io.loadmat(
+                stim_params_path,
+                squeeze_me=True,
+                struct_as_record=False,
+            )["stimParams"]
+            stim_params_path.unlink()
+            scipy.io.savemat(stimulus_dir / "chosenparams.mat", {"params": raw_params})
+
+            loaded = load_source_conversion_inputs(session_dir)
+
+            self.assertEqual(loaded.stimulus_parameters.path.name, "chosenparams.mat")
+            self.assertEqual(
+                loaded.stimulus_parameters.epochs[0]["epochName"],
+                "Gray Interleave",
+            )
+            self.assertEqual(
+                loaded.stimulus_code.function_lookup,
+                {"62002": "LEDMovingBars"},
             )
 
     def test_labels_stable_stimulus_data_slots_from_matlab_writer(self) -> None:
@@ -334,6 +367,47 @@ class ConversionTest(unittest.TestCase):
                     h5_file["movie/aligned"][()],
                     np.arange(12, dtype=np.float64).reshape(3, 2, 2),
                 )
+
+    def test_conversion_persists_database_hemisphere_metadata(self) -> None:
+        """Confirm conversion saves database fly-eye metadata into run fields.
+
+        Inputs: a source recording path with a matching Clark-style DB row.
+        Outputs: converted HDF5 run metadata includes ``hemisphere`` and ``eye``.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_dir = root / "data"
+            database_dir = root / "db"
+            database_dir.mkdir()
+            session_dir = (
+                data_dir / "genotype" / "stimulus" / "2023" / "10_17" / "10_02_49"
+            )
+            output_dir = root / "output"
+            config_path = root / "config.yml"
+            self._write_session(session_dir)
+            self._write_database_log(database_dir / "experimentLog.db")
+            config_path.write_text(
+                "\n".join(
+                    (
+                        f"database_path: {database_dir}",
+                        f"data_path: {data_dir}",
+                        "database_access: direct",
+                        "analysis_output: source",
+                    )
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            converted = convert_recording_to_twopy(
+                session_dir,
+                output_dir,
+                config_path=config_path,
+            )
+
+            with h5py.File(converted.path, "r") as h5_file:
+                self.assertEqual(h5_file["run"].attrs["hemisphere"], "left")
+                self.assertEqual(h5_file["run"].attrs["eye"], "left")
 
     def test_converts_mean_image_for_requested_frame_range(self) -> None:
         """Confirm conversion can compute a range-limited mean image.
@@ -672,6 +746,68 @@ class ConversionTest(unittest.TestCase):
             delimiter="\t",
         )
         (session_dir / "defaultAlignChannel.txt").write_text("1\n", encoding="utf-8")
+
+    def _write_database_log(self, path: Path) -> None:
+        """Create the minimal database row conversion uses for fly-eye metadata."""
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE fly (
+                    flyId INTEGER PRIMARY KEY,
+                    genotype TEXT,
+                    cellType TEXT,
+                    fluorescentProtein TEXT,
+                    eye TEXT,
+                    surgeon TEXT
+                )
+                """,
+            )
+            connection.execute(
+                """
+                CREATE TABLE stimulusPresentation (
+                    stimulusPresentationId INTEGER PRIMARY KEY,
+                    fly INT,
+                    relativeDataPath TEXT,
+                    stimulusFunction TEXT,
+                    date TEXT,
+                    dataQuality INT
+                )
+                """,
+            )
+            connection.execute(
+                """
+                INSERT INTO fly
+                    (flyId, genotype, cellType, fluorescentProtein, eye, surgeon)
+                VALUES
+                    (10923, 'genotype', 'cell', 'sensor', 'left', 'Gustavo')
+                """,
+            )
+            connection.execute(
+                """
+                INSERT INTO stimulusPresentation
+                    (
+                        stimulusPresentationId,
+                        fly,
+                        relativeDataPath,
+                        stimulusFunction,
+                        date,
+                        dataQuality
+                    )
+                VALUES
+                    (
+                        20005,
+                        10923,
+                        'genotype\\stimulus\\2023\\10_17\\10_02_49',
+                        'stimulus',
+                        '2023-10-17 10:02:49',
+                        1
+                    )
+                """,
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
     def _write_filebackup_zip(self, path: Path) -> None:
         """Write the tiny stimulus-code backup required for conversion.

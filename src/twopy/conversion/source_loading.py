@@ -94,6 +94,10 @@ RUN_METADATA_FIELDS = (
     ("rigTemperature", "rig_temperature"),
     ("runNumber", "run_number"),
 )
+STIMULUS_PARAMETER_FILES = (
+    ("stimParams.mat", "stimParams"),
+    ("chosenparams.mat", "params"),
+)
 
 
 def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
@@ -128,9 +132,7 @@ def load_source_conversion_inputs(session_dir: Path) -> SourceConversionInputs:
         acquisition=acquisition,
         photodiode=photodiode,
     )
-    stimulus_parameters = _load_stimulus_parameters(
-        files.stimulus_data_dir / "stimParams.mat",
-    )
+    stimulus_parameters = _load_stimulus_parameters(files.stimulus_data_dir)
     return SourceConversionInputs(
         session_files=files,
         aligned_movie=aligned_movie,
@@ -219,16 +221,34 @@ def _load_run_metadata(path: Path) -> RunMetadata:
     )
 
 
-def _load_stimulus_parameters(path: Path) -> StimulusParameters:
+def _load_stimulus_parameters(stimulus_dir: Path) -> StimulusParameters:
     """Load stimulus epoch parameter structs.
 
     Args:
-        path: ``stimParams.mat`` path.
+        stimulus_dir: ``stimulusData`` folder that should contain structured
+            stimulus epoch parameters.
 
     Returns:
         Stimulus parameters as one dictionary per epoch.
+
+    Newer recordings use ``stimParams.mat`` with variable ``stimParams``. Older
+    recordings can instead use ``chosenparams.mat`` with variable ``params``.
     """
-    raw_params = load_scipy_variable(path, "stimParams")
+    for filename, variable_name in STIMULUS_PARAMETER_FILES:
+        path = stimulus_dir / filename
+        if path.is_file():
+            raw_params = load_scipy_variable(path, variable_name)
+            break
+    else:
+        expected = ", ".join(
+            filename for filename, _variable in STIMULUS_PARAMETER_FILES
+        )
+        msg = (
+            f"Missing stimulus parameter MAT file in {stimulus_dir}: "
+            f"expected one of {expected}"
+        )
+        raise FileNotFoundError(msg)
+
     params_array = (
         raw_params
         if isinstance(raw_params, np.ndarray)

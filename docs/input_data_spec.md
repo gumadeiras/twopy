@@ -27,7 +27,7 @@ Optional top-level contents:
 
 - `imageDescription.mat`: primary acquisition metadata.
 - `alignedMovie.mat`: primary movie for ROI drawing and trace extraction.
-- `stimulusData/stimParams.mat`: primary structured stimulus epoch metadata.
+- `stimulusData/stimParams.mat`, or older `stimulusData/chosenparams.mat`: primary structured stimulus epoch metadata.
 - `stimulusData/stimdata.mat`: primary structured stimulus time series.
 - `stimulusData/filebackup.zip`: exact stimulus/runtime code provenance and source for stimulus-specific column meanings.
 - `highResPd.mat`: preferred photodiode signal for precise event detection.

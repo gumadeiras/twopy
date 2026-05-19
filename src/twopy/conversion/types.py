@@ -122,9 +122,9 @@ class AcquisitionMetadata:
 
 @dataclass(frozen=True)
 class StimulusParameters:
-    """Stimulus epoch definitions from ``stimParams.mat``.
+    """Stimulus epoch definitions from ``stimParams.mat`` or ``chosenparams.mat``.
 
-    Inputs: MATLAB ``stimParams`` structs.
+    Inputs: MATLAB epoch parameter structs.
     Outputs: one plain dictionary per epoch.
 
     Field names and values vary with the stimulus design, so dictionaries keep
