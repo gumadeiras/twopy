@@ -331,7 +331,7 @@ def _recording_hemisphere_from_default_database(
             config,
             recording.source_session_dir,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, ValueError):
         return None
     if value is None:
         return None

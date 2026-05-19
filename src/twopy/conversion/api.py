@@ -59,7 +59,10 @@ def convert_recording_to_twopy(
     file keeps metadata, stimulus, photodiode, and the quick-look mean image.
     """
     inputs = load_source_conversion_inputs(session_dir)
-    config = _load_config_if_available(config_path)
+    config = _load_config_for_conversion(
+        config_path,
+        require=output_dir is None,
+    )
     if config is not None:
         inputs = _with_database_run_metadata(inputs, config)
     start_frame, stop_frame = normalize_frame_range(
@@ -76,7 +79,6 @@ def convert_recording_to_twopy(
     destination_dir = _resolve_conversion_output_dir(
         session_dir=inputs.session_files.session_dir,
         output_dir=output_dir,
-        config_path=config_path,
         config=config,
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
@@ -106,7 +108,6 @@ def _resolve_conversion_output_dir(
     *,
     session_dir: Path,
     output_dir: Path | None,
-    config_path: Path,
     config: TwopyConfig | None,
 ) -> Path:
     """Choose where conversion output should be written.
@@ -114,7 +115,6 @@ def _resolve_conversion_output_dir(
     Args:
         session_dir: Source recording folder.
         output_dir: Caller-provided output directory, if any.
-        config_path: Config file used when ``output_dir`` is omitted.
         config: Already loaded config, when available.
 
     Returns:
@@ -128,15 +128,22 @@ def _resolve_conversion_output_dir(
         return output_dir.expanduser()
 
     if config is None:
-        config = load_config(config_path)
+        msg = "Conversion config is required when output_dir is omitted."
+        raise ValueError(msg)
     return resolve_analysis_work_dir(config, session_dir)
 
 
-def _load_config_if_available(config_path: Path) -> TwopyConfig | None:
-    """Load machine config when present without making explicit outputs depend on it."""
+def _load_config_for_conversion(
+    config_path: Path,
+    *,
+    require: bool,
+) -> TwopyConfig | None:
+    """Load config, unless explicit output conversion can run without it."""
     try:
         return load_config(config_path)
-    except FileNotFoundError:
+    except (FileNotFoundError, ValueError):
+        if require:
+            raise
         return None
 
 

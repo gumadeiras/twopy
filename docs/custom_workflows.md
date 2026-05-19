@@ -106,7 +106,7 @@ Roles are not tied to field names. A field named `start`, `window_start_seconds`
 
 ## Outputs And Provenance
 
-Workflows return `CustomResult` objects. A result can list files, tables, line plots, replacement ROIs, or response plot data. File and table outputs must be below `ctx.output_dir`; use `ctx.output_path("name.csv")` instead of building paths by hand. Returned CSV and TSV tables are previewed in the Custom tab, `CustomTable(..., highlighted_rows=(...))` marks zero-based data rows, and `CustomLinePlot(..., y_label="Weight")` sets the plot y-axis label when the default `Value` is too generic. Files written through `ctx.write_roi_table()` and `ctx.write_matrix_csv()` automatically receive workflow metadata. Files returned in `CustomResult.files` or `CustomResult.tables` receive metadata after the workflow returns.
+Workflows return `CustomResult` objects. A result can list files, tables, line plots, replacement ROIs, or response plot data. File and table outputs must be below `ctx.output_dir`; use `ctx.output_path("name.csv")` instead of building paths by hand. Returned CSV and TSV tables are previewed in the Custom tab, `CustomTable(..., highlighted_rows=(...))` marks zero-based data rows, and `CustomLinePlot(..., y_label="Weight")` sets the plot y-axis label when the default `Value` is too generic. Files written through `ctx.write_roi_table()` and `ctx.write_matrix_csv()` automatically receive workflow metadata; pass `column_labels=(...)` to `ctx.write_matrix_csv()` when matrix columns have scientific coordinates such as lag seconds. Files returned in `CustomResult.files` or `CustomResult.tables` receive metadata after the workflow returns.
 
 For CSV, PDF, PNG, and other non-HDF5 outputs, twopy writes a sidecar like `direction_selectivity.twopy-workflow.yml`. For HDF5 outputs, twopy writes a `twopy_workflow` metadata group. The metadata records the workflow id, name, version, source path, source hash, twopy version, run time, parameters, and recording path. When analysis caching is enabled, custom outputs and their metadata sync to the configured analysis output folder.
 
@@ -116,16 +116,16 @@ twopy ships a native Response kernels workflow. It runs through the same Custom 
 
 For `olfaction`, the workflow fits one raw-left and raw-right antenna kernel per ROI and epoch name, maps those raw kernels to ipsi and contra from the recording hemisphere stored in converted metadata, with a manual override available for audits, then writes:
 
-- `response_kernels_<epoch_name>_ipsi.csv`
-- `response_kernels_<epoch_name>_contra.csv`
+- `response_kernels_group_<index>_epochs_<numbers>_<epoch_name>_ipsi.csv`
+- `response_kernels_group_<index>_epochs_<numbers>_<epoch_name>_contra.csv`
 - `response_kernels_summary.csv`
 
 For `vision`, the workflow fits one signed-contrast kernel per ROI and epoch name and writes:
 
-- `response_kernels_<epoch_name>_contrast.csv`
+- `response_kernels_group_<index>_epochs_<numbers>_<epoch_name>_contrast.csv`
 - `response_kernels_summary.csv`
 
-Both current native modes default to `stimulus_specific_05`, but the meaning differs by modality. In olfactory LED recordings it matches the random-noise workflow's `antenna_stim` value after twopy's stable column naming; LED recordings encode `0=left`, `1=both`, `2=right`, and `3=blank`. In Matulis-style full-field visual contrast recordings it is signed contrast, such as `-0.2/+0.2` and `-0.9/+0.9`. Negative kernel times are future stimulus samples and are useful as a timing diagnostic. Current native fitting is frame-aligned; per-ROI line timing maps are not yet part of converted HDF5 files, so line-precise psycho5 parity remains a separate timing-extension task.
+Both current native modes default to `stimulus_specific_05`, but the meaning differs by modality. In olfactory LED recordings it matches the random-noise workflow's `antenna_stim` value after twopy's stable column naming; LED recordings encode `0=left`, `1=both`, `2=right`, and `3=blank`. In Matulis-style full-field visual contrast recordings it is signed contrast, such as `-0.2/+0.2` and `-0.9/+0.9`. Kernel CSV matrix columns are labeled as `lag_s_<seconds>` so the exported lag axis is inspectable without opening the plot. Negative kernel times are future stimulus samples and are useful as a timing diagnostic. Current native fitting is frame-aligned; per-ROI line timing maps are not yet part of converted HDF5 files, so line-precise psycho5 parity remains a separate timing-extension task.
 
 A local kernel workflow can still return custom line plots if it needs experimental fitting code:
 

@@ -390,7 +390,7 @@ class ConversionTest(unittest.TestCase):
                 "\n".join(
                     (
                         f"database_path: {database_dir}",
-                        f"data_path: {data_dir}",
+                        f"data_paths:\n  - {data_dir}",
                         "database_access: direct",
                         "analysis_output: source",
                     )
@@ -408,6 +408,29 @@ class ConversionTest(unittest.TestCase):
             with h5py.File(converted.path, "r") as h5_file:
                 self.assertEqual(h5_file["run"].attrs["hemisphere"], "left")
                 self.assertEqual(h5_file["run"].attrs["eye"], "left")
+
+    def test_explicit_output_conversion_ignores_invalid_config(self) -> None:
+        """Confirm explicit output conversion does not require machine config.
+
+        Inputs: a valid source recording, explicit output directory, and a
+        malformed config file.
+        Outputs: converted files are written under the explicit output.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            session_dir = root / "recording"
+            output_dir = root / "output"
+            config_path = root / "config.yml"
+            self._write_session(session_dir)
+            config_path.write_text("database_path: [broken\n", encoding="utf-8")
+
+            converted = convert_recording_to_twopy(
+                session_dir,
+                output_dir,
+                config_path=config_path,
+            )
+
+            self.assertEqual(converted.path.parent, output_dir)
 
     def test_converts_mean_image_for_requested_frame_range(self) -> None:
         """Confirm conversion can compute a range-limited mean image.
@@ -472,7 +495,7 @@ class ConversionTest(unittest.TestCase):
             self._write_session(session_dir)
             config_path.write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root}\n"
+                f"data_paths:\n  - {data_root}\n"
                 "database_access: copy\n"
                 "analysis_caching: false\n"
                 f"analysis_output: {output_root}\n",
@@ -508,7 +531,7 @@ class ConversionTest(unittest.TestCase):
             self._write_session(session_dir)
             config_path.write_text(
                 f"database_path: {root / 'db'}\n"
-                f"data_path: {data_root}\n"
+                f"data_paths:\n  - {data_root}\n"
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"

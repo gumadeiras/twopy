@@ -137,7 +137,7 @@ class StimulusKernelFitTest(unittest.TestCase):
                 self.fail("olfactory kernel result should include left/right kernels")
             np.testing.assert_array_equal(result.ipsilateral, result.raw_right)
             np.testing.assert_array_equal(result.contralateral, result.raw_left)
-            self.assertEqual(result.response_sample_counts.tolist(), [[4], [4]])
+            self.assertEqual(result.response_sample_counts.tolist(), [[3], [3]])
             self.assertEqual(result.stimulus_sample_counts, (4, 4))
 
     def test_recording_kernel_fits_visual_contrast_without_hemisphere(self) -> None:
@@ -201,7 +201,7 @@ class StimulusKernelFitTest(unittest.TestCase):
             self.assertEqual(result.epoch_names, ("contrast 0.2", "contrast 0.9"))
             self.assertEqual(result.contrast.shape, (2, 1, 2))
             self.assertEqual(result.selected_epoch_numbers, (2, 3))
-            self.assertEqual(result.response_sample_counts.tolist(), [[4], [4]])
+            self.assertEqual(result.response_sample_counts.tolist(), [[3], [3]])
 
     def test_recording_hemisphere_reads_converted_metadata(self) -> None:
         """Confirm the public helper exposes the recording hemisphere."""

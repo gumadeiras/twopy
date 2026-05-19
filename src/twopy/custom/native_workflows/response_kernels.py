@@ -170,23 +170,29 @@ def _olfactory_kernel_result(
     summary_path = ctx.output_path(f"{params.output_prefix}_summary.csv")
     files: list[Path] = []
     plots: list[CustomLinePlot] = []
+    lag_columns = _lag_column_labels(kernels.time_seconds)
     for epoch_index, epoch_name in enumerate(kernels.epoch_names):
-        suffix = _safe_epoch_suffix(epoch_name)
-        ipsi_path = ctx.output_path(f"{params.output_prefix}_{suffix}_ipsi.csv")
-        contra_path = ctx.output_path(f"{params.output_prefix}_{suffix}_contra.csv")
+        stem = _kernel_output_stem(
+            params.output_prefix,
+            epoch_index=epoch_index,
+            epoch_name=epoch_name,
+            epoch_numbers=kernels.selected_epoch_numbers_by_name[epoch_index],
+        )
+        ipsi_path = ctx.output_path(f"{stem}_ipsi.csv")
+        contra_path = ctx.output_path(f"{stem}_contra.csv")
         ipsi = kernels.ipsilateral[epoch_index]
         contra = kernels.contralateral[epoch_index]
         ctx.write_matrix_csv(
             ipsi_path,
             ipsi,
             row_labels=kernels.roi_labels,
-            column_prefix="lag",
+            column_labels=lag_columns,
         )
         ctx.write_matrix_csv(
             contra_path,
             contra,
             row_labels=kernels.roi_labels,
-            column_prefix="lag",
+            column_labels=lag_columns,
         )
         files.extend((ipsi_path, contra_path))
         plots.extend(
@@ -247,15 +253,21 @@ def _visual_kernel_result(
     files: list[Path] = []
     plots: list[CustomLinePlot] = []
     mean_rows: list[np.ndarray] = []
+    lag_columns = _lag_column_labels(kernels.time_seconds)
     for epoch_index, epoch_name in enumerate(kernels.epoch_names):
-        suffix = _safe_epoch_suffix(epoch_name)
-        contrast_path = ctx.output_path(f"{params.output_prefix}_{suffix}_contrast.csv")
+        stem = _kernel_output_stem(
+            params.output_prefix,
+            epoch_index=epoch_index,
+            epoch_name=epoch_name,
+            epoch_numbers=kernels.selected_epoch_numbers_by_name[epoch_index],
+        )
+        contrast_path = ctx.output_path(f"{stem}_contrast.csv")
         contrast = kernels.contrast[epoch_index]
         ctx.write_matrix_csv(
             contrast_path,
             contrast,
             row_labels=kernels.roi_labels,
-            column_prefix="lag",
+            column_labels=lag_columns,
         )
         files.append(contrast_path)
         plots.append(
@@ -347,6 +359,35 @@ def _safe_epoch_suffix(epoch_name: str) -> str:
     """Return a readable filename suffix for one epoch name."""
     cleaned = _SAFE_FILENAME_PART.sub("_", epoch_name.strip()).strip("_")
     return cleaned or "epoch"
+
+
+def _kernel_output_stem(
+    output_prefix: str,
+    *,
+    epoch_index: int,
+    epoch_name: str,
+    epoch_numbers: tuple[int, ...],
+) -> str:
+    """Return a collision-proof output stem for one kernel epoch group."""
+    epoch_number_text = "_".join(str(value) for value in epoch_numbers)
+    suffix = _safe_epoch_suffix(epoch_name)
+    return (
+        f"{output_prefix}_group_{epoch_index + 1:02d}_"
+        f"epochs_{epoch_number_text}_{suffix}"
+    )
+
+
+def _lag_column_labels(time_seconds: np.ndarray) -> tuple[str, ...]:
+    """Return matrix CSV labels that encode actual lag seconds."""
+    return tuple(f"lag_s_{_clean_lag_value(value):.6f}" for value in time_seconds)
+
+
+def _clean_lag_value(value: float) -> float:
+    """Avoid negative-zero labels from floating-point lag axes."""
+    as_float = float(value)
+    if abs(as_float) < 5e-13:
+        return 0.0
+    return as_float
 
 
 def _selected_hemisphere(params: ResponseKernelParams) -> Hemisphere | None:

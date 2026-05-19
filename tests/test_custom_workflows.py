@@ -32,7 +32,11 @@ from twopy.custom.native_workflows.direction_selectivity import (
 from twopy.custom.native_workflows.direction_selectivity import (
     run as run_direction_selectivity,
 )
-from twopy.custom.native_workflows.response_kernels import ResponseKernelParams
+from twopy.custom.native_workflows.response_kernels import (
+    ResponseKernelParams,
+    _kernel_output_stem,
+    _lag_column_labels,
+)
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.roi import RoiSet, make_roi_set
 
@@ -446,6 +450,51 @@ class CustomRunContextApiTest(unittest.TestCase):
 
             self.assertEqual(all_rois.labels, roi_set.labels)
             self.assertEqual(visible_rois.labels, ("roi_0001", "roi_0003"))
+
+    def test_matrix_csv_accepts_explicit_column_labels(self) -> None:
+        """Confirm workflow matrix CSVs can carry scientific axis labels."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = write_converted_recording_files(root)
+            ctx = _custom_context(recording_path)
+            path = ctx.output_path("matrix.csv")
+
+            ctx.write_matrix_csv(
+                path,
+                np.array([[1.0, 2.0]], dtype=np.float64),
+                row_labels=("roi_0001",),
+                column_labels=("lag_s_-0.100000", "lag_s_0.000000"),
+            )
+
+            self.assertEqual(
+                path.read_text(encoding="utf-8").splitlines()[0],
+                "label,lag_s_-0.100000,lag_s_0.000000",
+            )
+
+    def test_response_kernel_output_names_and_lag_labels_are_stable(self) -> None:
+        """Confirm kernel CSV outputs encode epochs and lag seconds."""
+        self.assertEqual(
+            _kernel_output_stem(
+                "response_kernels",
+                epoch_index=0,
+                epoch_name="contrast/0.2",
+                epoch_numbers=(2, 4),
+            ),
+            "response_kernels_group_01_epochs_2_4_contrast_0.2",
+        )
+        self.assertEqual(
+            _kernel_output_stem(
+                "response_kernels",
+                epoch_index=1,
+                epoch_name="contrast 0.2",
+                epoch_numbers=(3,),
+            ),
+            "response_kernels_group_02_epochs_3_contrast_0.2",
+        )
+        self.assertEqual(
+            _lag_column_labels(np.array([-0.02, -0.0, 0.02], dtype=np.float64)),
+            ("lag_s_-0.020000", "lag_s_0.000000", "lag_s_0.020000"),
+        )
 
 
 class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):

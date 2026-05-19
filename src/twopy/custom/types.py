@@ -582,6 +582,7 @@ class CustomRunContext:
         *,
         row_labels: tuple[str, ...],
         column_prefix: str = "sample",
+        column_labels: Sequence[str] | None = None,
     ) -> None:
         """Write a matrix CSV and workflow metadata.
 
@@ -590,6 +591,7 @@ class CustomRunContext:
             values: Matrix shaped ``(rows, columns)``.
             row_labels: Label for each matrix row.
             column_prefix: Prefix used for generated sample column names.
+            column_labels: Optional explicit label for each matrix column.
 
         Returns:
             None.
@@ -604,18 +606,15 @@ class CustomRunContext:
                 f"got {matrix.shape[0]} rows and {len(row_labels)} labels"
             )
             raise ValueError(msg)
+        resolved_column_labels = _matrix_column_labels(
+            column_count=matrix.shape[1],
+            column_prefix=column_prefix,
+            column_labels=column_labels,
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8", newline="") as csv_file:
             writer = csv.writer(csv_file)
-            writer.writerow(
-                (
-                    "label",
-                    *(
-                        f"{column_prefix}_{index:04d}"
-                        for index in range(matrix.shape[1])
-                    ),
-                ),
-            )
+            writer.writerow(("label", *resolved_column_labels))
             for row_index, label in enumerate(row_labels):
                 writer.writerow((label, *matrix[row_index, :].tolist()))
         from twopy.custom.provenance import write_workflow_provenance_for_path
@@ -703,6 +702,28 @@ def _validate_column_lengths(
         if len(values) != row_count:
             msg = f"Column {name!r} has {len(values)} rows; expected {row_count} rows"
             raise ValueError(msg)
+
+
+def _matrix_column_labels(
+    *,
+    column_count: int,
+    column_prefix: str,
+    column_labels: Sequence[str] | None,
+) -> tuple[str, ...]:
+    """Return explicit or generated matrix CSV column labels."""
+    if column_labels is None:
+        return tuple(f"{column_prefix}_{index:04d}" for index in range(column_count))
+    labels = tuple(column_labels)
+    if len(labels) != column_count:
+        msg = (
+            "Matrix column label count must match matrix columns; "
+            f"got {len(labels)} labels and {column_count} columns"
+        )
+        raise ValueError(msg)
+    if any(label == "" for label in labels):
+        msg = "Matrix column labels must not be blank."
+        raise ValueError(msg)
+    return labels
 
 
 def _metric_by_roi(
