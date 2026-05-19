@@ -44,15 +44,19 @@ def plot_form_layout() -> QFormLayout:
     return layout
 
 
-def set_plot_control_width(control: QWidget) -> None:
+def set_plot_control_width(control: QWidget, *, width: int | None = None) -> None:
     """Give one Plot-tab non-dropdown field widget the shared fixed width.
 
     Args:
         control: Field widget in a Plot-tab form row.
+        width: Optional width for controls whose visible text needs more room.
 
     Returns:
         None.
     """
+    if width is not None:
+        _set_plot_field_width(control, width)
+        return
     if isinstance(control, QCheckBox):
         _set_plot_field_width(control, PLOT_DROPDOWN_WIDTH)
         return

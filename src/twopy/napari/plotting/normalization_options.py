@@ -23,6 +23,8 @@ from twopy.napari.plotting.form_controls import (
 
 __all__ = ["NormalizationOptionsWidget", "default_normalization_epoch_number"]
 
+_NORMALIZE_TO_EPOCH_PEAK_WIDTH = 180
+
 
 class NormalizationOptionsWidget(QWidget):
     """Widget that exposes typed response normalization settings.
@@ -48,7 +50,10 @@ class NormalizationOptionsWidget(QWidget):
         super().__init__()
         self._on_change = on_change
         self._normalize_to_epoch_peak = QCheckBox("Normalize to epoch peak")
-        set_plot_control_width(self._normalize_to_epoch_peak)
+        set_plot_control_width(
+            self._normalize_to_epoch_peak,
+            width=_NORMALIZE_TO_EPOCH_PEAK_WIDTH,
+        )
         self._normalize_to_epoch_peak.setChecked(options.method == "epoch_peak")
         self._epoch = QComboBox()
         set_plot_dropdown_width(self._epoch)

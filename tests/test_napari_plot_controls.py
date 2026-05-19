@@ -370,7 +370,6 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             dff_widget._use_full_baseline,
             dff_widget._fit_mode,
             dff_widget._apply_motion_mask,
-            normalization_widget._normalize_to_epoch_peak,
             normalization_widget._epoch,
             processing_widget._smoothing_method,
             processing_widget._low_pass_method,
@@ -424,6 +423,10 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
         self.assertEqual(
             {control.width() for control in wide_controls},
             {PLOT_DROPDOWN_WIDTH},
+        )
+        self.assertEqual(
+            normalization_widget._normalize_to_epoch_peak.width(),
+            180,
         )
         popup_view_widths: set[int] = set()
         popup_window_widths: set[int] = set()

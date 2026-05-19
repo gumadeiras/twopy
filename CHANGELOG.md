@@ -33,6 +33,7 @@
 
 ### Fixes
 
+- Widened the napari Plot-tab normalization checkbox so `Normalize to epoch peak` is no longer cropped.
 - Used interpolated timing for older flash-train recordings whose `photodiode_flash` pulses are not one-per-epoch-boundary, while still rejecting incomplete boundary-flash evidence, restoring response plots and response-watershed ROI generation for older recordings.
 - Restored saved-analysis reload for source recordings routed through the stable external analysis cache.
 - Allowed source recording conversion to load older `chosenparams.mat` stimulus epoch parameters when `stimParams.mat` is absent.
