@@ -175,6 +175,9 @@ def _validate_line_plot(plot: CustomLinePlot) -> None:
     if plot.title == "":
         msg = "CustomLinePlot.title must not be blank."
         raise ValueError(msg)
+    if plot.y_label == "":
+        msg = "CustomLinePlot.y_label must not be blank."
+        raise ValueError(msg)
     if plot.x.ndim != 1:
         msg = f"CustomLinePlot.x must be one-dimensional; got {plot.x.shape}"
         raise ValueError(msg)

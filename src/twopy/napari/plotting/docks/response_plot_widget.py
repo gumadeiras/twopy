@@ -128,6 +128,7 @@ _CUSTOM_EPOCH_WINDOW_STEP_SECONDS = 0.1
 _CUSTOM_RESPONSE_WINDOW_STEP_SECONDS = 0.1
 _CUSTOM_RESPONSE_METRIC_CHOICES = ("mean", "peak", "minimum")
 _CUSTOM_ROI_SELECTOR_CHOICES = ("all_rois", "visible_rois")
+_CUSTOM_STIMULUS_COLUMN_EXCLUSIONS = frozenset(("time_seconds", "epoch_number"))
 _CUSTOM_EPOCH_WINDOW_ROLES = ("epoch_window_start", "epoch_window_stop")
 _CUSTOM_RESPONSE_WINDOW_ROLES = ("response_window_start", "response_window_stop")
 
@@ -616,6 +617,7 @@ class _ResponsePlotWidget(QWidget):
         if self._recording is None:
             return specs
         epoch_choices = _custom_epoch_choices(self._recording)
+        stimulus_column_choices = _custom_stimulus_column_choices(self._recording)
         metric_stop_seconds = response_plot_min_epoch_duration_for_recording(
             self._recording,
         )
@@ -633,6 +635,7 @@ class _ResponsePlotWidget(QWidget):
                 spec,
                 recording=self._recording,
                 epoch_choices=epoch_choices,
+                stimulus_column_choices=stimulus_column_choices,
                 metric_stop_seconds=metric_stop_seconds,
                 response_start_seconds=-pre_window_seconds,
                 response_stop_seconds=response_stop_seconds,
@@ -1123,7 +1126,7 @@ class _ResponsePlotWidget(QWidget):
             visible,
             row_count=self._epoch_count(),
         )
-        self._render_plots(apply_roi_layer_visibility=False)
+        self._update_epoch_visibility_display()
 
     def _set_epoch_visibility_batch(self, visibility: dict[object, bool]) -> None:
         set_row_visibility_batch(
@@ -1131,7 +1134,7 @@ class _ResponsePlotWidget(QWidget):
             visibility,
             row_count=self._epoch_count(),
         )
-        self._render_plots(apply_roi_layer_visibility=False)
+        self._update_epoch_visibility_display()
 
     def _visible_roi_indices(self) -> tuple[int, ...]:
         return visible_indices(self._roi_visibility, len(self._roi_labels()))
@@ -1370,6 +1373,58 @@ class _ResponsePlotWidget(QWidget):
             else:
                 self._render_response_maps()
 
+    def _update_epoch_visibility_display(self) -> None:
+        """Refresh epoch visibility without recomputing or rebuilding cached data."""
+        if self._plot_data is None or len(self._plot_data.epochs) == 0:
+            self._render_plots(apply_roi_layer_visibility=False)
+            return
+        roi_indices = self._visible_roi_indices()
+        epoch_indices = self._visible_epoch_indices()
+        if len(roi_indices) == 0 or len(epoch_indices) == 0:
+            self._render_plots(apply_roi_layer_visibility=False)
+            return
+        if not self._plot_area.has_epoch_widgets(epoch_indices):
+            self._render_plots(apply_roi_layer_visibility=False)
+            return
+        time_min, time_max = resolved_time_bounds(
+            self._plot_data,
+            epoch_indices,
+            manual_min=self._manual_x_min,
+            manual_max=self._manual_x_max,
+        )
+        value_min, value_max = resolved_value_bounds(
+            self._plot_data,
+            roi_indices,
+            epoch_indices,
+            manual_min=self._manual_y_min,
+            manual_max=self._manual_y_max,
+        )
+        self._plot_area.render_cached_epoch_widgets(
+            roi_indices=roi_indices,
+            epoch_indices=epoch_indices,
+            show_sem=self._show_sem,
+            roi_colors=self._roi_colors,
+            time_min=time_min,
+            time_max=time_max,
+            value_min=value_min,
+            value_max=value_max,
+            plot_size=self._plot_size,
+        )
+        if self._response_map_data is None:
+            self._render_response_maps()
+            return
+        response_map_epoch_indices = self._visible_response_map_epoch_indices()
+        if len(response_map_epoch_indices) == 0:
+            self._render_response_maps()
+            return
+        if self._response_map_area.has_epoch_widgets(response_map_epoch_indices):
+            self._response_map_area.render_cached_epoch_widgets(
+                epoch_indices=response_map_epoch_indices,
+                map_size=self._plot_size,
+            )
+            return
+        self._render_response_maps()
+
     def _apply_roi_layer_visibility(self) -> None:
         apply_roi_visibility_to_labels_layer(
             self._roi_labels_layer,
@@ -1499,11 +1554,24 @@ def _custom_epoch_choices(recording: RecordingData) -> tuple[str, ...]:
     )
 
 
+def _custom_stimulus_column_choices(recording: RecordingData) -> tuple[str, ...]:
+    """Return converted stimulus columns useful as workflow inputs."""
+    choices = tuple(
+        name
+        for name in recording.stimulus_data_column_names
+        if name not in _CUSTOM_STIMULUS_COLUMN_EXCLUSIONS
+    )
+    if len(choices) > 0:
+        return choices
+    return recording.stimulus_data_column_names
+
+
 def _recording_parameter_spec(
     spec: CustomParameterSpec,
     *,
     recording: RecordingData,
     epoch_choices: tuple[str, ...],
+    stimulus_column_choices: tuple[str, ...],
     metric_stop_seconds: float | None,
     response_start_seconds: float,
     response_stop_seconds: float | None,
@@ -1548,6 +1616,8 @@ def _recording_parameter_spec(
         )
     if spec.role == "roi_selector":
         return _custom_choice_parameter_spec(spec, _CUSTOM_ROI_SELECTOR_CHOICES)
+    if spec.role == "stimulus_column" and len(stimulus_column_choices) > 0:
+        return _custom_choice_parameter_spec(spec, stimulus_column_choices)
     if spec.role == "table_highlight_threshold":
         return replace(
             spec,
@@ -1575,11 +1645,15 @@ def _matched_epoch_choice(
 ) -> str:
     """Return the matching epoch choice or the first choice."""
     selector = preferred_name.strip()
+    preferred_number = _custom_epoch_number_from_selector(selector)
+    if preferred_number is not None:
+        for choice in choices:
+            if _custom_epoch_number_from_choice(choice) == preferred_number:
+                return choice
     preferred = selector.casefold()
     for choice in choices:
         if (
             choice.casefold() == preferred
-            or _custom_epoch_number_from_choice(choice) == selector
             or _custom_epoch_name_from_choice(choice).casefold() == preferred
         ):
             return choice
@@ -1616,9 +1690,22 @@ def _custom_epoch_name_from_choice(choice: str) -> str:
     return choice.split(":", maxsplit=1)[1].strip()
 
 
-def _custom_epoch_number_from_choice(choice: str) -> str:
+def _custom_epoch_number_from_choice(choice: str) -> int | None:
     """Return the epoch-number part of a custom epoch choice."""
-    return choice.split(":", maxsplit=1)[0].strip()
+    if ":" in choice:
+        return _custom_epoch_number_from_selector(choice.split(":", maxsplit=1)[0])
+    return _custom_epoch_number_from_selector(choice)
+
+
+def _custom_epoch_number_from_selector(selector: str) -> int | None:
+    """Return the numeric epoch selector, when one is present."""
+    candidate = selector.strip()
+    if candidate.casefold().startswith("epoch "):
+        candidate = candidate[len("epoch ") :].strip()
+    try:
+        return int(candidate)
+    except ValueError:
+        return None
 
 
 def _load_pixel_calibration_profile_mappings_for_ui() -> tuple[

@@ -98,6 +98,19 @@ class ResponseMapArea:
             map_size=map_size,
             shared_limits=shared_limits,
         )
+        self.render_cached_epoch_widgets(
+            epoch_indices=epoch_indices,
+            map_size=map_size,
+        )
+
+    def render_cached_epoch_widgets(
+        self,
+        *,
+        epoch_indices: tuple[int, ...],
+        map_size: int,
+    ) -> None:
+        """Show selected cached heatmap panels and update their display size."""
+        self.clear_layout_preserving_epoch_cache()
         for epoch_index in epoch_indices:
             if epoch_index not in self.epoch_map_panels:
                 continue

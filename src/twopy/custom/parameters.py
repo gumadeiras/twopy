@@ -37,6 +37,7 @@ ParameterRole = Literal[
     "response_window_stop",
     "roi_limit",
     "roi_selector",
+    "stimulus_column",
     "table_highlight_threshold",
 ]
 
@@ -52,6 +53,7 @@ _ROLE_KINDS: dict[ParameterRole, tuple[ParameterKind, ...]] = {
     "response_window_stop": ("float",),
     "roi_limit": ("int",),
     "roi_selector": ("str",),
+    "stimulus_column": ("str",),
     "table_highlight_threshold": ("float",),
 }
 _ROLE_VALUES: dict[object, ParameterRole] = {role: role for role in _ROLE_KINDS}

@@ -102,6 +102,52 @@ class ResponsePlotArea:
             roi_colors=roi_colors,
             plot_size=plot_size,
         )
+        self.render_cached_epoch_widgets(
+            roi_indices=roi_indices,
+            epoch_indices=epoch_indices,
+            show_sem=show_sem,
+            roi_colors=roi_colors,
+            time_min=time_min,
+            time_max=time_max,
+            value_min=value_min,
+            value_max=value_max,
+            plot_size=plot_size,
+        )
+
+    def render_cached_epoch_widgets(
+        self,
+        *,
+        roi_indices: tuple[int, ...],
+        epoch_indices: tuple[int, ...],
+        show_sem: bool,
+        roi_colors: tuple[QColor, ...],
+        time_min: float,
+        time_max: float,
+        value_min: float,
+        value_max: float,
+        plot_size: int,
+    ) -> None:
+        """Show selected cached epoch panels and repaint them.
+
+        Args:
+            roi_indices: ROI rows to draw.
+            epoch_indices: Epoch plot rows to display.
+            show_sem: Whether SEM bands should be drawn.
+            roi_colors: ROI plot colors.
+            time_min: Shared x-axis minimum.
+            time_max: Shared x-axis maximum.
+            value_min: Shared y-axis minimum.
+            value_max: Shared y-axis maximum.
+            plot_size: Pixel width used for each response plot.
+
+        Returns:
+            None.
+
+        Epoch visibility changes only alter which already-computed panels are
+        visible. Keeping this path separate avoids refreshing every cached plot
+        row just to hide or show one epoch.
+        """
+        self.clear_layout_preserving_epoch_cache()
         for epoch_index in epoch_indices:
             self._layout.addWidget(self.epoch_plot_panels[epoch_index])
             self.epoch_plot_panels[epoch_index].show()

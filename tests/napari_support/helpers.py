@@ -100,6 +100,7 @@ def _write_converted_recording(
     alignment_valid_crop: SpatialCrop | None = None,
     source_session_dir: Path | None = None,
     stimulus_data: npt.NDArray[np.float64] | None = None,
+    stimulus_data_column_names: tuple[str, ...] = ("time_seconds", "epoch_number"),
     high_res_pd: npt.NDArray[np.float64] | None = None,
     stimulus_parameters_json: str = "[]",
 ) -> Path:
@@ -113,6 +114,7 @@ def _write_converted_recording(
             converted recording metadata.
         stimulus_data: Optional stimulus rows shaped ``(rows, 2)`` containing
             ``time_seconds`` and ``epoch_number``.
+        stimulus_data_column_names: Column names stored with ``stimulus_data``.
         high_res_pd: Optional high-rate photodiode vector.
         stimulus_parameters_json: JSON list of stimulus epoch parameter
             dictionaries.
@@ -128,6 +130,7 @@ def _write_converted_recording(
         acquisition_metadata={"acq.frameRate": 10.0, "acq.zoomFactor": 2.0},
         run_metadata={"rig_name": "TestRig"},
         stimulus_data=stimulus_data,
+        stimulus_data_column_names=stimulus_data_column_names,
         stimulus_parameters_json=stimulus_parameters_json,
         high_res_pd=high_res_pd,
     )

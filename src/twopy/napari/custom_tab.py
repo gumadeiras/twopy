@@ -5,12 +5,17 @@ returned files, tables, and plots. Validation and analysis helpers live in
 ``twopy.custom`` so this module stays focused on Qt widgets.
 """
 
+from __future__ import annotations
+
 import csv
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
-from qtpy.QtGui import QPalette
+import numpy as np
+from qtpy.QtCore import Qt
+from qtpy.QtGui import QPalette, QWheelEvent
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -42,10 +47,30 @@ from twopy.custom import (
     parameter_specs,
 )
 
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+
 __all__ = ["CustomWorkflowPanel"]
 
 WorkflowRunner = Callable[[CustomWorkflow, object | None], CustomResult]
 ParameterSpecProvider = Callable[[CustomWorkflow], tuple[CustomParameterSpec, ...]]
+_CUSTOM_CHOICE_LABELS = {
+    "all_rois": "all ROIs",
+    "recording_metadata": "auto",
+    "visible_rois": "visible ROIs",
+}
+_PLOT_BACKGROUND = "#20252d"
+_PLOT_AXIS_COLOR = "#cfd6df"
+_PLOT_GRID_COLOR = "#6d7683"
+_PLOT_TRACE_COLORS = (
+    "#4cc9f0",
+    "#f72585",
+    "#f8961e",
+    "#90be6d",
+    "#b5179e",
+    "#43aa8b",
+)
 
 
 class CustomWorkflowPanel(QScrollArea):
@@ -234,8 +259,9 @@ class CustomWorkflowPanel(QScrollArea):
                 _wrapped_label(str(_table_display_path(table)))
             )
             self._result_layout.addWidget(_table_widget(table))
+        y_bounds = _line_plot_y_bounds(result.plots)
         for plot in result.plots:
-            self._result_layout.addWidget(_line_plot_widget(plot))
+            self._result_layout.addWidget(_line_plot_widget(plot, y_bounds=y_bounds))
         if self._result_layout.count() == 0:
             self._result_layout.addWidget(QLabel("No file or plot outputs."))
 
@@ -311,30 +337,121 @@ def _choice_label(value: object) -> str:
     """Return a readable label for one choice value."""
     if isinstance(value, Enum):
         return str(value.value)
-    return str(value)
+    text = str(value)
+    return _CUSTOM_CHOICE_LABELS.get(text, text)
 
 
-def _line_plot_widget(plot: CustomLinePlot) -> QWidget:
+def _line_plot_widget(
+    plot: CustomLinePlot,
+    *,
+    y_bounds: tuple[float, float] | None = None,
+) -> QWidget:
     """Create a matplotlib widget for one custom line plot."""
-    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
     from matplotlib.figure import Figure
 
-    figure = Figure(figsize=(4.0, 2.4), dpi=100)
+    figure = Figure(figsize=(3.8, 3.35), dpi=100, facecolor=_PLOT_BACKGROUND)
     axes = figure.add_subplot(111)
+    figure.patch.set_facecolor(_PLOT_BACKGROUND)
+    axes.set_facecolor(_PLOT_BACKGROUND)
     y_values = plot.y.reshape(1, -1) if plot.y.ndim == 1 else plot.y
     labels = plot.labels or tuple(
         f"series {index + 1}" for index in range(y_values.shape[0])
     )
     for index, values in enumerate(y_values):
-        axes.plot(plot.x, values, label=labels[index])
-    axes.set_title(plot.title)
+        axes.plot(
+            plot.x,
+            values,
+            label=labels[index],
+            color=_PLOT_TRACE_COLORS[index % len(_PLOT_TRACE_COLORS)],
+            linewidth=1.8,
+        )
+    if y_bounds is not None:
+        axes.set_ylim(*y_bounds)
+    _style_line_plot_axes(axes, title=plot.title, y_label=plot.y_label)
     if y_values.shape[0] <= 12:
-        axes.legend(loc="best", fontsize=7)
-    axes.set_xlabel("time")
-    axes.set_ylabel("value")
+        _style_line_plot_legend(axes)
     figure.tight_layout()
-    canvas = FigureCanvasQTAgg(figure)
+    return _line_plot_canvas(figure)
+
+
+def _line_plot_y_bounds(
+    plots: tuple[CustomLinePlot, ...],
+) -> tuple[float, float] | None:
+    """Return shared y-axis bounds for all visible custom line plots."""
+    finite_values: list[np.ndarray] = []
+    for plot in plots:
+        values = np.asarray(plot.y, dtype=np.float64)
+        finite = values[np.isfinite(values)]
+        if finite.size > 0:
+            finite_values.append(finite)
+    if not finite_values:
+        return None
+
+    combined = np.concatenate(finite_values)
+    value_min = float(np.min(combined))
+    value_max = float(np.max(combined))
+    if value_min == value_max:
+        padding = max(abs(value_min) * 0.1, 1.0)
+        return value_min - padding, value_max + padding
+    value_span = value_max - value_min
+    padding = 0.05 * value_span
+    return value_min - padding, value_max + padding
+
+
+def _line_plot_canvas(figure: Figure) -> QWidget:
+    """Return a matplotlib canvas that lets wheel scrolling reach the parent tab."""
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+
+    class WheelPassthroughCanvas(FigureCanvasQTAgg):
+        """Matplotlib canvas that does not consume Custom-tab wheel scrolling."""
+
+        def wheelEvent(self, event: QWheelEvent) -> None:
+            """Ignore wheel events so the surrounding scroll area can handle them."""
+            event.ignore()
+
+    canvas = WheelPassthroughCanvas(figure)
+    canvas.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     return canvas
+
+
+def _style_line_plot_axes(axes: Axes, *, title: str, y_label: str) -> None:
+    """Apply the response-widget plot palette to a matplotlib axes."""
+    axes.set_title(title, color=_PLOT_AXIS_COLOR, fontsize=10)
+    axes.set_xlabel("Time (s)", color=_PLOT_AXIS_COLOR)
+    axes.set_ylabel(y_label, color=_PLOT_AXIS_COLOR)
+    axes.tick_params(colors=_PLOT_AXIS_COLOR, labelsize=8)
+    axes.spines["top"].set_visible(False)
+    axes.spines["right"].set_visible(False)
+    for side in ("left", "bottom"):
+        axes.spines[side].set_color(_PLOT_AXIS_COLOR)
+        axes.spines[side].set_linewidth(1.0)
+    x_min, x_max = axes.get_xlim()
+    y_min, y_max = axes.get_ylim()
+    if x_min <= 0.0 <= x_max:
+        _draw_zero_reference_line(axes, axis="x")
+    if y_min <= 0.0 <= y_max:
+        _draw_zero_reference_line(axes, axis="y")
+
+
+def _style_line_plot_legend(axes: Axes) -> None:
+    """Apply the response-widget palette to a small matplotlib legend."""
+    legend = axes.legend(loc="best", fontsize=7)
+    legend.get_frame().set_facecolor(_PLOT_BACKGROUND)
+    legend.get_frame().set_edgecolor(_PLOT_AXIS_COLOR)
+    for text in legend.get_texts():
+        text.set_color(_PLOT_AXIS_COLOR)
+
+
+def _draw_zero_reference_line(axes: Axes, *, axis: Literal["x", "y"]) -> None:
+    """Draw one dashed zero-reference line with response-plot styling."""
+    draw = axes.axvline if axis == "x" else axes.axhline
+    draw(
+        0.0,
+        color=_PLOT_GRID_COLOR,
+        linewidth=1.4,
+        linestyle=(0, (5, 4)),
+        zorder=0,
+    )
 
 
 def _wrapped_label(text: str) -> QLabel:

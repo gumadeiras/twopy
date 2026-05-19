@@ -41,6 +41,7 @@ class ReferenceParams:
         selected_epoch: Main epoch to summarize.
         baseline_epoch: Example baseline epoch selector.
         comparison_epoch: Example comparison epoch selector.
+        stimulus_column: Example converted stimulus column selector.
         metric: Metric used by ``ctx.epoch_metric``.
         window_start_seconds: Epoch-relative metric start.
         window_stop_seconds: Epoch-relative metric stop.
@@ -121,6 +122,14 @@ class ReferenceParams:
             "label": "Comparison epoch",
             "description": "Example comparison recording epoch selector.",
             "twopy_role": "comparison_epoch",
+        },
+    )
+    stimulus_column: str = field(
+        default="stimulus_specific_01",
+        metadata={
+            "label": "Stimulus column",
+            "description": "Example converted stimulus/data column selector.",
+            "twopy_role": "stimulus_column",
         },
     )
     metric: str = field(

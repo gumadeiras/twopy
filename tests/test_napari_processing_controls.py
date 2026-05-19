@@ -4,6 +4,7 @@ Inputs: shared fake napari state and tiny response data.
 Outputs: assertions for plot-control behavior.
 """
 
+from qtpy.QtCore import Qt
 from tests.napari_support import (
     Any,
     DeltaFOverFOptions,
@@ -34,9 +35,15 @@ from tests.napari_support import (
 )
 
 from twopy.custom import (
+    CustomLinePlot,
     CustomParameterSpec,
     discover_custom_workflows,
     native_custom_workflow_paths,
+)
+from twopy.napari.custom_tab import (
+    _line_plot_widget,
+    _line_plot_y_bounds,
+    _parameter_widget,
 )
 from twopy.napari.plotting.docks.response_plot_widget import _recording_parameter_spec
 
@@ -193,6 +200,122 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             self.assertEqual(specs["dsi_threshold"].step, 0.05)
             self.assertEqual(specs["dsi_threshold"].decimals, 3)
 
+    def test_roi_selector_dropdown_uses_readable_labels(self) -> None:
+        """Confirm ROI selector values keep stable IDs but display readable text."""
+        _ = QApplication.instance() or QApplication([])
+        spec = CustomParameterSpec(
+            name="roi_selector",
+            label="ROIs",
+            kind="choice",
+            default="visible_rois",
+            description="",
+            role="roi_selector",
+            choices=("all_rois", "visible_rois"),
+        )
+
+        widget = cast(Any, _parameter_widget(spec))
+
+        self.assertEqual(
+            [widget.itemText(index) for index in range(widget.count())],
+            ["all ROIs", "visible ROIs"],
+        )
+        self.assertEqual(
+            [widget.itemData(index) for index in range(widget.count())],
+            ["all_rois", "visible_rois"],
+        )
+        self.assertEqual(widget.currentData(), "visible_rois")
+
+    def test_custom_line_plot_uses_response_plot_style(self) -> None:
+        """Confirm custom line plots share the response-widget visual palette."""
+        from matplotlib.colors import to_hex
+
+        _ = QApplication.instance() or QApplication([])
+        plot = CustomLinePlot(
+            "Kernel",
+            np.array([-1.0, 0.0, 1.0], dtype=np.float64),
+            np.array([[-1.0, 0.0, 1.0]], dtype=np.float64),
+            ("roi_0001",),
+            y_label="Weight",
+        )
+
+        widget = cast(Any, _line_plot_widget(plot, y_bounds=(-2.0, 2.0)))
+        axes = widget.figure.axes[0]
+
+        self.assertEqual(to_hex(widget.figure.get_facecolor()), "#20252d")
+        self.assertEqual(to_hex(axes.get_facecolor()), "#20252d")
+        self.assertFalse(axes.spines["top"].get_visible())
+        self.assertFalse(axes.spines["right"].get_visible())
+        self.assertEqual(to_hex(axes.lines[0].get_color()), "#4cc9f0")
+        self.assertEqual(axes.get_ylabel(), "Weight")
+        self.assertEqual(tuple(float(value) for value in axes.get_ylim()), (-2.0, 2.0))
+        self.assertEqual(widget.focusPolicy(), Qt.FocusPolicy.NoFocus)
+        self.assertGreaterEqual(len(axes.lines), 3)
+
+    def test_custom_line_plot_y_bounds_span_all_result_plots(self) -> None:
+        """Confirm a workflow result can use one y scale for every line plot."""
+        plots = (
+            CustomLinePlot(
+                "A",
+                np.array([0.0, 1.0], dtype=np.float64),
+                np.array([[1.0, 2.0]], dtype=np.float64),
+                ("a",),
+            ),
+            CustomLinePlot(
+                "B",
+                np.array([0.0, 1.0], dtype=np.float64),
+                np.array([[-10.0, 5.0]], dtype=np.float64),
+                ("b",),
+            ),
+        )
+
+        self.assertEqual(_line_plot_y_bounds(plots), (-10.75, 5.75))
+
+    def test_native_kernel_modality_parameter_uses_dropdown(self) -> None:
+        """Confirm native kernel stimulus mode is a dropdown."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                stimulus_data=np.zeros((1, 4), dtype=np.float64),
+                stimulus_data_column_names=(
+                    "time_seconds",
+                    "epoch_number",
+                    "stimulus_frame_number",
+                    "stimulus_specific_05",
+                ),
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            workflows = discover_custom_workflows(native_custom_workflow_paths())
+            workflow = next(
+                item for item in workflows.workflows if item.id == "response-kernels"
+            )
+
+            specs = {
+                spec.name: spec
+                for spec in response_widget._custom_parameter_specs_for_workflow(
+                    workflow,
+                )
+            }
+
+            self.assertEqual(specs["stimulus_modality"].kind, "choice")
+            self.assertEqual(
+                specs["stimulus_modality"].choices,
+                ("olfaction", "vision"),
+            )
+            self.assertEqual(specs["stimulus_modality"].default, "olfaction")
+            hemisphere_widget = cast(Any, _parameter_widget(specs["hemisphere"]))
+
+            self.assertEqual(
+                [
+                    hemisphere_widget.itemText(index)
+                    for index in range(hemisphere_widget.count())
+                ],
+                ["auto", "right", "left"],
+            )
+            self.assertEqual(hemisphere_widget.currentData(), "recording_metadata")
+
     def test_custom_epoch_parameter_default_matches_supported_selectors(self) -> None:
         """Confirm epoch dropdown defaults accept number, label, and name."""
         with temporary_directory() as temp_dir:
@@ -219,12 +342,33 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                     spec,
                     recording=opened.recording,
                     epoch_choices=choices,
+                    stimulus_column_choices=(),
                     metric_stop_seconds=None,
                     response_start_seconds=-1.0,
                     response_stop_seconds=2.0,
                 )
 
                 self.assertEqual(adjusted.default, "2: Right")
+
+            spec = CustomParameterSpec(
+                name="epoch",
+                label="Epoch",
+                kind="str",
+                default="2",
+                description="",
+                role="epoch",
+            )
+            adjusted = _recording_parameter_spec(
+                spec,
+                recording=opened.recording,
+                epoch_choices=("Epoch 1", "Epoch 2"),
+                stimulus_column_choices=(),
+                metric_stop_seconds=None,
+                response_start_seconds=-1.0,
+                response_stop_seconds=2.0,
+            )
+
+            self.assertEqual(adjusted.default, "Epoch 2")
 
     def test_baseline_epoch_dropdown_defaults_to_gray_like_epoch(self) -> None:
         """Confirm the dF/F baseline defaults to the gray/interleave epoch.

@@ -174,6 +174,33 @@ Response maps use the following data flow:
 - Saved epoch maps are scaled by the largest absolute finite response across all epochs; multiply `epoch.response_values` by `map_data.response_scale` to recover original dF/F units.
 - Napari display and exports use a separate robust 95th-percentile color limit, optionally shared across epochs, without changing saved heatmap values.
 
+Random-noise temporal kernels can be fit from the same computed response object. The fitter keeps complete regular stimulus streams for selected non-baseline epochs, groups selected epochs by unique epoch name, uses photodiode-aligned frame windows for sparse ROI response times, and maps raw left/right kernels to ipsi/contra from the recording hemisphere stored in converted metadata:
+
+```python
+from twopy import (
+    StimulusKernelOptions,
+    fit_recording_stimulus_kernels,
+    recording_hemisphere,
+)
+
+computation = compute_recording_responses(recording, roi_set)
+print(recording_hemisphere(recording))
+kernels = fit_recording_stimulus_kernels(
+    computation,
+    StimulusKernelOptions(
+        stimulus_modality="olfaction",
+        num_stim_past=150,
+        num_stim_future=25,
+        method="ols",
+    ),
+)
+print(kernels.time_seconds)
+print(kernels.epoch_names)
+print(kernels.ipsilateral.shape)
+```
+
+The kernel arrays are shaped `(epoch_names, rois, lags)`. The default `stimulus_specific_05` column is selected from `stimulus_modality`. For `stimulus_modality="olfaction"`, it matches the random-noise workflow's `antenna_stim` value after conversion. LED recordings encode `0=left`, `1=both`, `2=right`, and `3=blank`; twopy derives raw left and raw right streams from that single activation column before mapping them to ipsi/contra. For `stimulus_modality="vision"`, the same default column is interpreted as signed visual contrast, such as the Matulis full-field contrast-flicker workflow's `-0.2/+0.2` and `-0.9/+0.9` values, and the result is stored in `kernels.contrast` without hemisphere mapping. Pass `stimulus_column="..."` only to override the modality default, and pass `hemisphere="left"` or `hemisphere="right"` only to override audited olfactory metadata. Negative kernel times are future stimulus samples and are useful for timing QC. Current native fitting is frame-aligned; converted files do not yet store per-ROI line timing maps.
+
 Stimulus epoch windows come from `resolve_recording_timing(...)`, not nominal frame-rate assumptions. Native timing prefers classified photodiode boundary evidence when the converted stimulus table has active `photodiode_flash` rows, and keeps interpolation for recordings without that boundary-flash contract. `timing.source` and `timing.metadata` keep the chosen path auditable. ROI dF/F uses corrected fluorescence plus baseline windows to fit one shared exponential tau and one amplitude per ROI. When scripts do not pass explicit baseline windows or a baseline selector, twopy defaults to the first epoch name containing `gray`, `grey`, or `interleave`, then falls back to epoch 1. For stimuli without a distinct baseline epoch, pass `baseline_mode="no_baseline_epoch"` plus the first epoch number to include in the baseline fit; twopy fits over one continuous span from that epoch through later epochs. The default dF/F fit mode is `direct_bounded_tau`; use `log_linear` for a log-space linear fit, or `direct_bounded_tau_and_log_amplitude` when both tau and log-amplitude should be bounded.
 
 Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response processing:

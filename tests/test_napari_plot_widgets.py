@@ -170,6 +170,63 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertFalse(response_widget._plot_area.epoch_plot_panels[1].isHidden())
         self.assertTrue(response_widget._plot_area.epoch_plot_panels[2].isHidden())
 
+    def test_epoch_visibility_reuses_cached_heatmap_widgets(self) -> None:
+        """Confirm epoch toggles do not rebuild cached heatmap images.
+
+        Inputs: two cached response plots and two cached heatmaps.
+        Outputs: hiding one epoch reuses existing widgets instead of refreshing
+        every heatmap from the computed map arrays.
+        """
+        _ = QApplication.instance() or QApplication([])
+        time_seconds = np.array([0.0, 1.0], dtype=np.float64)
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Odor A",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor B",
+                    epoch_number=2,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
+        )
+        base_map_data = _tiny_response_map_data()
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+        response_widget._response_map_data = replace(
+            base_map_data,
+            epochs=(
+                replace(base_map_data.epochs[0], epoch_name="Odor A", epoch_number=1),
+                replace(base_map_data.epochs[0], epoch_name="Odor B", epoch_number=2),
+            ),
+        )
+        response_widget._render_response_maps()
+        refresh_calls: list[str] = []
+        response_widget._response_map_area.ensure_epoch_map_cache = lambda **_kwargs: (
+            refresh_calls.append("refresh")
+        )
+
+        response_widget._set_epoch_visibility(1, False)
+
+        self.assertEqual(refresh_calls, [])
+        self.assertEqual(response_widget._visible_epoch_indices(), (0,))
+        self.assertFalse(
+            response_widget._response_map_area.epoch_map_panels[0].isHidden()
+        )
+        self.assertTrue(
+            response_widget._response_map_area.epoch_map_panels[1].isHidden()
+        )
+
     def test_heatmap_epochs_match_visible_plot_epochs_by_identity(self) -> None:
         """Confirm omitted baseline heatmaps do not shift visible map rows.
 

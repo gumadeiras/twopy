@@ -15,6 +15,7 @@ from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.converted import load_converted_recording
 from twopy.custom import (
+    CustomLinePlot,
     CustomResult,
     CustomRunContext,
     CustomWorkflowProvenance,
@@ -31,6 +32,7 @@ from twopy.custom.native_workflows.direction_selectivity import (
 from twopy.custom.native_workflows.direction_selectivity import (
     run as run_direction_selectivity,
 )
+from twopy.custom.native_workflows.response_kernels import ResponseKernelParams
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.roi import RoiSet, make_roi_set
 
@@ -211,6 +213,7 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
         self.assertEqual(result.errors, ())
         workflows_by_id = {workflow.id: workflow for workflow in result.workflows}
         self.assertIn("direction-selectivity", workflows_by_id)
+        self.assertIn("response-kernels", workflows_by_id)
         workflow = workflows_by_id["direction-selectivity"]
         self.assertEqual(workflow.name, "Direction selectivity")
         self.assertEqual(workflow.version, "1.0")
@@ -243,6 +246,44 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
         self.assertEqual(specs["output_name"].kind, "str")
         self.assertEqual(specs["output_name"].role, "output_name")
 
+        kernel_workflow = workflows_by_id["response-kernels"]
+        self.assertEqual(kernel_workflow.name, "Response kernels")
+        self.assertEqual(kernel_workflow.version, "1.0")
+        self.assertIsNotNone(kernel_workflow.params_type)
+        if kernel_workflow.params_type is None:
+            self.fail("native response kernels should define parameter controls")
+        self.assertEqual(
+            kernel_workflow.params_type.__name__,
+            ResponseKernelParams.__name__,
+        )
+        kernel_specs = {
+            spec.name: spec for spec in parameter_specs(kernel_workflow.params_type)
+        }
+        self.assertEqual(kernel_specs["stimulus_modality"].kind, "choice")
+        self.assertEqual(
+            kernel_specs["stimulus_modality"].choices,
+            ("olfaction", "vision"),
+        )
+
+    def test_custom_line_plot_validates_y_label(self) -> None:
+        """Confirm custom line plots require a readable y-axis label."""
+        plot = CustomLinePlot(
+            "Plot",
+            np.array([0.0], dtype=np.float64),
+            np.array([1.0], dtype=np.float64),
+            y_label="",
+        )
+
+        with (
+            temporary_directory() as temp_dir,
+            self.assertRaisesRegex(ValueError, "y_label"),
+        ):
+            validate_custom_result(
+                CustomResult(message="ok", plots=(plot,)),
+                output_dir=Path(temp_dir) / "custom_outputs",
+                expected_roi_shape=(1, 1),
+            )
+
     def test_reference_showcase_uses_all_parameter_kinds(self) -> None:
         """Confirm the reference example covers every parameter role."""
         workflow_path = Path("examples/custom_workflows/reference_showcase.py")
@@ -270,6 +311,7 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
                 "response_window_stop",
                 "roi_limit",
                 "roi_selector",
+                "stimulus_column",
                 "table_highlight_threshold",
                 None,
             },

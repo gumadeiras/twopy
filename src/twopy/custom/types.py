@@ -93,6 +93,7 @@ class CustomLinePlot:
         y: One-dimensional values or two-dimensional ``(series, samples)``
             values.
         labels: Optional series labels.
+        y_label: Y-axis label shown beside the plot.
 
     Returns:
         Immutable plot descriptor.
@@ -102,6 +103,7 @@ class CustomLinePlot:
     x: npt.NDArray[np.float64]
     y: npt.NDArray[np.float64]
     labels: tuple[str, ...] = ()
+    y_label: str = "Value"
 
 
 @dataclass(frozen=True)

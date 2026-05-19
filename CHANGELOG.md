@@ -9,6 +9,7 @@
 - Added versioned workflow metadata for custom outputs, including workflow id, version, source path, source hash, twopy version, parameters, and recording path.
 - Added a stable `twopy.custom` API for workflow parameters, recording metadata, ROI selection, response metrics, tables, plots, output paths, and response plot data.
 - Added a reference custom workflow example that shows every supported parameter and result type.
+- Added native random-noise response kernel fitting with a stimulus-mode dropdown for olfactory antenna activation or visual contrast, automatic default stimulus-column selection, metadata-driven hemisphere mapping for olfaction, one kernel per unique epoch name, modality-specific CSV outputs, and a packaged napari Custom-tab workflow.
 - Added database search favorites in the napari Load-tab search window, with Save favorite, Use, and Remove actions backed by a machine-local YAML file.
 - Added a thin epoch-span marker to napari response plots and exported response figures.
 
@@ -16,6 +17,7 @@
 
 - Routed napari manual, CSV-list, and database recording loads through one shared Load-tab workflow with consistent load-failure wording.
 - Unified napari response preview, live update, and Save Analysis handling around one ROI analysis request so plotted previews and saved outputs use the same ROI masks and Plot-tab settings.
+- Let custom line plots set their y-axis label, and label native response-kernel plots as `Weight`.
 - Moved manual Group Matching ROI match-table mutation rules into GUI-independent analysis helpers while keeping the napari view focused on rendering and interaction wiring.
 - Routed native response timing through one audited recording-timing boundary that prefers classified photodiode boundary evidence and keeps interpolation as the non-boundary-flash fallback.
 - Split napari response-map display scaling coverage into a pure helper test module and reused shared converted-HDF5 fixture writers across more analysis tests.
@@ -23,11 +25,15 @@
 ### Fixes
 
 - Restored saved-analysis reload for source recordings routed through the stable external analysis cache.
+- Allowed source recording conversion to load older `chosenparams.mat` stimulus epoch parameters when `stimParams.mat` is absent.
 - Deleted local cached PDF and PNG export figures after they successfully sync to the configured analysis output destination.
 - Prevented database search favorites from changing the dialog state or overwriting a corrupt favorites file when local YAML persistence fails.
 - Kept custom workflow ROI visibility filters, including the Direction selectivity threshold, from removing nonpassing ROIs from the ROIs tab.
 - Kept custom workflow epoch-window defaults from being overwritten by recording duration caps.
 - Made DSI threshold and epoch-window controls show three decimals, and showed synced custom table outputs at their publish paths instead of cache paths.
+- Matched custom workflow epoch dropdown defaults from numeric selectors, full labels, and epoch names, including unnamed `Epoch N` labels.
+- Kept Epochs-tab visibility toggles from rebuilding cached response heatmap images.
+- Persisted database `fly.eye` metadata as converted recording `hemisphere`/`eye` run fields during conversion, with database lookup for older converted files that predate the field.
 
 ## 0.1.9 - 2026-05-17
 
