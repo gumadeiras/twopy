@@ -23,6 +23,10 @@
 - Let custom line plots set their y-axis label, and label native response-kernel plots as `Weight`.
 - Made the native Response kernels baseline epoch use the recording epoch dropdown and gray/interleave default instead of a numeric spinbox.
 - Moved manual Group Matching ROI match-table mutation rules into GUI-independent analysis helpers while keeping the napari view focused on rendering and interaction wiring.
+- Added Group Matching FOV select-all controls, shared italic placeholder styling, and ROI preview plot-size, smoothing, and mean-plus-SEM response rows.
+- Added a shared `finite_mean_and_sem` API so response plots, CSV exports, custom workflows, and group-matching previews use the same sample-SEM convention.
+- Made native response-kernel workflows plot mean +/- SEM summary traces with filled SEM bands using the shared SEM helper.
+- Made custom ROI-labeled line plots, including native response-kernel traces, use the current napari ROI colors automatically.
 - Routed native response timing through one audited recording-timing boundary that prefers classified photodiode boundary evidence and keeps interpolation as the non-boundary-flash fallback.
 - Replaced the single configured data root with ordered `data_paths`, using the first available recording path for database loads and matching output/cache mirroring to the selected root.
 - Split napari response-map display scaling coverage into a pure helper test module and reused shared converted-HDF5 fixture writers across more analysis tests.
@@ -41,6 +45,7 @@
 - Made response-kernel CSV columns encode lag seconds, kept per-epoch filenames collision-proof, and reported fitted sample counts after kernel-window filtering.
 - Made response-kernel fitting skip irregular stimulus-clock segments and report fitted/skipped segment counts instead of failing the whole workflow.
 - Kept pooled response-kernel epoch groups from using lag samples across stimulus-segment boundaries, and kept invalid database hemisphere metadata from being hidden as missing metadata.
+- Kept malformed `config.yml` errors visible during explicit-output conversion and old converted-file hemisphere lookup, while still allowing missing config when explicit conversion output is provided.
 - Kept Epochs-tab visibility toggles from rebuilding cached response heatmap images.
 - Persisted database `fly.eye` metadata as converted recording `hemisphere`/`eye` run fields during conversion, with database lookup for older converted files that predate the field.
 - Made the Export-tab Save ROIs + analysis button show the same save and sync status message as the Metadata tab.
