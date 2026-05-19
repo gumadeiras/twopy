@@ -38,7 +38,7 @@ from twopy.napari.plotting.form_controls import (
 )
 from twopy.typing_guards import require_string_choice
 
-__all__ = ["ResponseProcessingOptionsWidget"]
+__all__ = ["ResponseProcessingOptionsWidget", "SmoothingOptionsWidget"]
 
 _SMOOTHING_METHOD_LABELS: tuple[tuple[str, SmoothingMethod], ...] = (
     ("none", "none"),
@@ -62,6 +62,154 @@ _CORRELATION_REFERENCE_LABELS: tuple[
 _CORRELATION_REFERENCES = tuple(
     value for _label, value in _CORRELATION_REFERENCE_LABELS
 )
+
+
+class SmoothingOptionsWidget(QWidget):
+    """Widget that exposes the Plot-tab smoothing controls on their own.
+
+    Inputs: initial smoothing options and an optional change callback.
+    Outputs: a Qt widget plus ``options()`` for reading typed smoothing
+    settings before preview actions.
+    """
+
+    def __init__(
+        self,
+        options: SmoothingOptions,
+        *,
+        on_change: Callable[[SmoothingOptions], None] | None = None,
+    ) -> None:
+        """Create standalone smoothing controls.
+
+        Args:
+            options: Initial smoothing settings.
+            on_change: Optional callback receiving new typed settings whenever
+                a GUI control changes.
+        """
+        super().__init__()
+        self._on_change = on_change
+        self._smoothing_method = _combo_box(_SMOOTHING_METHOD_LABELS)
+        self._smoothing_window_frames = _spin_box(
+            minimum=1,
+            maximum=1001,
+            value=options.window_frames,
+        )
+        self._smoothing_polynomial_order = _spin_box(
+            minimum=0,
+            maximum=16,
+            value=options.polynomial_order,
+        )
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(self._smoothing_group())
+        self.setLayout(layout)
+
+        _set_combo_data(self._smoothing_method, options.method)
+        self._connect_changes()
+        self._refresh_enabled_state()
+
+    def options(self) -> SmoothingOptions:
+        """Return the current typed smoothing options.
+
+        Args:
+            None.
+
+        Returns:
+            ``SmoothingOptions`` built from the current controls.
+        """
+        return SmoothingOptions(
+            method=require_string_choice(
+                str(self._smoothing_method.currentData()),
+                name="smoothing method",
+                allowed=_SMOOTHING_METHODS,
+            ),
+            window_frames=self._smoothing_window_frames.value(),
+            polynomial_order=self._smoothing_polynomial_order.value(),
+        )
+
+    def set_options(self, options: SmoothingOptions) -> None:
+        """Update controls from typed options without emitting changes.
+
+        Args:
+            options: Smoothing settings loaded from another source.
+
+        Returns:
+            None.
+        """
+        blockers = [
+            QSignalBlocker(self._smoothing_method),
+            QSignalBlocker(self._smoothing_window_frames),
+            QSignalBlocker(self._smoothing_polynomial_order),
+        ]
+        _set_combo_data(self._smoothing_method, options.method)
+        self._smoothing_window_frames.setValue(options.window_frames)
+        self._smoothing_polynomial_order.setValue(options.polynomial_order)
+        del blockers
+        self._refresh_enabled_state()
+
+    def _smoothing_group(self) -> QGroupBox:
+        """Create the smoothing control group."""
+        group = QGroupBox("Smoothing")
+        layout = plot_form_layout()
+        layout.addRow("Method", self._smoothing_method)
+        layout.addRow("Window", self._smoothing_window_frames)
+        layout.addRow("Order", self._smoothing_polynomial_order)
+        group.setLayout(layout)
+        return group
+
+    def _connect_changes(self) -> None:
+        """Connect control changes to state refresh and callback dispatch."""
+        self._smoothing_method.currentIndexChanged.connect(self._emit_change)
+        self._smoothing_window_frames.valueChanged.connect(self._emit_change)
+        self._smoothing_polynomial_order.valueChanged.connect(self._emit_change)
+
+    def _emit_change(self, *_args: object) -> None:
+        """Emit typed options after a GUI value changes."""
+        self._refresh_enabled_state()
+        if self._on_change is not None:
+            self._on_change(self.options())
+
+    def _refresh_enabled_state(self) -> None:
+        """Enable parameters only when their smoothing method is active."""
+        self._refresh_smoothing_window_constraints()
+        smoothing_method = self._smoothing_method.currentData()
+        self._smoothing_window_frames.setEnabled(
+            smoothing_method in {"moving_average", "savgol"},
+        )
+        self._smoothing_polynomial_order.setEnabled(
+            smoothing_method == "savgol",
+        )
+
+    def _refresh_smoothing_window_constraints(self) -> None:
+        """Keep the smoothing window spinbox aligned with the selected method."""
+        if self._smoothing_method.currentData() != "savgol":
+            self._smoothing_window_frames.setMinimum(1)
+            self._smoothing_window_frames.setSingleStep(1)
+            return
+
+        blocker = QSignalBlocker(self._smoothing_window_frames)
+        self._smoothing_window_frames.setMinimum(
+            _minimum_savgol_window(self._smoothing_polynomial_order.value()),
+        )
+        self._smoothing_window_frames.setSingleStep(2)
+        self._smoothing_window_frames.setValue(
+            self._nearest_valid_savgol_window(),
+        )
+        del blocker
+
+    def _nearest_valid_savgol_window(self) -> int:
+        """Return the nearest valid Savitzky-Golay smoothing window."""
+        value = self._smoothing_window_frames.value()
+        minimum = self._smoothing_window_frames.minimum()
+        maximum = self._smoothing_window_frames.maximum()
+        if value < minimum:
+            return minimum
+        if value % 2 == 1:
+            return value
+        if value < maximum:
+            return value + 1
+        return value - 1
 
 
 class ResponseProcessingOptionsWidget(QWidget):
@@ -88,16 +236,14 @@ class ResponseProcessingOptionsWidget(QWidget):
         super().__init__()
         self._on_change = on_change
         self._normalization_options = options.normalization
-        self._smoothing_method = _combo_box(_SMOOTHING_METHOD_LABELS)
-        self._smoothing_window_frames = _spin_box(
-            minimum=1,
-            maximum=1001,
-            value=options.smoothing.window_frames,
+        self._smoothing_widget = SmoothingOptionsWidget(
+            options.smoothing,
+            on_change=lambda _options: self._emit_change(),
         )
-        self._smoothing_polynomial_order = _spin_box(
-            minimum=0,
-            maximum=16,
-            value=options.smoothing.polynomial_order,
+        self._smoothing_method = self._smoothing_widget._smoothing_method
+        self._smoothing_window_frames = self._smoothing_widget._smoothing_window_frames
+        self._smoothing_polynomial_order = (
+            self._smoothing_widget._smoothing_polynomial_order
         )
         self._low_pass_method = _combo_box(_LOW_PASS_METHOD_LABELS)
         self._low_pass_cutoff_hz = _double_spin_box(
@@ -138,14 +284,13 @@ class ResponseProcessingOptionsWidget(QWidget):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
-        layout.addWidget(self._smoothing_group())
+        layout.addWidget(self._smoothing_widget)
         layout.addWidget(self._low_pass_group())
         layout.addWidget(self._correlation_group())
         self.setLayout(layout)
 
-        self._set_combo_data(self._smoothing_method, options.smoothing.method)
-        self._set_combo_data(self._low_pass_method, options.low_pass.method)
-        self._set_combo_data(
+        _set_combo_data(self._low_pass_method, options.low_pass.method)
+        _set_combo_data(
             self._correlation_reference,
             options.correlation_filter.reference,
         )
@@ -167,15 +312,7 @@ class ResponseProcessingOptionsWidget(QWidget):
             allowed=_LOW_PASS_METHODS,
         )
         return ResponseProcessingOptions(
-            smoothing=SmoothingOptions(
-                method=require_string_choice(
-                    str(self._smoothing_method.currentData()),
-                    name="smoothing method",
-                    allowed=_SMOOTHING_METHODS,
-                ),
-                window_frames=self._smoothing_window_frames.value(),
-                polynomial_order=self._smoothing_polynomial_order.value(),
-            ),
+            smoothing=self._smoothing_widget.options(),
             low_pass=LowPassFilterOptions(
                 method=low_pass_method,
                 cutoff_hz=(
@@ -216,9 +353,6 @@ class ResponseProcessingOptionsWidget(QWidget):
         reflects these settings.
         """
         blockers = [
-            QSignalBlocker(self._smoothing_method),
-            QSignalBlocker(self._smoothing_window_frames),
-            QSignalBlocker(self._smoothing_polynomial_order),
             QSignalBlocker(self._low_pass_method),
             QSignalBlocker(self._low_pass_cutoff_hz),
             QSignalBlocker(self._low_pass_order),
@@ -229,16 +363,12 @@ class ResponseProcessingOptionsWidget(QWidget):
             QSignalBlocker(self._correlation_window_has_stop),
         ]
         self._normalization_options = options.normalization
-        self._set_combo_data(self._smoothing_method, options.smoothing.method)
-        self._smoothing_window_frames.setValue(options.smoothing.window_frames)
-        self._smoothing_polynomial_order.setValue(
-            options.smoothing.polynomial_order,
-        )
-        self._set_combo_data(self._low_pass_method, options.low_pass.method)
+        self._smoothing_widget.set_options(options.smoothing)
+        _set_combo_data(self._low_pass_method, options.low_pass.method)
         if options.low_pass.cutoff_hz is not None:
             self._low_pass_cutoff_hz.setValue(options.low_pass.cutoff_hz)
         self._low_pass_order.setValue(options.low_pass.order)
-        self._set_combo_data(
+        _set_combo_data(
             self._correlation_reference,
             options.correlation_filter.reference,
         )
@@ -293,16 +423,6 @@ class ResponseProcessingOptionsWidget(QWidget):
         self._correlation_window_stop.setValue(resolved_stop)
         del blocker
 
-    def _smoothing_group(self) -> QGroupBox:
-        """Create the smoothing control group."""
-        group = QGroupBox("Smoothing")
-        layout = plot_form_layout()
-        layout.addRow("Method", self._smoothing_method)
-        layout.addRow("Window", self._smoothing_window_frames)
-        layout.addRow("Order", self._smoothing_polynomial_order)
-        group.setLayout(layout)
-        return group
-
     def _low_pass_group(self) -> QGroupBox:
         """Create the low-pass control group."""
         group = QGroupBox("Low-pass filter")
@@ -327,15 +447,9 @@ class ResponseProcessingOptionsWidget(QWidget):
 
     def _connect_changes(self) -> None:
         """Connect control changes to state refresh and callback dispatch."""
-        for combo in (
-            self._smoothing_method,
-            self._low_pass_method,
-            self._correlation_reference,
-        ):
+        for combo in (self._low_pass_method, self._correlation_reference):
             combo.currentIndexChanged.connect(self._emit_change)
         for spin_box in (
-            self._smoothing_window_frames,
-            self._smoothing_polynomial_order,
             self._low_pass_cutoff_hz,
             self._low_pass_order,
             self._minimum_correlation,
@@ -353,14 +467,6 @@ class ResponseProcessingOptionsWidget(QWidget):
 
     def _refresh_enabled_state(self) -> None:
         """Enable parameters only when their processing method is active."""
-        self._refresh_smoothing_window_constraints()
-        smoothing_method = self._smoothing_method.currentData()
-        self._smoothing_window_frames.setEnabled(
-            smoothing_method in {"moving_average", "savgol"},
-        )
-        self._smoothing_polynomial_order.setEnabled(
-            smoothing_method == "savgol",
-        )
         low_pass_enabled = self._low_pass_method.currentData() == "butterworth"
         self._low_pass_cutoff_hz.setEnabled(low_pass_enabled)
         self._low_pass_order.setEnabled(low_pass_enabled)
@@ -372,42 +478,6 @@ class ResponseProcessingOptionsWidget(QWidget):
         )
         self._correlation_window_has_stop.setEnabled(correlation_enabled)
 
-    def _refresh_smoothing_window_constraints(self) -> None:
-        """Keep the smoothing window spinbox aligned with the selected method."""
-        if self._smoothing_method.currentData() != "savgol":
-            self._smoothing_window_frames.setMinimum(1)
-            self._smoothing_window_frames.setSingleStep(1)
-            return
-
-        blocker = QSignalBlocker(self._smoothing_window_frames)
-        self._smoothing_window_frames.setMinimum(
-            _minimum_savgol_window(self._smoothing_polynomial_order.value()),
-        )
-        self._smoothing_window_frames.setSingleStep(2)
-        self._smoothing_window_frames.setValue(
-            self._nearest_valid_savgol_window(),
-        )
-        del blocker
-
-    def _nearest_valid_savgol_window(self) -> int:
-        """Return the nearest valid Savitzky-Golay smoothing window."""
-        value = self._smoothing_window_frames.value()
-        minimum = self._smoothing_window_frames.minimum()
-        maximum = self._smoothing_window_frames.maximum()
-        if value < minimum:
-            return minimum
-        if value % 2 == 1:
-            return value
-        if value < maximum:
-            return value + 1
-        return value - 1
-
-    def _set_combo_data(self, combo_box: QComboBox, value: str) -> None:
-        """Set a combo box by stored item data when the item exists."""
-        index = combo_box.findData(value)
-        if index >= 0:
-            combo_box.setCurrentIndex(index)
-
 
 def _combo_box(values: tuple[tuple[str, str], ...]) -> QComboBox:
     """Create one combo box with fixed text options."""
@@ -416,6 +486,13 @@ def _combo_box(values: tuple[tuple[str, str], ...]) -> QComboBox:
         combo_box.addItem(label, value)
     set_plot_dropdown_width(combo_box)
     return combo_box
+
+
+def _set_combo_data(combo_box: QComboBox, value: str) -> None:
+    """Set a combo box by stored item data when the item exists."""
+    index = combo_box.findData(value)
+    if index >= 0:
+        combo_box.setCurrentIndex(index)
 
 
 def _spin_box(*, minimum: int, maximum: int, value: int) -> QSpinBox:

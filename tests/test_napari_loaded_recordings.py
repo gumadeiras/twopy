@@ -129,6 +129,8 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             )
             assert fov_path_edit is not None
             assert match_path_edit is not None
+            self.assertEqual(fov_path_edit.placeholderText(), "FOV CSV path...")
+            self.assertEqual(match_path_edit.placeholderText(), "ROI CSV path...")
             fov_path_edit.setText(str(fov_path))
             match_path_edit.setText(str(match_path))
             contrast_sliders = group_matching_widget.findChildren(QSlider)
@@ -139,6 +141,13 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 "fov_recording_note",
             )
             self.assertEqual(len(fov_note_edits), 2)
+            self.assertEqual(
+                {note_edit.placeholderText() for note_edit in fov_note_edits},
+                {"Optional note..."},
+            )
+            self.assertTrue(
+                all(note_edit.font().italic() for note_edit in fov_note_edits)
+            )
             fov_note_edits[0].setText("first field edge")
             fov_note_edits[1].setText("second field edge")
             match_buttons = {
@@ -156,7 +165,9 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             match_buttons["Select none"].click()
             for button in select_buttons:
                 self.assertFalse(button.isChecked())
-                button.click()
+            match_buttons["Select all"].click()
+            for button in select_buttons:
+                self.assertTrue(button.isChecked())
             match_buttons["New FOV from selected"].click()
             match_buttons["Save FOV groups"].click()
             fov_rows = load_manual_fov_group_rows(fov_path)
@@ -241,6 +252,8 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 "roi_match_note",
             )
             assert roi_note_edit is not None
+            self.assertEqual(roi_note_edit.placeholderText(), "Optional note...")
+            self.assertTrue(roi_note_edit.font().italic())
             self.assertIn("Load ROI CSV", roi_buttons)
             self.assertIn("Browse save path", roi_buttons)
             self.assertIn("Add new group", roi_buttons)
@@ -279,6 +292,21 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                     ),
                 ),
                 1,
+            )
+            self.assertEqual(
+                len(
+                    group_matching_widget.findChildren(
+                        QWidget,
+                        "roi_mean_response_preview",
+                    ),
+                ),
+                1,
+            )
+            roi_view = cast(Any, group_matching_widget)._roi_view
+            self.assertEqual(roi_view._plot_size, 180)
+            self.assertEqual(
+                roi_view._smoothing_widget._smoothing_method.itemText(1),
+                "moving average",
             )
             loaded_list.setCurrentRow(0)
             self.assertIn(first.name, str(load_widget.recording_folder.line_edit.value))

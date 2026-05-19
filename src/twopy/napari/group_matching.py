@@ -44,6 +44,7 @@ from twopy.napari.group_matching_roi import (
     roi_labels_from_layer_data,
 )
 from twopy.napari.session import LoadedNapariRecording
+from twopy.napari.text import configure_placeholder
 
 __all__ = [
     "FovAssignmentView",
@@ -192,6 +193,7 @@ class FovAssignmentView(QWidget):
         self._on_finalize = on_finalize
         self._path_edit = QLineEdit(str(Path.cwd() / FOV_GROUP_TABLE_FILENAME))
         self._path_edit.setObjectName("fov_group_path")
+        configure_placeholder(self._path_edit, "FOV CSV path")
         self._path_edit.editingFinished.connect(self.load_fov_groups_from_path)
         self._instruction_label = QLabel("Select recordings that share a FOV.")
         self._status_label = QLabel("")
@@ -214,6 +216,8 @@ class FovAssignmentView(QWidget):
         assign_button.clicked.connect(self.assign_selected_to_fov)
         new_fov_button = QPushButton("New FOV from selected")
         new_fov_button.clicked.connect(self.new_fov_from_selected)
+        select_all_button = QPushButton("Select all")
+        select_all_button.clicked.connect(self.select_all)
         select_none_button = QPushButton("Select none")
         select_none_button.clicked.connect(self.select_none)
         clear_button = QPushButton("Clear selected FOV")
@@ -240,6 +244,7 @@ class FovAssignmentView(QWidget):
         assignment_controls.addStretch(1)
 
         cleanup_controls = QHBoxLayout()
+        cleanup_controls.addWidget(select_all_button)
         cleanup_controls.addWidget(select_none_button)
         cleanup_controls.addWidget(clear_button)
         cleanup_controls.addStretch(1)
@@ -310,6 +315,12 @@ class FovAssignmentView(QWidget):
         for card in self._cards:
             card.set_selected(False)
         self._status_label.setText("Cleared card selection.")
+
+    def select_all(self) -> None:
+        """Select all visible cards without changing FOV assignments."""
+        for card in self._cards:
+            card.set_selected(True)
+        self._status_label.setText(f"Selected {len(self._cards)} recording cards.")
 
     def load_fov_group_path(self) -> None:
         """Choose an existing FOV CSV path and load matching rows."""
@@ -501,7 +512,7 @@ class FovRecordingCard(QFrame):
         self._path_label.setWordWrap(True)
         self._note_edit = QLineEdit(note)
         self._note_edit.setObjectName("fov_recording_note")
-        self._note_edit.setPlaceholderText("Optional note saved to this CSV row")
+        configure_placeholder(self._note_edit, "Optional note")
         self._select_button = QPushButton("Select")
         self._select_button.setCheckable(True)
         self._select_button.toggled.connect(self._sync_selection_style)

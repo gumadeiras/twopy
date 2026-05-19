@@ -59,6 +59,7 @@ from twopy.napari.database_favorites import (
 )
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.load_workflow import RecordingLoadFailure, RecordingLoadResult
+from twopy.napari.text import configure_placeholder
 
 __all__ = [
     "ExperimentFavoriteErrorDialog",
@@ -393,7 +394,7 @@ class ExperimentSearchDialog(QDialog):
     def _filter_line_edit(self, placeholder: str) -> QLineEdit:
         """Create one filter field with an italic placeholder hint."""
         line_edit = QLineEdit()
-        line_edit.setPlaceholderText(placeholder)
+        configure_placeholder(line_edit, placeholder)
         line_edit.setTextMargins(
             TEXT_FIELD_MARGIN_PX,
             0,
@@ -402,13 +403,6 @@ class ExperimentSearchDialog(QDialog):
         )
         line_edit.setClearButtonEnabled(True)
         line_edit.returnPressed.connect(self.search)
-        line_edit.textChanged.connect(
-            lambda text, widget=line_edit: _set_filter_hint_font(
-                widget,
-                is_hint_visible=text == "",
-            )
-        )
-        _set_filter_hint_font(line_edit, is_hint_visible=True)
         return line_edit
 
     def _filter_widgets(self) -> tuple[QLineEdit, ...]:
@@ -590,21 +584,6 @@ class ExperimentSearchDialog(QDialog):
     def _show_favorite_error(self, error: Exception) -> None:
         """Show a favorites persistence failure with clear details."""
         ExperimentFavoriteErrorDialog(error, parent=self.parentWidget()).exec()
-
-
-def _set_filter_hint_font(line_edit: QLineEdit, *, is_hint_visible: bool) -> None:
-    """Italicize empty filter fields so placeholder hints read as hints.
-
-    Args:
-        line_edit: Filter text field.
-        is_hint_visible: Whether the field is empty and showing its placeholder.
-
-    Returns:
-        None.
-    """
-    font = line_edit.font()
-    font.setItalic(is_hint_visible)
-    line_edit.setFont(font)
 
 
 def _bottom_button_row(

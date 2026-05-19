@@ -27,6 +27,7 @@ from qtpy.QtWidgets import (
     QFileDialog,
     QFrame,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -34,6 +35,7 @@ from qtpy.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -53,11 +55,15 @@ from twopy.analysis.group_matching import (
 from twopy.analysis.response_processing import (
     NormalizationOptions,
     ResponseProcessingOptions,
+    SmoothingOptions,
 )
+from twopy.analysis.responses import finite_mean_and_sem
 from twopy.analysis.trials import is_baseline_epoch_name
 from twopy.napari.group_matching_images import mean_image_roi_overlay_pixmap
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
+from twopy.napari.plotting.form_controls import plot_form_layout, set_plot_control_width
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
+from twopy.napari.plotting.processing_options import SmoothingOptionsWidget
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     clear_layout,
@@ -69,6 +75,7 @@ from twopy.napari.responses import (
     response_analysis_request_from_labels,
 )
 from twopy.napari.session import LoadedNapariRecording
+from twopy.napari.text import configure_placeholder
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 __all__ = [
@@ -137,27 +144,37 @@ class RoiAssignmentView(QWidget):
         self._on_back = on_back
         self._cards: list[RoiRecordingCard] = []
         self._hidden_response_recordings: set[Path] = set()
+        self._selected_responses: tuple[_SelectedRoiResponse, ...] = ()
         self._selected_group_dirty = False
         self._normalization_options = NormalizationOptions()
+        self._smoothing_options = SmoothingOptions()
+        self._plot_size = _ROI_PREVIEW_PLOT_SIZE
         self._status_label = QLabel("Choose ROIs in the cards, then save a group.")
         self._response_status = QLabel("Choose ROIs to compare responses.")
         self._response_status.setWordWrap(True)
+        self._plot_size_widget = self._create_plot_size_widget()
+        self._smoothing_widget = SmoothingOptionsWidget(
+            self._smoothing_options,
+            on_change=self._set_smoothing_options,
+        )
         self._normalization_widget = self._create_normalization_widget()
         self._legend_widget = QWidget()
         self._legend_layout = QHBoxLayout()
         self._legend_layout.setContentsMargins(0, 0, 0, 0)
         self._legend_widget.setLayout(self._legend_layout)
-        self._response_widget = QWidget()
-        self._response_widget.setObjectName("roi_response_preview")
-        self._response_layout = QHBoxLayout()
-        self._response_layout.setContentsMargins(0, 0, 0, 0)
-        self._response_widget.setLayout(self._response_layout)
+        self._response_widget, self._response_layout = _horizontal_preview_widget(
+            "roi_response_preview",
+        )
+        self._mean_response_widget, self._mean_response_layout = (
+            _horizontal_preview_widget("roi_mean_response_preview")
+        )
         self._path_edit = QLineEdit(str(Path.cwd() / MATCH_TABLE_FILENAME))
         self._path_edit.setObjectName("roi_match_path")
+        configure_placeholder(self._path_edit, "ROI CSV path")
         self._path_edit.editingFinished.connect(self.load_match_rows_from_path)
         self._note_edit = QLineEdit("")
         self._note_edit.setObjectName("roi_match_note")
-        self._note_edit.setPlaceholderText("Optional note saved with this ROI group")
+        configure_placeholder(self._note_edit, "Optional note")
         self._note_edit.textChanged.connect(
             lambda _text: self._mark_selected_group_dirty(),
         )
@@ -206,6 +223,8 @@ class RoiAssignmentView(QWidget):
         action_panel.addWidget(close_button)
         action_panel.addWidget(QLabel("Note"))
         action_panel.addWidget(self._note_edit)
+        action_panel.addWidget(self._plot_size_widget)
+        action_panel.addWidget(self._smoothing_widget)
         action_panel.addWidget(self._normalization_widget)
         action_panel.addStretch(1)
         self._normalization_widget.setMinimumWidth(420)
@@ -231,7 +250,10 @@ class RoiAssignmentView(QWidget):
         layout.addLayout(review_panel)
         layout.addWidget(self._response_status)
         layout.addWidget(self._legend_widget)
+        layout.addWidget(QLabel("All traces"))
         layout.addWidget(self._response_widget)
+        layout.addWidget(QLabel("Mean +/- SEM"))
+        layout.addWidget(self._mean_response_widget)
         layout.addWidget(self._status_label)
         content = QWidget()
         content.setLayout(layout)
@@ -244,6 +266,21 @@ class RoiAssignmentView(QWidget):
         outer_layout.addWidget(scroll_area)
         self.setLayout(outer_layout)
         self.refresh_fov_filter()
+
+    def _create_plot_size_widget(self) -> QGroupBox:
+        """Return the ROI preview plot-size controls."""
+        group = QGroupBox("Plot")
+        layout = plot_form_layout()
+        plot_size_spin = QSpinBox()
+        plot_size_spin.setRange(120, 900)
+        plot_size_spin.setSingleStep(20)
+        plot_size_spin.setSuffix(" px")
+        plot_size_spin.setValue(self._plot_size)
+        plot_size_spin.valueChanged.connect(self._set_plot_size)
+        set_plot_control_width(plot_size_spin)
+        layout.addRow("Size", plot_size_spin)
+        group.setLayout(layout)
+        return group
 
     def _create_normalization_widget(self) -> NormalizationOptionsWidget:
         """Return the ROI response normalization controls."""
@@ -338,24 +375,29 @@ class RoiAssignmentView(QWidget):
     def refresh_response_preview(self) -> None:
         """Refresh the shared response preview from selected card ROIs."""
         self._sync_current_rois_from_cards()
+        self._selected_responses = self._selected_response_data()
+        self._render_response_preview()
+
+    def _render_response_preview(self) -> None:
+        """Redraw cached ROI response previews without recomputing responses."""
         clear_layout(self._legend_layout)
         clear_layout(self._response_layout)
-        selected_responses = self._selected_response_data()
+        clear_layout(self._mean_response_layout)
         self._hidden_response_recordings.intersection_update(
-            {response.recording_path for response in selected_responses},
+            {response.recording_path for response in self._selected_responses},
         )
-        if len(selected_responses) == 0:
+        if len(self._selected_responses) == 0:
             self._response_status.setText("Choose ROIs to compare responses.")
             return
         _add_response_legend(
             self._legend_layout,
-            selected_responses,
+            self._selected_responses,
             hidden_recordings=self._hidden_response_recordings,
             set_visible=self._set_response_visible,
         )
         visible_responses = tuple(
             response
-            for response in selected_responses
+            for response in self._selected_responses
             if response.recording_path not in self._hidden_response_recordings
         )
         if len(visible_responses) == 0:
@@ -372,6 +414,13 @@ class RoiAssignmentView(QWidget):
             self._response_layout,
             combined,
             roi_colors=tuple(response.color for response in visible_responses),
+            plot_size=self._plot_size,
+        )
+        _add_response_preview_widgets(
+            self._mean_response_layout,
+            _mean_response_plot_data(combined),
+            roi_colors=(QColor("#f2c14e"),),
+            plot_size=self._plot_size,
         )
 
     def _set_response_visible(self, recording_path: Path, visible: bool) -> None:
@@ -380,7 +429,7 @@ class RoiAssignmentView(QWidget):
             self._hidden_response_recordings.discard(recording_path)
         else:
             self._hidden_response_recordings.add(recording_path)
-        self.refresh_response_preview()
+        self._render_response_preview()
 
     def add_match_group(self) -> None:
         """Append current selected ROIs as a new matched cell group."""
@@ -539,6 +588,16 @@ class RoiAssignmentView(QWidget):
         """Update response normalization options and redraw previews."""
         self._normalization_options = options
         self.refresh_response_preview()
+
+    def _set_smoothing_options(self, options: SmoothingOptions) -> None:
+        """Update response smoothing options and redraw previews."""
+        self._smoothing_options = options
+        self.refresh_response_preview()
+
+    def _set_plot_size(self, value: int) -> None:
+        """Update response preview plot size and redraw previews."""
+        self._plot_size = int(value)
+        self._render_response_preview()
 
     def _filtered_recordings(self) -> tuple[LoadedNapariRecording, ...]:
         """Return loaded recordings visible under the current FOV filter."""
@@ -713,6 +772,7 @@ class RoiAssignmentView(QWidget):
                     card.recording,
                     roi_label,
                     normalization_options=self._normalization_options,
+                    smoothing_options=self._smoothing_options,
                 )
             except ValueError:
                 continue
@@ -853,6 +913,7 @@ def _selected_roi_response_plot_data(
     roi_label: str,
     *,
     normalization_options: NormalizationOptions,
+    smoothing_options: SmoothingOptions,
 ) -> ResponsePlotData:
     """Compute response plot data for one selected ROI label."""
     label_value = _roi_label_value(roi_label)
@@ -866,10 +927,21 @@ def _selected_roi_response_plot_data(
         _SelectedRoiLayer(data=selected.astype(np.int64, copy=False)),
         source_path=recording.recording.source_session_dir.expanduser(),
         response_processing_options=ResponseProcessingOptions(
+            smoothing=smoothing_options,
             normalization=normalization_options,
         ),
     )
     return compute_response_preview(request)
+
+
+def _horizontal_preview_widget(object_name: str) -> tuple[QWidget, QHBoxLayout]:
+    """Return a named widget with a zero-margin horizontal layout."""
+    widget = QWidget()
+    widget.setObjectName(object_name)
+    layout = QHBoxLayout()
+    layout.setContentsMargins(0, 0, 0, 0)
+    widget.setLayout(layout)
+    return widget, layout
 
 
 def _combined_response_plot_data(
@@ -928,6 +1000,25 @@ def _combined_epoch_values(
     return np.vstack(mean_rows), np.vstack(sem_rows)
 
 
+def _mean_response_plot_data(plot_data: ResponsePlotData) -> ResponsePlotData:
+    """Return one mean trace with SEM across visible recording traces."""
+    epochs: list[EpochResponsePlotData] = []
+    for epoch in plot_data.epochs:
+        means, sems = finite_mean_and_sem(epoch.mean_values, axis=0)
+        epochs.append(
+            EpochResponsePlotData(
+                epoch_name=epoch.epoch_name,
+                epoch_number=epoch.epoch_number,
+                roi_labels=("mean",),
+                time_seconds=epoch.time_seconds,
+                mean_values=means[np.newaxis, :],
+                sem_values=sems[np.newaxis, :],
+                epoch_time_spans=epoch.epoch_time_spans,
+            ),
+        )
+    return ResponsePlotData(source_path=plot_data.source_path, epochs=tuple(epochs))
+
+
 def _matching_epoch(
     plot_data: ResponsePlotData,
     *,
@@ -953,6 +1044,7 @@ def _add_response_preview_widgets(
     plot_data: ResponsePlotData,
     *,
     roi_colors: tuple[QColor, ...],
+    plot_size: int,
 ) -> None:
     """Add one compact response plot per epoch as a horizontal strip."""
     epoch_indices = _visible_response_epoch_indices(plot_data)
@@ -982,7 +1074,7 @@ def _add_response_preview_widgets(
                 time_max=time_max,
                 value_min=value_min,
                 value_max=value_max,
-                plot_size=_ROI_PREVIEW_PLOT_SIZE,
+                plot_size=plot_size,
             ),
         )
         layout.addLayout(epoch_panel)

@@ -80,14 +80,14 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
                 dialog._tree.selectionMode(),
                 QAbstractItemView.SelectionMode.ExtendedSelection,
             )
-            self.assertEqual(dialog._user_filter.placeholderText(), "gustavo")
-            self.assertEqual(dialog._cell_type_filter.placeholderText(), "ALPN")
-            self.assertEqual(dialog._sensor_filter.placeholderText(), "g6f")
+            self.assertEqual(dialog._user_filter.placeholderText(), "gustavo...")
+            self.assertEqual(dialog._cell_type_filter.placeholderText(), "ALPN...")
+            self.assertEqual(dialog._sensor_filter.placeholderText(), "g6f...")
             self.assertEqual(
                 dialog._stimulus_filter.placeholderText(),
-                "bars_singles_stim=5s_bars=3x400ms_dt=200ms_int=20",
+                "bars_singles_stim=5s_bars=3x400ms_dt=200ms_int=20...",
             )
-            self.assertEqual(dialog._date_filter.placeholderText(), "2025-10-22")
+            self.assertEqual(dialog._date_filter.placeholderText(), "2025-10-22...")
             self.assertEqual(dialog._date_filter.text(), "2023-10-17")
             self.assertEqual(dialog._tree.columnWidth(1), 72)
             self.assertEqual(dialog._user_filter.textMargins().left(), 6)

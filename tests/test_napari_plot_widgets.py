@@ -21,6 +21,7 @@ from tests.napari_support import (
     ResponseMapOptions,
     ResponsePlotData,
     RoiDeltaFOverF,
+    SimpleNamespace,
     _FakeColorLayer,
     _FakeLayer,
     _tiny_response_map_data,
@@ -447,6 +448,59 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
                 "second roi_0002",
             ),
         )
+
+    def test_group_matching_mean_plot_uses_sample_sem(self) -> None:
+        """Confirm the ROI matching mean row uses twopy's shared SEM rule.
+
+        Inputs: two overlaid recording traces.
+        Outputs: mean trace and sample SEM across the active traces.
+        """
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Odor",
+                    epoch_number=1,
+                    roi_labels=("first", "second"),
+                    time_seconds=np.array([0.0, 1.0], dtype=np.float64),
+                    mean_values=np.array(
+                        [[1.0, 3.0], [3.0, 7.0]],
+                        dtype=np.float64,
+                    ),
+                    sem_values=np.zeros((2, 2), dtype=np.float64),
+                ),
+            ),
+        )
+
+        mean_plot = group_matching_roi._mean_response_plot_data(plot_data)
+        epoch = mean_plot.epochs[0]
+
+        np.testing.assert_allclose(epoch.mean_values, np.array([[2.0, 5.0]]))
+        np.testing.assert_allclose(epoch.sem_values, np.array([[1.0, 2.0]]))
+
+    def test_group_matching_plot_size_redraws_without_recompute(self) -> None:
+        """Confirm display-only plot sizing does not rerun ROI analysis.
+
+        Inputs: an empty ROI assignment view and a patched recompute method.
+        Outputs: size changes repaint cached data without asking for new
+        selected response data.
+        """
+        _ = QApplication.instance() or QApplication([])
+        view = group_matching_roi.RoiAssignmentView(
+            state=SimpleNamespace(loaded_recordings=[]),
+            fov_groups={},
+            current_rois={},
+            on_back=lambda: None,
+        )
+
+        with patch.object(
+            view,
+            "_selected_response_data",
+            side_effect=AssertionError("plot size should not recompute responses"),
+        ):
+            view._set_plot_size(240)
+
+        self.assertEqual(view._plot_size, 240)
 
     def test_group_matching_roi_preview_omits_interleave_epochs(self) -> None:
         """Confirm ROI matching response plots omit interleave epochs.
