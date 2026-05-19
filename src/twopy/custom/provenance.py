@@ -16,6 +16,7 @@ from twopy.custom.types import (
     CustomResult,
     CustomWorkflowProvenance,
 )
+from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
 __all__ = [
     "custom_result_artifact_paths",
@@ -199,10 +200,10 @@ def _validate_line_plot(plot: CustomLinePlot) -> None:
 
 def _validate_response_plot_data(plot_data: object) -> None:
     """Check returned response plot data before it reaches the plot dock."""
-    epochs = getattr(plot_data, "epochs", None)
-    if not isinstance(epochs, tuple):
+    if not isinstance(plot_data, ResponsePlotData):
         msg = "CustomResult.response_plot_data must be a ResponsePlotData object."
         raise ValueError(msg)
+    epochs = plot_data.epochs
     if len(epochs) == 0:
         msg = "CustomResult.response_plot_data must contain at least one epoch."
         raise ValueError(msg)
@@ -233,6 +234,12 @@ def _validate_response_plot_visible_rois(
 
 def _validate_response_epoch(epoch: object, *, epoch_index: int) -> None:
     """Check one returned response-plot epoch."""
+    if not isinstance(epoch, EpochResponsePlotData):
+        msg = (
+            f"Response plot epoch {epoch_index} must be an "
+            "EpochResponsePlotData object."
+        )
+        raise ValueError(msg)
     roi_labels = getattr(epoch, "roi_labels", None)
     time_seconds = getattr(epoch, "time_seconds", None)
     mean_values = getattr(epoch, "mean_values", None)
@@ -286,18 +293,14 @@ def _write_hdf5_provenance(
     provenance: CustomWorkflowProvenance,
 ) -> None:
     """Write workflow metadata into a HDF5 file."""
+    metadata = provenance.as_mapping()
     with h5py.File(path, "a") as h5_file:
         if "twopy_workflow" in h5_file:
             del h5_file["twopy_workflow"]
         group = h5_file.create_group("twopy_workflow")
-        group.attrs["workflow_id"] = provenance.workflow_id
-        group.attrs["workflow_name"] = provenance.workflow_name
-        group.attrs["workflow_version"] = provenance.workflow_version
-        group.attrs["workflow_source_path"] = str(provenance.workflow_source_path)
-        group.attrs["workflow_source_hash"] = provenance.workflow_source_hash
-        group.attrs["twopy_version"] = provenance.twopy_version
-        group.attrs["run_started_at"] = provenance.run_started_at
-        group.attrs["recording_path"] = str(provenance.recording_path)
+        for key, value in metadata.items():
+            if key != "parameters":
+                group.attrs[key] = value
         parameter_group = group.create_group("parameters")
         for parameter_name, parameter_value in provenance.parameters.items():
             parameter_group.attrs[parameter_name] = parameter_value

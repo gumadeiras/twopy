@@ -549,6 +549,39 @@ class CustomWorkflowProvenanceTest(unittest.TestCase):
                     expected_roi_shape=(2, 2),
                 )
 
+    def test_rejects_fake_response_plot_data(self) -> None:
+        """Confirm response plot output must use twopy's plot-data object."""
+        with temporary_directory() as temp_dir:
+            fake_plot_data = _FakeResponsePlotData(
+                epochs=(
+                    EpochResponsePlotData(
+                        epoch_name="right",
+                        epoch_number=1,
+                        roi_labels=("roi_0001",),
+                        time_seconds=np.array([0.0, 1.0]),
+                        mean_values=np.array([[1.0, 2.0]]),
+                        sem_values=np.array([[0.1, 0.2]]),
+                    ),
+                ),
+            )
+
+            with self.assertRaisesRegex(ValueError, "ResponsePlotData"):
+                validate_custom_result(
+                    CustomResult(
+                        message="ok",
+                        response_plot_data=cast(ResponsePlotData, fake_plot_data),
+                    ),
+                    output_dir=Path(temp_dir) / "custom_outputs",
+                    expected_roi_shape=(2, 2),
+                )
+
+
+@dataclass(frozen=True)
+class _FakeResponsePlotData:
+    """Fake plot-data object with the right shape but wrong type."""
+
+    epochs: tuple[EpochResponsePlotData, ...]
+
 
 @dataclass(frozen=True)
 class _DsiFakeComputation:
