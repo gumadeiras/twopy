@@ -451,8 +451,7 @@ class _ResponsePlotWidget(QWidget):
             self._response_window_options,
         )
         self._refresh_update_path_labels()
-        self._refresh_response_maps()
-        self._render_response_maps()
+        self._schedule_response_map_refresh()
         self.reload()
         self._live_controller.set_context(self._recording, self._roi_labels_layer)
 

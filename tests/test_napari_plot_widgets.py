@@ -25,6 +25,7 @@ from tests.napari_support import (
     ResponsePlotData,
     RoiDeltaFOverF,
     SimpleNamespace,
+    SpatialCrop,
     _FakeColorLayer,
     _FakeLayer,
     _tiny_response_map_data,
@@ -48,8 +49,11 @@ from tests.napari_support import (
     unittest,
 )
 
+from twopy.analysis.group_matching import ManualRoiMatchRow, save_manual_roi_match_rows
 from twopy.napari.group_matching_style import style_group_matching_panel
 from twopy.napari.plotting import widgets as plotting_widgets
+from twopy.napari.plotting.preview_strip import ResponsePreviewStrip
+from twopy.napari.session import LoadedNapariRecording
 
 
 class NapariPlotWidgetTest(NapariAdapterTestCase):
@@ -740,6 +744,166 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         )
         self.assertEqual(plotting_widgets._axis_ticks(-1.0, 1.0), (-1.0, 0.0, 1.0))
 
+    def test_response_preview_strip_keeps_cached_panels_parented(self) -> None:
+        """Confirm preview redraws do not orphan cached Qt panels.
+
+        Inputs: a cached response preview strip rendered, cleared, then rendered
+        again.
+        Outputs: cached epoch panels stay parented to the strip widget, avoiding
+        transient top-level widgets during Group Matching selection changes.
+        """
+        _ = QApplication.instance() or QApplication([])
+        strip = ResponsePreviewStrip("test_preview_strip")
+        plot_data = _tiny_response_plot_data()
+
+        strip.render(
+            plot_data,
+            epoch_indices=(0,),
+            roi_colors=(QColor("#1f77b4"),),
+            plot_size=180,
+        )
+        panel = strip._epoch_plot_panels[0]
+        self.assertIs(panel.parent(), strip.widget)
+        strip.clear()
+        self.assertIs(panel.parent(), strip.widget)
+
+        strip.render(
+            plot_data,
+            epoch_indices=(0,),
+            roi_colors=(QColor("#1f77b4"),),
+            plot_size=200,
+        )
+        self.assertIs(panel.parent(), strip.widget)
+
+    def test_response_preview_strip_rebuilds_after_epoch_count_shrinks(self) -> None:
+        """Confirm stale epoch panels leave the visible strip.
+
+        Inputs: a preview strip rendered with two epochs, then rendered with
+        one epoch.
+        Outputs: the removed epoch panel is no longer present in the layout.
+        """
+        _ = QApplication.instance() or QApplication([])
+        strip = ResponsePreviewStrip("test_preview_strip")
+        first = _tiny_response_plot_data()
+        two_epoch_data = replace(
+            first,
+            epochs=(
+                first.epochs[0],
+                replace(first.epochs[0], epoch_number=2, epoch_name="Second"),
+            ),
+        )
+
+        strip.render(
+            two_epoch_data,
+            epoch_indices=(0, 1),
+            roi_colors=(QColor("#1f77b4"),),
+            plot_size=180,
+        )
+        stale_panel = strip._epoch_plot_panels[1]
+        strip.render(
+            first,
+            epoch_indices=(0,),
+            roi_colors=(QColor("#1f77b4"),),
+            plot_size=180,
+        )
+
+        layout_widgets: list[QWidget] = []
+        for index in range(strip._layout.count()):
+            item = strip._layout.itemAt(index)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget is not None:
+                layout_widgets.append(widget)
+        self.assertNotIn(stale_panel, layout_widgets)
+        self.assertEqual(tuple(layout_widgets), (strip._epoch_plot_panels[0],))
+
+    def test_group_matching_response_success_redraw_does_not_clear_strips(
+        self,
+    ) -> None:
+        """Confirm successful response redraws update cached strips in place.
+
+        Inputs: a ROI assignment view with one selected response already
+        computed.
+        Outputs: the success path renders plots without clearing/hiding the
+        cached response strips first.
+        """
+        _ = QApplication.instance() or QApplication([])
+        view = group_matching_roi.RoiAssignmentView(
+            state=SimpleNamespace(loaded_recordings=[]),
+            fov_groups={},
+            current_rois={},
+            output_path=Path("roi_matches.csv"),
+            on_output_path_changed=lambda _path: None,
+            on_back=lambda: None,
+        )
+        view._selected_responses = (
+            group_matching_roi._SelectedRoiResponse(
+                recording_path=Path("/recordings/first"),
+                roi_label="roi_0001",
+                plot_data=_tiny_response_plot_data(),
+                color=QColor("#1f77b4"),
+            ),
+        )
+
+        with (
+            patch.object(
+                view._response_strip,
+                "clear",
+                side_effect=AssertionError("success redraw should not clear ROI strip"),
+            ),
+            patch.object(
+                view._mean_response_strip,
+                "clear",
+                side_effect=AssertionError(
+                    "success redraw should not clear combined strip",
+                ),
+            ),
+        ):
+            view._render_response_preview()
+
+        self.assertFalse(view._response_status.isVisible())
+
+    def test_group_matching_saved_group_selection_resets_hidden_traces(self) -> None:
+        """Confirm saved-group restore starts with all selected responses visible.
+
+        Inputs: a ROI assignment view with a hidden recording trace and one
+        saved group selected from the table.
+        Outputs: the hidden trace set is cleared before the restored group is
+        redrawn.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            path = Path(temp_dir) / "roi_matches.csv"
+            recording_path = Path(temp_dir) / "recording"
+            save_manual_roi_match_rows(
+                (
+                    ManualRoiMatchRow(
+                        fov_group_id="fov_1",
+                        group_cell_id=1,
+                        recording_path=recording_path,
+                        roi_label="roi_0001",
+                        status="matched",
+                    ),
+                ),
+                path,
+            )
+            view = group_matching_roi.RoiAssignmentView(
+                state=SimpleNamespace(loaded_recordings=[]),
+                fov_groups={},
+                current_rois={},
+                output_path=path,
+                on_output_path_changed=lambda _path: None,
+                on_back=lambda: None,
+            )
+            view._fov_filter.addItem("1", "fov_1")
+            view._hidden_response_recordings.add(recording_path)
+            view._refresh_group_table()
+
+            view._group_table.selectRow(0)
+
+        self.assertEqual(view._hidden_response_recordings, set())
+
     def test_group_matching_style_uses_active_qt_palette(self) -> None:
         """Confirm Group Matching colors follow the current Qt theme.
 
@@ -827,6 +991,62 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertLessEqual(abs(pixel_color.green() - selected_color.green()), 1)
         self.assertLessEqual(abs(pixel_color.blue() - selected_color.blue()), 1)
 
+    def test_group_matching_selected_roi_response_uses_full_frame_labels(self) -> None:
+        """Confirm selected ROI plots analyze full-frame labels from cropped UI data.
+
+        Inputs: a crop-native napari Labels layer with one selected ROI.
+        Outputs: the Group Matching response path sends full-frame movie labels
+        to the selected-response cache.
+        """
+        crop = SpatialCrop(
+            axis0_start=1,
+            axis0_stop=3,
+            axis1_start=2,
+            axis1_stop=5,
+            original_shape=(4, 6),
+            source="alignment_valid_crop",
+        )
+        display_labels = np.zeros((crop.shape[1], crop.shape[0]), dtype=np.int64)
+        display_labels[1, 0] = 7
+        with temporary_directory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(
+                    Path(temp_dir),
+                    movie_values=np.ones((3, 4, 6), dtype=np.float64),
+                    alignment_valid_crop=crop,
+                ),
+            )
+            loaded = LoadedNapariRecording(
+                recording=recording,
+                roi_save_file=Path(temp_dir) / "rois.h5",
+                mean_image_layer=_FakeLayer(
+                    name="mean",
+                    data=np.zeros(display_labels.shape, dtype=np.float64),
+                    options={},
+                ),
+                movie_layer=None,
+                roi_labels_layer=_FakeLayer(
+                    name="rois",
+                    data=display_labels,
+                    options={},
+                ),
+            )
+            cache = _RecordingSelectedResponseCache()
+
+            group_matching_roi._selected_roi_response_plot_data(
+                loaded,
+                "roi_0007",
+                cache=cast(Any, cache),
+                normalization_options=group_matching_roi.NormalizationOptions(),
+                smoothing_options=group_matching_roi.SmoothingOptions(),
+            )
+
+        assert cache.label_image is not None
+        routed_labels = np.asarray(cache.label_image, dtype=np.int64)
+        self.assertEqual(routed_labels.shape, crop.original_shape)
+        self.assertEqual(routed_labels[1, 3], 7)
+        self.assertEqual(int(np.count_nonzero(routed_labels)), 1)
+
     def test_epoch_plot_widget_uses_compact_height(self) -> None:
         """Confirm response plots trim unused height below the x-axis.
 
@@ -913,6 +1133,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             ) as compute_maps:
                 response_widget = cast(Any, create_response_plot_widget(None))
                 response_widget.load_recording(recording)
+                _finish_response_map_worker(response_widget)
 
         compute_maps.assert_called_once()
         self.assertIs(response_widget._response_map_data, map_data)
@@ -978,6 +1199,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             ) as compute_maps:
                 response_widget = cast(Any, create_response_plot_widget(None))
                 response_widget.load_recording(recording)
+                _finish_response_map_worker(response_widget)
                 compute_maps.reset_mock()
                 response_widget.set_response_plot_data(
                     _tiny_response_plot_data(),
@@ -1007,6 +1229,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             ) as compute_maps:
                 response_widget = cast(Any, create_response_plot_widget(None))
                 response_widget.load_recording(recording)
+                _finish_response_map_worker(response_widget)
                 first_image = response_widget._response_map_area.epoch_map_widgets[
                     0
                 ]._image
@@ -1044,6 +1267,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             ):
                 response_widget = cast(Any, create_response_plot_widget(None))
                 response_widget.load_recording(recording)
+                _finish_response_map_worker(response_widget)
 
             future: Future[ResponseMapData] = Future()
             with patch.object(
@@ -1093,6 +1317,40 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
 
         self.assertEqual(title_label.text(), "Epoch 1: Odor")
         self.assertTrue(title_label.alignment() & Qt.AlignmentFlag.AlignHCenter)
+
+
+def _finish_response_map_worker(response_widget: object) -> None:
+    """Run and collect one pending response-map worker job in tests."""
+    worker = cast(Any, response_widget)._response_map_worker
+    worker._debounce_timer.stop()
+    worker._start_latest_job()
+    future = worker._future
+    assert future is not None
+    future.result(timeout=2.0)
+    worker.collect_finished_job()
+
+
+class _RecordingSelectedResponseCache:
+    """Selected-response cache double that records routed label images."""
+
+    def __init__(self) -> None:
+        """Create an empty cache double."""
+        self.label_image: object | None = None
+
+    def compute_selected_response(
+        self,
+        recording: object,
+        label_image: object,
+        *,
+        roi_label: str,
+        label_value: int,
+        source_path: Path,
+        response_processing_options: object,
+    ) -> ResponsePlotData:
+        """Record selected-response inputs and return tiny plot data."""
+        del recording, roi_label, label_value, source_path, response_processing_options
+        self.label_image = np.asarray(label_image, dtype=np.int64)
+        return _tiny_response_plot_data()
 
 
 if __name__ == "__main__":

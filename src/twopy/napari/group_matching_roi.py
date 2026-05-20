@@ -64,6 +64,7 @@ from twopy.napari.group_matching_images import (
     THUMBNAIL_SIZE,
     mean_image_roi_overlay_pixmap,
 )
+from twopy.napari.group_matching_responses import SelectedRoiResponseCache
 from twopy.napari.group_matching_style import (
     group_matching_button,
     group_matching_section,
@@ -71,17 +72,10 @@ from twopy.napari.group_matching_style import (
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.form_controls import plot_form_layout, set_plot_control_width
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
+from twopy.napari.plotting.preview_strip import ResponsePreviewStrip
 from twopy.napari.plotting.processing_options import SmoothingOptionsWidget
-from twopy.napari.plotting.widgets import (
-    EpochPlotWidget,
-    clear_layout,
-    global_time_bounds,
-    global_value_bounds,
-)
-from twopy.napari.responses import (
-    compute_response_preview,
-    response_analysis_request_from_labels,
-)
+from twopy.napari.plotting.widgets import clear_layout
+from twopy.napari.roi import roi_label_image_from_layer_for_recording
 from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.text import configure_placeholder
 from twopy.stimulus import stimulus_epoch_names_by_number
@@ -114,13 +108,6 @@ class GroupMatchingState(Protocol):
 
 class _LayerWithData(Protocol):
     """Small protocol for napari layers whose label data can be inspected."""
-
-    data: object
-
-
-@dataclass(frozen=True)
-class _SelectedRoiLayer:
-    """Minimal Labels-layer stand-in for computing one selected ROI response."""
 
     data: object
 
@@ -172,6 +159,7 @@ class RoiAssignmentView(QWidget):
         self._selected_group_dirty = False
         self._normalization_options = NormalizationOptions()
         self._smoothing_options = SmoothingOptions()
+        self._response_cache = SelectedRoiResponseCache()
         self._plot_size = _ROI_PREVIEW_PLOT_SIZE
         self._epoch_visibility: dict[int, bool] = {}
         self._epoch_visibility_signature: tuple[tuple[int, str], ...] = ()
@@ -201,12 +189,18 @@ class RoiAssignmentView(QWidget):
         self._legend_layout.setContentsMargins(0, 0, 0, 0)
         self._legend_layout.setSpacing(6)
         self._legend_widget.setLayout(self._legend_layout)
-        self._response_widget, self._response_layout = _horizontal_preview_widget(
+        self._response_strip = ResponsePreviewStrip(
             "roi_response_preview",
+            trace_alpha=_ROI_TRACE_ALPHA,
+            title_pixel_size=_response_epoch_title_size,
         )
-        self._mean_response_widget, self._mean_response_layout = (
-            _horizontal_preview_widget("roi_mean_response_preview")
+        self._response_widget = self._response_strip.widget
+        self._mean_response_strip = ResponsePreviewStrip(
+            "roi_mean_response_preview",
+            trace_alpha=_ROI_TRACE_ALPHA,
+            title_pixel_size=_response_epoch_title_size,
         )
+        self._mean_response_widget = self._mean_response_strip.widget
         self._show_roi_responses_checkbox = QCheckBox("ROI responses")
         self._show_roi_responses_checkbox.setObjectName("show_roi_responses")
         self._show_roi_responses_checkbox.setChecked(True)
@@ -512,6 +506,12 @@ class RoiAssignmentView(QWidget):
         _clear_grid_layout(self._grid, delete_widgets=True)
         self._cards.clear()
         recordings = self._filtered_recordings()
+        self._response_cache.retain_recordings(
+            tuple(
+                recording.recording.path.expanduser()
+                for recording in self._state.loaded_recordings
+            ),
+        )
         self._refresh_epoch_controls_from_names(_epoch_names_for_recordings(recordings))
         self._normalization_widget.set_epoch_choices(
             _epoch_names_for_recordings(recordings),
@@ -561,15 +561,12 @@ class RoiAssignmentView(QWidget):
     def _render_response_preview(self) -> None:
         """Redraw cached ROI response previews without recomputing responses."""
         clear_layout(self._legend_layout)
-        _clear_nested_layout(self._response_layout)
-        _clear_nested_layout(self._mean_response_layout)
         self._hidden_response_recordings.intersection_update(
             {response.recording_path for response in self._selected_responses},
         )
         self._update_selected_rois_section_title()
         if len(self._selected_responses) == 0:
-            self._response_status.setText("Choose ROIs to compare responses.")
-            self._response_status.setVisible(True)
+            self._show_response_status("Choose ROIs to compare responses.")
             return
         _add_response_legend(
             self._legend_layout,
@@ -584,38 +581,40 @@ class RoiAssignmentView(QWidget):
             if response.recording_path not in self._hidden_response_recordings
         )
         if len(visible_responses) == 0:
-            self._response_status.setText("All selected recording traces are hidden.")
-            self._response_status.setVisible(True)
+            self._show_response_status("All selected recording traces are hidden.")
             return
         combined = _combined_response_plot_data(visible_responses)
         if combined is None:
-            self._response_status.setText(
+            self._show_response_status(
                 "Responses unavailable for the selected ROI combination.",
             )
-            self._response_status.setVisible(True)
             return
         self._refresh_epoch_controls(combined)
         epoch_indices = self._visible_response_epoch_indices(combined)
         if len(epoch_indices) == 0:
-            self._response_status.setText("Choose at least one epoch to plot.")
-            self._response_status.setVisible(True)
+            self._show_response_status("Choose at least one epoch to plot.")
             return
         self._response_status.setVisible(False)
-        _add_response_preview_widgets(
-            self._response_layout,
+        self._response_strip.render(
             combined,
             epoch_indices=epoch_indices,
             roi_colors=tuple(response.color for response in visible_responses),
             plot_size=self._plot_size,
         )
-        _add_response_preview_widgets(
-            self._mean_response_layout,
+        self._mean_response_strip.render(
             _mean_response_plot_data(combined),
             epoch_indices=epoch_indices,
             roi_colors=(QColor("#f2c14e"),),
             plot_size=self._plot_size,
         )
         self._set_response_panel_visibility()
+
+    def _show_response_status(self, text: str) -> None:
+        """Show a response status message and hide cached plot strips."""
+        self._response_strip.clear()
+        self._mean_response_strip.clear()
+        self._response_status.setText(text)
+        self._response_status.setVisible(True)
 
     def _set_response_visible(self, recording_path: Path, visible: bool) -> None:
         """Show or hide one selected recording in the shared response preview."""
@@ -1006,6 +1005,7 @@ class RoiAssignmentView(QWidget):
     def _restore_selected_group(self) -> None:
         """Restore ROI selectors from the currently selected saved group row."""
         group_cell_id = self._selected_group_cell_id()
+        self._hidden_response_recordings.clear()
         if group_cell_id is None:
             for card in self._cards:
                 card.set_selected_roi("")
@@ -1092,6 +1092,7 @@ class RoiAssignmentView(QWidget):
                 plot_data = _selected_roi_response_plot_data(
                     card.recording,
                     roi_label,
+                    cache=self._response_cache,
                     normalization_options=self._normalization_options,
                     smoothing_options=self._smoothing_options,
                 )
@@ -1259,6 +1260,7 @@ def _selected_roi_response_plot_data(
     recording: LoadedNapariRecording,
     roi_label: str,
     *,
+    cache: SelectedRoiResponseCache,
     normalization_options: NormalizationOptions,
     smoothing_options: SmoothingOptions,
 ) -> ResponsePlotData:
@@ -1267,28 +1269,21 @@ def _selected_roi_response_plot_data(
     if label_value is None or recording.roi_labels_layer is None:
         msg = "Selected ROI is missing."
         raise ValueError(msg)
-    label_image = np.asarray(cast(_LayerWithData, recording.roi_labels_layer).data)
-    selected = np.where(label_image.astype(np.int64, copy=False) == label_value, 1, 0)
-    request = response_analysis_request_from_labels(
+    label_image = roi_label_image_from_layer_for_recording(
+        recording.roi_labels_layer,
         recording.recording,
-        _SelectedRoiLayer(data=selected.astype(np.int64, copy=False)),
+    )
+    return cache.compute_selected_response(
+        recording.recording,
+        label_image,
+        roi_label=roi_label,
+        label_value=label_value,
         source_path=recording.recording.source_session_dir.expanduser(),
         response_processing_options=ResponseProcessingOptions(
             smoothing=smoothing_options,
             normalization=normalization_options,
         ),
     )
-    return compute_response_preview(request)
-
-
-def _horizontal_preview_widget(object_name: str) -> tuple[QWidget, QHBoxLayout]:
-    """Return a named widget with a zero-margin horizontal layout."""
-    widget = QWidget()
-    widget.setObjectName(object_name)
-    layout = QHBoxLayout()
-    layout.setContentsMargins(0, 0, 0, 0)
-    widget.setLayout(layout)
-    return widget, layout
 
 
 def _combined_response_plot_data(
@@ -1424,49 +1419,6 @@ def _interpolated_row(
     )
 
 
-def _add_response_preview_widgets(
-    layout: QHBoxLayout,
-    plot_data: ResponsePlotData,
-    *,
-    epoch_indices: tuple[int, ...],
-    roi_colors: tuple[QColor, ...],
-    plot_size: int,
-) -> None:
-    """Add one compact response plot per epoch as a horizontal strip."""
-    if len(epoch_indices) == 0:
-        return
-    time_min, time_max = global_time_bounds(plot_data, epoch_indices)
-    roi_indices = tuple(range(len(roi_colors)))
-    value_min, value_max = global_value_bounds(plot_data, roi_indices, epoch_indices)
-    plot_colors = _trace_colors_with_opacity(roi_colors)
-    for epoch_index in epoch_indices:
-        epoch = plot_data.epochs[epoch_index]
-        epoch_panel = QVBoxLayout()
-        epoch_label = QLabel(_epoch_title(epoch))
-        epoch_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        epoch_font = epoch_label.font()
-        epoch_font.setPixelSize(_response_epoch_title_size(plot_size))
-        epoch_font.setBold(False)
-        epoch_label.setFont(epoch_font)
-        epoch_label.setStyleSheet("font-weight: normal;")
-        epoch_panel.addWidget(epoch_label)
-        epoch_panel.addWidget(
-            EpochPlotWidget(
-                epoch,
-                show_sem=True,
-                roi_indices=roi_indices,
-                roi_colors=plot_colors,
-                time_min=time_min,
-                time_max=time_max,
-                value_min=value_min,
-                value_max=value_max,
-                plot_size=plot_size,
-            ),
-        )
-        layout.addLayout(epoch_panel)
-    layout.addStretch(1)
-
-
 def _epoch_title(epoch: EpochResponsePlotData) -> str:
     """Return the compact title shown above one ROI comparison plot."""
     return f"{epoch.epoch_number}: {epoch.epoch_name}"
@@ -1484,16 +1436,6 @@ def _visible_response_epoch_indices(plot_data: ResponsePlotData) -> tuple[int, .
 def _response_epoch_title_size(plot_size: int) -> int:
     """Return a plot-title font size that follows the preview size."""
     return max(10, min(16, round(plot_size * 0.07)))
-
-
-def _trace_colors_with_opacity(colors: tuple[QColor, ...]) -> tuple[QColor, ...]:
-    """Return response-trace colors at the ROI matching preview opacity."""
-    faded: list[QColor] = []
-    for color in colors:
-        trace_color = QColor(color)
-        trace_color.setAlpha(_ROI_TRACE_ALPHA)
-        faded.append(trace_color)
-    return tuple(faded)
 
 
 def _add_response_legend(

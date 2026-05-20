@@ -13,10 +13,12 @@
 - Reworked the napari Group Matching FOV and ROI assignment views with larger image previews, clearer staged headings, grouped file/action/preview sections, theme-aware colors, more legible primary and destructive actions, and a compact two-column FOV assignment layout with image-overlaid recording labels, vertical contrast sliders, a vertical-only scrollable left control column, and compact FOV ID step buttons.
 - Made the Group Matching popup expand to the current display without entering macOS fullscreen, removed the maximum-height cap, added hover color feedback to matching buttons, and added a compact four-row current-FOV table that reselects assigned recording cards for edits.
 - Moved the Group Matching ROI controls into a compact left sidebar, placed a selected-ROI chip panel above separate ROI-response and combined-response plot sections, and added numeric FOV IDs, numeric ROI dropdown labels, selectable ROI load-status paths, inline ROI color chips, resizable saved-group columns, epoch visibility controls, ROI-response plot toggles, and resize-safe response previews with size-aware plot text.
+- Made Group Matching and live ROI response previews reuse selected ROI traces, response contexts, and compact epoch plot widgets more aggressively, while initial response heatmaps now compute in the existing background worker on recording load.
 
 ### Fixes
 
 - Kept Group Matching's auto-managed ROI match CSV path following the current loaded-recordings CSV folder after unloading all recordings and loading a new CSV list, while preserving explicitly chosen ROI CSV paths.
+- Kept Group Matching ROI-view selection changes from moving focus back to the main napari window, from flashing the response preview rows on each update, and from carrying hidden response chips into a newly selected saved group.
 - Kept napari Load manually and Load CSV list dialog folders independent so choosing one no longer overwrites the other's remembered location.
 - Kept napari response plots from carrying stale epoch visibility into newly loaded recordings, so gray/interleave epochs are hidden by default after loading a CSV list.
 
