@@ -24,6 +24,7 @@
 
 - Made Return in the napari database-search window search from filter fields and load selected result rows from the result tree.
 - Kept the napari Metadata and Export tabs from widening the sidebar with a horizontal scrollbar when status paths are long, and made Metadata text selectable for copying.
+- Kept Direction selectivity's metric window cap tied to the selected preferred/null stimulus epochs instead of unrelated shorter epochs such as gray interleaves.
 - Cleared stale Custom-tab workflow outputs when loading, selecting, or clearing a recording.
 - Kept native response-kernel mean plot legends focused on mean traces by omitting separate SEM band legend entries.
 - Cleared stale Custom-tab workflow outputs after failed DSI or response-kernel runs and when a run returns no displayable outputs.

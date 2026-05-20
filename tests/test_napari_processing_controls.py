@@ -15,6 +15,8 @@ from tests.napari_support import (
     NormalizationOptions,
     Path,
     QApplication,
+    QComboBox,
+    QDoubleSpinBox,
     ResponsePlotData,
     ResponseProcessingOptions,
     ResponseProcessingOptionsWidget,
@@ -28,12 +30,14 @@ from tests.napari_support import (
     group_delta_f_over_f_by_epoch,
     np,
     open_recording_in_napari,
+    patch,
     response_plot_data_from_grouped,
     response_plot_min_epoch_duration_seconds,
     temporary_directory,
     unittest,
 )
 
+from twopy.analysis.timing import RecordingTiming
 from twopy.custom import (
     CustomLineBand,
     CustomLinePlot,
@@ -200,6 +204,74 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             self.assertEqual(specs["dsi_threshold"].minimum, 0.0)
             self.assertEqual(specs["dsi_threshold"].step, 0.05)
             self.assertEqual(specs["dsi_threshold"].decimals, 3)
+
+    def test_native_dsi_window_end_caps_to_selected_epoch_durations(self) -> None:
+        """Confirm DSI caps metric windows to preferred/null epoch durations.
+
+        Inputs: a recording with a short gray epoch, long LR/RL epochs, and a
+        longer third stimulus epoch.
+        Outputs: the DSI window-end cap ignores gray and follows the shorter
+        of the selected preferred/null epochs as the null dropdown changes.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(
+                root,
+                stimulus_parameters_json=(
+                    "["
+                    '{"epochName": "Gray Interleave"},'
+                    '{"epochName": "LR"},'
+                    '{"epochName": "RL"},'
+                    '{"epochName": "Long"}'
+                    "]"
+                ),
+            )
+            timing = RecordingTiming(
+                frame_rate_hz=10.0,
+                epoch_windows=(
+                    EpochFrameWindow(
+                        FrameWindow(0, 0, 49, "gray"),
+                        1,
+                        "Gray Interleave",
+                    ),
+                    EpochFrameWindow(FrameWindow(1, 49, 399, "lr"), 2, "LR"),
+                    EpochFrameWindow(FrameWindow(2, 399, 649, "rl"), 3, "RL"),
+                    EpochFrameWindow(FrameWindow(3, 649, 1049, "long"), 4, "Long"),
+                ),
+                source="interpolated_epochs",
+                metadata={},
+            )
+
+            with patch(
+                "twopy.napari.plotting.docks.response_plot_widget."
+                "resolve_recording_timing",
+                return_value=timing,
+            ):
+                viewer = _FakeViewer()
+                opened = open_recording_in_napari(recording_path, viewer=viewer)
+                response_widget = cast(Any, opened.response_plot_widget)
+                panel = response_widget._custom_workflow_panel
+                for index in range(panel._workflow_combo.count()):
+                    workflow = panel._workflow_combo.itemData(index)
+                    if workflow.id == "direction-selectivity":
+                        panel._workflow_combo.setCurrentIndex(index)
+                        break
+
+                window_stop = cast(
+                    QDoubleSpinBox,
+                    panel._parameter_controls["window_stop_seconds"],
+                )
+
+                self.assertEqual(window_stop.maximum(), 25.0)
+
+                null_epoch = cast(QComboBox, panel._parameter_controls["null_epoch"])
+                null_epoch.setCurrentIndex(null_epoch.findData("4: Long"))
+                window_stop = cast(
+                    QDoubleSpinBox,
+                    panel._parameter_controls["window_stop_seconds"],
+                )
+
+                self.assertEqual(window_stop.maximum(), 35.0)
 
     def test_roi_selector_dropdown_uses_readable_labels(self) -> None:
         """Confirm selector values keep stable IDs but display readable text."""
@@ -440,7 +512,7 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                     recording=opened.recording,
                     epoch_choices=choices,
                     stimulus_column_choices=(),
-                    metric_stop_seconds=None,
+                    epoch_window_stop_seconds=None,
                     response_start_seconds=-1.0,
                     response_stop_seconds=2.0,
                 )
@@ -460,7 +532,7 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 recording=opened.recording,
                 epoch_choices=("Epoch 1", "Epoch 2"),
                 stimulus_column_choices=(),
-                metric_stop_seconds=None,
+                epoch_window_stop_seconds=None,
                 response_start_seconds=-1.0,
                 response_stop_seconds=2.0,
             )

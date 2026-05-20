@@ -8,7 +8,7 @@ returned files, tables, and plots. Validation and analysis helpers live in
 from __future__ import annotations
 
 import csv
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -58,7 +58,10 @@ if TYPE_CHECKING:
 __all__ = ["CustomWorkflowPanel"]
 
 WorkflowRunner = Callable[[CustomWorkflow, object | None], CustomResult]
-ParameterSpecProvider = Callable[[CustomWorkflow], tuple[CustomParameterSpec, ...]]
+ParameterSpecProvider = Callable[
+    [CustomWorkflow, Mapping[str, object]],
+    tuple[CustomParameterSpec, ...],
+]
 _CUSTOM_CHOICE_LABELS = {
     "all_epochs": "all epochs",
     "all_rois": "all ROIs",
@@ -104,6 +107,7 @@ class CustomWorkflowPanel(QScrollArea):
         self._parameter_specs_for_workflow = parameter_specs_for_workflow
         self._discovery_result = WorkflowDiscoveryResult((), ())
         self._parameter_controls: dict[str, object] = {}
+        self._refreshing_parameter_controls = False
 
         self._workflow_combo = QComboBox()
         self._workflow_combo.currentIndexChanged.connect(
@@ -173,9 +177,9 @@ class CustomWorkflowPanel(QScrollArea):
     def _selected_workflow_changed(self) -> None:
         """Show the selected workflow description and controls."""
         workflow = self._selected_workflow()
-        _clear_layout(self._parameter_layout)
-        self._parameter_controls.clear()
         if workflow is None:
+            _clear_layout(self._parameter_layout)
+            self._parameter_controls.clear()
             self._description_label.setText("No custom workflows available.")
             self._version_label.setText("")
             self._run_button.setEnabled(False)
@@ -186,13 +190,48 @@ class CustomWorkflowPanel(QScrollArea):
         self._version_label.setText(
             f"version {workflow.version}; source {source}",
         )
-        if workflow.params_type is None:
-            self._parameter_layout.addRow(QLabel("No parameters."))
+        self._refresh_parameter_controls(workflow, current_values={})
+
+    def _refresh_parameter_controls(
+        self,
+        workflow: CustomWorkflow,
+        *,
+        current_values: Mapping[str, object],
+    ) -> None:
+        """Rebuild workflow controls while preserving current values."""
+        self._refreshing_parameter_controls = True
+        try:
+            _clear_layout(self._parameter_layout)
+            self._parameter_controls.clear()
+            if workflow.params_type is None:
+                self._parameter_layout.addRow(QLabel("No parameters."))
+                return
+            for spec in self._parameter_specs(workflow, current_values=current_values):
+                widget = _parameter_widget(spec)
+                if spec.name in current_values:
+                    _set_parameter_widget_value(widget, current_values[spec.name])
+                self._connect_parameter_widget(widget)
+                self._parameter_controls[spec.name] = widget
+                self._parameter_layout.addRow(spec.label, widget)
+        finally:
+            self._refreshing_parameter_controls = False
+
+    def _connect_parameter_widget(self, widget: object) -> None:
+        """Connect controls whose value can change dependent parameter specs."""
+        if isinstance(widget, QComboBox):
+            widget.currentIndexChanged.connect(self._parameter_control_changed)
+
+    def _parameter_control_changed(self) -> None:
+        """Refresh dependent parameter controls after a dropdown change."""
+        if self._refreshing_parameter_controls:
             return
-        for spec in self._parameter_specs(workflow):
-            widget = _parameter_widget(spec)
-            self._parameter_controls[spec.name] = widget
-            self._parameter_layout.addRow(spec.label, widget)
+        workflow = self._selected_workflow()
+        if workflow is None:
+            return
+        self._refresh_parameter_controls(
+            workflow,
+            current_values=self._current_parameter_values(),
+        )
 
     def _run_selected_workflow(self) -> None:
         """Run the selected workflow with current GUI values."""
@@ -226,19 +265,32 @@ class CustomWorkflowPanel(QScrollArea):
         if workflow.params_type is None:
             return {}
         values: dict[str, object] = {}
-        for spec in self._parameter_specs(workflow):
+        for spec in self._parameter_specs(
+            workflow,
+            current_values=self._current_parameter_values(),
+        ):
             widget = self._parameter_controls[spec.name]
             values[spec.name] = _read_parameter_widget(widget)
         return values
 
+    def _current_parameter_values(self) -> dict[str, object]:
+        """Return current values from already-built controls."""
+        return {
+            name: _read_parameter_widget(widget)
+            for name, widget in self._parameter_controls.items()
+        }
+
     def _parameter_specs(
-        self, workflow: CustomWorkflow
+        self,
+        workflow: CustomWorkflow,
+        *,
+        current_values: Mapping[str, object],
     ) -> tuple[CustomParameterSpec, ...]:
         """Return parameter specs for one workflow."""
         if workflow.params_type is None:
             return ()
         if self._parameter_specs_for_workflow is not None:
-            return self._parameter_specs_for_workflow(workflow)
+            return self._parameter_specs_for_workflow(workflow, current_values)
         return parameter_specs(workflow.params_type)
 
     def _set_discovery_status(self) -> None:
@@ -385,6 +437,42 @@ def _read_parameter_widget(widget: object) -> object:
         return widget.currentText()
     msg = f"Unsupported parameter widget {type(widget).__name__}."
     raise TypeError(msg)
+
+
+def _set_parameter_widget_value(
+    widget: object,
+    value: object,
+) -> None:
+    """Set one rebuilt parameter widget from a previous GUI value."""
+    if isinstance(widget, QCheckBox):
+        widget.setChecked(bool(value))
+        return
+    if isinstance(widget, QDoubleSpinBox):
+        widget.setValue(float(_numeric_parameter_value(value)))
+        return
+    if isinstance(widget, QSpinBox):
+        widget.setValue(int(_numeric_parameter_value(value)))
+        return
+    if isinstance(widget, QLineEdit):
+        widget.setText(str(value))
+        return
+    if isinstance(widget, QComboBox):
+        index = widget.findData(value)
+        if index < 0:
+            index = widget.findText(str(value))
+        if index >= 0:
+            widget.setCurrentIndex(index)
+        return
+    msg = f"Unsupported parameter widget {type(widget).__name__}."
+    raise TypeError(msg)
+
+
+def _numeric_parameter_value(value: object) -> str | int | float:
+    """Return a value that Qt numeric controls can parse."""
+    if isinstance(value, str | int | float):
+        return value
+    msg = f"Expected numeric parameter value, got {value!r}."
+    raise ValueError(msg)
 
 
 def _choice_label(value: object) -> str:

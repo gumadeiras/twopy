@@ -5,6 +5,7 @@ responses from the current Labels layer, this module converts labels to a
 ``RoiSet`` and calls the normal analysis workflow.
 """
 
+from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import replace
@@ -31,6 +32,8 @@ from twopy.analysis.response_processing import (
     ResponseProcessingOptions,
 )
 from twopy.analysis.response_window_options import ResponseWindowOptions
+from twopy.analysis.timing import resolve_recording_timing
+from twopy.analysis.trials import EpochFrameWindow
 from twopy.analysis_cache import (
     AnalysisSyncPlan,
     AnalysisSyncResult,
@@ -624,6 +627,7 @@ class _ResponsePlotWidget(QWidget):
     def _custom_parameter_specs_for_workflow(
         self,
         workflow: CustomWorkflow,
+        current_values: Mapping[str, object] | None = None,
     ) -> tuple[CustomParameterSpec, ...]:
         """Return parameter controls adjusted for the loaded recording."""
         if workflow.params_type is None:
@@ -633,8 +637,13 @@ class _ResponsePlotWidget(QWidget):
             return specs
         epoch_choices = _custom_epoch_choices(self._recording)
         stimulus_column_choices = _custom_stimulus_column_choices(self._recording)
-        metric_stop_seconds = response_plot_min_epoch_duration_for_recording(
+        values = {} if current_values is None else current_values
+        epoch_window_stop_seconds = _custom_epoch_window_stop_seconds(
+            workflow,
             self._recording,
+            specs=specs,
+            epoch_choices=epoch_choices,
+            current_values=values,
         )
         pre_window_seconds, post_window_seconds = (
             response_plot_window_seconds_for_recording(
@@ -643,8 +652,8 @@ class _ResponsePlotWidget(QWidget):
             )
         )
         response_stop_seconds = None
-        if metric_stop_seconds is not None:
-            response_stop_seconds = metric_stop_seconds + post_window_seconds
+        if epoch_window_stop_seconds is not None:
+            response_stop_seconds = epoch_window_stop_seconds + post_window_seconds
         return tuple(
             _workflow_recording_parameter_spec(
                 workflow,
@@ -653,7 +662,7 @@ class _ResponsePlotWidget(QWidget):
                     recording=self._recording,
                     epoch_choices=epoch_choices,
                     stimulus_column_choices=stimulus_column_choices,
-                    metric_stop_seconds=metric_stop_seconds,
+                    epoch_window_stop_seconds=epoch_window_stop_seconds,
                     response_start_seconds=-pre_window_seconds,
                     response_stop_seconds=response_stop_seconds,
                 ),
@@ -1692,7 +1701,7 @@ def _recording_parameter_spec(
     recording: RecordingData,
     epoch_choices: tuple[str, ...],
     stimulus_column_choices: tuple[str, ...],
-    metric_stop_seconds: float | None,
+    epoch_window_stop_seconds: float | None,
     response_start_seconds: float,
     response_stop_seconds: float | None,
 ) -> CustomParameterSpec:
@@ -1715,7 +1724,7 @@ def _recording_parameter_spec(
         return replace(
             spec,
             minimum=_CUSTOM_EPOCH_WINDOW_MIN_SECONDS,
-            maximum=metric_stop_seconds,
+            maximum=epoch_window_stop_seconds,
             step=_CUSTOM_EPOCH_WINDOW_STEP_SECONDS,
         )
     if spec.role == "response_metric":
@@ -1804,6 +1813,93 @@ def _matched_epoch_choice(
         ):
             return choice
     return choices[0]
+
+
+def _custom_epoch_window_stop_seconds(
+    workflow: CustomWorkflow,
+    recording: RecordingData,
+    *,
+    specs: tuple[CustomParameterSpec, ...],
+    epoch_choices: tuple[str, ...],
+    current_values: Mapping[str, object],
+) -> float | None:
+    """Return the recording-specific stop cap for epoch-window controls."""
+    if workflow.id != "direction-selectivity":
+        return response_plot_min_epoch_duration_for_recording(recording)
+    selectors = _direction_selectivity_epoch_selectors(
+        specs,
+        epoch_choices=epoch_choices,
+        current_values=current_values,
+    )
+    selected_stop_seconds = _selected_epoch_min_duration_seconds(
+        recording,
+        selectors,
+    )
+    if selected_stop_seconds is not None:
+        return selected_stop_seconds
+    return response_plot_min_epoch_duration_for_recording(recording)
+
+
+def _direction_selectivity_epoch_selectors(
+    specs: tuple[CustomParameterSpec, ...],
+    *,
+    epoch_choices: tuple[str, ...],
+    current_values: Mapping[str, object],
+) -> tuple[str, ...]:
+    """Return preferred/null epoch selectors for Direction selectivity."""
+    spec_by_name = {spec.name: spec for spec in specs}
+    selectors: list[str] = []
+    for name in ("preferred_epoch", "null_epoch"):
+        spec = spec_by_name.get(name)
+        if spec is None:
+            continue
+        value = current_values.get(name, spec.default)
+        if len(epoch_choices) > 0:
+            value = _matched_epoch_choice(epoch_choices, str(value))
+        selectors.append(str(value))
+    return tuple(selectors)
+
+
+def _selected_epoch_min_duration_seconds(
+    recording: RecordingData,
+    selectors: tuple[str, ...],
+) -> float | None:
+    """Return the shortest duration among selected epoch trials."""
+    if len(selectors) == 0:
+        return None
+    try:
+        timing = resolve_recording_timing(recording)
+    except ValueError:
+        return None
+    selected_durations = []
+    for selector in selectors:
+        durations = tuple(
+            (epoch_window.window.stop_frame - epoch_window.window.start_frame)
+            / timing.frame_rate_hz
+            for epoch_window in timing.epoch_windows
+            if (
+                _epoch_window_matches_selector(epoch_window, selector)
+                and epoch_window.window.stop_frame > epoch_window.window.start_frame
+            )
+        )
+        if len(durations) == 0:
+            continue
+        selected_durations.append(min(durations))
+    if len(selected_durations) == 0:
+        return None
+    return min(selected_durations)
+
+
+def _epoch_window_matches_selector(
+    epoch_window: EpochFrameWindow,
+    selector: str,
+) -> bool:
+    """Return whether one epoch window matches a Custom-tab epoch selector."""
+    epoch_number = _custom_epoch_number_from_choice(selector)
+    if epoch_number is not None:
+        return epoch_window.epoch_number == epoch_number
+    epoch_name = _custom_epoch_name_from_choice(selector)
+    return epoch_window.epoch_name.casefold() == epoch_name.casefold()
 
 
 def _baseline_epoch_choice(
