@@ -62,7 +62,9 @@ from twopy.napari.sidebar import (
     create_twopy_sidebar_widget,
 )
 from twopy.napari.state import (
+    read_last_recording_csv_folder,
     read_last_recording_folder,
+    write_last_recording_csv_folder,
 )
 
 __all__ = ["NapariSidebarWidgets", "add_twopy_magicgui_controls"]
@@ -485,7 +487,11 @@ def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
         None.
     """
     selected_paths = _choose_recording_paths(state)
-    _load_selected_recording_paths(state, selected_paths)
+    _load_selected_recording_paths(
+        state,
+        selected_paths,
+        remember_selected_folder=True,
+    )
 
 
 def _load_recording_csvs_from_dialog(state: NapariControlState) -> None:
@@ -498,13 +504,20 @@ def _load_recording_csvs_from_dialog(state: NapariControlState) -> None:
         None.
     """
     selected_paths = _choose_recording_csv_paths(state)
-    _load_selected_recording_paths(state, selected_paths)
+    _remember_recording_csv_folder(selected_paths)
+    _load_selected_recording_paths(
+        state,
+        selected_paths,
+        remember_selected_folder=False,
+    )
     _load_adjacent_fov_groups_for_recording_csvs(state, selected_paths)
 
 
 def _load_selected_recording_paths(
     state: NapariControlState,
     selected_paths: tuple[Path, ...],
+    *,
+    remember_selected_folder: bool,
 ) -> None:
     """Expand selected folders or CSVs, then load their recordings."""
     if len(selected_paths) == 0:
@@ -517,7 +530,7 @@ def _load_selected_recording_paths(
     result = load_recording_paths(
         state,
         recording_paths,
-        remember_selected_folder=True,
+        remember_selected_folder=remember_selected_folder,
     )
     _show_source_unavailable_warnings(result.source_warnings)
     _sync_recording_picker_to_selected(state)
@@ -540,7 +553,7 @@ def _choose_recording_paths(state: NapariControlState) -> tuple[Path, ...]:
     """
     dialog = QFileDialog()
     dialog.setWindowTitle("Choose recording folders")
-    start_path = _recording_picker_start_path(state)
+    start_path = _manual_recording_start_path(state)
     if start_path is not None:
         dialog.setDirectory(start_path)
     dialog.setFileMode(QFileDialog.FileMode.Directory)
@@ -557,10 +570,19 @@ def _choose_recording_csv_paths(state: NapariControlState) -> tuple[Path, ...]:
     selected_paths, _selected_filter = QFileDialog.getOpenFileNames(
         None,
         "Choose loaded-recordings CSV",
-        _recording_picker_start_path(state) or "",
+        _recording_csv_start_path() or "",
         "CSV files (*.csv);;All files (*)",
     )
     return tuple(Path(path).expanduser() for path in selected_paths)
+
+
+def _remember_recording_csv_folder(paths: tuple[Path, ...]) -> None:
+    """Persist the folder that owns a selected loaded-recordings CSV."""
+    if len(paths) == 0:
+        return
+    first_path = paths[0].expanduser()
+    folder = first_path if first_path.is_dir() else first_path.parent
+    write_last_recording_csv_folder(folder)
 
 
 def _recording_paths_from_manual_selections(
@@ -606,7 +628,7 @@ def _save_loaded_recordings_from_dialog(state: NapariControlState) -> None:
 
 def _choose_loaded_recordings_csv_save_path(state: NapariControlState) -> Path | None:
     """Return the CSV path selected for saving loaded recordings."""
-    start_path = _recording_picker_start_path(state)
+    start_path = _recording_csv_start_path()
     suggested_path = (
         Path(start_path) / "loaded_recordings.csv"
         if start_path is not None
@@ -623,6 +645,7 @@ def _choose_loaded_recordings_csv_save_path(state: NapariControlState) -> Path |
     output_path = Path(selected_path).expanduser()
     if output_path.suffix == "":
         output_path = output_path.with_suffix(".csv")
+    _remember_recording_csv_folder((output_path,))
     return output_path
 
 
@@ -787,7 +810,7 @@ def _configure_recording_folder_picker(
         result = widget._show_file_dialog(
             widget.mode,
             caption="Choose directory",
-            start_path=_recording_picker_start_path(state),
+            start_path=_manual_recording_start_path(state),
             filter=widget.filter,
         )
         if result is None or isinstance(result, tuple):
@@ -911,6 +934,36 @@ def _recording_picker_start_path(state: NapariControlState) -> str | None:
     if remembered_folder is None:
         return None
     return str(remembered_folder.resolve())
+
+
+def _manual_recording_start_path(state: NapariControlState) -> str | None:
+    """Return the folder shown first for manual recording-folder dialogs.
+
+    Args:
+        state: Current napari control state.
+
+    Returns:
+        Absolute path string, or ``None`` for the platform default.
+
+    The manual picker has its own memory because source recording folders and
+    saved loaded-recordings CSVs usually live in different places.
+    """
+    remembered_folder = read_last_recording_folder()
+    if remembered_folder is not None:
+        return str(remembered_folder.resolve())
+    return _recording_picker_start_path(state)
+
+
+def _recording_csv_start_path() -> str | None:
+    """Return the folder shown first for loaded-recordings CSV dialogs.
+
+    Returns:
+        Absolute path string, or ``None`` for the platform default.
+    """
+    remembered_folder = read_last_recording_csv_folder()
+    if remembered_folder is not None:
+        return str(remembered_folder.resolve())
+    return None
 
 
 def _resolve_recording_folder_value(

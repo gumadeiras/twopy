@@ -31,6 +31,12 @@ from tests.napari_support import (
     unittest,
 )
 
+from twopy.napari.state import (
+    read_last_recording_csv_folder,
+    read_last_recording_folder,
+    write_last_recording_folder,
+)
+
 
 class NapariLoadTabTest(NapariAdapterTestCase):
     """Napari Load tab tests."""
@@ -217,6 +223,72 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 {note_edit.text() for note_edit in fov_note_edits},
                 {"first loaded-list note", "second loaded-list note"},
             )
+
+    def test_load_csv_list_uses_separate_remembered_folder(self) -> None:
+        """Confirm CSV-list dialogs do not overwrite manual-load memory.
+
+        Inputs: separate manual and CSV folders persisted through the Load tab.
+        Outputs: CSV dialogs reopen at the CSV folder, while manual recording
+        memory remains on the source-recording folder.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            manual_folder = root / "manual_recordings"
+            csv_folder = root / "csv_lists"
+            recording = root / "recording"
+            manual_folder.mkdir()
+            csv_folder.mkdir()
+            recording.mkdir()
+            _write_converted_recording(recording, source_session_dir=recording)
+            write_last_recording_folder(manual_folder)
+            csv_path = csv_folder / "loaded_recordings.csv"
+            with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
+                writer = csv.DictWriter(
+                    csv_file,
+                    fieldnames=("recording_path", "recording_data_path"),
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "recording_path": str(recording),
+                        "recording_data_path": str(
+                            recording / "twopy" / "recording_data.h5"
+                        ),
+                    },
+                )
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            load_panel = cast(QWidget, control_docks.load_widget)
+            load_buttons = {
+                button.text(): button for button in load_panel.findChildren(QPushButton)
+            }
+
+            with patch.object(
+                napari_controls.QFileDialog,
+                "getOpenFileNames",
+                return_value=([str(csv_path)], ""),
+            ) as choose_csv:
+                load_buttons["Load CSV list"].click()
+
+            first_call_args = choose_csv.call_args.args
+            self.assertEqual(first_call_args[2], "")
+            self.assertEqual(read_last_recording_folder(), manual_folder.resolve())
+            self.assertEqual(read_last_recording_csv_folder(), csv_folder.resolve())
+
+            with patch.object(
+                napari_controls.QFileDialog,
+                "getOpenFileNames",
+                return_value=([], ""),
+            ) as choose_csv_again:
+                load_buttons["Load CSV list"].click()
+
+            second_call_args = choose_csv_again.call_args.args
+            self.assertEqual(second_call_args[2], str(csv_folder.resolve()))
 
     def test_load_tab_csv_converts_from_recording_path_when_h5_missing(
         self,

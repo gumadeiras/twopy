@@ -1,7 +1,7 @@
 """Local napari UI state for twopy.
 
 Inputs: small local JSON file in the user's home directory.
-Outputs: remembered GUI defaults such as the last recording folder.
+Outputs: remembered GUI defaults such as the last recording and CSV folders.
 
 This module stores convenience state only. It is never used for analysis
 decisions, and missing or corrupt state simply falls back to defaults.
@@ -12,12 +12,16 @@ import os
 from pathlib import Path
 
 __all__ = [
+    "read_last_recording_csv_folder",
     "read_last_recording_folder",
     "recording_folder_for_state",
+    "write_last_recording_csv_folder",
     "write_last_recording_folder",
 ]
 
 STATE_FILE_ENV_VAR = "TWOPY_NAPARI_STATE_FILE"
+LAST_RECORDING_FOLDER_KEY = "last_recording_folder"
+LAST_RECORDING_CSV_FOLDER_KEY = "last_recording_csv_folder"
 
 
 def read_last_recording_folder(*, state_file: Path | None = None) -> Path | None:
@@ -29,18 +33,19 @@ def read_last_recording_folder(*, state_file: Path | None = None) -> Path | None
     Returns:
         Existing folder path, or ``None`` when no usable state exists.
     """
-    path = _state_file_path(state_file)
-    if not path.is_file():
-        return None
-    try:
-        data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    folder_text = data.get("last_recording_folder")
-    if not isinstance(folder_text, str):
-        return None
-    folder = Path(folder_text).expanduser()
-    return folder if folder.is_dir() else None
+    return _read_existing_folder(LAST_RECORDING_FOLDER_KEY, state_file)
+
+
+def read_last_recording_csv_folder(*, state_file: Path | None = None) -> Path | None:
+    """Read the last folder used for loaded-recordings CSV files.
+
+    Args:
+        state_file: Optional state file override for tests.
+
+    Returns:
+        Existing folder path, or ``None`` when no usable state exists.
+    """
+    return _read_existing_folder(LAST_RECORDING_CSV_FOLDER_KEY, state_file)
 
 
 def write_last_recording_folder(
@@ -57,20 +62,24 @@ def write_last_recording_folder(
     Returns:
         None.
     """
-    resolved_folder = folder.expanduser().resolve()
-    path = _state_file_path(state_file)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(
-                {"last_recording_folder": str(resolved_folder)},
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-        )
-    except OSError:
-        return
+    _write_folder(LAST_RECORDING_FOLDER_KEY, folder, state_file)
+
+
+def write_last_recording_csv_folder(
+    folder: Path,
+    *,
+    state_file: Path | None = None,
+) -> None:
+    """Remember the last folder used for loaded-recordings CSV files.
+
+    Args:
+        folder: Folder to store.
+        state_file: Optional state file override for tests.
+
+    Returns:
+        None.
+    """
+    _write_folder(LAST_RECORDING_CSV_FOLDER_KEY, folder, state_file)
 
 
 def recording_folder_for_state(selected_path: Path, recording_data_path: Path) -> Path:
@@ -104,3 +113,80 @@ def _state_file_path(state_file: Path | None) -> Path:
     if env_path:
         return Path(env_path).expanduser()
     return Path.home() / ".config" / "twopy" / "napari_state.json"
+
+
+def _read_existing_folder(key: str, state_file: Path | None) -> Path | None:
+    """Read one existing folder value from the local state file.
+
+    Args:
+        key: JSON key to read.
+        state_file: Optional explicit state file path.
+
+    Returns:
+        Existing folder path, or ``None`` when the key is absent or stale.
+    """
+    folder_text = _read_state_data(state_file).get(key)
+    if not isinstance(folder_text, str):
+        return None
+    folder = Path(folder_text).expanduser()
+    return folder if folder.is_dir() else None
+
+
+def _write_folder(key: str, folder: Path, state_file: Path | None) -> None:
+    """Write one folder value while preserving other local state keys.
+
+    Args:
+        key: JSON key to write.
+        folder: Folder to store.
+        state_file: Optional explicit state file path.
+
+    Returns:
+        None.
+    """
+    data = _read_state_data(state_file)
+    data[key] = str(folder.expanduser().resolve())
+    _write_state_data(data, state_file)
+
+
+def _read_state_data(state_file: Path | None) -> dict[str, object]:
+    """Return usable persisted napari state values.
+
+    Args:
+        state_file: Optional explicit state file path.
+
+    Returns:
+        JSON state mapping, or an empty mapping when state is absent or
+        corrupt.
+    """
+    path = _state_file_path(state_file)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    state_data: dict[str, object] = {}
+    for key, value in data.items():
+        if isinstance(key, str):
+            state_data[key] = value
+    return state_data
+
+
+def _write_state_data(data: dict[str, object], state_file: Path | None) -> None:
+    """Persist napari state while treating write failures as non-fatal.
+
+    Args:
+        data: State values to write.
+        state_file: Optional explicit state file path.
+
+    Returns:
+        None.
+    """
+    path = _state_file_path(state_file)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    except OSError:
+        return
