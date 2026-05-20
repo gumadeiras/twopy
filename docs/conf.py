@@ -19,6 +19,7 @@ extensions = [
 source_suffix = {
     ".md": "markdown",
 }
+myst_heading_anchors = 3
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 html_theme = "furo"
 html_extra_path = ["CNAME", ".nojekyll"]

@@ -1,8 +1,10 @@
-# Recording File Reference Schema
+# Recording file reference
 
-This document describes the files twopy expects in a two-photon microscope recording folder and what each file should be used for. It is based on the example recording inspected during development. Some values are example-specific and will vary with stimulus design, recording settings, rig configuration, and prior MATLAB analysis.
+This is the developer / auditor reference for the files twopy expects in a two-photon microscope recording folder, plus the converted HDF5 schema twopy writes. For the short, high-level contract, see [Input data spec](input_data_spec.md).
 
-## Source-Of-Truth Rules
+The details below are based on the example recording inspected during development. Some values are example-specific and will vary with stimulus design, recording settings, rig configuration, and prior MATLAB analysis.
+
+## Source-of-truth rules
 
 - Use `imageDescription.mat` as the primary source for recording acquisition metadata.
 - Use the raw TIFF only when we need raw interleaved frame data or need to audit that its embedded `ImageDescription` matches `imageDescription.mat`.

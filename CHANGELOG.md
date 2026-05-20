@@ -9,6 +9,7 @@
 
 ### Changes
 
+- Overhauled the documentation site for end users: rewrote the landing page, added a Getting Started walkthrough, split the GUI guide into per-task pages (Loading, ROIs, Plots, Custom tab, Group Matching, Saving) under `docs/gui/`, rewrote the Python API and custom-workflow writing guides in plainer language, and tightened the input-data and recording-file reference intros.
 - Switched the documentation site to the Furo theme.
 - Made the napari Plot tab's Show SEM toggle start unchecked.
 - Made Custom-tab workflow results show one selectable compact output folder and avoid horizontal scrolling from long output paths.
