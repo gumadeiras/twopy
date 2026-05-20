@@ -15,6 +15,7 @@ from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
+from scipy import sparse
 
 from twopy.converted import RecordingData
 from twopy.frame_ranges import normalize_frame_range
@@ -278,6 +279,7 @@ def _extract_mean_traces_from_indices(
     rather than total recording length.
     """
     traces = np.empty((frame_stop - frame_start, len(pixel_indices_by_trace)))
+    projection = _mean_projection(pixel_indices_by_trace)
     _check_cancelled(check_cancelled)
     for chunk_start, chunk_stop, frames in recording.movie.iter_frame_batches(
         chunk_frames=chunk_frames,
@@ -289,10 +291,7 @@ def _extract_mean_traces_from_indices(
         chunk_offset = chunk_start - frame_start
         chunk_slice = slice(chunk_offset, chunk_offset + (chunk_stop - chunk_start))
         chunk_flat = frames.reshape(frames.shape[0], -1)
-        for trace_index, pixel_indices in enumerate(pixel_indices_by_trace):
-            traces[chunk_slice, trace_index] = chunk_flat[:, pixel_indices].mean(
-                axis=1,
-            )
+        traces[chunk_slice, :] = _project_trace_pixels(chunk_flat, projection)
         _check_cancelled(check_cancelled)
 
     return traces
@@ -344,6 +343,7 @@ def _extract_movie_global_percentile_corrected_traces(
     )
     frame_count = frame_stop - frame_start
     roi_count = len(roi_pixel_indices)
+    projection = _mean_projection(roi_pixel_indices)
     raw_values = np.empty((frame_count, roi_count), dtype=np.float64)
     background_values = np.empty((frame_count, roi_count), dtype=np.float64)
     corrected_values = np.empty((frame_count, roi_count), dtype=np.float64)
@@ -359,14 +359,19 @@ def _extract_movie_global_percentile_corrected_traces(
         chunk_slice = slice(chunk_offset, chunk_offset + (chunk_stop - chunk_start))
         chunk_flat = frames.reshape(frames.shape[0], -1)
         background_trace = chunk_flat[:, background_indices].mean(axis=1)
-        for roi_index, pixel_indices in enumerate(roi_pixel_indices):
-            roi_pixels = chunk_flat[:, pixel_indices]
-            raw_values[chunk_slice, roi_index] = roi_pixels.mean(axis=1)
-            background_values[chunk_slice, roi_index] = background_trace
-            # Clamp pixels before averaging so dim pixels cannot pull the
-            # corrected ROI trace below zero.
-            corrected_pixels = np.maximum(roi_pixels - background_trace[:, None], 0.0)
-            corrected_values[chunk_slice, roi_index] = corrected_pixels.mean(axis=1)
+        roi_pixels = chunk_flat[:, projection.pixel_indices]
+        raw_values[chunk_slice, :] = _project_selected_pixels(roi_pixels, projection)
+        background_values[chunk_slice, :] = background_trace[:, np.newaxis]
+        # Clamp pixels before averaging so dim pixels cannot pull the
+        # corrected ROI trace below zero.
+        corrected_pixels = np.maximum(
+            roi_pixels - background_trace[:, np.newaxis],
+            0.0,
+        )
+        corrected_values[chunk_slice, :] = _project_selected_pixels(
+            corrected_pixels,
+            projection,
+        )
         _check_cancelled(check_cancelled)
 
     metadata: dict[str, BackgroundMetadataValue] = {
@@ -440,6 +445,7 @@ def _extract_movie_y_stripe_percentile_corrected_traces(
     )
     frame_count = frame_stop - frame_start
     roi_count = len(roi_pixel_indices)
+    projection = _mean_projection(roi_pixel_indices)
     raw_values = np.empty((frame_count, roi_count), dtype=np.float64)
     background_values = np.empty((frame_count, roi_count), dtype=np.float64)
     corrected_values = np.empty((frame_count, roi_count), dtype=np.float64)
@@ -460,15 +466,21 @@ def _extract_movie_y_stripe_percentile_corrected_traces(
         )
         chunk_flat = frames.reshape(frames.shape[0], -1)
         background_flat = background_field.reshape(background_field.shape[0], -1)
-        for roi_index, pixel_indices in enumerate(roi_pixel_indices):
-            roi_pixels = chunk_flat[:, pixel_indices]
-            roi_background_pixels = background_flat[:, pixel_indices]
-            raw_values[chunk_slice, roi_index] = roi_pixels.mean(axis=1)
-            background_values[chunk_slice, roi_index] = roi_background_pixels.mean(
-                axis=1,
-            )
-            corrected_pixels = np.maximum(roi_pixels - roi_background_pixels, 0.0)
-            corrected_values[chunk_slice, roi_index] = corrected_pixels.mean(axis=1)
+        roi_pixels = chunk_flat[:, projection.pixel_indices]
+        roi_background_pixels = background_flat[:, projection.pixel_indices]
+        raw_values[chunk_slice, :] = _project_selected_pixels(roi_pixels, projection)
+        background_values[chunk_slice, :] = _project_selected_pixels(
+            roi_background_pixels,
+            projection,
+        )
+        corrected_pixels = np.maximum(
+            roi_pixels - roi_background_pixels,
+            0.0,
+        )
+        corrected_values[chunk_slice, :] = _project_selected_pixels(
+            corrected_pixels,
+            projection,
+        )
         _check_cancelled(check_cancelled)
 
     metadata: dict[str, BackgroundMetadataValue] = {
@@ -591,6 +603,93 @@ def _roi_pixel_indices_from_masks(
     """
     flat_masks = masks.reshape(masks.shape[0], -1)
     return tuple(np.flatnonzero(mask).astype(np.int64) for mask in flat_masks)
+
+
+@dataclass(frozen=True)
+class _MeanProjection:
+    """Sparse averaging matrix plus selected flattened pixel indices."""
+
+    pixel_indices: npt.NDArray[np.int64]
+    matrix: sparse.csc_matrix
+
+
+def _mean_projection(
+    pixel_indices_by_trace: tuple[npt.NDArray[np.int64], ...],
+) -> _MeanProjection:
+    """Return selected pixels and a sparse pixel-to-trace averaging matrix.
+
+    Args:
+        pixel_indices_by_trace: One flattened pixel-index array per trace.
+
+    Returns:
+        Selected flattened pixel indices plus a sparse matrix shaped
+        ``(selected_pixels, traces)`` whose columns average each trace.
+
+    Pixel indices are concatenated per trace instead of deduplicated. That
+    preserves the existing behavior for overlapping ROIs, where the same movie
+    pixel can contribute independently to more than one ROI mean.
+    """
+    selected_pixel_indices: list[npt.NDArray[np.int64]] = []
+    rows: list[npt.NDArray[np.int64]] = []
+    columns: list[npt.NDArray[np.int64]] = []
+    values: list[npt.NDArray[np.float64]] = []
+    row_start = 0
+    for trace_index, pixel_indices in enumerate(pixel_indices_by_trace):
+        if pixel_indices.size == 0:
+            continue
+        selected_pixel_indices.append(pixel_indices)
+        rows.append(
+            np.arange(
+                row_start,
+                row_start + pixel_indices.size,
+                dtype=np.int64,
+            ),
+        )
+        row_start += pixel_indices.size
+        columns.append(
+            np.full(pixel_indices.shape, trace_index, dtype=np.int64),
+        )
+        values.append(
+            np.full(
+                pixel_indices.shape,
+                1.0 / float(pixel_indices.size),
+                dtype=np.float64,
+            ),
+        )
+    if len(selected_pixel_indices) == 0:
+        return _MeanProjection(
+            pixel_indices=np.array([], dtype=np.int64),
+            matrix=sparse.csc_matrix((0, len(pixel_indices_by_trace))),
+        )
+    return _MeanProjection(
+        pixel_indices=np.concatenate(selected_pixel_indices),
+        matrix=sparse.csc_matrix(
+            (
+                np.concatenate(values),
+                (np.concatenate(rows), np.concatenate(columns)),
+            ),
+            shape=(row_start, len(pixel_indices_by_trace)),
+        ),
+    )
+
+
+def _project_trace_pixels(
+    chunk_flat: npt.NDArray[np.float64],
+    projection: _MeanProjection,
+) -> npt.NDArray[np.float64]:
+    """Return trace means from a flattened movie chunk and projection."""
+    return _project_selected_pixels(chunk_flat[:, projection.pixel_indices], projection)
+
+
+def _project_selected_pixels(
+    selected_pixels: npt.NDArray[np.float64],
+    projection: _MeanProjection,
+) -> npt.NDArray[np.float64]:
+    """Return trace means from selected pixel columns."""
+    return np.asarray(
+        selected_pixels @ projection.matrix,
+        dtype=np.float64,
+    )
 
 
 def _check_cancelled(check_cancelled: Callable[[], None] | None) -> None:

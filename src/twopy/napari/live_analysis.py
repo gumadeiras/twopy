@@ -10,11 +10,9 @@ response grouping, normalization, and QC through the normal analysis helpers.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from hashlib import blake2b
 from pathlib import Path
 
 import numpy as np
-import numpy.typing as npt
 
 from twopy.analysis.background_subtraction import (
     BackgroundCorrectedRoiTraces,
@@ -26,6 +24,8 @@ from twopy.analysis.response_context import (
     ResponseAnalysisContext,
     resolve_response_analysis_context,
 )
+from twopy.analysis.response_processing import ResponseProcessingOptions
+from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.workflow import compute_recording_responses_from_traces
 from twopy.converted import RecordingData
 from twopy.napari.plotting.data import ResponsePlotData
@@ -33,9 +33,10 @@ from twopy.napari.responses import (
     ResponseAnalysisRequest,
     response_plot_data_from_computation,
 )
+from twopy.napari.roi_signatures import roi_mask_signature
 from twopy.roi import RoiSet, make_roi_set
 
-__all__ = ["LiveResponseAnalysisCache"]
+__all__ = ["LiveResponseAnalysisCache", "roi_mask_signature"]
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,19 @@ class _TraceContextKey:
     trace_start: int
     trace_stop: int
     background_method: str
+
+
+@dataclass(frozen=True)
+class _ResponseContextCacheKey:
+    """Cache key for resolved response timing and processing context."""
+
+    recording_path: Path
+    movie_path: Path
+    baseline_epoch_number: int | None
+    baseline_epoch_name: str | None
+    baseline_mode: str
+    response_window_options: ResponseWindowOptions
+    response_processing_options: ResponseProcessingOptions
 
 
 @dataclass(frozen=True)
@@ -77,10 +91,15 @@ class LiveResponseAnalysisCache:
     current ROI set.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, drop_absent_traces: bool = True) -> None:
         """Create an empty live-analysis trace cache."""
         self._context_key: _TraceContextKey | None = None
         self._traces_by_label: dict[str, _CachedTrace] = {}
+        self._contexts_by_key: dict[
+            _ResponseContextCacheKey,
+            ResponseAnalysisContext,
+        ] = {}
+        self._drop_absent_traces_enabled = drop_absent_traces
 
     def clear(self) -> None:
         """Remove all cached ROI traces.
@@ -93,6 +112,7 @@ class LiveResponseAnalysisCache:
         """
         self._context_key = None
         self._traces_by_label.clear()
+        self._contexts_by_key.clear()
 
     def compute_response_preview(
         self,
@@ -110,20 +130,11 @@ class LiveResponseAnalysisCache:
             Plot-ready response data for all current ROIs.
         """
         dff_options = request.delta_f_over_f_options
-        pre_window_seconds, post_window_seconds = request.response_window_seconds()
-        context = resolve_response_analysis_context(
-            request.recording,
-            baseline_mode=dff_options.baseline_mode,
-            baseline_epoch_number=dff_options.baseline_epoch_number,
-            baseline_epoch_name=dff_options.baseline_epoch_name,
-            response_pre_window_seconds=pre_window_seconds,
-            response_post_window_seconds=post_window_seconds,
-            response_processing_options=request.response_processing_options,
-        )
+        context = self._response_context(request)
         current = _prepare_roi_set(request.roi_set)
         context_key = _trace_context_key(request.recording, context, dff_options)
         if context_key != self._context_key:
-            self.clear()
+            self._clear_traces()
             self._context_key = context_key
         if check_cancelled is not None:
             check_cancelled()
@@ -138,7 +149,8 @@ class LiveResponseAnalysisCache:
                 background_method=dff_options.background_method,
                 check_cancelled=check_cancelled,
             )
-        self._drop_absent_traces(current.labels)
+        if self._drop_absent_traces_enabled:
+            self._drop_absent_traces(current.labels)
         traces = _combine_cached_traces(self._cached_traces(current))
         computation = compute_recording_responses_from_traces(
             request.recording,
@@ -151,6 +163,43 @@ class LiveResponseAnalysisCache:
             check_cancelled=check_cancelled,
         )
         return response_plot_data_from_computation(request, computation)
+
+    def _clear_traces(self) -> None:
+        """Remove cached ROI traces while keeping reusable timing contexts."""
+        self._context_key = None
+        self._traces_by_label.clear()
+
+    def _response_context(
+        self,
+        request: ResponseAnalysisRequest,
+    ) -> ResponseAnalysisContext:
+        """Return cached response-analysis context for one request."""
+        dff_options = request.delta_f_over_f_options
+        key = _ResponseContextCacheKey(
+            recording_path=request.recording.path,
+            movie_path=request.recording.movie.path,
+            baseline_epoch_number=dff_options.baseline_epoch_number,
+            baseline_epoch_name=dff_options.baseline_epoch_name,
+            baseline_mode=dff_options.baseline_mode,
+            response_window_options=request.response_window_options,
+            response_processing_options=request.response_processing_options,
+        )
+        cached = self._contexts_by_key.get(key)
+        if cached is not None:
+            return cached
+
+        pre_window_seconds, post_window_seconds = request.response_window_seconds()
+        context = resolve_response_analysis_context(
+            request.recording,
+            baseline_mode=dff_options.baseline_mode,
+            baseline_epoch_number=dff_options.baseline_epoch_number,
+            baseline_epoch_name=dff_options.baseline_epoch_name,
+            response_pre_window_seconds=pre_window_seconds,
+            response_post_window_seconds=post_window_seconds,
+            response_processing_options=request.response_processing_options,
+        )
+        self._contexts_by_key[key] = context
+        return context
 
     def _changed_trace_indices(
         self,
@@ -243,16 +292,8 @@ def _prepare_roi_set(roi_set: RoiSet) -> _PreparedRoiSet:
     return _PreparedRoiSet(
         roi_set=roi_set,
         labels=roi_set.labels,
-        signatures=tuple(_mask_signature(mask) for mask in roi_set.masks),
+        signatures=tuple(roi_mask_signature(mask) for mask in roi_set.masks),
     )
-
-
-def _mask_signature(mask: npt.NDArray[np.bool_]) -> str:
-    """Return a stable signature for one ROI mask."""
-    digest = blake2b(digest_size=16)
-    digest.update(np.asarray(mask.shape, dtype=np.int64).tobytes())
-    digest.update(np.flatnonzero(mask).astype(np.int64, copy=False).tobytes())
-    return digest.hexdigest()
 
 
 def _select_roi_set(roi_set: RoiSet, indices: tuple[int, ...]) -> RoiSet:
@@ -301,13 +342,15 @@ def _combine_cached_traces(
         if trace.method != first.method or trace.statistic != first.statistic:
             msg = "Cached traces must share one extraction method and statistic."
             raise ValueError(msg)
-    raw_values = np.column_stack(tuple(trace.raw_values[:, 0] for trace in traces))
-    background_values = np.column_stack(
-        tuple(trace.background_values[:, 0] for trace in traces)
-    )
-    corrected_values = np.column_stack(
-        tuple(trace.corrected_values[:, 0] for trace in traces)
-    )
+    frame_count = first.stop_frame - first.start_frame
+    roi_count = len(traces)
+    raw_values = np.empty((frame_count, roi_count), dtype=np.float64)
+    background_values = np.empty((frame_count, roi_count), dtype=np.float64)
+    corrected_values = np.empty((frame_count, roi_count), dtype=np.float64)
+    for index, trace in enumerate(traces):
+        raw_values[:, index] = trace.raw_values[:, 0]
+        background_values[:, index] = trace.background_values[:, 0]
+        corrected_values[:, index] = trace.corrected_values[:, 0]
     labels = tuple(label for trace in traces for label in trace.labels)
     return BackgroundCorrectedRoiTraces(
         raw_values=raw_values,
