@@ -39,3 +39,14 @@ micromamba run -n twopy python scripts/test_timings.py napari
 ```
 
 `--discover --record` is the pre-commit path: it runs normal unittest discovery once, keeps the last 50 local runs, and prints the current run against the prior successful median. The group/module mode runs each module in a fresh process so slow cold imports are visible. Keep pure analysis, display-coordinate, and plot-data tests out of Qt/napari modules when they can test the same behavior through non-Qt helpers.
+
+Use the function inventory when planning documentation, testing, or simplification passes:
+
+```sh
+micromamba run -n twopy python scripts/function_inventory.py --format csv > build/function_inventory.csv
+micromamba run -n twopy python scripts/function_inventory.py --format markdown --limit 25
+```
+
+The inventory reports only action-oriented columns: code lines, docstring lines, direct static call sites, direct test functions, lightweight complexity, API-surface classification, domain bucket, git file churn, current-body blame span, and a risk score. Complexity is a lightweight cyclomatic estimate: one base path plus branches, loops, exception handlers, boolean decision operands, match cases, and ternary expressions.
+
+The risk score is a review-prioritization heuristic: `(code_lines + 5 * complexity) * api_weight * test_gap_weight * churn_weight`, where exported API is weighted above public internal code, functions without direct static tests are doubled, and file commit count raises the score up to a capped churn multiplier.
