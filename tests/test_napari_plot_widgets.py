@@ -51,7 +51,10 @@ from tests.napari_support import (
 
 from twopy.analysis.group_matching import ManualRoiMatchRow, save_manual_roi_match_rows
 from twopy.custom import CustomResult, CustomTable
-from twopy.napari.group_matching_style import style_group_matching_panel
+from twopy.napari.group_matching import (
+    response_preview as group_matching_response_preview,
+)
+from twopy.napari.group_matching.style import style_group_matching_panel
 from twopy.napari.plotting import widgets as plotting_widgets
 from twopy.napari.plotting.preview_strip import ResponsePreviewStrip
 from twopy.napari.session import LoadedNapariRecording
@@ -534,15 +537,15 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         """
         first_data = _tiny_response_plot_data()
         second_data = _tiny_response_plot_data()
-        combined = group_matching_roi._combined_response_plot_data(
+        combined = group_matching_response_preview.combined_response_plot_data(
             (
-                group_matching_roi._SelectedRoiResponse(
+                group_matching_response_preview.SelectedRoiResponse(
                     recording_path=Path("/recordings/first"),
                     roi_label="roi_0001",
                     plot_data=first_data,
                     color=QColor("#1f77b4"),
                 ),
-                group_matching_roi._SelectedRoiResponse(
+                group_matching_response_preview.SelectedRoiResponse(
                     recording_path=Path("/recordings/second"),
                     roi_label="roi_0002",
                     plot_data=second_data,
@@ -576,15 +579,15 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             epochs=(dense_epoch,),
         )
 
-        combined = group_matching_roi._combined_response_plot_data(
+        combined = group_matching_response_preview.combined_response_plot_data(
             (
-                group_matching_roi._SelectedRoiResponse(
+                group_matching_response_preview.SelectedRoiResponse(
                     recording_path=Path("/recordings/reference"),
                     roi_label="roi_0001",
                     plot_data=reference_data,
                     color=QColor("#1f77b4"),
                 ),
-                group_matching_roi._SelectedRoiResponse(
+                group_matching_response_preview.SelectedRoiResponse(
                     recording_path=Path("/recordings/dense"),
                     roi_label="roi_0006",
                     plot_data=dense_data,
@@ -627,7 +630,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             ),
         )
 
-        mean_plot = group_matching_roi._mean_response_plot_data(plot_data)
+        mean_plot = group_matching_response_preview.mean_response_plot_data(plot_data)
         epoch = mean_plot.epochs[0]
 
         np.testing.assert_allclose(epoch.mean_values, np.array([[2.0, 5.0]]))
@@ -640,16 +643,16 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         layout = QGridLayout()
         widget.setLayout(layout)
 
-        group_matching_roi._add_response_legend(
+        group_matching_response_preview.add_response_legend(
             layout,
             (
-                group_matching_roi._SelectedRoiResponse(
+                group_matching_response_preview.SelectedRoiResponse(
                     recording_path=Path("/recordings/first"),
                     roi_label="roi_0001",
                     plot_data=_tiny_response_plot_data(),
                     color=QColor("#1f77b4"),
                 ),
-                group_matching_roi._SelectedRoiResponse(
+                group_matching_response_preview.SelectedRoiResponse(
                     recording_path=Path("/recordings/second"),
                     roi_label="roi_0012",
                     plot_data=_tiny_response_plot_data(),
@@ -839,7 +842,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             on_back=lambda: None,
         )
         view._selected_responses = (
-            group_matching_roi._SelectedRoiResponse(
+            group_matching_response_preview.SelectedRoiResponse(
                 recording_path=Path("/recordings/first"),
                 roi_label="roi_0001",
                 plot_data=_tiny_response_plot_data(),
@@ -891,13 +894,13 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             on_back=lambda: None,
         )
         view._selected_responses = (
-            group_matching_roi._SelectedRoiResponse(
+            group_matching_response_preview.SelectedRoiResponse(
                 recording_path=first_path,
                 roi_label="roi_0001",
                 plot_data=_tiny_response_plot_data(),
                 color=QColor("#1f77b4"),
             ),
-            group_matching_roi._SelectedRoiResponse(
+            group_matching_response_preview.SelectedRoiResponse(
                 recording_path=second_path,
                 roi_label="roi_0002",
                 plot_data=_tiny_response_plot_data(),
@@ -1015,7 +1018,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         )
 
         self.assertEqual(
-            group_matching_roi._visible_response_epoch_indices(plot_data),
+            group_matching_response_preview.visible_response_epoch_indices(plot_data),
             (1,),
         )
 
@@ -1092,7 +1095,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             )
             cache = _RecordingSelectedResponseCache()
 
-            group_matching_roi._selected_roi_response_plot_data(
+            group_matching_response_preview.selected_roi_response_plot_data(
                 loaded,
                 "roi_0007",
                 cache=cast(Any, cache),

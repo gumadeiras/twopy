@@ -57,7 +57,7 @@ from tests.tempdir import temporary_directory
 
 import twopy.napari.controls as napari_controls
 import twopy.napari.group_matching as group_matching
-import twopy.napari.group_matching_roi as group_matching_roi
+import twopy.napari.group_matching.roi_assignment as group_matching_roi
 import twopy.napari.sidebar as napari_sidebar
 import twopy.napari.trial_timeline as trial_timeline
 from twopy import (
@@ -120,7 +120,7 @@ from twopy.napari.display_paths import (
     format_twopy_h5_output,
     recording_display_summary,
 )
-from twopy.napari.group_matching_images import mean_image_roi_overlay_pixmap
+from twopy.napari.group_matching.images import mean_image_roi_overlay_pixmap
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.live_analysis import LiveResponseAnalysisCache
 from twopy.napari.load_workflow import RecordingLoadFailure, RecordingLoadResult

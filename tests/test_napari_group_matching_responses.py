@@ -21,7 +21,7 @@ from tests.napari_support import (
     unittest,
 )
 
-from twopy.napari.group_matching_responses import SelectedRoiResponseCache
+from twopy.napari.group_matching.responses import SelectedRoiResponseCache
 
 
 class GroupMatchingResponseCacheTest(unittest.TestCase):
@@ -37,7 +37,7 @@ class GroupMatchingResponseCacheTest(unittest.TestCase):
             fake_trace_cache = _FakeTraceCache()
 
             with patch(
-                "twopy.napari.group_matching_responses._new_trace_cache",
+                "twopy.napari.group_matching.responses._new_trace_cache",
                 return_value=fake_trace_cache,
             ) as new_trace_cache:
                 cache = SelectedRoiResponseCache()
@@ -86,7 +86,7 @@ class GroupMatchingResponseCacheTest(unittest.TestCase):
             fake_trace_cache = _FakeTraceCache()
 
             with patch(
-                "twopy.napari.group_matching_responses._new_trace_cache",
+                "twopy.napari.group_matching.responses._new_trace_cache",
                 return_value=fake_trace_cache,
             ):
                 cache = SelectedRoiResponseCache()

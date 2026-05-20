@@ -42,6 +42,9 @@ from tests.napari_support import (
     write_last_recording_folder,
 )
 
+from twopy.napari.group_matching import cards as group_matching_cards
+from twopy.napari.group_matching import fov_assignment as group_matching_fov
+
 
 class NapariLoadedRecordingsTest(NapariAdapterTestCase):
     """Napari loaded-recording panel tests."""
@@ -211,6 +214,29 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 QLabel,
                 "fov_card_overlay",
             )
+            fov_cards = group_matching_widget.findChildren(
+                QWidget,
+                "fov_recording_card",
+            )
+            self.assertEqual(len(fov_cards), 2)
+            fov_view = cast(Any, group_matching_widget)._fov_view
+            self.assertEqual(
+                fov_view._card_grid_columns,
+                group_matching_cards.card_columns_for_width(
+                    fov_view._workspace_viewport.width(),
+                    card_width=group_matching_fov.FOV_CARD_WIDTH,
+                    spacing=fov_view._grid.spacing(),
+                ),
+            )
+            for fov_card in fov_cards:
+                self.assertEqual(
+                    fov_card.minimumWidth(),
+                    group_matching_fov.FOV_CARD_WIDTH,
+                )
+                self.assertEqual(
+                    fov_card.maximumWidth(),
+                    group_matching_fov.FOV_CARD_WIDTH,
+                )
             self.assertTrue(
                 all(" - FOV ID:" in label.text() for label in overlay_labels),
             )
@@ -249,8 +275,8 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             )
             self.assertEqual(
                 fov_group_table.maximumHeight(),
-                (group_matching._FOV_TABLE_VISIBLE_ROWS + 1)
-                * group_matching._FOV_TABLE_ROW_HEIGHT
+                (group_matching_fov._FOV_TABLE_VISIBLE_ROWS + 1)
+                * group_matching_fov._FOV_TABLE_ROW_HEIGHT
                 + 4,
             )
             self.assertEqual(fov_group_table.rowCount(), 1)

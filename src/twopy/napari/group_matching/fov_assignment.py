@@ -1,25 +1,21 @@
-"""Manual group-analysis controls for loaded napari recordings.
+"""FOV-assignment controls for manual group matching.
 
-Inputs: recordings already loaded in the shared napari viewer, their mean-image
-layers, and their ROI Labels layers.
-Outputs: plain CSV FOV grouping and ROI match tables that downstream group
-analysis can load without depending on napari.
+Inputs: loaded napari recordings, mutable FOV assignment state, and a FOV CSV path.
+Outputs: mean-image cards plus plain CSV FOV group rows.
 
-The popup is intentionally staged. FOV assignment comes first because ROI
-matching across fields of view should not be the default path.
+This module owns the first stage of Group Matching. Users compare mean images,
+select recordings that share a field of view, and persist those assignments before
+moving into ROI matching.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from qtpy.QtCore import QEvent, Qt
-from qtpy.QtGui import QMouseEvent
+from qtpy.QtCore import QEvent, QObject, Qt
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
-    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -29,8 +25,6 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QScrollArea,
     QSizePolicy,
-    QSlider,
-    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QToolButton,
@@ -43,253 +37,41 @@ from twopy.analysis.group_matching import (
     make_manual_fov_group_rows,
     save_manual_fov_group_rows,
 )
-from twopy.napari.group_matching_images import (
-    THUMBNAIL_SIZE,
+from twopy.napari.group_matching.cards import (
+    GROUP_MATCHING_CARD_SPACING,
+    card_columns_for_width,
+    clear_card_grid_layout,
+)
+from twopy.napari.group_matching.fov_cards import (
+    FOV_CARD_WIDTH,
+    FovRecordingCard,
     mean_image_thumbnail_pixmap,
 )
-from twopy.napari.group_matching_roi import (
-    MATCH_TABLE_FILENAME,
-    RoiAssignmentView,
-    roi_labels_from_layer_data,
-)
-from twopy.napari.group_matching_style import (
+from twopy.napari.group_matching.style import (
     group_matching_button,
     group_matching_section,
-    style_group_matching_panel,
 )
+from twopy.napari.group_matching.tables import ToggleSelectionTable
 from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.text import configure_placeholder
 
 __all__ = [
+    "FOV_GROUP_TABLE_FILENAME",
     "FovAssignmentView",
     "FovRecordingCard",
-    "GroupMatchingPanel",
-    "RoiAssignmentView",
     "mean_image_thumbnail_pixmap",
-    "roi_labels_from_layer_data",
 ]
 
 FOV_GROUP_TABLE_FILENAME = "fov_groups.csv"
-_FOV_CARD_COLUMNS = 3
-_FOV_CARD_MIN_WIDTH = THUMBNAIL_SIZE + 72
-_FOV_CARD_GRID_MIN_WIDTH = (_FOV_CARD_MIN_WIDTH * _FOV_CARD_COLUMNS) + 28
 _FOV_TABLE_VISIBLE_ROWS = 4
 _FOV_TABLE_ROW_HEIGHT = 24
 _FOV_ID_STEP_BUTTON_SIZE = 26
 
 
-@dataclass
-class GroupMatchingCsvPaths:
-    """Session-level CSV paths for manual group matching.
-
-    Args:
-        fov_path: Current FOV assignment CSV path.
-        roi_path: Current ROI match CSV path.
-        roi_path_is_auto: Whether the ROI path still follows the FOV folder.
-
-    Returns:
-        Mutable path state owned by the group-matching panel.
-
-    The ROI path should follow recording-list folders only while it is
-    auto-managed. Once a user chooses a specific ROI CSV, that explicit choice
-    is preserved across later FOV path changes.
-    """
-
-    fov_path: Path
-    roi_path: Path
-    roi_path_is_auto: bool = True
-
-    @classmethod
-    def default(cls) -> "GroupMatchingCsvPaths":
-        """Return default CSV paths rooted at the current working directory."""
-        return cls(
-            fov_path=Path.cwd() / FOV_GROUP_TABLE_FILENAME,
-            roi_path=Path.cwd() / MATCH_TABLE_FILENAME,
-        )
-
-    def retarget_folder(self, folder: Path) -> None:
-        """Point auto-managed CSV paths at one recording-list folder."""
-        self.fov_path = folder.expanduser() / FOV_GROUP_TABLE_FILENAME
-        self._retarget_auto_roi_path()
-
-    def set_fov_path(self, path: Path) -> None:
-        """Set the FOV CSV path and move the auto ROI path beside it."""
-        self.fov_path = path.expanduser()
-        self._retarget_auto_roi_path()
-
-    def set_manual_roi_path(self, path: Path) -> None:
-        """Store an explicit ROI CSV path chosen by the user."""
-        self.roi_path = path.expanduser()
-        self.roi_path_is_auto = False
-
-    def _retarget_auto_roi_path(self) -> None:
-        """Move the ROI CSV path only while it is still auto-managed."""
-        if self.roi_path_is_auto:
-            self.roi_path = self.fov_path.parent / MATCH_TABLE_FILENAME
-
-
 class GroupMatchingState(Protocol):
-    """Napari control-state fields needed by the group-matching widget."""
+    """Napari control-state fields needed by the FOV assignment view."""
 
     loaded_recordings: list[LoadedNapariRecording]
-
-
-class GroupMatchingPanel(QWidget):
-    """Two-step group-analysis popup for FOV assignment then ROI matching."""
-
-    def __init__(self, state: GroupMatchingState) -> None:
-        """Create the staged group-matching panel.
-
-        Args:
-            state: Shared napari control state. The panel reads loaded
-                recordings and the active recording selection when buttons are
-                pressed.
-        """
-        super().__init__()
-        self._state = state
-        self._fov_groups: dict[Path, str] = {}
-        self._fov_notes: dict[Path, str] = {}
-        self._current_rois: dict[Path, str] = {}
-        self._csv_paths = GroupMatchingCsvPaths.default()
-        self._theme_style_refreshing = False
-        self._stack = QStackedWidget()
-        self._fov_view = FovAssignmentView(
-            state=state,
-            fov_groups=self._fov_groups,
-            fov_notes=self._fov_notes,
-            output_path=self._csv_paths.fov_path,
-            on_output_path_changed=self._set_fov_output_path,
-            on_finalize=self.finalize_fov_assignments,
-        )
-        self._roi_view = RoiAssignmentView(
-            state=state,
-            fov_groups=self._fov_groups,
-            current_rois=self._current_rois,
-            output_path=self._csv_paths.roi_path,
-            on_output_path_changed=self._set_manual_roi_output_path,
-            on_back=self.show_fov_assignment,
-        )
-        self._stack.addWidget(self._fov_view)
-        self._stack.addWidget(self._roi_view)
-
-        style_group_matching_panel(self)
-        layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.addWidget(self._stack)
-        self.setLayout(layout)
-        self.refresh()
-
-    def refresh(self) -> None:
-        """Refresh both staged views from loaded recordings and saved files."""
-        self._load_fov_groups_if_available()
-        self._fov_view.refresh()
-        self._roi_view.refresh()
-
-    def changeEvent(self, a0: QEvent | None) -> None:  # noqa: N802
-        """Refresh palette-derived styling when napari changes theme."""
-        super().changeEvent(a0)
-        if a0 is not None and a0.type() in (
-            QEvent.Type.ApplicationPaletteChange,
-            QEvent.Type.PaletteChange,
-        ):
-            if self._theme_style_refreshing:
-                return
-            self._theme_style_refreshing = True
-            try:
-                style_group_matching_panel(self)
-            finally:
-                self._theme_style_refreshing = False
-
-    def finalize_fov_assignments(self) -> None:
-        """Save current FOV assignments and switch to ROI assignment."""
-        if self._fov_view.save_fov_groups():
-            self._csv_paths.set_fov_path(self._fov_view.output_path())
-            self._sync_roi_output_path(load_rows=True)
-            self._roi_view.refresh_fov_filter()
-            self._stack.setCurrentWidget(self._roi_view)
-
-    def show_fov_assignment(self) -> None:
-        """Return to the FOV assignment view."""
-        self._stack.setCurrentWidget(self._fov_view)
-        self._fov_view.refresh()
-
-    def load_csv_folder_defaults(self, folder: Path) -> bool:
-        """Load group-matching CSV defaults from a recording-list folder.
-
-        Args:
-            folder: Folder that may contain manual group-matching CSVs.
-
-        Returns:
-            ``True`` when an adjacent FOV CSV was found and loaded.
-        """
-        candidate = folder.expanduser() / FOV_GROUP_TABLE_FILENAME
-        if not candidate.exists():
-            return False
-        self._csv_paths.retarget_folder(folder)
-        self._sync_csv_paths_to_views(load_roi_rows=True)
-        self._fov_view.load_fov_groups_from_path()
-        self._roi_view.refresh_fov_filter()
-        return True
-
-    def clear_loaded_recording_state(self) -> None:
-        """Clear matching decisions that belong to unloaded recordings."""
-        self._fov_groups.clear()
-        self._fov_notes.clear()
-        self._current_rois.clear()
-        self._roi_view.refresh_fov_filter()
-
-    def remove_loaded_recording_state(self, recording_path: Path) -> None:
-        """Clear matching decisions that belong to one unloaded recording."""
-        path = recording_path.expanduser()
-        self._fov_groups.pop(path, None)
-        self._fov_notes.pop(path, None)
-        self._current_rois.pop(path, None)
-        self._roi_view.refresh_fov_filter()
-
-    def _set_fov_output_path(self, path: Path) -> None:
-        """Store a user-visible FOV path change and retarget auto ROI output."""
-        self._csv_paths.set_fov_path(path)
-        self._sync_roi_output_path(load_rows=True)
-
-    def _set_manual_roi_output_path(self, path: Path) -> None:
-        """Store a user-chosen ROI path so future FOV changes preserve it."""
-        self._csv_paths.set_manual_roi_path(path)
-
-    def _sync_csv_paths_to_views(self, *, load_roi_rows: bool) -> None:
-        """Mirror panel-owned CSV paths into both staged views."""
-        self._fov_view.set_output_path(self._csv_paths.fov_path)
-        self._sync_roi_output_path(load_rows=load_roi_rows)
-
-    def _sync_roi_output_path(self, *, load_rows: bool) -> None:
-        """Mirror the panel-owned ROI CSV path into the ROI view."""
-        self._roi_view.set_output_path(self._csv_paths.roi_path, load_rows=load_rows)
-
-    def _load_fov_groups_if_available(self) -> None:
-        """Populate FOV assignments from disk when the panel has none yet."""
-        if len(self._fov_groups) > 0:
-            return
-        output_path = self._fov_view.output_path()
-        if not output_path.exists():
-            return
-        loaded_paths = {
-            recording.recording.source_session_dir.expanduser()
-            for recording in self._state.loaded_recordings
-        }
-        rows = load_manual_fov_group_rows(output_path)
-        self._fov_groups.update(
-            {
-                row.recording_path.expanduser(): row.fov_group_id
-                for row in rows
-                if row.recording_path.expanduser() in loaded_paths
-            },
-        )
-        self._fov_notes.update(
-            {
-                row.recording_path.expanduser(): row.note
-                for row in rows
-                if row.recording_path.expanduser() in loaded_paths
-            },
-        )
 
 
 class FovAssignmentView(QWidget):
@@ -320,6 +102,8 @@ class FovAssignmentView(QWidget):
         self._fov_groups = fov_groups
         self._fov_notes = fov_notes
         self._cards: list[FovRecordingCard] = []
+        self._card_grid_rows = 0
+        self._card_grid_columns = 0
         self._on_output_path_changed = on_output_path_changed
         self._on_finalize = on_finalize
         self._path_edit = QLineEdit(str(output_path.expanduser()))
@@ -350,16 +134,18 @@ class FovAssignmentView(QWidget):
         self._fov_group_label.setObjectName("fov_id_label")
         self._fov_table = self._create_fov_table()
         self._grid_widget = QWidget()
-        self._grid_widget.setMinimumWidth(_FOV_CARD_GRID_MIN_WIDTH)
         self._grid = QGridLayout()
         self._grid.setContentsMargins(0, 0, 0, 0)
-        self._grid.setSpacing(12)
+        self._grid.setSpacing(GROUP_MATCHING_CARD_SPACING)
         self._grid_widget.setLayout(self._grid)
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll_area.setMinimumWidth(_FOV_CARD_GRID_MIN_WIDTH + 28)
         scroll_area.setWidget(self._grid_widget)
+        workspace_viewport = scroll_area.viewport()
+        assert workspace_viewport is not None
+        self._workspace_viewport = workspace_viewport
+        self._workspace_viewport.installEventFilter(self)
 
         assign_button = group_matching_button("Assign FOV ID", role="primary")
         assign_button.clicked.connect(self.assign_selected_to_fov)
@@ -490,11 +276,21 @@ class FovAssignmentView(QWidget):
         )
         self.setLayout(layout)
 
+    def eventFilter(self, a0: QObject | None, a1: QEvent | None) -> bool:
+        """Relayout fixed-size FOV cards when the workspace width changes."""
+        if (
+            a0 is getattr(self, "_workspace_viewport", None)
+            and a1 is not None
+            and a1.type() == QEvent.Type.Resize
+        ):
+            self._layout_cards()
+        return super().eventFilter(a0, a1)
+
     def refresh(self) -> None:
         """Refresh mean-image cards from currently loaded recordings."""
-        _clear_grid_layout(self._grid)
+        clear_card_grid_layout(self._grid, delete_widgets=True)
         self._cards.clear()
-        for index, recording in enumerate(self._state.loaded_recordings):
+        for recording in self._state.loaded_recordings:
             recording_path = recording.recording.source_session_dir.expanduser()
             card = FovRecordingCard(
                 recording=recording,
@@ -502,16 +298,26 @@ class FovAssignmentView(QWidget):
                 note=self._fov_notes.get(recording_path, ""),
             )
             self._cards.append(card)
-            self._grid.addWidget(
-                card,
-                index // _FOV_CARD_COLUMNS,
-                index % _FOV_CARD_COLUMNS,
-            )
-        self._grid.setRowStretch(
-            (len(self._cards) + _FOV_CARD_COLUMNS - 1) // _FOV_CARD_COLUMNS,
-            1,
-        )
+        self._layout_cards()
         self._refresh_fov_table()
+
+    def _layout_cards(self) -> None:
+        """Wrap fixed-size FOV cards to fit the current workspace width."""
+        clear_card_grid_layout(self._grid, delete_widgets=False)
+        for row_index in range(self._card_grid_rows + 1):
+            self._grid.setRowStretch(row_index, 0)
+        for column_index in range(self._card_grid_columns):
+            self._grid.setColumnStretch(column_index, 0)
+        columns = card_columns_for_width(
+            self._workspace_viewport.width(),
+            card_width=FOV_CARD_WIDTH,
+            spacing=self._grid.spacing(),
+        )
+        for index, card in enumerate(self._cards):
+            self._grid.addWidget(card, index // columns, index % columns)
+        self._card_grid_columns = columns
+        self._card_grid_rows = (len(self._cards) + columns - 1) // columns
+        self._grid.setRowStretch(self._card_grid_rows, 1)
 
     def assign_selected_to_fov(self) -> None:
         """Assign selected cards to the chosen FOV group."""
@@ -684,7 +490,7 @@ class FovAssignmentView(QWidget):
 
     def _create_fov_table(self) -> QTableWidget:
         """Return a compact table of current FOV assignments."""
-        table = _ToggleSelectionTable(0, 3)
+        table = ToggleSelectionTable(0, 3)
         table.setObjectName("fov_assignment_table")
         table.setHorizontalHeaderLabels(("FOV", "N", "Recordings"))
         table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -842,145 +648,6 @@ class FovAssignmentView(QWidget):
         self._refresh_fov_table()
 
 
-class FovRecordingCard(QFrame):
-    """One selectable mean-image card for FOV assignment."""
-
-    def __init__(
-        self,
-        *,
-        recording: LoadedNapariRecording,
-        fov_group_id: str,
-        note: str,
-    ) -> None:
-        """Create a FOV-assignment card.
-
-        Args:
-            recording: Loaded recording represented by this card.
-            fov_group_id: Existing FOV assignment, if any.
-            note: Existing row-specific FOV note, if any.
-        """
-        super().__init__()
-        self.recording_path = recording.recording.source_session_dir.expanduser()
-        self._mean_image_layer = recording.mean_image_layer
-        self._image_label = QLabel()
-        self._image_label.setFixedSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
-        self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._overlay_label = QLabel()
-        self._overlay_label.setObjectName("fov_card_overlay")
-        self._overlay_label.setAttribute(
-            Qt.WidgetAttribute.WA_TransparentForMouseEvents
-        )
-        self._note_edit = QLineEdit(note)
-        self._note_edit.setObjectName("fov_recording_note")
-        configure_placeholder(self._note_edit, "Optional note")
-        self._select_button = group_matching_button("Select", role="quiet")
-        self._select_button.setCheckable(True)
-        self._select_button.toggled.connect(self._sync_selection_style)
-        self._contrast_slider = QSlider(Qt.Orientation.Vertical)
-        self._contrast_slider.setRange(1, 100)
-        self._contrast_slider.setValue(100)
-        self._contrast_slider.setFixedHeight(THUMBNAIL_SIZE)
-        self._contrast_slider.setToolTip("Contrast")
-        self._contrast_slider.valueChanged.connect(self._refresh_image)
-
-        image_stack = QWidget()
-        image_stack.setSizePolicy(
-            QSizePolicy.Policy.Fixed,
-            QSizePolicy.Policy.Fixed,
-        )
-        image_layout = QGridLayout()
-        image_layout.setContentsMargins(0, 0, 0, 0)
-        image_layout.setSpacing(0)
-        image_layout.addWidget(self._image_label, 0, 0)
-        image_layout.addWidget(
-            self._overlay_label,
-            0,
-            0,
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
-        )
-        image_stack.setLayout(image_layout)
-
-        preview_row = QHBoxLayout()
-        preview_row.setContentsMargins(0, 0, 0, 0)
-        preview_row.setSpacing(8)
-        preview_row.addWidget(image_stack)
-        preview_row.addWidget(self._contrast_slider)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(6)
-        layout.addLayout(preview_row)
-        layout.addWidget(self._note_edit)
-        layout.addWidget(self._select_button)
-        self.setLayout(layout)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setObjectName("fov_recording_card")
-        self.setMinimumWidth(_FOV_CARD_MIN_WIDTH)
-        self.set_fov_group_id(fov_group_id)
-        self._refresh_image()
-        self._sync_selection_style()
-
-    def is_selected(self) -> bool:
-        """Return whether this card is selected for batch assignment."""
-        return self._select_button.isChecked()
-
-    def set_selected(self, selected: bool) -> None:
-        """Set whether this card is selected for batch assignment."""
-        self._select_button.setChecked(selected)
-
-    def set_fov_group_id(self, fov_group_id: str) -> None:
-        """Set the visual FOV assignment label."""
-        fov_text = fov_group_id if fov_group_id else "none"
-        self._overlay_label.setText(
-            f"{self.recording_path.name} - FOV ID: {_fov_group_display_id(fov_text)}",
-        )
-
-    def note(self) -> str:
-        """Return the row-specific note for this recording."""
-        return self._note_edit.text()
-
-    def set_note(self, note: str) -> None:
-        """Set the row-specific note without rebuilding the card."""
-        self._note_edit.setText(note)
-
-    def _refresh_image(self) -> None:
-        """Refresh the card thumbnail using the current contrast slider."""
-        pixmap = mean_image_thumbnail_pixmap(
-            self._mean_image_layer,
-            contrast_percentile=float(self._contrast_slider.value()),
-        )
-        if pixmap is not None:
-            self._image_label.setPixmap(pixmap)
-
-    def _sync_selection_style(self) -> None:
-        """Show selected cards with a visible border."""
-        if self.is_selected():
-            self._select_button.setText("Selected")
-        else:
-            self._select_button.setText("Select")
-        self.setProperty("selected", self.is_selected())
-        style = self.style()
-        if style is not None:
-            style.unpolish(self)
-            style.polish(self)
-
-
-class _ToggleSelectionTable(QTableWidget):
-    """Table that clears selection when the selected row is clicked again."""
-
-    def mousePressEvent(self, e: QMouseEvent | None) -> None:  # noqa: N802
-        """Toggle the current row off when users click it a second time."""
-        if e is None:
-            super().mousePressEvent(e)
-            return
-        row_index = self.rowAt(e.pos().y())
-        if row_index >= 0 and row_index == self.currentRow() and self.selectedItems():
-            self.clearSelection()
-            self.setCurrentCell(-1, -1)
-            return
-        super().mousePressEvent(e)
-
-
 def _fov_id_step_button(arrow_type: Qt.ArrowType) -> QToolButton:
     """Return a compact native-arrow button for stepping the FOV id."""
     button = QToolButton()
@@ -997,25 +664,6 @@ def _fov_id_step_button(arrow_type: Qt.ArrowType) -> QToolButton:
 def _section_with_layout(title: str, layout: QLayout) -> QGroupBox:
     """Return a titled section for a horizontal control row."""
     return group_matching_section(title, layout)
-
-
-def _fov_group_display_id(fov_group_id: str) -> str:
-    """Return the compact numeric text shown in mean-image overlays."""
-    if fov_group_id == "none":
-        return "none"
-    suffix = fov_group_id.removeprefix("fov_")
-    return suffix if suffix.isdecimal() else fov_group_id
-
-
-def _clear_grid_layout(layout: QGridLayout) -> None:
-    """Remove all child widgets from a grid layout."""
-    while layout.count() > 0:
-        item = layout.takeAt(0)
-        if item is None:
-            continue
-        widget = item.widget()
-        if widget is not None:
-            widget.setParent(None)
 
 
 def _selected_dialog_path(dialog: QFileDialog) -> Path | None:

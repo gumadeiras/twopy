@@ -12,20 +12,17 @@ the main napari viewer.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 import numpy as np
-import numpy.typing as npt
 from qtpy.QtCore import QEvent, QObject, QSignalBlocker, Qt
-from qtpy.QtGui import QColor, QMouseEvent
+from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
     QFileDialog,
-    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -33,7 +30,6 @@ from qtpy.QtWidgets import (
     QLabel,
     QLayout,
     QLineEdit,
-    QPushButton,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
@@ -55,29 +51,42 @@ from twopy.analysis.group_matching import (
 )
 from twopy.analysis.response_processing import (
     NormalizationOptions,
-    ResponseProcessingOptions,
     SmoothingOptions,
 )
-from twopy.analysis.responses import finite_mean_and_sem
 from twopy.analysis.trials import is_baseline_epoch_name
-from twopy.napari.group_matching_images import (
-    THUMBNAIL_SIZE,
-    mean_image_roi_overlay_pixmap,
+from twopy.napari.group_matching import response_preview
+from twopy.napari.group_matching.cards import (
+    GROUP_MATCHING_CARD_SPACING,
+    card_columns_for_width,
+    clear_card_grid_layout,
 )
-from twopy.napari.group_matching_responses import SelectedRoiResponseCache
-from twopy.napari.group_matching_style import (
+from twopy.napari.group_matching.cards import (
+    fov_group_display_id as _fov_group_display_id,
+)
+from twopy.napari.group_matching.images import (
+    THUMBNAIL_SIZE as GROUP_MATCHING_THUMBNAIL_SIZE,
+)
+from twopy.napari.group_matching.responses import SelectedRoiResponseCache
+from twopy.napari.group_matching.roi_cards import (
+    ROI_CARD_HEIGHT,
+    ROI_CARD_WIDTH,
+    ROI_CONTROL_HEIGHT,
+    RoiRecordingCard,
+    roi_labels_from_layer_data,
+)
+from twopy.napari.group_matching.style import (
     group_matching_button,
     group_matching_section,
 )
+from twopy.napari.group_matching.tables import ToggleSelectionTable
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.form_controls import plot_form_layout, set_plot_control_width
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
 from twopy.napari.plotting.preview_strip import ResponsePreviewStrip
 from twopy.napari.plotting.processing_options import SmoothingOptionsWidget
 from twopy.napari.plotting.widgets import clear_layout
-from twopy.napari.roi import roi_label_image_from_layer_for_recording
 from twopy.napari.session import LoadedNapariRecording
-from twopy.napari.text import configure_placeholder, counted_noun
+from twopy.napari.text import configure_placeholder
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 __all__ = [
@@ -87,39 +96,23 @@ __all__ = [
 ]
 
 MATCH_TABLE_FILENAME = "roi_matches.csv"
+THUMBNAIL_SIZE = GROUP_MATCHING_THUMBNAIL_SIZE
 _ROI_PREVIEW_PLOT_SIZE = 180
 _ROI_TRACE_ALPHA = int(round(255 * 0.75))
 _ROI_SIDEBAR_MIN_WIDTH = 340
 _ROI_SIDEBAR_MAX_WIDTH = 370
-_ROI_CARD_WIDTH = THUMBNAIL_SIZE + 24
-_ROI_CARD_HEIGHT = THUMBNAIL_SIZE + 58
-_ROI_CARD_MIN_WIDTH = _ROI_CARD_WIDTH
+_ROI_CARD_WIDTH = ROI_CARD_WIDTH
+_ROI_CARD_HEIGHT = ROI_CARD_HEIGHT
+_ROI_CONTROL_HEIGHT = ROI_CONTROL_HEIGHT
 _FOV_FILTER_POPUP_MIN_WIDTH = 128
 _ROI_TABLE_VISIBLE_ROWS = 5
 _ROI_TABLE_ROW_HEIGHT = 24
-_ROI_CONTROL_HEIGHT = 28
 
 
 class GroupMatchingState(Protocol):
     """Napari control-state fields needed by the ROI assignment view."""
 
     loaded_recordings: list[LoadedNapariRecording]
-
-
-class _LayerWithData(Protocol):
-    """Small protocol for napari layers whose label data can be inspected."""
-
-    data: object
-
-
-@dataclass(frozen=True)
-class _SelectedRoiResponse:
-    """Response data for one selected ROI in one loaded recording."""
-
-    recording_path: Path
-    roi_label: str
-    plot_data: ResponsePlotData
-    color: QColor
 
 
 class RoiAssignmentView(QWidget):
@@ -155,7 +148,7 @@ class RoiAssignmentView(QWidget):
         self._card_grid_rows = 0
         self._card_grid_columns = 0
         self._hidden_response_recordings: set[Path] = set()
-        self._selected_responses: tuple[_SelectedRoiResponse, ...] = ()
+        self._selected_responses: tuple[response_preview.SelectedRoiResponse, ...] = ()
         self._selected_group_dirty = False
         self._normalization_options = NormalizationOptions()
         self._smoothing_options = SmoothingOptions()
@@ -192,13 +185,13 @@ class RoiAssignmentView(QWidget):
         self._response_strip = ResponsePreviewStrip(
             "roi_response_preview",
             trace_alpha=_ROI_TRACE_ALPHA,
-            title_pixel_size=_response_epoch_title_size,
+            title_pixel_size=response_preview.response_epoch_title_size,
         )
         self._response_widget = self._response_strip.widget
         self._mean_response_strip = ResponsePreviewStrip(
             "roi_mean_response_preview",
             trace_alpha=_ROI_TRACE_ALPHA,
-            title_pixel_size=_response_epoch_title_size,
+            title_pixel_size=response_preview.response_epoch_title_size,
         )
         self._mean_response_widget = self._mean_response_strip.widget
         self._show_roi_responses_checkbox = QCheckBox("ROI responses")
@@ -238,7 +231,7 @@ class RoiAssignmentView(QWidget):
         self._grid_widget = QWidget()
         self._grid = QGridLayout()
         self._grid.setContentsMargins(0, 0, 0, 0)
-        self._grid.setSpacing(12)
+        self._grid.setSpacing(GROUP_MATCHING_CARD_SPACING)
         self._grid_widget.setLayout(self._grid)
         self._group_table = self._create_group_table()
         load_button = group_matching_button("Load ROI CSV")
@@ -449,7 +442,7 @@ class RoiAssignmentView(QWidget):
 
     def _create_group_table(self) -> QTableWidget:
         """Return the saved ROI group table with selection behavior wired."""
-        table = _ToggleSelectionTable(0, 3)
+        table = ToggleSelectionTable(0, 3)
         table.setObjectName("roi_match_group_table")
         table.setHorizontalHeaderLabels(("Group", "ROIs", "Note"))
         table.setFixedHeight(
@@ -503,7 +496,7 @@ class RoiAssignmentView(QWidget):
 
     def refresh(self) -> None:
         """Refresh the visual ROI cards from current FOV filter state."""
-        _clear_grid_layout(self._grid, delete_widgets=True)
+        clear_card_grid_layout(self._grid, delete_widgets=True)
         self._cards.clear()
         recordings = self._filtered_recordings()
         self._response_cache.retain_recordings(
@@ -537,7 +530,7 @@ class RoiAssignmentView(QWidget):
 
     def _layout_cards(self) -> None:
         """Wrap fixed-size ROI cards to fit the current workspace width."""
-        _clear_grid_layout(self._grid, delete_widgets=False)
+        clear_card_grid_layout(self._grid, delete_widgets=False)
         for row_index in range(self._card_grid_rows + 1):
             self._grid.setRowStretch(row_index, 0)
         for column_index in range(self._card_grid_columns):
@@ -568,7 +561,7 @@ class RoiAssignmentView(QWidget):
         if len(self._selected_responses) == 0:
             self._show_response_status("Choose ROIs to compare responses.")
             return
-        _add_response_legend(
+        response_preview.add_response_legend(
             self._legend_layout,
             self._selected_responses,
             hidden_recordings=self._hidden_response_recordings,
@@ -583,7 +576,7 @@ class RoiAssignmentView(QWidget):
         if len(visible_responses) == 0:
             self._show_response_status("All selected recording traces are hidden.")
             return
-        combined = _combined_response_plot_data(visible_responses)
+        combined = response_preview.combined_response_plot_data(visible_responses)
         if combined is None:
             self._show_response_status(
                 "Responses unavailable for the selected ROI combination.",
@@ -595,7 +588,7 @@ class RoiAssignmentView(QWidget):
             self._show_response_status("Choose at least one epoch to plot.")
             return
         self._set_response_status(
-            _selected_response_visibility_status(
+            response_preview.selected_response_visibility_status(
                 total_count=len(self._selected_responses),
                 visible_count=len(visible_responses),
             ),
@@ -607,7 +600,7 @@ class RoiAssignmentView(QWidget):
             plot_size=self._plot_size,
         )
         self._mean_response_strip.render(
-            _mean_response_plot_data(combined),
+            response_preview.mean_response_plot_data(combined),
             epoch_indices=epoch_indices,
             roi_colors=(QColor("#f2c14e"),),
             plot_size=self._plot_size,
@@ -685,7 +678,7 @@ class RoiAssignmentView(QWidget):
         button_row.addWidget(select_none_button)
         self._epoch_layout.addLayout(button_row)
         for index, epoch in enumerate(epochs):
-            checkbox = QCheckBox(_epoch_title(epoch))
+            checkbox = QCheckBox(response_preview.response_epoch_title(epoch))
             checkbox.setObjectName("roi_epoch_visibility_checkbox")
             checkbox.setChecked(self._epoch_visibility.get(index, True))
             checkbox.stateChanged.connect(
@@ -1090,15 +1083,17 @@ class RoiAssignmentView(QWidget):
         )
         self._selected_rois_section.setTitle(title)
 
-    def _selected_response_data(self) -> tuple[_SelectedRoiResponse, ...]:
+    def _selected_response_data(
+        self,
+    ) -> tuple[response_preview.SelectedRoiResponse, ...]:
         """Return response data for card ROIs selected in the popup."""
-        responses: list[_SelectedRoiResponse] = []
+        responses: list[response_preview.SelectedRoiResponse] = []
         for card in self._cards:
             roi_label = card.selected_roi_label()
             if roi_label is None:
                 continue
             try:
-                plot_data = _selected_roi_response_plot_data(
+                plot_data = response_preview.selected_roi_response_plot_data(
                     card.recording,
                     roi_label,
                     cache=self._response_cache,
@@ -1108,7 +1103,7 @@ class RoiAssignmentView(QWidget):
             except ValueError:
                 continue
             responses.append(
-                _SelectedRoiResponse(
+                response_preview.SelectedRoiResponse(
                     recording_path=card.recording_path,
                     roi_label=roi_label,
                     plot_data=plot_data,
@@ -1116,408 +1111,6 @@ class RoiAssignmentView(QWidget):
                 ),
             )
         return tuple(responses)
-
-
-class RoiRecordingCard(QFrame):
-    """One visual ROI assignment card for a loaded recording."""
-
-    def __init__(
-        self,
-        *,
-        recording: LoadedNapariRecording,
-        fov_group_id: str,
-        selected_roi: str,
-        trace_color: QColor,
-        on_selection_changed: Callable[[], None],
-    ) -> None:
-        """Create one ROI card."""
-        super().__init__()
-        self.recording_path = recording.recording.source_session_dir.expanduser()
-        self.recording = recording
-        self.trace_color = trace_color
-        self._image_label = QLabel()
-        self._image_label.setObjectName("roi_preview_image")
-        self._image_label.setFixedSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
-        self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        fov_id = _fov_group_display_id(fov_group_id)
-        self._overlay_label = QLabel(f"{self.recording_path.name} - FOV ID: {fov_id}")
-        self._overlay_label.setObjectName("fov_card_overlay")
-        self._overlay_label.setAttribute(
-            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
-        )
-        self._roi_selector = QComboBox()
-        self._roi_selector.setObjectName("roi_selector")
-        self._roi_selector.setMinimumWidth(118)
-        self._roi_selector.setFixedHeight(_ROI_CONTROL_HEIGHT)
-        self._trace_label = QLabel("ROI")
-        self._trace_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._trace_label.setFixedSize(42, _ROI_CONTROL_HEIGHT)
-        self._trace_label.setStyleSheet(_trace_label_style(trace_color))
-
-        self._roi_selector.addItem("No ROI", "")
-        for roi_label in roi_labels_from_layer_data(recording.roi_labels_layer):
-            self._roi_selector.addItem(_roi_label_display_id(roi_label), roi_label)
-        if selected_roi:
-            index = self._roi_selector.findData(selected_roi)
-            if index >= 0:
-                self._roi_selector.setCurrentIndex(index)
-        self._roi_selector.currentIndexChanged.connect(
-            lambda _index: self._refresh_after_selection_change(on_selection_changed),
-        )
-
-        controls = QHBoxLayout()
-        controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(6)
-        controls.addWidget(self._trace_label)
-        controls.addWidget(self._roi_selector, 1)
-        controls_widget = QWidget()
-        controls_widget.setFixedWidth(THUMBNAIL_SIZE)
-        controls_widget.setLayout(controls)
-
-        image_stack = QWidget()
-        image_stack.setFixedSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
-        image_stack.setSizePolicy(
-            QSizePolicy.Policy.Fixed,
-            QSizePolicy.Policy.Fixed,
-        )
-        image_layout = QGridLayout()
-        image_layout.setContentsMargins(0, 0, 0, 0)
-        image_layout.setSpacing(0)
-        image_layout.addWidget(self._image_label, 0, 0)
-        image_layout.addWidget(
-            self._overlay_label,
-            0,
-            0,
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
-        )
-        image_stack.setLayout(image_layout)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
-        layout.addWidget(controls_widget, 0, Qt.AlignmentFlag.AlignHCenter)
-        layout.addWidget(image_stack, 0, Qt.AlignmentFlag.AlignHCenter)
-        self.setLayout(layout)
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setObjectName("roi_assignment_card")
-        self.setFixedSize(_ROI_CARD_WIDTH, _ROI_CARD_HEIGHT)
-        self.refresh_preview()
-
-    def selected_roi_label(self) -> str | None:
-        """Return the currently selected ROI label."""
-        data = self._roi_selector.currentData()
-        if not isinstance(data, str) or data == "":
-            return None
-        return data
-
-    def set_selected_roi(self, roi_label: str) -> None:
-        """Set the selected ROI label without emitting intermediate updates."""
-        self._roi_selector.blockSignals(True)
-        try:
-            index = 0 if roi_label == "" else self._roi_selector.findData(roi_label)
-            self._roi_selector.setCurrentIndex(index if index >= 0 else 0)
-        finally:
-            self._roi_selector.blockSignals(False)
-        self.refresh_preview()
-
-    def refresh_preview(self) -> None:
-        """Refresh selected-ROI image and response previews."""
-        roi_label = self.selected_roi_label()
-        pixmap = mean_image_roi_overlay_pixmap(
-            mean_image_layer=self.recording.mean_image_layer,
-            roi_labels_layer=self.recording.roi_labels_layer,
-            roi_label=roi_label,
-            selected_color=self.trace_color,
-            contrast_percentile=100.0,
-        )
-        if pixmap is not None:
-            self._image_label.setPixmap(pixmap)
-
-    def _refresh_after_selection_change(self, callback: Callable[[], None]) -> None:
-        """Refresh the ROI image and shared response plot after selection."""
-        self.refresh_preview()
-        callback()
-
-
-def roi_labels_from_layer_data(layer: object | None) -> tuple[str, ...]:
-    """Return selectable twopy ROI labels from a napari Labels layer.
-
-    Args:
-        layer: Napari Labels layer or a test double exposing integer ``data``.
-
-    Returns:
-        Sorted ``roi_####`` labels for positive values present in the label
-        image. Zero is background and is omitted.
-    """
-    if layer is None or not hasattr(layer, "data"):
-        return ()
-    labels_layer = cast(_LayerWithData, layer)
-    label_image = np.asarray(labels_layer.data)
-    if label_image.size == 0:
-        return ()
-    labels = sorted(
-        {
-            int(label_value)
-            for label_value in np.unique(label_image)
-            if int(label_value) > 0
-        },
-    )
-    return tuple(f"roi_{label_value:04d}" for label_value in labels)
-
-
-def _selected_roi_response_plot_data(
-    recording: LoadedNapariRecording,
-    roi_label: str,
-    *,
-    cache: SelectedRoiResponseCache,
-    normalization_options: NormalizationOptions,
-    smoothing_options: SmoothingOptions,
-) -> ResponsePlotData:
-    """Compute response plot data for one selected ROI label."""
-    label_value = _roi_label_value(roi_label)
-    if label_value is None or recording.roi_labels_layer is None:
-        msg = "Selected ROI is missing."
-        raise ValueError(msg)
-    label_image = roi_label_image_from_layer_for_recording(
-        recording.roi_labels_layer,
-        recording.recording,
-    )
-    return cache.compute_selected_response(
-        recording.recording,
-        label_image,
-        roi_label=roi_label,
-        label_value=label_value,
-        source_path=recording.recording.source_session_dir.expanduser(),
-        response_processing_options=ResponseProcessingOptions(
-            smoothing=smoothing_options,
-            normalization=normalization_options,
-        ),
-    )
-
-
-def _combined_response_plot_data(
-    selected_responses: tuple[_SelectedRoiResponse, ...],
-) -> ResponsePlotData | None:
-    """Return one plot data object with selected recordings overlaid as ROIs."""
-    if len(selected_responses) == 0:
-        return None
-    reference_epochs = selected_responses[0].plot_data.epochs
-    if len(reference_epochs) == 0:
-        return None
-    roi_labels = tuple(
-        f"{response.recording_path.name} {response.roi_label}"
-        for response in selected_responses
-    )
-    combined_epochs: list[EpochResponsePlotData] = []
-    for reference_epoch in reference_epochs:
-        mean_values, sem_values = _combined_epoch_values(
-            reference_epoch,
-            selected_responses,
-        )
-        combined_epochs.append(
-            EpochResponsePlotData(
-                epoch_name=reference_epoch.epoch_name,
-                epoch_number=reference_epoch.epoch_number,
-                roi_labels=roi_labels,
-                time_seconds=reference_epoch.time_seconds,
-                mean_values=mean_values,
-                sem_values=sem_values,
-                epoch_time_spans=reference_epoch.epoch_time_spans,
-            ),
-        )
-    return ResponsePlotData(source_path=None, epochs=tuple(combined_epochs))
-
-
-def _combined_epoch_values(
-    reference_epoch: EpochResponsePlotData,
-    selected_responses: tuple[_SelectedRoiResponse, ...],
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """Return stacked mean and SEM rows for one shared comparison epoch."""
-    key = (reference_epoch.epoch_number, reference_epoch.epoch_name)
-    mean_rows: list[npt.NDArray[np.float64]] = []
-    sem_rows: list[npt.NDArray[np.float64]] = []
-    for response in selected_responses:
-        epoch = _matching_epoch(response.plot_data, key=key)
-        if epoch is None:
-            missing_row = np.full_like(reference_epoch.time_seconds, np.nan)
-            mean_rows.append(missing_row)
-            sem_rows.append(missing_row)
-        elif _same_time_axis(reference_epoch.time_seconds, epoch.time_seconds):
-            mean_rows.append(epoch.mean_values[0])
-            sem_rows.append(epoch.sem_values[0])
-        else:
-            mean_rows.append(
-                _interpolated_row(
-                    epoch.time_seconds,
-                    epoch.mean_values[0],
-                    reference_epoch.time_seconds,
-                ),
-            )
-            sem_rows.append(
-                _interpolated_row(
-                    epoch.time_seconds,
-                    epoch.sem_values[0],
-                    reference_epoch.time_seconds,
-                ),
-            )
-    return np.vstack(mean_rows), np.vstack(sem_rows)
-
-
-def _mean_response_plot_data(plot_data: ResponsePlotData) -> ResponsePlotData:
-    """Return one mean trace with SEM across visible recording traces."""
-    epochs: list[EpochResponsePlotData] = []
-    for epoch in plot_data.epochs:
-        means, sems = finite_mean_and_sem(epoch.mean_values, axis=0)
-        epochs.append(
-            EpochResponsePlotData(
-                epoch_name=epoch.epoch_name,
-                epoch_number=epoch.epoch_number,
-                roi_labels=("mean",),
-                time_seconds=epoch.time_seconds,
-                mean_values=means[np.newaxis, :],
-                sem_values=sems[np.newaxis, :],
-                epoch_time_spans=epoch.epoch_time_spans,
-            ),
-        )
-    return ResponsePlotData(source_path=plot_data.source_path, epochs=tuple(epochs))
-
-
-def _selected_response_visibility_status(
-    *,
-    total_count: int,
-    visible_count: int,
-) -> str:
-    """Return the Selected ROIs summary for the current trace visibility."""
-    if visible_count == total_count:
-        if total_count == 1:
-            return "Showing the selected recording trace."
-        selected_traces = counted_noun(total_count, "selected recording trace")
-        return f"Showing all {selected_traces}."
-    total_traces = counted_noun(total_count, "selected recording trace")
-    hidden_traces = counted_noun(total_count - visible_count, "recording trace")
-    return f"Showing {visible_count} of {total_traces}; {hidden_traces} hidden."
-
-
-def _matching_epoch(
-    plot_data: ResponsePlotData,
-    *,
-    key: tuple[int, str],
-) -> EpochResponsePlotData | None:
-    """Return the epoch matching one reference epoch key."""
-    for epoch in plot_data.epochs:
-        if (epoch.epoch_number, epoch.epoch_name) == key:
-            return epoch
-    return None
-
-
-def _same_time_axis(
-    first: npt.NDArray[np.float64],
-    second: npt.NDArray[np.float64],
-) -> bool:
-    """Return whether two epoch traces can be overlaid directly."""
-    return first.shape == second.shape and bool(np.allclose(first, second))
-
-
-def _interpolated_row(
-    source_time: npt.NDArray[np.float64],
-    source_values: npt.NDArray[np.float64],
-    target_time: npt.NDArray[np.float64],
-) -> npt.NDArray[np.float64]:
-    """Return one response row sampled onto the shared plot time axis.
-
-    ROI matching overlays recordings that can have different frame timing. The
-    plot uses the first visible recording as the reference axis and samples
-    later recordings onto that axis instead of dropping mismatched traces.
-    """
-    finite = np.isfinite(source_time) & np.isfinite(source_values)
-    if int(np.sum(finite)) < 2:
-        return np.full_like(target_time, np.nan)
-    sorted_indices = np.argsort(source_time[finite])
-    sorted_time = source_time[finite][sorted_indices]
-    sorted_values = source_values[finite][sorted_indices]
-    return np.interp(
-        target_time,
-        sorted_time,
-        sorted_values,
-        left=np.nan,
-        right=np.nan,
-    )
-
-
-def _epoch_title(epoch: EpochResponsePlotData) -> str:
-    """Return the compact title shown above one ROI comparison plot."""
-    return f"{epoch.epoch_number}: {epoch.epoch_name}"
-
-
-def _visible_response_epoch_indices(plot_data: ResponsePlotData) -> tuple[int, ...]:
-    """Return default visible ROI-comparison epochs."""
-    return tuple(
-        index
-        for index, epoch in enumerate(plot_data.epochs)
-        if not is_baseline_epoch_name(epoch.epoch_name)
-    )
-
-
-def _response_epoch_title_size(plot_size: int) -> int:
-    """Return a plot-title font size that follows the preview size."""
-    return max(10, min(16, round(plot_size * 0.07)))
-
-
-def _add_response_legend(
-    layout: QGridLayout,
-    selected_responses: tuple[_SelectedRoiResponse, ...],
-    *,
-    hidden_recordings: set[Path],
-    set_visible: Callable[[Path, bool], None],
-    max_width: int,
-) -> None:
-    """Add clickable color toggles for overlaid recording traces."""
-    row_index = 0
-    column_index = 0
-    row_width = 0
-    spacing = max(0, layout.spacing())
-    available_width = max(120, max_width)
-    for response in selected_responses:
-        visible = response.recording_path not in hidden_recordings
-        button = QPushButton(
-            f"{response.recording_path.name} - ROI "
-            f"{_roi_label_display_id(response.roi_label)}",
-        )
-        button.setCheckable(True)
-        button.setChecked(visible)
-        button.setStyleSheet(_trace_button_style(response.color, visible=visible))
-        button.clicked.connect(
-            lambda checked, path=response.recording_path: set_visible(path, checked),
-        )
-        button_width = button.sizeHint().width()
-        next_width = (
-            button_width if column_index == 0 else row_width + spacing + button_width
-        )
-        if column_index > 0 and next_width > available_width:
-            row_index += 1
-            column_index = 0
-            row_width = 0
-        layout.addWidget(button, row_index, column_index)
-        row_width = (
-            button_width if column_index == 0 else row_width + spacing + button_width
-        )
-        column_index += 1
-
-
-class _ToggleSelectionTable(QTableWidget):
-    """Table that clears selection when the selected row is clicked again."""
-
-    def mousePressEvent(self, e: QMouseEvent | None) -> None:  # noqa: N802
-        """Toggle the current row off when users click it a second time."""
-        if e is None:
-            super().mousePressEvent(e)
-            return
-        row_index = self.rowAt(e.pos().y())
-        if row_index >= 0 and row_index == self.currentRow() and self.selectedItems():
-            self.clearSelection()
-            self.setCurrentCell(-1, -1)
-            return
-        super().mousePressEvent(e)
 
 
 def _trace_color(index: int) -> QColor:
@@ -1533,34 +1126,6 @@ def _trace_color(index: int) -> QColor:
     return colors[index % len(colors)]
 
 
-def _trace_label_style(color: QColor) -> str:
-    """Return stylesheet text for one trace-color chip."""
-    return (
-        "QLabel {"
-        f"background-color: {color.name()};"
-        "color: white;"
-        "font-weight: bold;"
-        "padding: 0px 6px;"
-        "border-radius: 3px;"
-        "}"
-    )
-
-
-def _trace_button_style(color: QColor, *, visible: bool) -> str:
-    """Return stylesheet text for one clickable trace visibility chip."""
-    background = color.name() if visible else "#555555"
-    return (
-        "QPushButton {"
-        f"background-color: {background};"
-        "color: white;"
-        "font-weight: bold;"
-        "padding: 2px 6px;"
-        "border-radius: 3px;"
-        "border: 0;"
-        "}"
-    )
-
-
 def _epoch_names_for_recordings(
     recordings: tuple[LoadedNapariRecording, ...],
 ) -> dict[int, str]:
@@ -1574,43 +1139,13 @@ def _epoch_names_for_recordings(
     return epoch_names
 
 
-def _roi_label_value(roi_label: str | None) -> int | None:
-    """Return the integer Labels value encoded in ``roi_####`` text."""
-    if roi_label is None:
-        return None
-    suffix = roi_label.removeprefix("roi_")
-    return int(suffix) if suffix.isdecimal() else None
-
-
-def _roi_label_display_id(roi_label: str) -> str:
-    """Return the compact ROI id shown in the card dropdown."""
-    suffix = roi_label.removeprefix("roi_")
-    return str(int(suffix)) if suffix.isdecimal() else roi_label
-
-
-def _fov_group_display_id(fov_group_id: str) -> str:
-    """Return the compact FOV id shown in the ROI filter."""
-    suffix = fov_group_id.removeprefix("fov_")
-    return suffix if suffix.isdecimal() else fov_group_id
-
-
 def _roi_card_columns_for_width(width: int, *, spacing: int) -> int:
     """Return how many fixed-width ROI cards fit in one row."""
-    available_width = max(_ROI_CARD_WIDTH, width - 48)
-    return max(1, (available_width + spacing) // (_ROI_CARD_WIDTH + spacing))
-
-
-def _clear_grid_layout(layout: QGridLayout, *, delete_widgets: bool) -> None:
-    """Remove all child widgets from a grid layout."""
-    while layout.count() > 0:
-        item = layout.takeAt(0)
-        if item is None:
-            continue
-        widget = item.widget()
-        if widget is not None and delete_widgets:
-            widget.hide()
-            widget.setParent(None)
-            widget.deleteLater()
+    return card_columns_for_width(
+        width,
+        card_width=_ROI_CARD_WIDTH,
+        spacing=spacing,
+    )
 
 
 def _clear_nested_layout(layout: QLayout) -> None:
