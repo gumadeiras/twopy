@@ -39,6 +39,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+import twopy.napari.group_matching.response_preview as response_preview
 from twopy.analysis.group_matching import (
     ManualRoiMatchGroup,
     ManualRoiMatchRow,
@@ -54,7 +55,6 @@ from twopy.analysis.response_processing import (
     SmoothingOptions,
 )
 from twopy.analysis.trials import is_baseline_epoch_name
-from twopy.napari.group_matching import response_preview
 from twopy.napari.group_matching.cards import (
     GROUP_MATCHING_CARD_SPACING,
     card_columns_for_width,

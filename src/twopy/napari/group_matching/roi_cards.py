@@ -23,7 +23,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from twopy.napari.group_matching.cards import image_overlay_stack
+from twopy.napari.group_matching.cards import fov_group_display_id, image_overlay_stack
 from twopy.napari.group_matching.images import (
     THUMBNAIL_SIZE,
     mean_image_roi_overlay_pixmap,
@@ -70,7 +70,7 @@ class RoiRecordingCard(QFrame):
         self.trace_color = trace_color
         self._image_label = QLabel()
         self._image_label.setObjectName("roi_preview_image")
-        fov_id = _fov_group_display_id(fov_group_id)
+        fov_id = fov_group_display_id(fov_group_id)
         self._overlay_label = QLabel(f"{self.recording_path.name} - FOV ID: {fov_id}")
         self._roi_selector = QComboBox()
         self._roi_selector.setObjectName("roi_selector")
@@ -205,9 +205,3 @@ def roi_label_display_id(roi_label: str) -> str:
     """Return the compact ROI id shown in the card dropdown."""
     suffix = roi_label.removeprefix("roi_")
     return str(int(suffix)) if suffix.isdecimal() else roi_label
-
-
-def _fov_group_display_id(fov_group_id: str) -> str:
-    """Return the compact FOV id shown in the ROI filter."""
-    suffix = fov_group_id.removeprefix("fov_")
-    return suffix if suffix.isdecimal() else fov_group_id
