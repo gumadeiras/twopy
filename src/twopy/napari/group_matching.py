@@ -13,19 +13,26 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from qtpy.QtCore import Qt
+from qtpy.QtCore import QEvent, Qt
+from qtpy.QtGui import QMouseEvent
 from qtpy.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QFrame,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLayout,
     QLineEdit,
-    QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
-    QSpinBox,
     QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +50,11 @@ from twopy.napari.group_matching_roi import (
     RoiAssignmentView,
     roi_labels_from_layer_data,
 )
+from twopy.napari.group_matching_style import (
+    group_matching_button,
+    group_matching_section,
+    style_group_matching_panel,
+)
 from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.text import configure_placeholder
 
@@ -56,6 +68,12 @@ __all__ = [
 ]
 
 FOV_GROUP_TABLE_FILENAME = "fov_groups.csv"
+_FOV_CARD_COLUMNS = 3
+_FOV_CARD_MIN_WIDTH = THUMBNAIL_SIZE + 72
+_FOV_CARD_GRID_MIN_WIDTH = (_FOV_CARD_MIN_WIDTH * _FOV_CARD_COLUMNS) + 28
+_FOV_TABLE_VISIBLE_ROWS = 4
+_FOV_TABLE_ROW_HEIGHT = 24
+_FOV_ID_STEP_BUTTON_SIZE = 26
 
 
 class GroupMatchingState(Protocol):
@@ -80,6 +98,7 @@ class GroupMatchingPanel(QWidget):
         self._fov_groups: dict[Path, str] = {}
         self._fov_notes: dict[Path, str] = {}
         self._current_rois: dict[Path, str] = {}
+        self._theme_style_refreshing = False
         self._stack = QStackedWidget()
         self._fov_view = FovAssignmentView(
             state=state,
@@ -96,7 +115,9 @@ class GroupMatchingPanel(QWidget):
         self._stack.addWidget(self._fov_view)
         self._stack.addWidget(self._roi_view)
 
+        style_group_matching_panel(self)
         layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
         layout.addWidget(self._stack)
         self.setLayout(layout)
         self.refresh()
@@ -106,6 +127,21 @@ class GroupMatchingPanel(QWidget):
         self._load_fov_groups_if_available()
         self._fov_view.refresh()
         self._roi_view.refresh()
+
+    def changeEvent(self, a0: QEvent | None) -> None:  # noqa: N802
+        """Refresh palette-derived styling when napari changes theme."""
+        super().changeEvent(a0)
+        if a0 is not None and a0.type() in (
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.PaletteChange,
+        ):
+            if self._theme_style_refreshing:
+                return
+            self._theme_style_refreshing = True
+            try:
+                style_group_matching_panel(self)
+            finally:
+                self._theme_style_refreshing = False
 
     def finalize_fov_assignments(self) -> None:
         """Save current FOV assignments and switch to ROI assignment."""
@@ -193,76 +229,170 @@ class FovAssignmentView(QWidget):
         self._on_finalize = on_finalize
         self._path_edit = QLineEdit(str(Path.cwd() / FOV_GROUP_TABLE_FILENAME))
         self._path_edit.setObjectName("fov_group_path")
+        self._path_edit.setMinimumWidth(0)
+        self._path_edit.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         configure_placeholder(self._path_edit, "FOV CSV path")
         self._path_edit.editingFinished.connect(self.load_fov_groups_from_path)
-        self._instruction_label = QLabel("Select recordings that share a FOV.")
+        self._instruction_label = QLabel(
+            "Compare mean images, select matching fields, then save FOV groups.",
+        )
+        self._instruction_label.setObjectName("group_matching_subtitle")
+        self._instruction_label.setWordWrap(True)
         self._status_label = QLabel("")
-        self._fov_group_spin = QSpinBox()
-        self._fov_group_spin.setRange(1, 9999)
-        self._fov_group_spin.setMinimumWidth(108)
-        spin_font = self._fov_group_spin.font()
-        spin_font.setPointSize(spin_font.pointSize() + 4)
-        self._fov_group_spin.setFont(spin_font)
+        self._status_label.setObjectName("group_matching_caption")
+        self._status_label.setMinimumWidth(0)
+        self._status_label.setWordWrap(True)
+        self._status_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse,
+        )
+        self._fov_group_value = 1
+        self._fov_group_value_label = QLabel(str(self._fov_group_value))
+        self._fov_group_value_label.setObjectName("fov_id_value")
+        self._fov_group_label = QLabel("FOV ID")
+        self._fov_group_label.setObjectName("fov_id_label")
+        self._fov_table = self._create_fov_table()
         self._grid_widget = QWidget()
+        self._grid_widget.setMinimumWidth(_FOV_CARD_GRID_MIN_WIDTH)
         self._grid = QGridLayout()
         self._grid.setContentsMargins(0, 0, 0, 0)
         self._grid.setSpacing(12)
         self._grid_widget.setLayout(self._grid)
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setMinimumWidth(_FOV_CARD_GRID_MIN_WIDTH + 28)
         scroll_area.setWidget(self._grid_widget)
 
-        assign_button = QPushButton("Assign selected to FOV")
+        assign_button = group_matching_button("Assign FOV ID", role="primary")
         assign_button.clicked.connect(self.assign_selected_to_fov)
-        new_fov_button = QPushButton("New FOV from selected")
+        new_fov_button = group_matching_button("Assign new FOV ID")
         new_fov_button.clicked.connect(self.new_fov_from_selected)
-        select_all_button = QPushButton("Select all")
+        increment_fov_button = _fov_id_step_button(Qt.ArrowType.UpArrow)
+        increment_fov_button.clicked.connect(
+            lambda _checked=False: self._step_fov_group_number(1),
+        )
+        decrement_fov_button = _fov_id_step_button(Qt.ArrowType.DownArrow)
+        decrement_fov_button.clicked.connect(
+            lambda _checked=False: self._step_fov_group_number(-1),
+        )
+        select_all_button = group_matching_button("Select all", role="quiet")
         select_all_button.clicked.connect(self.select_all)
-        select_none_button = QPushButton("Select none")
+        select_none_button = group_matching_button("Select none", role="quiet")
         select_none_button.clicked.connect(self.select_none)
-        clear_button = QPushButton("Clear selected FOV")
+        clear_button = group_matching_button("Remove assigned FOV", role="danger")
         clear_button.clicked.connect(self.clear_selected_fov)
-        load_button = QPushButton("Load FOV CSV")
+        load_button = group_matching_button("Load FOV CSV")
         load_button.clicked.connect(self.load_fov_group_path)
-        browse_button = QPushButton("Browse save path")
+        browse_button = group_matching_button("Browse save path")
         browse_button.clicked.connect(self.browse_fov_group_save_path)
-        save_button = QPushButton("Save FOV groups")
+        save_button = group_matching_button("Save FOV groups")
         save_button.clicked.connect(self.save_fov_groups)
-        finalize_button = QPushButton("Save and continue to ROI assignment")
+        finalize_button = group_matching_button(
+            "Save and continue to ROI assignment",
+            role="primary",
+        )
         finalize_button.clicked.connect(self._finalize)
 
-        path_controls = QHBoxLayout()
+        path_controls = QVBoxLayout()
         path_controls.addWidget(self._path_edit)
-        path_controls.addWidget(load_button)
-        path_controls.addWidget(browse_button)
+        path_button_row = QHBoxLayout()
+        path_button_row.addWidget(load_button)
+        path_button_row.addWidget(browse_button)
+        path_controls.addLayout(path_button_row)
 
-        assignment_controls = QHBoxLayout()
-        assignment_controls.addWidget(QLabel("Assign selection to FOV"))
-        assignment_controls.addWidget(self._fov_group_spin)
+        assignment_controls = QVBoxLayout()
+        fov_target_row = QHBoxLayout()
+        fov_target_row.addStretch(1)
+        fov_target_row.addWidget(
+            self._fov_group_label,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
+        fov_target_row.addWidget(
+            self._fov_group_value_label,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
+        fov_target_row.addWidget(
+            increment_fov_button,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
+        fov_target_row.addWidget(
+            decrement_fov_button,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
+        fov_target_row.addStretch(1)
+        assignment_controls.addLayout(fov_target_row)
         assignment_controls.addWidget(assign_button)
+        assignment_controls.addWidget(clear_button)
         assignment_controls.addWidget(new_fov_button)
-        assignment_controls.addStretch(1)
 
         cleanup_controls = QHBoxLayout()
         cleanup_controls.addWidget(select_all_button)
         cleanup_controls.addWidget(select_none_button)
-        cleanup_controls.addWidget(clear_button)
-        cleanup_controls.addStretch(1)
 
-        output_controls = QHBoxLayout()
-        output_controls.addStretch(1)
+        output_controls = QVBoxLayout()
         output_controls.addWidget(save_button)
         output_controls.addWidget(finalize_button)
 
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("FOV Assignment"))
-        layout.addWidget(self._instruction_label)
-        layout.addLayout(path_controls)
-        layout.addWidget(scroll_area)
-        layout.addLayout(assignment_controls)
-        layout.addLayout(cleanup_controls)
-        layout.addLayout(output_controls)
-        layout.addWidget(self._status_label)
+        title = QLabel("FOV assignment")
+        title.setObjectName("group_matching_title")
+        assignment_section = _section_with_layout(
+            "Assign selected recordings",
+            assignment_controls,
+        )
+        selection_section = _section_with_layout(
+            "Selection",
+            cleanup_controls,
+        )
+        output_section = _section_with_layout("Finish", output_controls)
+        group_table_layout = QVBoxLayout()
+        group_table_layout.addWidget(self._fov_table)
+        group_table_section = group_matching_section(
+            "Current FOV groups",
+            group_table_layout,
+        )
+        card_section_layout = QVBoxLayout()
+        card_section_layout.addWidget(scroll_area)
+
+        left_column = QVBoxLayout()
+        left_column.setSpacing(10)
+        left_column.addWidget(title)
+        left_column.addWidget(self._instruction_label)
+        left_column.addWidget(group_matching_section("FOV file", path_controls))
+        left_column.addWidget(self._status_label)
+        left_column.addWidget(assignment_section)
+        left_column.addWidget(selection_section)
+        left_column.addWidget(group_table_section)
+        left_column.addWidget(output_section)
+        left_column.addStretch(1)
+        left_content = QWidget()
+        left_content.setMinimumWidth(0)
+        left_content.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
+        left_content.setLayout(left_column)
+        left_scroll = QScrollArea()
+        left_scroll.setObjectName("fov_assignment_left_scroll")
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setWidget(left_content)
+        left_scroll.setMinimumWidth(360)
+        left_scroll.setMaximumWidth(380)
+
+        layout = QHBoxLayout()
+        layout.setSpacing(12)
+        layout.addWidget(left_scroll)
+        layout.addWidget(
+            group_matching_section("Mean-image cards", card_section_layout),
+            1,
+        )
         self.setLayout(layout)
 
     def refresh(self) -> None:
@@ -277,8 +407,16 @@ class FovAssignmentView(QWidget):
                 note=self._fov_notes.get(recording_path, ""),
             )
             self._cards.append(card)
-            self._grid.addWidget(card, index // 3, index % 3)
-        self._grid.setRowStretch((len(self._cards) + 2) // 3, 1)
+            self._grid.addWidget(
+                card,
+                index // _FOV_CARD_COLUMNS,
+                index % _FOV_CARD_COLUMNS,
+            )
+        self._grid.setRowStretch(
+            (len(self._cards) + _FOV_CARD_COLUMNS - 1) // _FOV_CARD_COLUMNS,
+            1,
+        )
+        self._refresh_fov_table()
 
     def assign_selected_to_fov(self) -> None:
         """Assign selected cards to the chosen FOV group."""
@@ -286,17 +424,18 @@ class FovAssignmentView(QWidget):
         if len(cards) == 0:
             self._status_label.setText("Select one or more recording cards.")
             return
-        fov_group_id = f"fov_{self._fov_group_spin.value()}"
+        fov_group_id = self._selected_fov_group_id()
         for card in cards:
             self._fov_groups[card.recording_path] = fov_group_id
             card.set_fov_group_id(fov_group_id)
+        self._refresh_fov_table()
         self._status_label.setText(
             f"Assigned {len(cards)} recordings to {fov_group_id}.",
         )
 
     def new_fov_from_selected(self) -> None:
         """Assign selected cards to the next unused FOV group."""
-        self._fov_group_spin.setValue(self._next_fov_group_number())
+        self._set_fov_group_number(self._next_fov_group_number())
         self.assign_selected_to_fov()
 
     def clear_selected_fov(self) -> None:
@@ -308,10 +447,12 @@ class FovAssignmentView(QWidget):
         for card in cards:
             self._fov_groups.pop(card.recording_path, None)
             card.set_fov_group_id("")
-        self._status_label.setText(f"Cleared {len(cards)} FOV assignments.")
+        self._refresh_fov_table()
+        self._status_label.setText(f"Removed {len(cards)} FOV assignments.")
 
     def select_none(self) -> None:
         """Clear the current card selection without changing FOV assignments."""
+        self._fov_table.clearSelection()
         for card in self._cards:
             card.set_selected(False)
         self._status_label.setText("Cleared card selection.")
@@ -372,8 +513,9 @@ class FovAssignmentView(QWidget):
         self._fov_groups.update(loaded_rows)
         self._fov_notes.update(loaded_notes)
         self._sync_cards_from_state()
+        self._refresh_fov_table()
         self._status_label.setText(
-            f"Loaded {len(loaded_rows)} FOV assignments from {path}.",
+            f"Loaded {len(loaded_rows)} FOV assignments from {path}",
         )
 
     def save_fov_groups(self) -> bool:
@@ -396,6 +538,7 @@ class FovAssignmentView(QWidget):
             notes=recording_notes,
         )
         save_manual_fov_group_rows(rows, self.output_path())
+        self._refresh_fov_table()
         self._status_label.setText(f"Saved {len(rows)} FOV assignments.")
         return True
 
@@ -436,6 +579,118 @@ class FovAssignmentView(QWidget):
     def _finalize(self) -> None:
         """Call the parent finalize callback."""
         self._on_finalize()
+
+    def _create_fov_table(self) -> QTableWidget:
+        """Return a compact table of current FOV assignments."""
+        table = _ToggleSelectionTable(0, 3)
+        table.setObjectName("fov_assignment_table")
+        table.setHorizontalHeaderLabels(("FOV", "N", "Recordings"))
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        table.setFixedHeight(
+            _FOV_TABLE_ROW_HEIGHT * _FOV_TABLE_VISIBLE_ROWS + _FOV_TABLE_ROW_HEIGHT + 4,
+        )
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        horizontal_header = table.horizontalHeader()
+        if horizontal_header is not None:
+            horizontal_header.setDefaultAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            )
+            horizontal_header.setSectionResizeMode(
+                0,
+                QHeaderView.ResizeMode.ResizeToContents,
+            )
+            horizontal_header.setSectionResizeMode(
+                1,
+                QHeaderView.ResizeMode.ResizeToContents,
+            )
+            horizontal_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        vertical_header = table.verticalHeader()
+        if vertical_header is not None:
+            vertical_header.setVisible(False)
+            vertical_header.setDefaultSectionSize(_FOV_TABLE_ROW_HEIGHT)
+        table.itemSelectionChanged.connect(self._select_fov_table_group)
+        return table
+
+    def _refresh_fov_table(self) -> None:
+        """Refresh the current FOV table from visible card assignments."""
+        groups = self._visible_fov_group_summary()
+        self._fov_table.blockSignals(True)
+        try:
+            self._fov_table.setRowCount(0)
+            for row_index, (fov_group_id, recording_names) in enumerate(groups):
+                self._fov_table.insertRow(row_index)
+                fov_item = QTableWidgetItem(fov_group_id)
+                fov_item.setData(Qt.ItemDataRole.UserRole, fov_group_id)
+                self._fov_table.setItem(row_index, 0, fov_item)
+                self._fov_table.setItem(
+                    row_index,
+                    1,
+                    QTableWidgetItem(str(len(recording_names))),
+                )
+                self._fov_table.setItem(
+                    row_index,
+                    2,
+                    QTableWidgetItem(", ".join(recording_names)),
+                )
+            self._fov_table.resizeColumnsToContents()
+            horizontal_header = self._fov_table.horizontalHeader()
+            if horizontal_header is not None:
+                horizontal_header.setSectionResizeMode(
+                    2,
+                    QHeaderView.ResizeMode.Stretch,
+                )
+        finally:
+            self._fov_table.blockSignals(False)
+
+    def _visible_fov_group_summary(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        """Return assigned FOV groups and visible recording names."""
+        grouped: dict[str, list[str]] = {}
+        for card in self._cards:
+            fov_group_id = self._fov_groups.get(card.recording_path, "")
+            if fov_group_id == "":
+                continue
+            grouped.setdefault(fov_group_id, []).append(card.recording_path.name)
+        return tuple(
+            (fov_group_id, tuple(sorted(recording_names)))
+            for fov_group_id, recording_names in sorted(grouped.items())
+        )
+
+    def _select_fov_table_group(self) -> None:
+        """Select cards belonging to the chosen FOV table row."""
+        if len(self._fov_table.selectedItems()) == 0:
+            for card in self._cards:
+                card.set_selected(False)
+            return
+        row_index = self._fov_table.currentRow()
+        if row_index < 0:
+            return
+        item = self._fov_table.item(row_index, 0)
+        if item is None:
+            return
+        fov_group_id = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(fov_group_id, str):
+            return
+        for card in self._cards:
+            card.set_selected(self._fov_groups.get(card.recording_path) == fov_group_id)
+        suffix = fov_group_id.rsplit("_", maxsplit=1)[-1]
+        if suffix.isdecimal():
+            self._set_fov_group_number(int(suffix))
+        self._status_label.setText(f"Selected recordings assigned to {fov_group_id}.")
+
+    def _selected_fov_group_id(self) -> str:
+        """Return the FOV id currently shown in the compact selector."""
+        return f"fov_{self._fov_group_value}"
+
+    def _step_fov_group_number(self, step: int) -> None:
+        """Increment or decrement the compact FOV id selector."""
+        self._set_fov_group_number(self._fov_group_value + step)
+
+    def _set_fov_group_number(self, value: int) -> None:
+        """Set the compact FOV id selector value within the supported range."""
+        self._fov_group_value = min(max(int(value), 1), 9999)
+        self._fov_group_value_label.setText(str(self._fov_group_value))
 
     def _selected_cards(self) -> tuple["FovRecordingCard", ...]:
         """Return currently selected recording cards."""
@@ -482,6 +737,7 @@ class FovAssignmentView(QWidget):
         for card in self._cards:
             card.set_fov_group_id(self._fov_groups.get(card.recording_path, ""))
             card.set_note(self._fov_notes.get(card.recording_path, ""))
+        self._refresh_fov_table()
 
 
 class FovRecordingCard(QFrame):
@@ -507,31 +763,57 @@ class FovRecordingCard(QFrame):
         self._image_label = QLabel()
         self._image_label.setFixedSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
         self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._fov_label = QLabel()
-        self._path_label = QLabel(self.recording_path.name)
-        self._path_label.setWordWrap(True)
+        self._overlay_label = QLabel()
+        self._overlay_label.setObjectName("fov_card_overlay")
+        self._overlay_label.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        )
         self._note_edit = QLineEdit(note)
         self._note_edit.setObjectName("fov_recording_note")
         configure_placeholder(self._note_edit, "Optional note")
-        self._select_button = QPushButton("Select")
+        self._select_button = group_matching_button("Select", role="quiet")
         self._select_button.setCheckable(True)
         self._select_button.toggled.connect(self._sync_selection_style)
-        self._contrast_slider = QSlider(Qt.Orientation.Horizontal)
+        self._contrast_slider = QSlider(Qt.Orientation.Vertical)
         self._contrast_slider.setRange(1, 100)
         self._contrast_slider.setValue(100)
+        self._contrast_slider.setFixedHeight(THUMBNAIL_SIZE)
+        self._contrast_slider.setToolTip("Contrast")
         self._contrast_slider.valueChanged.connect(self._refresh_image)
 
+        image_stack = QWidget()
+        image_stack.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
+        image_layout = QGridLayout()
+        image_layout.setContentsMargins(0, 0, 0, 0)
+        image_layout.setSpacing(0)
+        image_layout.addWidget(self._image_label, 0, 0)
+        image_layout.addWidget(
+            self._overlay_label,
+            0,
+            0,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
+        )
+        image_stack.setLayout(image_layout)
+
+        preview_row = QHBoxLayout()
+        preview_row.setContentsMargins(0, 0, 0, 0)
+        preview_row.setSpacing(8)
+        preview_row.addWidget(image_stack)
+        preview_row.addWidget(self._contrast_slider)
+
         layout = QVBoxLayout()
-        layout.addWidget(self._image_label)
-        layout.addWidget(self._path_label)
-        layout.addWidget(self._fov_label)
-        layout.addWidget(QLabel("Note"))
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
+        layout.addLayout(preview_row)
         layout.addWidget(self._note_edit)
-        layout.addWidget(QLabel("Contrast"))
-        layout.addWidget(self._contrast_slider)
         layout.addWidget(self._select_button)
         self.setLayout(layout)
         self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setObjectName("fov_recording_card")
+        self.setMinimumWidth(_FOV_CARD_MIN_WIDTH)
         self.set_fov_group_id(fov_group_id)
         self._refresh_image()
         self._sync_selection_style()
@@ -546,7 +828,10 @@ class FovRecordingCard(QFrame):
 
     def set_fov_group_id(self, fov_group_id: str) -> None:
         """Set the visual FOV assignment label."""
-        self._fov_label.setText(f"FOV: {fov_group_id}" if fov_group_id else "FOV: none")
+        fov_text = fov_group_id if fov_group_id else "none"
+        self._overlay_label.setText(
+            f"{self.recording_path.name} - FOV ID: {_fov_group_display_id(fov_text)}",
+        )
 
     def note(self) -> str:
         """Return the row-specific note for this recording."""
@@ -569,10 +854,55 @@ class FovRecordingCard(QFrame):
         """Show selected cards with a visible border."""
         if self.is_selected():
             self._select_button.setText("Selected")
-            self.setStyleSheet("QFrame { border: 2px solid #2d7dd2; }")
         else:
             self._select_button.setText("Select")
-            self.setStyleSheet("")
+        self.setProperty("selected", self.is_selected())
+        style = self.style()
+        if style is not None:
+            style.unpolish(self)
+            style.polish(self)
+
+
+class _ToggleSelectionTable(QTableWidget):
+    """Table that clears selection when the selected row is clicked again."""
+
+    def mousePressEvent(self, e: QMouseEvent | None) -> None:  # noqa: N802
+        """Toggle the current row off when users click it a second time."""
+        if e is None:
+            super().mousePressEvent(e)
+            return
+        row_index = self.rowAt(e.pos().y())
+        if row_index >= 0 and row_index == self.currentRow() and self.selectedItems():
+            self.clearSelection()
+            self.setCurrentCell(-1, -1)
+            return
+        super().mousePressEvent(e)
+
+
+def _fov_id_step_button(arrow_type: Qt.ArrowType) -> QToolButton:
+    """Return a compact native-arrow button for stepping the FOV id."""
+    button = QToolButton()
+    button.setObjectName("fov_id_step_button")
+    button.setArrowType(arrow_type)
+    button.setFixedSize(_FOV_ID_STEP_BUTTON_SIZE, _FOV_ID_STEP_BUTTON_SIZE)
+    tooltip = (
+        "Increment FOV ID" if arrow_type == Qt.ArrowType.UpArrow else "Decrement FOV ID"
+    )
+    button.setToolTip(tooltip)
+    return button
+
+
+def _section_with_layout(title: str, layout: QLayout) -> QGroupBox:
+    """Return a titled section for a horizontal control row."""
+    return group_matching_section(title, layout)
+
+
+def _fov_group_display_id(fov_group_id: str) -> str:
+    """Return the compact numeric text shown in mean-image overlays."""
+    if fov_group_id == "none":
+        return "none"
+    suffix = fov_group_id.removeprefix("fov_")
+    return suffix if suffix.isdecimal() else fov_group_id
 
 
 def _clear_grid_layout(layout: QGridLayout) -> None:

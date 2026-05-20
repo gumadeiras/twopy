@@ -4,6 +4,7 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from qtpy.QtGui import QPalette
 from tests.napari_support import (
     Any,
     EpochFrameWindow,
@@ -17,6 +18,7 @@ from tests.napari_support import (
     QColor,
     QLabel,
     Qt,
+    QWidget,
     ResponseMapData,
     ResponseMapOptions,
     ResponsePlotData,
@@ -44,6 +46,8 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
+
+from twopy.napari.group_matching_style import style_group_matching_panel
 
 
 class NapariPlotWidgetTest(NapariAdapterTestCase):
@@ -501,6 +505,28 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             view._set_plot_size(240)
 
         self.assertEqual(view._plot_size, 240)
+
+    def test_group_matching_style_uses_active_qt_palette(self) -> None:
+        """Confirm Group Matching colors follow the current Qt theme.
+
+        Inputs: one widget with a dark palette.
+        Outputs: the applied stylesheet uses palette colors instead of fixed
+        light-card colors.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = QWidget()
+        palette = widget.palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
+        palette.setColor(QPalette.ColorRole.Base, QColor("#303030"))
+        palette.setColor(QPalette.ColorRole.WindowText, QColor("#eeeeee"))
+        widget.setPalette(palette)
+
+        style_group_matching_panel(widget)
+
+        stylesheet = widget.styleSheet()
+        self.assertIn("#202020", stylesheet)
+        self.assertIn("#303030", stylesheet)
+        self.assertNotIn("#fffefa", stylesheet)
 
     def test_group_matching_roi_preview_omits_interleave_epochs(self) -> None:
         """Confirm ROI matching response plots omit interleave epochs.

@@ -60,6 +60,10 @@ from twopy.analysis.response_processing import (
 from twopy.analysis.responses import finite_mean_and_sem
 from twopy.analysis.trials import is_baseline_epoch_name
 from twopy.napari.group_matching_images import mean_image_roi_overlay_pixmap
+from twopy.napari.group_matching_style import (
+    group_matching_button,
+    group_matching_section,
+)
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.form_controls import plot_form_layout, set_plot_control_width
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
@@ -158,6 +162,7 @@ class RoiAssignmentView(QWidget):
             on_change=self._set_smoothing_options,
         )
         self._normalization_widget = self._create_normalization_widget()
+        self._normalization_widget.setMinimumWidth(420)
         self._legend_widget = QWidget()
         self._legend_layout = QHBoxLayout()
         self._legend_layout.setContentsMargins(0, 0, 0, 0)
@@ -187,21 +192,21 @@ class RoiAssignmentView(QWidget):
         self._grid.setSpacing(12)
         self._grid_widget.setLayout(self._grid)
         self._group_table = self._create_group_table()
-        load_button = QPushButton("Load ROI CSV")
+        load_button = group_matching_button("Load ROI CSV")
         load_button.clicked.connect(self.load_match_row_path)
-        browse_button = QPushButton("Browse save path")
+        browse_button = group_matching_button("Browse save path")
         browse_button.clicked.connect(self.browse_match_row_save_path)
-        add_button = QPushButton("Add new group")
+        add_button = group_matching_button("Add new group", role="primary")
         add_button.clicked.connect(self.add_match_group)
-        save_button = QPushButton("Overwrite selected group")
+        save_button = group_matching_button("Overwrite selected group")
         save_button.clicked.connect(self.save_selected_match_group)
-        remove_button = QPushButton("Remove selected group")
+        remove_button = group_matching_button("Remove selected group", role="danger")
         remove_button.clicked.connect(self.remove_selected_match_group)
-        clear_button = QPushButton("Clear ROI selection")
+        clear_button = group_matching_button("Clear ROI selection", role="quiet")
         clear_button.clicked.connect(self.clear_current_group)
-        back_button = QPushButton("Back to FOV assignment")
+        back_button = group_matching_button("Back to FOV assignment", role="quiet")
         back_button.clicked.connect(self.return_to_fov_assignment)
-        close_button = QPushButton("Save and close")
+        close_button = group_matching_button("Save and close", role="primary")
         close_button.clicked.connect(self.close_group_matching_window)
 
         path_controls = QHBoxLayout()
@@ -214,20 +219,25 @@ class RoiAssignmentView(QWidget):
         controls.addWidget(self._fov_filter)
         controls.addStretch(1)
 
-        action_panel = QVBoxLayout()
-        action_panel.addWidget(add_button)
-        action_panel.addWidget(save_button)
-        action_panel.addWidget(remove_button)
-        action_panel.addWidget(clear_button)
-        action_panel.addWidget(back_button)
-        action_panel.addWidget(close_button)
-        action_panel.addWidget(QLabel("Note"))
-        action_panel.addWidget(self._note_edit)
-        action_panel.addWidget(self._plot_size_widget)
-        action_panel.addWidget(self._smoothing_widget)
-        action_panel.addWidget(self._normalization_widget)
-        action_panel.addStretch(1)
-        self._normalization_widget.setMinimumWidth(420)
+        match_action_panel = QVBoxLayout()
+        match_action_panel.addWidget(QLabel("Note"))
+        match_action_panel.addWidget(self._note_edit)
+        match_action_panel.addWidget(add_button)
+        match_action_panel.addWidget(save_button)
+        match_action_panel.addWidget(remove_button)
+        match_action_panel.addWidget(clear_button)
+        match_action_panel.addStretch(1)
+
+        preview_settings_panel = QVBoxLayout()
+        preview_settings_panel.addWidget(self._plot_size_widget)
+        preview_settings_panel.addWidget(self._smoothing_widget)
+        preview_settings_panel.addWidget(self._normalization_widget)
+        preview_settings_panel.addStretch(1)
+
+        navigation_panel = QHBoxLayout()
+        navigation_panel.addWidget(back_button)
+        navigation_panel.addStretch(1)
+        navigation_panel.addWidget(close_button)
 
         group_label = QLabel("Saved groups")
         group_label.setSizePolicy(
@@ -238,22 +248,48 @@ class RoiAssignmentView(QWidget):
         group_panel.addWidget(group_label)
         group_panel.addWidget(self._group_table, 1)
 
-        review_panel = QHBoxLayout()
-        review_panel.addLayout(group_panel, 1)
-        review_panel.addLayout(action_panel, 1)
+        card_section_layout = QVBoxLayout()
+        card_section_layout.addWidget(self._grid_widget)
 
+        side_panel = QVBoxLayout()
+        side_panel.addWidget(group_matching_section("FOV filter", controls))
+        side_panel.addWidget(group_matching_section("Saved groups", group_panel), 1)
+        side_panel.addWidget(
+            group_matching_section("Current match", match_action_panel),
+        )
+        side_panel.addWidget(
+            group_matching_section("Preview settings", preview_settings_panel),
+        )
+
+        workspace = QHBoxLayout()
+        workspace.addWidget(
+            group_matching_section("Recording ROI cards", card_section_layout),
+            2,
+        )
+        workspace.addLayout(side_panel, 1)
+
+        response_panel = QVBoxLayout()
+        response_panel.addWidget(self._response_status)
+        response_panel.addWidget(self._legend_widget)
+        response_panel.addWidget(QLabel("All traces"))
+        response_panel.addWidget(self._response_widget)
+        response_panel.addWidget(QLabel("Mean +/- SEM"))
+        response_panel.addWidget(self._mean_response_widget)
+
+        title = QLabel("2. ROI assignment")
+        title.setObjectName("group_matching_title")
+        subtitle = QLabel(
+            "Pick matching ROIs inside the selected FOV, then save the cell group.",
+        )
+        subtitle.setObjectName("group_matching_subtitle")
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("ROI Assignment"))
-        layout.addLayout(path_controls)
-        layout.addLayout(controls)
-        layout.addWidget(self._grid_widget)
-        layout.addLayout(review_panel)
-        layout.addWidget(self._response_status)
-        layout.addWidget(self._legend_widget)
-        layout.addWidget(QLabel("All traces"))
-        layout.addWidget(self._response_widget)
-        layout.addWidget(QLabel("Mean +/- SEM"))
-        layout.addWidget(self._mean_response_widget)
+        layout.setSpacing(10)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(group_matching_section("Decision file", path_controls))
+        layout.addLayout(workspace)
+        layout.addWidget(group_matching_section("Response comparison", response_panel))
+        layout.addLayout(navigation_panel)
         layout.addWidget(self._status_label)
         content = QWidget()
         content.setLayout(layout)
@@ -298,8 +334,8 @@ class RoiAssignmentView(QWidget):
         table = QTableWidget(0, 3)
         table.setObjectName("roi_match_group_table")
         table.setHorizontalHeaderLabels(("Group", "ROIs", "Note"))
-        table.setMinimumHeight(160)
-        table.setMaximumHeight(240)
+        table.setMinimumHeight(180)
+        table.setMaximumHeight(320)
         vertical_header = table.verticalHeader()
         if vertical_header is not None:
             vertical_header.setVisible(False)
@@ -844,6 +880,7 @@ class RoiRecordingCard(QFrame):
         self.setLayout(layout)
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setObjectName("roi_assignment_card")
+        self.setMinimumWidth(520)
         self.refresh_preview()
 
     def selected_roi_label(self) -> str | None:

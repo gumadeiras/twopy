@@ -18,8 +18,8 @@ __all__ = [
     "mean_image_thumbnail_pixmap",
 ]
 
-THUMBNAIL_SIZE = 180
-ROI_PREVIEW_SIZE = 220
+THUMBNAIL_SIZE = 220
+ROI_PREVIEW_SIZE = 260
 
 
 class _LayerWithData(Protocol):

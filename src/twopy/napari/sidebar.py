@@ -10,6 +10,7 @@ screens. A single tabbed twopy dock keeps resizing predictable while leaving
 napari's built-in layer controls alone.
 """
 
+from qtpy.QtGui import QScreen
 from qtpy.QtWidgets import (
     QApplication,
     QDialog,
@@ -141,7 +142,7 @@ class GroupMatchingWindowButton(QPushButton):
         layout = QVBoxLayout()
         layout.addWidget(group_matching_widget)
         self._dialog.setLayout(layout)
-        self._dialog.resize(980, 720)
+        self._dialog.resize(1280, 760)
         self.clicked.connect(self.open_group_matching_window)
 
     def open_group_matching_window(self) -> None:
@@ -149,10 +150,17 @@ class GroupMatchingWindowButton(QPushButton):
         refresh = getattr(self._group_matching_widget, "refresh", None)
         if callable(refresh):
             refresh()
-        self._dialog.show()
-        _maximize_dialog_height(self._dialog)
+        self._dialog.showNormal()
+        parent_window = self.window()
+        self._expand_dialog_to_screen(
+            parent_window.screen() if parent_window is not None else None,
+        )
         self._dialog.raise_()
         self._dialog.activateWindow()
+
+    def _expand_dialog_to_screen(self, screen: QScreen | None) -> None:
+        """Expand the dialog to the current display without macOS fullscreen."""
+        _expand_dialog_to_screen(self._dialog, screen)
 
 
 def _response_options_tabs(response_options_widget: object | None) -> QTabWidget:
@@ -198,20 +206,17 @@ def _qt_widget(widget: object) -> QWidget:
     return native_widget
 
 
-def _maximize_dialog_height(dialog: QDialog) -> None:
-    """Resize a popup to available screen height while preserving width.
+def _expand_dialog_to_screen(dialog: QDialog, screen: QScreen | None = None) -> None:
+    """Resize a popup to the available screen area without native fullscreen.
 
     Args:
-        dialog: Popup dialog that should open tall enough for dense workflows.
+        dialog: Popup dialog that should open as a large normal window.
+        screen: Preferred display. When omitted, the dialog or primary screen
+            is used.
     """
-    screen = dialog.screen() or QApplication.primaryScreen()
+    screen = screen or dialog.screen() or QApplication.primaryScreen()
     if screen is None:
         return
     available = screen.availableGeometry()
-    geometry = dialog.geometry()
-    width = geometry.width()
-    max_x = available.left() + max(0, available.width() - width)
-    x_position = min(max(geometry.x(), available.left()), max_x)
-    height = available.height()
-    dialog.setMaximumHeight(height)
-    dialog.setGeometry(x_position, available.top(), width, height)
+    dialog.setMaximumHeight(16_777_215)
+    dialog.setGeometry(available)

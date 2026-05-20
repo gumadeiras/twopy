@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changes
+
+- Reworked the napari Group Matching FOV and ROI assignment views with larger image previews, clearer staged headings, grouped file/action/preview sections, theme-aware colors, more legible primary and destructive actions, and a compact two-column FOV assignment layout with image-overlaid recording labels, vertical contrast sliders, a vertical-only scrollable left control column, and compact FOV ID step buttons.
+- Made the Group Matching popup expand to the current display without entering macOS fullscreen, removed the maximum-height cap, added hover color feedback to matching buttons, and added a compact four-row current-FOV table that reselects assigned recording cards for edits.
+
 ## 0.2.0 - 2026-05-19
 
 ### Features

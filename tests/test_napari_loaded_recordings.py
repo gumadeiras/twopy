@@ -10,11 +10,14 @@ from tests.napari_support import (
     Path,
     QApplication,
     QComboBox,
+    QGroupBox,
+    QLabel,
     QLineEdit,
     QListWidget,
     QPushButton,
     QScrollArea,
     QSlider,
+    Qt,
     QTableWidget,
     QWidget,
     _FakeViewer,
@@ -101,7 +104,6 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             self.assertTrue(sidebar_buttons["Open Group Matching"].isEnabled())
             self.assertTrue(sidebar_buttons["Reconvert selected"].isEnabled())
             self.assertTrue(sidebar_buttons["Save loaded list"].isEnabled())
-            sidebar_buttons["Open Group Matching"].click()
             group_matching_button = cast(
                 napari_sidebar.GroupMatchingWindowButton,
                 sidebar_buttons["Open Group Matching"],
@@ -111,9 +113,21 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 group_matching_dialog.screen() or QApplication.primaryScreen()
             )
             assert group_matching_screen is not None
-            self.assertEqual(
-                group_matching_dialog.geometry().height(),
-                group_matching_screen.availableGeometry().height(),
+            with patch.object(
+                group_matching_dialog,
+                "showFullScreen",
+                wraps=group_matching_dialog.showFullScreen,
+            ) as show_full_screen:
+                sidebar_buttons["Open Group Matching"].click()
+            show_full_screen.assert_not_called()
+            self.assertFalse(group_matching_dialog.isFullScreen())
+            dialog_geometry = group_matching_dialog.geometry()
+            available_geometry = group_matching_screen.availableGeometry()
+            self.assertEqual(dialog_geometry.left(), available_geometry.left())
+            self.assertEqual(dialog_geometry.top(), available_geometry.top())
+            self.assertEqual(dialog_geometry.width(), available_geometry.width())
+            self.assertGreaterEqual(
+                dialog_geometry.height(), available_geometry.height()
             )
 
             fov_path = root / "fov_groups.csv"
@@ -168,7 +182,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             match_buttons["Select all"].click()
             for button in select_buttons:
                 self.assertTrue(button.isChecked())
-            match_buttons["New FOV from selected"].click()
+            match_buttons["Assign new FOV ID"].click()
             match_buttons["Save FOV groups"].click()
             fov_rows = load_manual_fov_group_rows(fov_path)
             self.assertEqual(
@@ -186,7 +200,69 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                     second.resolve(strict=False): "second field edge",
                 },
             )
-            match_buttons["Clear selected FOV"].click()
+            fov_group_table = group_matching_widget.findChild(
+                QTableWidget,
+                "fov_assignment_table",
+            )
+            assert fov_group_table is not None
+            overlay_labels = group_matching_widget.findChildren(
+                QLabel,
+                "fov_card_overlay",
+            )
+            self.assertTrue(
+                all(" - FOV ID:" in label.text() for label in overlay_labels),
+            )
+            self.assertTrue(
+                all(": FOV ID:" not in label.text() for label in overlay_labels),
+            )
+            left_scroll = group_matching_widget.findChild(
+                QScrollArea,
+                "fov_assignment_left_scroll",
+            )
+            assert left_scroll is not None
+            left_scroll_widget = left_scroll.widget()
+            assert left_scroll_widget is not None
+            fov_id_label = left_scroll_widget.findChild(QLabel, "fov_id_label")
+            assert fov_id_label is not None
+            self.assertEqual(fov_id_label.text(), "FOV ID")
+            fov_sections = {
+                group_box.title()
+                for group_box in left_scroll_widget.findChildren(QGroupBox)
+            }
+            self.assertIn("FOV file", fov_sections)
+            self.assertNotIn("Decision file", fov_sections)
+            self.assertEqual(
+                left_scroll.horizontalScrollBarPolicy(),
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+            )
+            self.assertEqual(
+                fov_group_table.horizontalScrollBarPolicy(),
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+            )
+            horizontal_header = fov_group_table.horizontalHeader()
+            assert horizontal_header is not None
+            self.assertEqual(
+                horizontal_header.defaultAlignment(),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            )
+            self.assertEqual(
+                fov_group_table.maximumHeight(),
+                (group_matching._FOV_TABLE_VISIBLE_ROWS + 1)
+                * group_matching._FOV_TABLE_ROW_HEIGHT
+                + 4,
+            )
+            self.assertEqual(fov_group_table.rowCount(), 1)
+            fov_group_table.selectRow(0)
+            for button in select_buttons:
+                self.assertTrue(button.isChecked())
+            fov_group_table.clearSelection()
+            for button in select_buttons:
+                self.assertFalse(button.isChecked())
+            fov_group_table.selectRow(0)
+            for button in select_buttons:
+                self.assertTrue(button.isChecked())
+            match_buttons["Remove assigned FOV"].click()
+            self.assertEqual(fov_group_table.rowCount(), 0)
             original_note_edit_ids = {id(note_edit) for note_edit in fov_note_edits}
             with patch.object(
                 group_matching.FovAssignmentView,
@@ -194,6 +270,19 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 return_value=fov_path,
             ):
                 match_buttons["Load FOV CSV"].click()
+            status_label = left_scroll_widget.findChild(
+                QLabel,
+                "group_matching_caption",
+            )
+            assert status_label is not None
+            self.assertTrue(
+                status_label.text().startswith("Loaded 2 FOV assignments from "),
+            )
+            self.assertFalse(status_label.text().endswith("."))
+            self.assertEqual(
+                status_label.textInteractionFlags(),
+                Qt.TextInteractionFlag.TextSelectableByMouse,
+            )
             fov_note_edits = group_matching_widget.findChildren(
                 QLineEdit,
                 "fov_recording_note",
@@ -219,11 +308,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             assert fov_filter is not None
             self.assertEqual(fov_filter.currentText(), "fov_1")
             panel_widget = cast(Any, group_matching_widget)
-            self.assertLessEqual(
-                group_matching_dialog.geometry().height(),
-                group_matching_screen.availableGeometry().height(),
-            )
-            self.assertEqual(
+            self.assertGreater(
                 group_matching_dialog.maximumHeight(),
                 group_matching_screen.availableGeometry().height(),
             )
