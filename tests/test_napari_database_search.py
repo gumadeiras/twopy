@@ -6,6 +6,7 @@ Outputs: assertions for one napari workflow area.
 
 from qtpy.QtCore import QEvent, Qt
 from qtpy.QtGui import QKeyEvent
+
 from tests.napari_support import (
     ExperimentFavoriteErrorDialog,
     ExperimentSearchDialog,
@@ -68,14 +69,11 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
                 """Record a save-favorite action."""
                 self.events.append("save")
 
-        app = QApplication.instance() or QApplication([])
+        _ = QApplication.instance() or QApplication([])
         dialog = ProbeDialog()
-        dialog.show()
-        app.processEvents()
 
         dialog._user_filter.setText("Gus")
         dialog._user_filter.setFocus()
-        app.processEvents()
         QApplication.sendEvent(
             dialog._user_filter,
             QKeyEvent(
@@ -84,7 +82,6 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
                 Qt.KeyboardModifier.NoModifier,
             ),
         )
-        app.processEvents()
 
         self.assertEqual(dialog.events, ["search"])
 
@@ -440,7 +437,7 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
         Outputs: pressing Return in the focused result tree sends both source
         folders to the loader callback.
         """
-        app = QApplication.instance() or QApplication([])
+        _ = QApplication.instance() or QApplication([])
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
@@ -495,8 +492,6 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             )
             dialog._user_filter.setText("Gus")
             dialog.search()
-            dialog.show()
-            app.processEvents()
 
             root_item = dialog._tree.topLevelItem(0)
             assert root_item is not None
@@ -506,7 +501,6 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             for item in leaves:
                 item.setSelected(True)
             dialog._tree.setFocus()
-            app.processEvents()
             QApplication.sendEvent(
                 dialog._tree,
                 QKeyEvent(
@@ -515,7 +509,7 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
                     Qt.KeyboardModifier.NoModifier,
                 ),
             )
-            app.processEvents()
+            QApplication.processEvents()
 
             self.assertEqual(
                 loaded_paths,

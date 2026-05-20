@@ -6,6 +6,7 @@ Outputs: assertions for one napari workflow area.
 
 from qtpy.QtGui import QPalette
 from qtpy.QtWidgets import QCheckBox, QGridLayout, QPushButton, QTableWidget
+
 from tests.napari_support import (
     Any,
     EpochFrameWindow,
@@ -48,7 +49,6 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
-
 from twopy.analysis.group_matching import ManualRoiMatchRow, save_manual_roi_match_rows
 from twopy.custom import CustomResult, CustomTable
 from twopy.napari.group_matching import (

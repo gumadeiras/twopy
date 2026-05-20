@@ -5,6 +5,7 @@ Outputs: assertions for plot-control behavior.
 """
 
 from qtpy.QtWidgets import QSizePolicy
+
 from tests.napari_support import (
     PLOT_CONTROL_WIDTH,
     PLOT_DROPDOWN_WIDTH,
@@ -35,7 +36,6 @@ from tests.napari_support import (
     plot_display_options_group,
     unittest,
 )
-
 from twopy.napari.plotting.panels import SidebarTextLabel, response_metadata_tab
 
 
@@ -418,7 +418,6 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             widget.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
             widget.ensurePolished()
             widget.adjustSize()
-            widget.show()
         QApplication.processEvents()
 
         wide_controls: list[QWidget] = [

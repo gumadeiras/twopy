@@ -5,6 +5,7 @@ Outputs: assertions for one napari workflow area.
 """
 
 from qtpy.QtWidgets import QHeaderView
+
 from tests.napari_support import (
     Any,
     NapariAdapterTestCase,
@@ -41,7 +42,6 @@ from tests.napari_support import (
     unittest,
     write_last_recording_folder,
 )
-
 from twopy.napari.group_matching import cards as group_matching_cards
 from twopy.napari.group_matching import fov_assignment as group_matching_fov
 

@@ -5,6 +5,7 @@ Outputs: assertions for one napari workflow area.
 """
 
 from qtpy.QtWidgets import QSizePolicy
+
 from tests.napari_support import (
     EpochResponseMap,
     Figure,
@@ -40,7 +41,6 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
-
 from twopy.napari.plotting.panels import SidebarTextLabel
 
 

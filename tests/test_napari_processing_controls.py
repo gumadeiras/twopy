@@ -5,6 +5,7 @@ Outputs: assertions for plot-control behavior.
 """
 
 from qtpy.QtCore import Qt
+
 from tests.napari_support import (
     Any,
     DeltaFOverFOptions,
@@ -36,7 +37,6 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
-
 from twopy.analysis.timing import RecordingTiming
 from twopy.custom import (
     CustomLineBand,

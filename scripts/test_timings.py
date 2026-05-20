@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import subprocess
 import sys
@@ -22,6 +23,10 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 class TimingRecord(TypedDict):
@@ -176,6 +181,7 @@ def main() -> int:
         completed = subprocess.run(
             (sys.executable, "-m", "unittest", module),
             check=False,
+            env=_test_environment(),
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -210,7 +216,7 @@ def _run_discover(*, record: bool, history_limit: int) -> int:
     """
     command = [sys.executable, "-m", "unittest", "discover", "-s", "tests"]
     start = time.perf_counter()
-    completed = subprocess.run(command, check=False)
+    completed = subprocess.run(command, check=False, env=_test_environment())
     elapsed = time.perf_counter() - start
     status = "ok" if completed.returncode == 0 else "fail"
 
@@ -276,6 +282,23 @@ def _history_path() -> Path:
     if not git_dir:
         return Path(".twopy-test-timings.json")
     return Path(git_dir).resolve() / "twopy-test-timings.json"
+
+
+def _test_environment() -> dict[str, str]:
+    """Return process environment defaults for quiet GUI tests.
+
+    Args:
+        None.
+
+    Returns:
+        Environment variables for unittest subprocesses.
+
+    Napari and Qt tests should measure widgets without opening desktop windows
+    or taking focus from the developer's active app.
+    """
+    from tests.gui_environment import headless_gui_environment
+
+    return headless_gui_environment(os.environ)
 
 
 def _git_text(*args: str) -> str:

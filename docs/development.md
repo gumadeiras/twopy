@@ -22,6 +22,8 @@ micromamba run -n twopy pre-commit run --all-files
 
 The installed pre-commit hook runs ruff, ty, and unit tests before each commit. The unittest hook uses the timing helper's discover mode, so the suite runs once and records a rolling local timing history in `.git/twopy-test-timings.json`.
 
+GUI tests set `QT_QPA_PLATFORM=offscreen`, `QT_LOGGING_RULES=qt.qpa.*=false`, and `MPLBACKEND=Agg` by default before importing Qt, napari, or matplotlib, so widget coverage should not draw windows, steal focus, or print Qt platform noise. Set those environment variables explicitly before a test command when you need a different backend for debugging.
+
 Use targeted unittest groups while iterating:
 
 ```sh

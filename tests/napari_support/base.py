@@ -53,13 +53,13 @@ from qtpy.QtWidgets import (
     QTreeWidgetItem,
     QWidget,
 )
-from tests.tempdir import temporary_directory
 
 import twopy.napari.controls as napari_controls
 import twopy.napari.group_matching as group_matching
 import twopy.napari.group_matching.roi_assignment as group_matching_roi
 import twopy.napari.sidebar as napari_sidebar
 import twopy.napari.trial_timeline as trial_timeline
+from tests.tempdir import temporary_directory
 from twopy import (
     add_twopy_magicgui_controls,
     load_manual_fov_group_rows,
