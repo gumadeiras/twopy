@@ -10,6 +10,7 @@
 ### Fixes
 
 - Kept napari Load manually and Load CSV list dialog folders independent so choosing one no longer overwrites the other's remembered location.
+- Kept napari response plots from carrying stale epoch visibility into newly loaded recordings, so gray/interleave epochs are hidden by default after loading a CSV list.
 
 ## 0.2.0 - 2026-05-19
 

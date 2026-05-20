@@ -175,6 +175,108 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertFalse(response_widget._plot_area.epoch_plot_panels[1].isHidden())
         self.assertTrue(response_widget._plot_area.epoch_plot_panels[2].isHidden())
 
+    def test_epoch_visibility_defaults_reset_when_epoch_identity_changes(self) -> None:
+        """Confirm stale row visibility does not override baseline defaults.
+
+        Inputs: first plot data with visible epoch row zero, then different plot
+        data whose row zero is gray interleave.
+        Outputs: row zero is hidden after the epoch identity changes.
+        """
+        _ = QApplication.instance() or QApplication([])
+        time_seconds = np.array([0.0, 1.0], dtype=np.float64)
+        first = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Odor",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
+        )
+        second = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Gray Interleave",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor",
+                    epoch_number=2,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+
+        response_widget.set_response_plot_data(first, reset_axes=True)
+        response_widget.set_response_plot_data(second, reset_axes=True)
+
+        self.assertEqual(response_widget._epoch_visibility, {0: False, 1: True})
+        self.assertEqual(response_widget._visible_epoch_indices(), (1,))
+
+    def test_epoch_visibility_preserves_user_choice_for_same_epochs(self) -> None:
+        """Confirm live refreshes keep visibility when epoch identity is stable.
+
+        Inputs: two plot-data objects with the same epoch rows and one hidden
+        row selected by the user.
+        Outputs: the hidden row stays hidden after the refreshed plot data loads.
+        """
+        _ = QApplication.instance() or QApplication([])
+        time_seconds = np.array([0.0, 1.0], dtype=np.float64)
+        first = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Odor A",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor B",
+                    epoch_number=2,
+                    roi_labels=("roi_1",),
+                    time_seconds=time_seconds,
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
+        )
+        second = replace(
+            first,
+            epochs=(
+                replace(
+                    first.epochs[0],
+                    mean_values=np.array([[4.0, 5.0]], dtype=np.float64),
+                ),
+                replace(
+                    first.epochs[1],
+                    mean_values=np.array([[6.0, 7.0]], dtype=np.float64),
+                ),
+            ),
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+
+        response_widget.set_response_plot_data(first, reset_axes=True)
+        response_widget._set_epoch_visibility(1, False)
+        response_widget.set_response_plot_data(second, reset_axes=True)
+
+        self.assertEqual(response_widget._visible_epoch_indices(), (0,))
+
     def test_epoch_visibility_reuses_cached_heatmap_widgets(self) -> None:
         """Confirm epoch toggles do not rebuild cached heatmap images.
 
@@ -684,6 +786,46 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertIs(response_widget._response_map_data, map_data)
         self.assertEqual(len(response_widget._response_map_area.epoch_map_widgets), 1)
         self.assertIsNone(response_widget._plot_data)
+
+    def test_response_heatmaps_without_roi_plot_data_omit_interleave_epochs(
+        self,
+    ) -> None:
+        """Confirm standalone heatmaps share the baseline epoch default.
+
+        Inputs: heatmap data with one gray interleave epoch and one odor epoch,
+        but no ROI plot data.
+        Outputs: only the odor heatmap is shown.
+        """
+        _ = QApplication.instance() or QApplication([])
+        base_map_data = _tiny_response_map_data()
+        map_data = replace(
+            base_map_data,
+            epochs=(
+                replace(
+                    base_map_data.epochs[0],
+                    epoch_name="Gray Interleave",
+                    epoch_number=1,
+                ),
+                replace(
+                    base_map_data.epochs[0],
+                    epoch_name="Odor",
+                    epoch_number=2,
+                ),
+            ),
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget._response_map_data = map_data
+
+        response_widget._render_response_maps()
+
+        self.assertIsNone(response_widget._plot_data)
+        self.assertEqual(response_widget._visible_response_map_epoch_indices(), (1,))
+        self.assertTrue(
+            response_widget._response_map_area.epoch_map_panels[0].isHidden()
+        )
+        self.assertFalse(
+            response_widget._response_map_area.epoch_map_panels[1].isHidden()
+        )
 
     def test_response_heatmaps_do_not_recompute_for_roi_plot_updates(self) -> None:
         """Confirm ROI response refreshes do not recompute movie heatmaps.

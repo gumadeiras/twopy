@@ -82,6 +82,7 @@ from twopy.napari.plotting.docks.response_map_area import ResponseMapArea
 from twopy.napari.plotting.docks.save_actions import save_current_roi_analysis
 from twopy.napari.plotting.docks.visibility_state import (
     epoch_visibility,
+    epoch_visibility_signature,
     roi_label_values,
     roi_labels_from_plot_data,
     row_visibility,
@@ -157,6 +158,7 @@ class _ResponsePlotWidget(QWidget):
         self._correlation_roi_visibility: dict[int, bool] | None = None
         self._roi_colors: tuple[QColor, ...] = ()
         self._epoch_visibility: dict[int, bool] = {}
+        self._epoch_visibility_signature: tuple[tuple[int, str], ...] = ()
         self._manual_x_min: float | None = None
         self._manual_x_max: float | None = None
         self._manual_y_min: float | None = None
@@ -411,8 +413,10 @@ class _ResponsePlotWidget(QWidget):
             None.
         """
         self._recording = None
+        self._plot_data = None
         self._response_map_data = None
         self._invalidate_response_map_jobs()
+        self._reset_plot_state()
         self._response_map_options_widget.set_spatial_shape(
             recording.alignment_valid_crop.shape,
         )
@@ -934,10 +938,17 @@ class _ResponsePlotWidget(QWidget):
                 fallback_count=len(roi_labels),
             )
         )
+        signature = epoch_visibility_signature(self._plot_data.epochs)
+        existing_epoch_visibility = (
+            self._epoch_visibility
+            if signature == self._epoch_visibility_signature
+            else {}
+        )
         self._epoch_visibility = epoch_visibility(
-            self._epoch_visibility,
+            existing_epoch_visibility,
             self._plot_data.epochs,
         )
+        self._epoch_visibility_signature = signature
         if reset_axes:
             self._manual_x_min = None
             self._manual_x_max = None
@@ -950,6 +961,7 @@ class _ResponsePlotWidget(QWidget):
         self._correlation_roi_visibility = None
         self._roi_colors = ()
         self._epoch_visibility = {}
+        self._epoch_visibility_signature = ()
         self._manual_x_min = None
         self._manual_x_max = None
         self._manual_y_min = None
@@ -1187,8 +1199,12 @@ class _ResponsePlotWidget(QWidget):
         if self._response_map_data is None:
             return ()
         if self._plot_data is None:
-            return visible_indices(
+            visibility = epoch_visibility(
                 self._epoch_visibility,
+                self._response_map_data.epochs,
+            )
+            return visible_indices(
+                visibility,
                 len(self._response_map_data.epochs),
             )
         visible_plot_epochs = tuple(

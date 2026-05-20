@@ -8,9 +8,19 @@ The helpers keep callback value validation and row-index logic shared between
 ROI and epoch controls.
 """
 
+from collections.abc import Sequence
+from typing import Protocol
+
 from twopy.analysis.trials import is_baseline_epoch_name
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
+from twopy.napari.plotting.data import ResponsePlotData
 from twopy.roi import roi_label_values_from_labels
+
+
+class EpochVisibilityRow(Protocol):
+    """Epoch row fields needed by visibility helpers."""
+
+    epoch_name: str
+    epoch_number: int
 
 
 def row_index_or_none(value: object, row_count: int) -> int | None:
@@ -46,7 +56,7 @@ def row_visibility(
 
 def epoch_visibility(
     existing_visibility: dict[int, bool],
-    epochs: tuple[EpochResponsePlotData, ...],
+    epochs: Sequence[EpochVisibilityRow],
 ) -> dict[int, bool]:
     """Return epoch visibility, hiding interleave rows by default.
 
@@ -64,6 +74,23 @@ def epoch_visibility(
         )
         for index, epoch in enumerate(epochs)
     }
+
+
+def epoch_visibility_signature(
+    epochs: Sequence[EpochVisibilityRow],
+) -> tuple[tuple[int, str], ...]:
+    """Return the row identity used to decide whether epoch visibility carries over.
+
+    Args:
+        epochs: Plot rows for each stimulus epoch.
+
+    Returns:
+        Tuple of epoch number and name pairs in plot-row order.
+
+    Epoch visibility is row-index based in Qt callbacks, but those indices are
+    only meaningful while the same epoch rows are still being refreshed.
+    """
+    return tuple((epoch.epoch_number, epoch.epoch_name) for epoch in epochs)
 
 
 def set_row_visibility(
