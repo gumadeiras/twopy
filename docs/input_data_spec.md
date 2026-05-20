@@ -1,6 +1,6 @@
 # Input Data Spec
 
-This is the short input contract for one twopy recording. Keep this file high-level. The canonical file-by-file reference, observed example details, MATLAB/TIFF metadata, conversion load set, and converted HDF5 schema live in `docs/recording_file_schema.md`.
+This is the short input contract for one twopy recording. Keep this file high-level. The canonical file-by-file reference, observed example details, MATLAB/TIFF metadata, conversion load set, and converted HDF5 schema live in `recording_file_schema.md`.
 
 ## Recording Folder Contract
 
@@ -65,7 +65,7 @@ Large compressible arrays use gzip compression. Small direct-access datasets, su
 
 ## Detail Index
 
-Use `docs/recording_file_schema.md` for:
+Use `recording_file_schema.md` for:
 
 - observed example files and non-contract acquisition/transfer artifacts
 - MATLAB loader goals and observed MAT file formats

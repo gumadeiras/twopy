@@ -4,6 +4,7 @@
 
 ### Features
 
+- Added a GitHub Pages documentation site for `twopy.gumadeiras.com`.
 - Added stable custom-workflow access to converted recording metadata through `ctx.recording_metadata()`, including typed helpers for run and acquisition fields.
 
 ### Changes

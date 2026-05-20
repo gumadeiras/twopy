@@ -29,6 +29,10 @@ dependencies = [
 [project.scripts]
 twopy = "twopy.napari:main"
 
+[project.urls]
+Homepage = "https://twopy.gumadeiras.com"
+Repository = "https://github.com/gumadeiras/twopy"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

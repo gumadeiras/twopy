@@ -53,6 +53,7 @@ When a source recording has not been converted yet, twopy converts it first. Con
 
 ## Docs
 
+- [Full documentation](https://twopy.gumadeiras.com)
 - [GUI guide](docs/gui.md): napari loading, ROI editing, plotting, and saved outputs.
 - [Python API guide](docs/python_api.md): find recordings, convert data, run analysis, and open napari from scripts.
 - [Custom workflow guide](docs/custom_workflows.md): add versioned local analyses to the napari Custom tab.
