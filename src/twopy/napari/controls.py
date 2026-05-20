@@ -510,7 +510,7 @@ def _load_recording_csvs_from_dialog(state: NapariControlState) -> None:
         selected_paths,
         remember_selected_folder=False,
     )
-    _load_adjacent_fov_groups_for_recording_csvs(state, selected_paths)
+    _load_adjacent_group_matching_csvs_for_recording_csvs(state, selected_paths)
 
 
 def _load_selected_recording_paths(
@@ -565,7 +565,7 @@ def _choose_recording_paths(state: NapariControlState) -> tuple[Path, ...]:
     return tuple(Path(path).expanduser() for path in dialog.selectedFiles())
 
 
-def _choose_recording_csv_paths(state: NapariControlState) -> tuple[Path, ...]:
+def _choose_recording_csv_paths(_state: NapariControlState) -> tuple[Path, ...]:
     """Return selected loaded-recordings CSV files."""
     selected_paths, _selected_filter = QFileDialog.getOpenFileNames(
         None,
@@ -598,18 +598,18 @@ def _recording_paths_from_manual_selections(
     return tuple(recording_paths)
 
 
-def _load_adjacent_fov_groups_for_recording_csvs(
+def _load_adjacent_group_matching_csvs_for_recording_csvs(
     state: NapariControlState,
     csv_paths: tuple[Path, ...],
 ) -> None:
-    """Load a FOV CSV beside the selected loaded-recordings CSV, if present."""
+    """Load group-matching CSV defaults beside a loaded-recordings CSV."""
     panel = state.group_matching_panel
     if not isinstance(panel, GroupMatchingPanel):
         return
     for csv_path in csv_paths:
         if csv_path.suffix.lower() != ".csv":
             continue
-        if panel.load_fov_groups_from_folder(csv_path.expanduser().parent):
+        if panel.load_csv_folder_defaults(csv_path.expanduser().parent):
             return
 
 
@@ -626,7 +626,9 @@ def _save_loaded_recordings_from_dialog(state: NapariControlState) -> None:
         _show_selection_error((output_path,), error)
 
 
-def _choose_loaded_recordings_csv_save_path(state: NapariControlState) -> Path | None:
+def _choose_loaded_recordings_csv_save_path(
+    _state: NapariControlState,
+) -> Path | None:
     """Return the CSV path selected for saving loaded recordings."""
     start_path = _recording_csv_start_path()
     suggested_path = (

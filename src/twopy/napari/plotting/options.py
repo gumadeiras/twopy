@@ -171,7 +171,7 @@ def visibility_options_widget(
             checkbox.setChecked(checked)
         del blockers
         if batch_callback is not None:
-            batch_callback({key: checked for key in checkbox_keys})
+            batch_callback(dict.fromkeys(checkbox_keys, checked))
             return
         for key in checkbox_keys:
             callback(key, checked)

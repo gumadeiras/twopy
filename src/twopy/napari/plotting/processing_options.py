@@ -484,6 +484,7 @@ def _combo_box(values: tuple[tuple[str, str], ...]) -> QComboBox:
     combo_box = QComboBox()
     for label, value in values:
         combo_box.addItem(label, value)
+    combo_box.setMaxVisibleItems(len(values))
     set_plot_dropdown_width(combo_box)
     return combo_box
 

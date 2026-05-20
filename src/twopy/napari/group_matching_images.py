@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 THUMBNAIL_SIZE = 220
-ROI_PREVIEW_SIZE = 260
+ROI_PREVIEW_SIZE = THUMBNAIL_SIZE
 
 
 class _LayerWithData(Protocol):

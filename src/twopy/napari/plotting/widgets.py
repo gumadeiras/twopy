@@ -12,14 +12,14 @@ from typing import Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
-from qtpy.QtCore import QPointF, QRectF, QSize
+from qtpy.QtCore import QPointF, QRectF, QSize, Qt
 from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
 from qtpy.QtWidgets import QLayout, QSizePolicy, QWidget
 
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
 DEFAULT_VALUE_BOUNDS = (-1.0, 1.0)
-_LEFT_MARGIN = 88.0
+_LEFT_MARGIN = 56.0
 _TOP_MARGIN = 12.0
 _RIGHT_MARGIN = 18.0
 _BOTTOM_MARGIN = 46.0
@@ -175,6 +175,9 @@ class EpochPlotWidget(QWidget):
         del a0
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        font = painter.font()
+        font.setPixelSize(_plot_text_pixel_size(self._plot_size))
+        painter.setFont(font)
         plot_rect = _square_plot_rect(QRectF(self.rect()))
         painter.fillRect(self.rect(), QColor("#20252d"))
         _draw_axes(
@@ -251,6 +254,11 @@ def _plot_widget_height(plot_width: int) -> int:
     """
     axis_side = max(1.0, float(plot_width) - _LEFT_MARGIN - _RIGHT_MARGIN)
     return int(_TOP_MARGIN + axis_side + _BOTTOM_MARGIN)
+
+
+def _plot_text_pixel_size(plot_width: int) -> int:
+    """Return axis text size scaled to the drawn plot width."""
+    return max(8, min(14, round(plot_width * 0.055)))
 
 
 def clear_layout(layout: QLayout) -> None:
@@ -588,7 +596,7 @@ def _draw_axes(
             value_max,
         )
         painter.drawLine(point, QPointF(point.x(), point.y() + 4.0))
-        painter.drawText(QPointF(point.x() - 12.0, point.y() + 18.0), f"{tick:.1f}")
+        painter.drawText(QPointF(point.x() - 10.0, point.y() + 18.0), f"{tick:.1f}")
     for tick in _axis_ticks(value_min, value_max):
         point = _plot_point(
             rect,
@@ -600,14 +608,18 @@ def _draw_axes(
             value_max,
         )
         painter.drawLine(QPointF(point.x() - 4.0, point.y()), point)
-        painter.drawText(QPointF(point.x() - 56.0, point.y() + 4.0), f"{tick:.1f}")
+        painter.drawText(
+            QRectF(point.x() - 46.0, point.y() - 10.0, 38.0, 20.0),
+            int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+            f"{tick:.1f}",
+        )
 
     painter.drawText(
         QPointF(rect.center().x() - 26.0, rect.bottom() + 36.0),
         "Time (s)",
     )
     painter.save()
-    painter.translate(18.0, rect.center().y() + 18.0)
+    painter.translate(12.0, rect.center().y() + 18.0)
     painter.rotate(-90.0)
     painter.drawText(QPointF(0.0, 0.0), "dF/F")
     painter.restore()
@@ -628,7 +640,7 @@ def _zero_line_pen(color: QColor) -> QPen:
 
 
 def _axis_ticks(min_value: float, max_value: float) -> tuple[float, ...]:
-    """Return six tick values including axis endpoints.
+    """Return three tick values including axis endpoints.
 
     Args:
         min_value: Axis minimum.
@@ -639,7 +651,7 @@ def _axis_ticks(min_value: float, max_value: float) -> tuple[float, ...]:
     """
     if min_value == max_value:
         return (min_value,)
-    return tuple(float(value) for value in np.linspace(min_value, max_value, 6))
+    return tuple(float(value) for value in np.linspace(min_value, max_value, 3))
 
 
 def _draw_trace(

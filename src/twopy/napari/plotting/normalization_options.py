@@ -162,6 +162,7 @@ class NormalizationOptionsWidget(QWidget):
         """Create the normalization control group."""
         group = QGroupBox("Normalization")
         layout = plot_form_layout()
+        layout.setVerticalSpacing(8)
         layout.addRow("", self._normalize_to_epoch_peak)
         layout.addRow("Epoch", self._epoch)
         group.setLayout(layout)

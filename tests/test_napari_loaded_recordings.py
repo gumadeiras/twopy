@@ -4,11 +4,13 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from qtpy.QtWidgets import QHeaderView
 from tests.napari_support import (
     Any,
     NapariAdapterTestCase,
     Path,
     QApplication,
+    QCheckBox,
     QComboBox,
     QGroupBox,
     QLabel,
@@ -306,22 +308,130 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
 
             fov_filter = group_matching_widget.findChild(QComboBox, "fov_filter")
             assert fov_filter is not None
-            self.assertEqual(fov_filter.currentText(), "fov_1")
+            self.assertEqual(fov_filter.currentText(), "1")
+            self.assertEqual(fov_filter.currentData(), "fov_1")
             panel_widget = cast(Any, group_matching_widget)
             self.assertGreater(
                 group_matching_dialog.maximumHeight(),
                 group_matching_screen.availableGeometry().height(),
             )
-            roi_scroll_area = panel_widget._roi_view.findChild(
+            roi_left_scroll = panel_widget._roi_view.findChild(
                 QScrollArea,
-                "roi_assignment_scroll_area",
+                "roi_assignment_left_scroll",
             )
-            assert roi_scroll_area is not None
-            self.assertTrue(roi_scroll_area.widgetResizable())
+            assert roi_left_scroll is not None
+            self.assertTrue(roi_left_scroll.widgetResizable())
+            roi_left_widget = roi_left_scroll.widget()
+            assert roi_left_widget is not None
             self.assertIs(
-                roi_scroll_area.widget().findChild(QLineEdit, "roi_match_path"),
+                roi_left_widget.findChild(QLineEdit, "roi_match_path"),
                 match_path_edit,
             )
+            left_layout = roi_left_widget.layout()
+            assert left_layout is not None
+            roi_title = roi_left_widget.findChild(QLabel, "group_matching_title")
+            assert roi_title is not None
+            self.assertEqual(roi_title.text(), "ROI assignment")
+            roi_section_titles = [
+                cast(QGroupBox, left_layout.itemAt(index).widget()).title()
+                for index in range(left_layout.count())
+                if isinstance(left_layout.itemAt(index).widget(), QGroupBox)
+            ]
+            self.assertEqual(
+                roi_section_titles[:6],
+                [
+                    "ROI file",
+                    "FOV filter",
+                    "Current selection",
+                    "Saved groups",
+                    "Plot settings",
+                    "Finish",
+                ],
+            )
+            self.assertNotIn("Decision file", roi_section_titles)
+            roi_status_label = cast(QLabel, left_layout.itemAt(3).widget())
+            self.assertEqual(roi_status_label.objectName(), "group_matching_caption")
+            self.assertEqual(
+                cast(QGroupBox, left_layout.itemAt(4).widget()).title(),
+                "FOV filter",
+            )
+            self.assertEqual(
+                roi_status_label.textInteractionFlags(),
+                Qt.TextInteractionFlag.TextSelectableByMouse,
+            )
+            self.assertIn(
+                "FOV ID",
+                [
+                    label.text()
+                    for label in roi_left_widget.findChildren(
+                        QLabel,
+                        "fov_id_label",
+                    )
+                ],
+            )
+            plot_toggles = {
+                checkbox.text(): checkbox
+                for checkbox in roi_left_widget.findChildren(QCheckBox)
+                if checkbox.objectName()
+                in {"show_roi_responses", "show_combined_response"}
+            }
+            self.assertEqual(
+                set(plot_toggles),
+                {"ROI responses", "Combined response"},
+            )
+            roi_response_preview = group_matching_widget.findChild(
+                QWidget,
+                "roi_response_preview",
+            )
+            combined_response_preview = group_matching_widget.findChild(
+                QWidget,
+                "roi_mean_response_preview",
+            )
+            assert roi_response_preview is not None
+            assert combined_response_preview is not None
+            fov_filter_view = fov_filter.view()
+            assert fov_filter_view is not None
+            self.assertGreaterEqual(fov_filter_view.minimumWidth(), 128)
+            roi_workspace_scroll = panel_widget._roi_view.findChild(
+                QScrollArea,
+                "roi_assignment_workspace_scroll",
+            )
+            assert roi_workspace_scroll is not None
+            self.assertTrue(roi_workspace_scroll.widgetResizable())
+            roi_workspace_widget = roi_workspace_scroll.widget()
+            assert roi_workspace_widget is not None
+            right_layout = roi_workspace_widget.layout()
+            assert right_layout is not None
+            first_section = right_layout.itemAt(0).widget()
+            second_section = right_layout.itemAt(1).widget()
+            third_section = right_layout.itemAt(2).widget()
+            fourth_section = right_layout.itemAt(3).widget()
+            self.assertIsInstance(first_section, QGroupBox)
+            self.assertIsInstance(second_section, QGroupBox)
+            self.assertIsInstance(third_section, QGroupBox)
+            self.assertIsInstance(fourth_section, QGroupBox)
+            self.assertEqual(
+                cast(QGroupBox, first_section).title(),
+                "Selected ROIs",
+            )
+            self.assertEqual(
+                cast(QGroupBox, second_section).title(),
+                "ROI responses",
+            )
+            self.assertEqual(
+                cast(QGroupBox, third_section).title(),
+                "Combined responses",
+            )
+            self.assertEqual(
+                cast(QGroupBox, fourth_section).title(),
+                "ROI cards",
+            )
+            plot_toggles["ROI responses"].click()
+            self.assertTrue(cast(QGroupBox, second_section).isHidden())
+            plot_toggles["ROI responses"].click()
+            plot_toggles["Combined response"].click()
+            self.assertTrue(cast(QGroupBox, third_section).isHidden())
+            plot_toggles["Combined response"].click()
             self.assertNotIn(
                 "All FOVs",
                 tuple(
@@ -351,6 +461,37 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 "roi_assignment_card",
             )
             self.assertEqual(len(roi_cards), 2)
+            roi_view = cast(Any, group_matching_widget)._roi_view
+            self.assertEqual(
+                roi_view._card_grid_columns,
+                group_matching_roi._roi_card_columns_for_width(
+                    roi_workspace_scroll.viewport().width(),
+                    spacing=roi_view._grid.spacing(),
+                ),
+            )
+            for roi_card in roi_cards:
+                self.assertEqual(
+                    roi_card.minimumWidth(),
+                    group_matching_roi._ROI_CARD_WIDTH,
+                )
+                self.assertEqual(
+                    roi_card.maximumWidth(),
+                    group_matching_roi._ROI_CARD_WIDTH,
+                )
+                self.assertEqual(
+                    roi_card.minimumHeight(),
+                    group_matching_roi._ROI_CARD_HEIGHT,
+                )
+                roi_overlay = roi_card.findChild(QLabel, "fov_card_overlay")
+                assert roi_overlay is not None
+                self.assertIn(" - FOV ID: 1", roi_overlay.text())
+                self.assertNotIn(": FOV ID:", roi_overlay.text())
+                roi_preview_image = roi_card.findChild(QLabel, "roi_preview_image")
+                assert roi_preview_image is not None
+                self.assertEqual(
+                    roi_preview_image.width(),
+                    group_matching_roi.THUMBNAIL_SIZE,
+                )
             roi_selectors = [
                 combo
                 for combo in group_matching_widget.findChildren(QComboBox)
@@ -359,7 +500,19 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             self.assertEqual(len(roi_selectors), 2)
             for selector in roi_selectors:
                 self.assertEqual(selector.count(), 2)
+                self.assertTrue(selector.itemText(1).isdecimal())
+                self.assertNotIn("roi_", selector.itemText(1))
+                self.assertEqual(
+                    selector.height(),
+                    group_matching_roi._ROI_CONTROL_HEIGHT,
+                )
                 selector.setCurrentIndex(1)
+            roi_trace_chips = [
+                label
+                for label in group_matching_widget.findChildren(QLabel)
+                if label.text() == "ROI" and label.height() == selector.height()
+            ]
+            self.assertEqual(len(roi_trace_chips), 2)
             self.assertEqual(
                 len(
                     group_matching_widget.findChildren(
@@ -387,11 +540,29 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 ),
                 1,
             )
-            roi_view = cast(Any, group_matching_widget)._roi_view
             self.assertEqual(roi_view._plot_size, 180)
             self.assertEqual(
                 roi_view._smoothing_widget._smoothing_method.itemText(1),
                 "moving average",
+            )
+            self.assertEqual(
+                roi_view._smoothing_widget._smoothing_method.maxVisibleItems(),
+                3,
+            )
+            self.assertFalse(roi_view._normalization_widget._epoch.isEnabled())
+            response_epoch_titles = [
+                label.text()
+                for label in roi_response_preview.findChildren(QLabel)
+                if ": " in label.text()
+            ]
+            roi_view._set_plot_size(200)
+            self.assertEqual(
+                [
+                    label.text()
+                    for label in roi_response_preview.findChildren(QLabel)
+                    if ": " in label.text()
+                ],
+                response_epoch_titles,
             )
             loaded_list.setCurrentRow(0)
             self.assertIn(first.name, str(load_widget.recording_folder.line_edit.value))
@@ -423,7 +594,31 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 "roi_match_group_table",
             )
             assert group_table is not None
+            roi_table_header = group_table.horizontalHeader()
+            assert roi_table_header is not None
+            self.assertEqual(
+                roi_table_header.defaultAlignment(),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            )
+            self.assertEqual(
+                group_table.maximumHeight(),
+                (group_matching_roi._ROI_TABLE_VISIBLE_ROWS + 1)
+                * group_matching_roi._ROI_TABLE_ROW_HEIGHT
+                + 4,
+            )
+            self.assertEqual(
+                roi_table_header.sectionResizeMode(0),
+                QHeaderView.ResizeMode.Interactive,
+            )
+            self.assertEqual(
+                roi_table_header.sectionResizeMode(1),
+                QHeaderView.ResizeMode.Interactive,
+            )
             self.assertEqual(group_table.rowCount(), 1)
+            self.assertEqual(
+                cast(QGroupBox, first_section).title(),
+                "Selected ROIs - Group 1",
+            )
             roi_view = cast(Any, group_matching_widget)._roi_view
             with patch.object(
                 group_matching_roi.RoiAssignmentView,
@@ -452,6 +647,14 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 {"roi_0001", "roi_0002"},
             )
             self.assertEqual(roi_note_edit.text(), "strong match")
+            group_table.clearSelection()
+            for selector in roi_selectors:
+                self.assertEqual(selector.currentData(), "")
+            self.assertEqual(
+                cast(QGroupBox, first_section).title(),
+                "Selected ROIs",
+            )
+            group_table.selectRow(0)
             roi_selectors[1].setCurrentIndex(0)
             roi_note_edit.setText("first only")
             roi_buttons["Overwrite selected group"].click()

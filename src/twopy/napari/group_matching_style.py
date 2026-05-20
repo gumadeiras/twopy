@@ -149,6 +149,11 @@ QLineEdit, QComboBox, QSpinBox {
     border-radius: 4px;
     padding: 3px 5px;
 }
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {
+    background: $disabled_base;
+    color: $disabled_text;
+    border-color: $border;
+}
 QTableWidget {
     background: $input_base;
     color: $text;

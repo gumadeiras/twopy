@@ -10,6 +10,7 @@ matching across fields of view should not be the default path.
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -47,6 +48,7 @@ from twopy.napari.group_matching_images import (
     mean_image_thumbnail_pixmap,
 )
 from twopy.napari.group_matching_roi import (
+    MATCH_TABLE_FILENAME,
     RoiAssignmentView,
     roi_labels_from_layer_data,
 )
@@ -76,6 +78,56 @@ _FOV_TABLE_ROW_HEIGHT = 24
 _FOV_ID_STEP_BUTTON_SIZE = 26
 
 
+@dataclass
+class GroupMatchingCsvPaths:
+    """Session-level CSV paths for manual group matching.
+
+    Args:
+        fov_path: Current FOV assignment CSV path.
+        roi_path: Current ROI match CSV path.
+        roi_path_is_auto: Whether the ROI path still follows the FOV folder.
+
+    Returns:
+        Mutable path state owned by the group-matching panel.
+
+    The ROI path should follow recording-list folders only while it is
+    auto-managed. Once a user chooses a specific ROI CSV, that explicit choice
+    is preserved across later FOV path changes.
+    """
+
+    fov_path: Path
+    roi_path: Path
+    roi_path_is_auto: bool = True
+
+    @classmethod
+    def default(cls) -> "GroupMatchingCsvPaths":
+        """Return default CSV paths rooted at the current working directory."""
+        return cls(
+            fov_path=Path.cwd() / FOV_GROUP_TABLE_FILENAME,
+            roi_path=Path.cwd() / MATCH_TABLE_FILENAME,
+        )
+
+    def retarget_folder(self, folder: Path) -> None:
+        """Point auto-managed CSV paths at one recording-list folder."""
+        self.fov_path = folder.expanduser() / FOV_GROUP_TABLE_FILENAME
+        self._retarget_auto_roi_path()
+
+    def set_fov_path(self, path: Path) -> None:
+        """Set the FOV CSV path and move the auto ROI path beside it."""
+        self.fov_path = path.expanduser()
+        self._retarget_auto_roi_path()
+
+    def set_manual_roi_path(self, path: Path) -> None:
+        """Store an explicit ROI CSV path chosen by the user."""
+        self.roi_path = path.expanduser()
+        self.roi_path_is_auto = False
+
+    def _retarget_auto_roi_path(self) -> None:
+        """Move the ROI CSV path only while it is still auto-managed."""
+        if self.roi_path_is_auto:
+            self.roi_path = self.fov_path.parent / MATCH_TABLE_FILENAME
+
+
 class GroupMatchingState(Protocol):
     """Napari control-state fields needed by the group-matching widget."""
 
@@ -98,18 +150,23 @@ class GroupMatchingPanel(QWidget):
         self._fov_groups: dict[Path, str] = {}
         self._fov_notes: dict[Path, str] = {}
         self._current_rois: dict[Path, str] = {}
+        self._csv_paths = GroupMatchingCsvPaths.default()
         self._theme_style_refreshing = False
         self._stack = QStackedWidget()
         self._fov_view = FovAssignmentView(
             state=state,
             fov_groups=self._fov_groups,
             fov_notes=self._fov_notes,
+            output_path=self._csv_paths.fov_path,
+            on_output_path_changed=self._set_fov_output_path,
             on_finalize=self.finalize_fov_assignments,
         )
         self._roi_view = RoiAssignmentView(
             state=state,
             fov_groups=self._fov_groups,
             current_rois=self._current_rois,
+            output_path=self._csv_paths.roi_path,
+            on_output_path_changed=self._set_manual_roi_output_path,
             on_back=self.show_fov_assignment,
         )
         self._stack.addWidget(self._fov_view)
@@ -146,9 +203,8 @@ class GroupMatchingPanel(QWidget):
     def finalize_fov_assignments(self) -> None:
         """Save current FOV assignments and switch to ROI assignment."""
         if self._fov_view.save_fov_groups():
-            self._roi_view.set_default_output_folder(
-                self._fov_view.output_path().parent
-            )
+            self._csv_paths.set_fov_path(self._fov_view.output_path())
+            self._sync_roi_output_path(load_rows=True)
             self._roi_view.refresh_fov_filter()
             self._stack.setCurrentWidget(self._roi_view)
 
@@ -157,11 +213,11 @@ class GroupMatchingPanel(QWidget):
         self._stack.setCurrentWidget(self._fov_view)
         self._fov_view.refresh()
 
-    def load_fov_groups_from_folder(self, folder: Path) -> bool:
-        """Load ``fov_groups.csv`` from a recording-list folder when present.
+    def load_csv_folder_defaults(self, folder: Path) -> bool:
+        """Load group-matching CSV defaults from a recording-list folder.
 
         Args:
-            folder: Folder that may contain the manual FOV grouping CSV.
+            folder: Folder that may contain manual group-matching CSVs.
 
         Returns:
             ``True`` when an adjacent FOV CSV was found and loaded.
@@ -169,10 +225,44 @@ class GroupMatchingPanel(QWidget):
         candidate = folder.expanduser() / FOV_GROUP_TABLE_FILENAME
         if not candidate.exists():
             return False
-        self._fov_view.set_output_path(candidate)
+        self._csv_paths.retarget_folder(folder)
+        self._sync_csv_paths_to_views(load_roi_rows=True)
         self._fov_view.load_fov_groups_from_path()
         self._roi_view.refresh_fov_filter()
         return True
+
+    def clear_loaded_recording_state(self) -> None:
+        """Clear matching decisions that belong to unloaded recordings."""
+        self._fov_groups.clear()
+        self._fov_notes.clear()
+        self._current_rois.clear()
+        self._roi_view.refresh_fov_filter()
+
+    def remove_loaded_recording_state(self, recording_path: Path) -> None:
+        """Clear matching decisions that belong to one unloaded recording."""
+        path = recording_path.expanduser()
+        self._fov_groups.pop(path, None)
+        self._fov_notes.pop(path, None)
+        self._current_rois.pop(path, None)
+        self._roi_view.refresh_fov_filter()
+
+    def _set_fov_output_path(self, path: Path) -> None:
+        """Store a user-visible FOV path change and retarget auto ROI output."""
+        self._csv_paths.set_fov_path(path)
+        self._sync_roi_output_path(load_rows=True)
+
+    def _set_manual_roi_output_path(self, path: Path) -> None:
+        """Store a user-chosen ROI path so future FOV changes preserve it."""
+        self._csv_paths.set_manual_roi_path(path)
+
+    def _sync_csv_paths_to_views(self, *, load_roi_rows: bool) -> None:
+        """Mirror panel-owned CSV paths into both staged views."""
+        self._fov_view.set_output_path(self._csv_paths.fov_path)
+        self._sync_roi_output_path(load_rows=load_roi_rows)
+
+    def _sync_roi_output_path(self, *, load_rows: bool) -> None:
+        """Mirror the panel-owned ROI CSV path into the ROI view."""
+        self._roi_view.set_output_path(self._csv_paths.roi_path, load_rows=load_rows)
 
     def _load_fov_groups_if_available(self) -> None:
         """Populate FOV assignments from disk when the panel has none yet."""
@@ -211,6 +301,8 @@ class FovAssignmentView(QWidget):
         state: GroupMatchingState,
         fov_groups: dict[Path, str],
         fov_notes: dict[Path, str],
+        output_path: Path,
+        on_output_path_changed: Callable[[Path], None],
         on_finalize: Callable[[], None],
     ) -> None:
         """Create the first-stage FOV assignment view.
@@ -219,6 +311,8 @@ class FovAssignmentView(QWidget):
             state: Shared loaded-recording state.
             fov_groups: Mutable recording-to-FOV assignment mapping.
             fov_notes: Mutable recording-to-FOV-note mapping.
+            output_path: Initial FOV CSV path owned by the parent panel.
+            on_output_path_changed: Callback for user-visible FOV path changes.
             on_finalize: Callback invoked by Finalize and assign ROIs.
         """
         super().__init__()
@@ -226,8 +320,9 @@ class FovAssignmentView(QWidget):
         self._fov_groups = fov_groups
         self._fov_notes = fov_notes
         self._cards: list[FovRecordingCard] = []
+        self._on_output_path_changed = on_output_path_changed
         self._on_finalize = on_finalize
-        self._path_edit = QLineEdit(str(Path.cwd() / FOV_GROUP_TABLE_FILENAME))
+        self._path_edit = QLineEdit(str(output_path.expanduser()))
         self._path_edit.setObjectName("fov_group_path")
         self._path_edit.setMinimumWidth(0)
         self._path_edit.setSizePolicy(
@@ -235,7 +330,7 @@ class FovAssignmentView(QWidget):
             QSizePolicy.Policy.Fixed,
         )
         configure_placeholder(self._path_edit, "FOV CSV path")
-        self._path_edit.editingFinished.connect(self.load_fov_groups_from_path)
+        self._path_edit.editingFinished.connect(self._path_editing_finished)
         self._instruction_label = QLabel(
             "Compare mean images, select matching fields, then save FOV groups.",
         )
@@ -469,6 +564,7 @@ class FovAssignmentView(QWidget):
         if selected_path is None:
             return
         self._path_edit.setText(str(selected_path))
+        self._on_output_path_changed(self.output_path())
         self.load_fov_groups_from_path()
 
     def browse_fov_group_save_path(self) -> None:
@@ -477,6 +573,7 @@ class FovAssignmentView(QWidget):
         if selected_path is None:
             return
         self._path_edit.setText(str(selected_path))
+        self._on_output_path_changed(self.output_path())
         if selected_path.exists():
             self.load_fov_groups_from_path()
         else:
@@ -549,6 +646,11 @@ class FovAssignmentView(QWidget):
     def set_output_path(self, path: Path) -> None:
         """Set the current FOV grouping CSV path."""
         self._path_edit.setText(str(path.expanduser()))
+
+    def _path_editing_finished(self) -> None:
+        """Load the typed FOV CSV path and update parent-owned path state."""
+        self._on_output_path_changed(self.output_path())
+        self.load_fov_groups_from_path()
 
     def _choose_existing_fov_group_path(self) -> Path | None:
         """Return a user-selected existing FOV CSV path."""

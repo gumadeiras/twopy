@@ -373,6 +373,13 @@ def unload_loaded_recording(state: NapariSessionState, index: int) -> None:
         return
     removed = state.loaded_recordings.pop(index)
     remove_loaded_recording_layers(state.viewer, removed)
+    remove_matching_state = getattr(
+        state.group_matching_panel,
+        "remove_loaded_recording_state",
+        None,
+    )
+    if callable(remove_matching_state):
+        remove_matching_state(removed.recording.source_session_dir)
     if len(state.loaded_recordings) == 0:
         select_loaded_recording(state, None)
         return
@@ -394,6 +401,13 @@ def unload_all_loaded_recordings(state: NapariSessionState) -> None:
     for loaded_recording in state.loaded_recordings:
         remove_loaded_recording_layers(state.viewer, loaded_recording)
     state.loaded_recordings.clear()
+    clear_matching_state = getattr(
+        state.group_matching_panel,
+        "clear_loaded_recording_state",
+        None,
+    )
+    if callable(clear_matching_state):
+        clear_matching_state()
     select_loaded_recording(state, None)
 
 
@@ -463,6 +477,9 @@ def _remove_layer(viewer: object, layer: object) -> None:
 
     for collection_name in ("images", "labels"):
         collection = getattr(viewer, collection_name, None)
-        if isinstance(collection, list) and layer in collection:
-            collection.remove(layer)
-            return
+        if not isinstance(collection, list):
+            continue
+        for index, candidate in enumerate(collection):
+            if candidate is layer:
+                collection.pop(index)
+                return

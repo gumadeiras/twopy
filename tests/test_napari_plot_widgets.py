@@ -5,6 +5,7 @@ Outputs: assertions for one napari workflow area.
 """
 
 from qtpy.QtGui import QPalette
+from qtpy.QtWidgets import QCheckBox, QGridLayout, QPushButton
 from tests.napari_support import (
     Any,
     EpochFrameWindow,
@@ -48,6 +49,7 @@ from tests.napari_support import (
 )
 
 from twopy.napari.group_matching_style import style_group_matching_panel
+from twopy.napari.plotting import widgets as plotting_widgets
 
 
 class NapariPlotWidgetTest(NapariAdapterTestCase):
@@ -555,6 +557,48 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             ),
         )
 
+    def test_group_matching_overlay_resamples_different_time_axes(self) -> None:
+        """Confirm selected recordings stay visible when frame rates differ."""
+        reference_data = _tiny_response_plot_data()
+        dense_epoch = replace(
+            reference_data.epochs[0],
+            time_seconds=np.array([0.0, 0.5, 1.0], dtype=np.float64),
+            mean_values=np.array([[0.0, 10.0, 20.0]], dtype=np.float64),
+            sem_values=np.array([[0.0, 1.0, 2.0]], dtype=np.float64),
+        )
+        dense_data = ResponsePlotData(
+            source_path=None,
+            epochs=(dense_epoch,),
+        )
+
+        combined = group_matching_roi._combined_response_plot_data(
+            (
+                group_matching_roi._SelectedRoiResponse(
+                    recording_path=Path("/recordings/reference"),
+                    roi_label="roi_0001",
+                    plot_data=reference_data,
+                    color=QColor("#1f77b4"),
+                ),
+                group_matching_roi._SelectedRoiResponse(
+                    recording_path=Path("/recordings/dense"),
+                    roi_label="roi_0006",
+                    plot_data=dense_data,
+                    color=QColor("#17becf"),
+                ),
+            ),
+        )
+
+        assert combined is not None
+        np.testing.assert_allclose(
+            combined.epochs[0].mean_values[1],
+            np.array([0.0, 20.0], dtype=np.float64),
+        )
+        np.testing.assert_allclose(
+            combined.epochs[0].sem_values[1],
+            np.array([0.0, 2.0], dtype=np.float64),
+        )
+        self.assertTrue(np.all(np.isfinite(combined.epochs[0].mean_values[1])))
+
     def test_group_matching_mean_plot_uses_sample_sem(self) -> None:
         """Confirm the ROI matching mean row uses twopy's shared SEM rule.
 
@@ -584,6 +628,87 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         np.testing.assert_allclose(epoch.mean_values, np.array([[2.0, 5.0]]))
         np.testing.assert_allclose(epoch.sem_values, np.array([[1.0, 2.0]]))
 
+    def test_group_matching_selected_roi_buttons_use_numeric_roi_ids(self) -> None:
+        """Confirm selected-ROI chips use compact recording and ROI text."""
+        _ = QApplication.instance() or QApplication([])
+        widget = QWidget()
+        layout = QGridLayout()
+        widget.setLayout(layout)
+
+        group_matching_roi._add_response_legend(
+            layout,
+            (
+                group_matching_roi._SelectedRoiResponse(
+                    recording_path=Path("/recordings/first"),
+                    roi_label="roi_0001",
+                    plot_data=_tiny_response_plot_data(),
+                    color=QColor("#1f77b4"),
+                ),
+                group_matching_roi._SelectedRoiResponse(
+                    recording_path=Path("/recordings/second"),
+                    roi_label="roi_0012",
+                    plot_data=_tiny_response_plot_data(),
+                    color=QColor("#d95f02"),
+                ),
+            ),
+            hidden_recordings=set(),
+            set_visible=lambda _path, _visible: None,
+            max_width=320,
+        )
+
+        button_texts = [
+            button.text()
+            for button in widget.findChildren(QPushButton)
+            if " - ROI " in button.text()
+        ]
+        self.assertEqual(button_texts, ["first - ROI 1", "second - ROI 12"])
+
+    def test_group_matching_epoch_controls_filter_response_previews(self) -> None:
+        """Confirm ROI matching has compact epoch visibility controls."""
+        _ = QApplication.instance() or QApplication([])
+        view = group_matching_roi.RoiAssignmentView(
+            state=SimpleNamespace(loaded_recordings=[]),
+            fov_groups={},
+            current_rois={},
+            output_path=Path("roi_matches.csv"),
+            on_output_path_changed=lambda _path: None,
+            on_back=lambda: None,
+        )
+        plot_data = ResponsePlotData(
+            source_path=None,
+            epochs=(
+                EpochResponsePlotData(
+                    epoch_name="Gray Interleave",
+                    epoch_number=1,
+                    roi_labels=("roi_1",),
+                    time_seconds=np.array([0.0, 1.0], dtype=np.float64),
+                    mean_values=np.array([[0.0, 1.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+                EpochResponsePlotData(
+                    epoch_name="Odor",
+                    epoch_number=2,
+                    roi_labels=("roi_1",),
+                    time_seconds=np.array([0.0, 1.0], dtype=np.float64),
+                    mean_values=np.array([[2.0, 3.0]], dtype=np.float64),
+                    sem_values=np.zeros((1, 2), dtype=np.float64),
+                ),
+            ),
+        )
+
+        view._refresh_epoch_controls(plot_data)
+
+        checkboxes = view.findChildren(QCheckBox, "roi_epoch_visibility_checkbox")
+        self.assertEqual(
+            [checkbox.text() for checkbox in checkboxes],
+            ["1: Gray Interleave", "2: Odor"],
+        )
+        self.assertFalse(checkboxes[0].isChecked())
+        self.assertTrue(checkboxes[1].isChecked())
+        self.assertEqual(view._visible_response_epoch_indices(plot_data), (1,))
+        checkboxes[1].click()
+        self.assertEqual(view._visible_response_epoch_indices(plot_data), ())
+
     def test_group_matching_plot_size_redraws_without_recompute(self) -> None:
         """Confirm display-only plot sizing does not rerun ROI analysis.
 
@@ -596,6 +721,8 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             state=SimpleNamespace(loaded_recordings=[]),
             fov_groups={},
             current_rois={},
+            output_path=Path("roi_matches.csv"),
+            on_output_path_changed=lambda _path: None,
             on_back=lambda: None,
         )
 
@@ -607,6 +734,11 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             view._set_plot_size(240)
 
         self.assertEqual(view._plot_size, 240)
+        self.assertLess(
+            plotting_widgets._plot_text_pixel_size(180),
+            plotting_widgets._plot_text_pixel_size(260),
+        )
+        self.assertEqual(plotting_widgets._axis_ticks(-1.0, 1.0), (-1.0, 0.0, 1.0))
 
     def test_group_matching_style_uses_active_qt_palette(self) -> None:
         """Confirm Group Matching colors follow the current Qt theme.
@@ -718,7 +850,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         )
 
         self.assertEqual(widget.sizeHint().width(), 480)
-        self.assertEqual(widget.sizeHint().height(), 432)
+        self.assertEqual(widget.sizeHint().height(), 464)
 
         widget.update_display(
             show_sem=False,
@@ -732,7 +864,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         )
 
         self.assertEqual(widget.sizeHint().width(), 320)
-        self.assertEqual(widget.sizeHint().height(), 272)
+        self.assertEqual(widget.sizeHint().height(), 304)
 
     def test_response_widget_reuses_epoch_plots_for_live_refreshes(self) -> None:
         """Confirm repeated live results update cached epoch widgets in place.

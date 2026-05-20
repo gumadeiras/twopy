@@ -224,6 +224,123 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 {"first loaded-list note", "second loaded-list note"},
             )
 
+    def test_load_csv_list_retargets_auto_group_matching_paths_after_unload_all(
+        self,
+    ) -> None:
+        """Confirm auto group-matching CSV paths follow each loaded-list folder."""
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+
+            def write_recording_list(folder_name: str) -> tuple[Path, Path, Path]:
+                folder = root / folder_name
+                first = folder / "first"
+                second = folder / "second"
+                first.mkdir(parents=True)
+                second.mkdir()
+                _write_converted_recording(first, source_session_dir=first)
+                _write_converted_recording(second, source_session_dir=second)
+                csv_path = folder / "loaded_recordings.csv"
+                with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
+                    writer = csv.DictWriter(
+                        csv_file,
+                        fieldnames=("recording_path", "recording_data_path"),
+                    )
+                    writer.writeheader()
+                    for recording in (first, second):
+                        writer.writerow(
+                            {
+                                "recording_path": str(recording),
+                                "recording_data_path": str(
+                                    recording / "twopy" / "recording_data.h5"
+                                ),
+                            },
+                        )
+                save_manual_fov_group_rows(
+                    make_manual_fov_group_rows({first: "fov_1", second: "fov_1"}),
+                    folder / "fov_groups.csv",
+                )
+                return csv_path, folder / "fov_groups.csv", folder / "roi_matches.csv"
+
+            first_csv, first_fov, first_roi = write_recording_list("first_set")
+            second_csv, second_fov, second_roi = write_recording_list("second_set")
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            load_panel = cast(QWidget, control_docks.load_widget)
+            loaded_panel = cast(QWidget, control_docks.loaded_recordings_widget)
+            group_matching_widget = cast(QWidget, control_docks.group_matching_widget)
+            load_buttons = {
+                button.text(): button for button in load_panel.findChildren(QPushButton)
+            }
+            unload_buttons = {
+                button.text(): button
+                for button in loaded_panel.findChildren(QPushButton)
+            }
+            fov_path_edit = group_matching_widget.findChild(
+                QLineEdit,
+                "fov_group_path",
+            )
+            roi_path_edit = group_matching_widget.findChild(
+                QLineEdit,
+                "roi_match_path",
+            )
+            assert fov_path_edit is not None
+            assert roi_path_edit is not None
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_csv_paths",
+                return_value=(first_csv,),
+            ):
+                load_buttons["Load CSV list"].click()
+
+            self.assertEqual(Path(fov_path_edit.text()), first_fov)
+            self.assertEqual(Path(roi_path_edit.text()), first_roi)
+
+            unload_buttons["Unload selected"].click()
+            unload_buttons["Unload selected"].click()
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_csv_paths",
+                return_value=(second_csv,),
+            ):
+                load_buttons["Load CSV list"].click()
+
+            self.assertEqual(Path(fov_path_edit.text()), second_fov)
+            self.assertEqual(Path(roi_path_edit.text()), second_roi)
+
+            unload_buttons["Unload all"].click()
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_csv_paths",
+                return_value=(first_csv,),
+            ):
+                load_buttons["Load CSV list"].click()
+
+            self.assertEqual(Path(fov_path_edit.text()), first_fov)
+            self.assertEqual(Path(roi_path_edit.text()), first_roi)
+
+            manual_roi_path = root / "manual_roi_matches.csv"
+            roi_path_edit.setText(str(manual_roi_path))
+            roi_path_edit.editingFinished.emit()
+            unload_buttons["Unload all"].click()
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_csv_paths",
+                return_value=(second_csv,),
+            ):
+                load_buttons["Load CSV list"].click()
+
+            self.assertEqual(Path(fov_path_edit.text()), second_fov)
+            self.assertEqual(Path(roi_path_edit.text()), manual_roi_path)
+
     def test_load_csv_list_uses_separate_remembered_folder(self) -> None:
         """Confirm CSV-list dialogs do not overwrite manual-load memory.
 
