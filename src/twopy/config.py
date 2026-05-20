@@ -84,7 +84,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
         msg = f"twopy config must be a YAML mapping: {config_path}"
         raise ValueError(msg)
 
-    raw_config: dict[object, object] = {key: value for key, value in loaded.items()}
+    raw_config: dict[object, object] = dict(loaded.items())
 
     return TwopyConfig(
         database_path=_required_path(raw_config, "database_path", config_path),

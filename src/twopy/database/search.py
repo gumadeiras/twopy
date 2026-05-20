@@ -527,7 +527,7 @@ def _time_nodes(
         experiments,
         field="time",
         label_for_experiment=time_label_for_experiment,
-        next_builder=lambda grouped: (),
+        next_builder=lambda _grouped: (),
     )
 
 

@@ -869,7 +869,7 @@ def _trial_response_row(
         "stop_frame": trial.stop_frame,
         "frame_count": trial.stop_frame - trial.start_frame,
     }
-    row.update({column: "" for column in time_columns})
+    row.update(dict.fromkeys(time_columns, ""))
     for time_seconds, value in zip(
         trial.time_seconds,
         trial.values[:, roi_index],

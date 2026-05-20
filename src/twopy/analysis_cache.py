@@ -10,6 +10,7 @@ files are removed from the local cache after they copy successfully because the
 publish destination is their durable location.
 """
 
+import os
 import shutil
 import tempfile
 from concurrent.futures import Executor, Future
@@ -266,7 +267,7 @@ def copy_file_atomically(source: Path, target: Path) -> None:
     temp_path = Path(temp_name)
     try:
         with (
-            open(temp_descriptor, "wb") as temp_file,
+            os.fdopen(temp_descriptor, "wb") as temp_file,
             source.open(
                 "rb",
             ) as source_file,
