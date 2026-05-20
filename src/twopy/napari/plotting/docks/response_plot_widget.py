@@ -156,7 +156,7 @@ class _ResponsePlotWidget(QWidget):
         self._roi_save_file: Path | None = None
         self._plot_data: ResponsePlotData | None = None
         self._response_map_data: ResponseMapData | None = None
-        self._show_sem = True
+        self._show_sem = False
         self._plot_size = 300
         self._roi_visibility: dict[int, bool] = {}
         self._correlation_roi_visibility: dict[int, bool] | None = None

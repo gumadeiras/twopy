@@ -10,6 +10,7 @@
 ### Changes
 
 - Switched the documentation site to the Furo theme.
+- Made the napari Plot tab's Show SEM toggle start unchecked.
 - Made Custom-tab workflow results show one selectable compact output folder and avoid horizontal scrolling from long output paths.
 - Changed native Response kernels defaults to 100 past stimulus samples and 10 future stimulus samples for both olfaction and vision.
 - Added a developer function-inventory script that reports action-oriented per-function size, docstring size, direct call counts, direct test counts, API surface, domain, git churn, risk score, and simple complexity.

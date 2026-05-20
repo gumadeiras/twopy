@@ -158,6 +158,31 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             ),
         )
 
+    def test_plot_tab_show_sem_starts_unchecked(self) -> None:
+        """Confirm the default Plot tab hides SEM bands.
+
+        Inputs: a newly created response widget.
+        Outputs: the Show SEM checkbox starts unchecked.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        display_item = response_widget._plot_display_options_layout.itemAt(0)
+        if display_item is None:
+            self.fail("Plot display options group is missing")
+        display_group = display_item.widget()
+        if display_group is None:
+            self.fail("Plot display options group is not a widget")
+        layout = cast(QFormLayout, display_group.layout())
+        sem_item = layout.itemAt(0, QFormLayout.ItemRole.FieldRole)
+        if sem_item is None:
+            self.fail("Plot display show SEM checkbox is missing")
+        sem_widget = sem_item.widget()
+        if not isinstance(sem_widget, QCheckBox):
+            self.fail("Plot display show SEM row is not a QCheckBox")
+
+        self.assertFalse(response_widget._show_sem)
+        self.assertFalse(sem_widget.isChecked())
+
     def test_response_map_options_show_only_current_mode_rows(self) -> None:
         """Confirm Heatmap controls hide parameters for the inactive mode.
 
