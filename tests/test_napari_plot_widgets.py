@@ -5,7 +5,7 @@ Outputs: assertions for one napari workflow area.
 """
 
 from qtpy.QtGui import QPalette
-from qtpy.QtWidgets import QCheckBox, QGridLayout, QPushButton
+from qtpy.QtWidgets import QCheckBox, QGridLayout, QPushButton, QTableWidget
 from tests.napari_support import (
     Any,
     EpochFrameWindow,
@@ -50,6 +50,7 @@ from tests.napari_support import (
 )
 
 from twopy.analysis.group_matching import ManualRoiMatchRow, save_manual_roi_match_rows
+from twopy.custom import CustomResult, CustomTable
 from twopy.napari.group_matching_style import style_group_matching_panel
 from twopy.napari.plotting import widgets as plotting_widgets
 from twopy.napari.plotting.preview_strip import ResponsePreviewStrip
@@ -1197,6 +1198,38 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertIs(response_widget._response_map_data, map_data)
         self.assertEqual(len(response_widget._response_map_area.epoch_map_widgets), 1)
         self.assertIsNone(response_widget._plot_data)
+
+    def test_recording_load_clears_custom_workflow_results(self) -> None:
+        """Confirm recording changes remove stale Custom-tab result widgets.
+
+        Inputs: response widget with a rendered Custom-tab table, then one
+        loaded converted recording.
+        Outputs: the Custom-tab result area returns to its empty state.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            table_path = root / "direction_selectivity.csv"
+            table_path.write_text("roi_label,dsi\nroi_0001,0.5\n", encoding="utf-8")
+            recording = load_converted_recording(
+                _write_converted_recording(root / "recording"),
+            )
+            response_widget = cast(Any, create_response_plot_widget(None))
+            custom_panel = response_widget._custom_workflow_panel
+            custom_panel._render_result(
+                CustomResult(
+                    message="ok",
+                    tables=(CustomTable("Direction selectivity", table_path),),
+                ),
+            )
+
+            self.assertIsNotNone(custom_panel.findChild(QTableWidget))
+
+            response_widget.load_recording(recording)
+
+            self.assertIsNone(custom_panel.findChild(QTableWidget))
+            labels = {label.text() for label in custom_panel.findChildren(QLabel)}
+            self.assertIn("No custom workflow outputs.", labels)
 
     def test_response_heatmaps_without_roi_plot_data_omit_interleave_epochs(
         self,

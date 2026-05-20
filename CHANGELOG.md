@@ -19,6 +19,7 @@
 
 ### Fixes
 
+- Cleared stale Custom-tab workflow outputs when loading, selecting, or clearing a recording.
 - Kept native response-kernel mean plot legends focused on mean traces by omitting separate SEM band legend entries.
 - Cleared stale Custom-tab workflow outputs after failed DSI or response-kernel runs and when a run returns no displayable outputs.
 - Kept Group Matching's auto-managed ROI match CSV path following the current loaded-recordings CSV folder after unloading all recordings and loading a new CSV list, while preserving explicitly chosen ROI CSV paths.

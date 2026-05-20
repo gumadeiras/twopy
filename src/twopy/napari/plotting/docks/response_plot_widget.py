@@ -393,6 +393,7 @@ class _ResponsePlotWidget(QWidget):
         self._response_window_options_widget.set_max_window_seconds(None)
         self._response_map_options_widget.set_spatial_shape(None)
         self._processing_options_widget.set_correlation_window_stop_default(None)
+        self._custom_workflow_panel.clear_result()
         self._custom_workflow_panel.refresh_parameters()
         self._reset_plot_state()
         self._recording_summary_label.setText("No recording loaded.")
@@ -441,6 +442,7 @@ class _ResponsePlotWidget(QWidget):
         self._processing_options_widget.set_correlation_window_stop_default(
             response_plot_min_epoch_duration_for_recording(recording),
         )
+        self._custom_workflow_panel.clear_result()
         self._custom_workflow_panel.refresh_parameters()
         self._delta_f_over_f_options = self._delta_f_over_f_options_widget.options()
         self._live_controller.set_delta_f_over_f_options(

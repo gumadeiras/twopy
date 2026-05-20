@@ -199,9 +199,9 @@ class CustomWorkflowPanel(QScrollArea):
         workflow = self._selected_workflow()
         if workflow is None:
             self._status_label.setText("No custom workflow selected.")
-            self._show_empty_result()
+            self.clear_result()
             return
-        self._show_empty_result()
+        self.clear_result()
         try:
             params = build_parameter_object(
                 workflow.params_type,
@@ -276,8 +276,20 @@ class CustomWorkflowPanel(QScrollArea):
         if self._result_layout.count() == 0:
             self._add_empty_result_label()
 
-    def _show_empty_result(self) -> None:
-        """Clear stale workflow outputs from the Result panel."""
+    def clear_result(self) -> None:
+        """Clear stale workflow outputs from the Result panel.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        Custom workflow outputs belong to the recording and ROI state that
+        produced them. Recording lifecycle owners call this method when that
+        context changes so the Custom tab never displays stale analysis
+        artifacts.
+        """
         _clear_layout(self._result_layout)
         self._add_empty_result_label()
 
