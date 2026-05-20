@@ -15,16 +15,24 @@ release = PYPROJECT["project"]["version"]
 
 extensions = [
     "myst_parser",
-    "sphinx_rtd_theme",
 ]
 source_suffix = {
     ".md": "markdown",
 }
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
-html_theme = "sphinx_rtd_theme"
+html_theme = "furo"
 html_extra_path = ["CNAME", ".nojekyll"]
 html_show_sourcelink = False
 html_theme_options = {
-    "collapse_navigation": False,
-    "navigation_depth": 4,
+    "light_css_variables": {
+        "color-brand-primary": "#1f6f78",
+        "color-brand-content": "#165b63",
+        "color-api-name": "#165b63",
+    },
+    "dark_css_variables": {
+        "color-brand-primary": "#67d5df",
+        "color-brand-content": "#67d5df",
+        "color-api-name": "#67d5df",
+    },
+    "navigation_with_keys": True,
 }
