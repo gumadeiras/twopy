@@ -4,6 +4,8 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from qtpy.QtCore import QEvent, Qt
+from qtpy.QtGui import QKeyEvent
 from tests.napari_support import (
     ExperimentFavoriteErrorDialog,
     ExperimentSearchDialog,
@@ -37,6 +39,54 @@ from tests.napari_support import (
 
 class NapariDatabaseSearchTest(NapariAdapterTestCase):
     """Napari database search tests."""
+
+    def test_database_search_filter_enter_only_searches(self) -> None:
+        """Confirm Return in a database-search filter does not save favorites.
+
+        Inputs: a dialog with a focused filter field containing saveable text.
+        Outputs: pressing Return emits only the search action, not the dialog's
+        first enabled button action.
+        """
+
+        class ProbeDialog(ExperimentSearchDialog):
+            """Record actions reached through Qt signal wiring."""
+
+            def __init__(self) -> None:
+                """Create a search dialog that records activated actions."""
+                self.events: list[str] = []
+                super().__init__(
+                    on_load_recording_paths=lambda paths: RecordingLoadResult(
+                        loaded_count=len(paths),
+                    ),
+                )
+
+            def search(self) -> None:
+                """Record a database-search action."""
+                self.events.append("search")
+
+            def save_current_favorite(self) -> None:
+                """Record a save-favorite action."""
+                self.events.append("save")
+
+        app = QApplication.instance() or QApplication([])
+        dialog = ProbeDialog()
+        dialog.show()
+        app.processEvents()
+
+        dialog._user_filter.setText("Gus")
+        dialog._user_filter.setFocus()
+        app.processEvents()
+        QApplication.sendEvent(
+            dialog._user_filter,
+            QKeyEvent(
+                QEvent.Type.KeyPress,
+                Qt.Key.Key_Return,
+                Qt.KeyboardModifier.NoModifier,
+            ),
+        )
+        app.processEvents()
+
+        self.assertEqual(dialog.events, ["search"])
 
     def test_database_search_dialog_loads_selected_hierarchy_paths(self) -> None:
         """Confirm DB search selections resolve to configured source paths.
@@ -387,9 +437,10 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
         """Confirm DB search can load several selected result rows at once.
 
         Inputs: two valid experiment rows and a multi-selected search tree.
-        Outputs: Load selected sends both source folders to the loader callback.
+        Outputs: pressing Return in the focused result tree sends both source
+        folders to the loader callback.
         """
-        _ = QApplication.instance() or QApplication([])
+        app = QApplication.instance() or QApplication([])
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             database_dir = root / "db"
@@ -444,14 +495,27 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             )
             dialog._user_filter.setText("Gus")
             dialog.search()
+            dialog.show()
+            app.processEvents()
 
             root_item = dialog._tree.topLevelItem(0)
             assert root_item is not None
             leaves = _tree_leaf_items(root_item)
             self.assertEqual(len(leaves), 2)
+            dialog._tree.setCurrentItem(leaves[0])
             for item in leaves:
                 item.setSelected(True)
-            dialog.load_selected()
+            dialog._tree.setFocus()
+            app.processEvents()
+            QApplication.sendEvent(
+                dialog._tree,
+                QKeyEvent(
+                    QEvent.Type.KeyPress,
+                    Qt.Key.Key_Return,
+                    Qt.KeyboardModifier.NoModifier,
+                ),
+            )
+            app.processEvents()
 
             self.assertEqual(
                 loaded_paths,

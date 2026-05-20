@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from qtpy.QtCore import Qt
+from qtpy.QtCore import QEvent, QObject, Qt
+from qtpy.QtGui import QKeyEvent
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -168,6 +169,7 @@ class ExperimentSearchDialog(QDialog):
         )
         self._configure_result_columns()
         self._tree.itemActivated.connect(self._load_tree_item)
+        self._tree.installEventFilter(self)
 
         search_button = QPushButton("Search")
         search_button.setStyleSheet(SECONDARY_ACTION_BUTTON_STYLE)
@@ -183,6 +185,16 @@ class ExperimentSearchDialog(QDialog):
         load_button.clicked.connect(self.load_selected)
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.reject)
+        for button in (
+            search_button,
+            self._save_favorite_button,
+            self._use_favorite_button,
+            self._remove_favorite_button,
+            load_button,
+            close_button,
+        ):
+            button.setAutoDefault(False)
+            button.setDefault(False)
 
         for widget in self._filter_widgets():
             widget.textChanged.connect(self._update_favorite_action_states)
@@ -200,6 +212,34 @@ class ExperimentSearchDialog(QDialog):
         layout.addWidget(splitter)
         layout.addLayout(_bottom_button_row(load_button, close_button))
         self.setLayout(layout)
+
+    def eventFilter(self, a0: QObject | None, a1: QEvent | None) -> bool:
+        """Load selected search results when Return is pressed in the result tree.
+
+        Args:
+            a0: Widget that received the event.
+            a1: Qt event sent to the watched widget.
+
+        Returns:
+            Whether this dialog handled the event.
+
+        The result tree accepts Return without emitting ``itemActivated`` on all
+        Qt backends, so the dialog handles that key explicitly while filter
+        fields keep their own Return-to-search behavior.
+        """
+        watched = a0
+        event = a1
+        if (
+            watched is self._tree
+            and isinstance(event, QKeyEvent)
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
+            and self._tree.selectedItems()
+        ):
+            self.load_selected()
+            event.accept()
+            return True
+        return super().eventFilter(watched, event)
 
     def search(self) -> None:
         """Run the database search and render grouped results.
