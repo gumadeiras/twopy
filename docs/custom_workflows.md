@@ -70,6 +70,7 @@ twopy rejects workflows that are missing `id`, `name`, `version`, `description`,
 - `ctx.current_rois()` returns the current ROI masks or raises a clear error.
 - `ctx.rois_for_selector(selector)` returns all current ROIs or the visible response-plot ROI subset for a standard `roi_selector` parameter.
 - `ctx.compute_standard_responses()` runs the same dF/F and response grouping used by the Plot tab.
+- `ctx.recording_metadata()` returns a stable metadata snapshot for the converted recording. Use `metadata.text("run", "rig_name", default="")`, `metadata.float("acquisition", "acq.zoomFactor")`, `metadata.int("run", "run_number")`, or raw mappings such as `metadata.run` and `metadata.stimulus_parameters` when a workflow needs lab metadata without importing internal recording objects.
 - `ctx.epoch_names()` returns `{epoch_number: epoch_name}` for the loaded recording.
 - `ctx.epoch_choices()` returns `CustomEpoch` objects with `number`, `name`, `label`, `selector`, and `duration_seconds`.
 - `ctx.epoch_durations_seconds()` returns the shortest observed duration per epoch number.
@@ -114,7 +115,7 @@ For CSV, PDF, PNG, and other non-HDF5 outputs, twopy writes a sidecar like `dire
 
 ## Kernel Workflow
 
-twopy ships a native Response kernels workflow. It runs through the same Custom tab as local workflows, uses the current Plot-tab dF/F and processing settings, uses the Baseline epoch dropdown to choose the gray or interleave epoch excluded from fitting, keeps complete regular stimulus streams for selected non-baseline epochs, skips selected stimulus segments whose sample times are not regular enough for fixed-lag fitting, samples ROI responses from photodiode-aligned frame windows, and fits temporal kernels per ROI for each unique selected epoch name. The Stimulus dropdown selects how the default converted stimulus column is interpreted.
+twopy ships a native Response kernels workflow. It runs through the same Custom tab as local workflows, uses the current Plot-tab dF/F and processing settings, uses the Baseline epoch dropdown to choose the gray or interleave epoch excluded from fitting, keeps complete regular stimulus streams for selected non-baseline epochs, skips selected stimulus segments whose sample times are not regular enough for fixed-lag fitting, samples ROI responses from photodiode-aligned frame windows, and fits temporal kernels per ROI for each unique selected epoch name. The Stimulus dropdown selects how the default converted stimulus column is interpreted. It defaults to `olfaction` when converted run metadata has `rig_name=OdorRig`; otherwise it defaults to `vision`.
 
 For `olfaction`, the workflow fits one raw-left and raw-right antenna kernel per ROI and epoch name, maps those raw kernels to ipsi and contra from the recording hemisphere stored in converted metadata, with a manual override available for audits, then writes:
 

@@ -343,6 +343,7 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 stimulus_parameters_json=(
                     '[{"epochName": "Noise"}, {"epochName": "Gray Interleave"}]'
                 ),
+                run_metadata={"rig_name": "OdorRig"},
             )
             viewer = _FakeViewer()
             opened = open_recording_in_napari(recording_path, viewer=viewer)
@@ -387,6 +388,30 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 ["auto", "right", "left"],
             )
             self.assertEqual(hemisphere_widget.currentData(), "recording_metadata")
+
+    def test_native_kernel_modality_defaults_to_vision_for_non_odor_rig(self) -> None:
+        """Confirm response kernels default to vision away from OdorRig."""
+        with temporary_directory() as temp_dir:
+            recording_path = _write_converted_recording(
+                Path(temp_dir),
+                run_metadata={"rig_name": "VisualRig"},
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            workflows = discover_custom_workflows(native_custom_workflow_paths())
+            workflow = next(
+                item for item in workflows.workflows if item.id == "response-kernels"
+            )
+
+            specs = {
+                spec.name: spec
+                for spec in response_widget._custom_parameter_specs_for_workflow(
+                    workflow,
+                )
+            }
+
+            self.assertEqual(specs["stimulus_modality"].default, "vision")
 
     def test_custom_epoch_parameter_default_matches_supported_selectors(self) -> None:
         """Confirm epoch dropdown defaults accept number, label, and name."""

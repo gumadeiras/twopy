@@ -103,6 +103,7 @@ def _write_converted_recording(
     stimulus_data_column_names: tuple[str, ...] = ("time_seconds", "epoch_number"),
     high_res_pd: npt.NDArray[np.float64] | None = None,
     stimulus_parameters_json: str = "[]",
+    run_metadata: dict[str, object] | None = None,
 ) -> Path:
     """Write a tiny converted recording for adapter tests.
 
@@ -118,6 +119,7 @@ def _write_converted_recording(
         high_res_pd: Optional high-rate photodiode vector.
         stimulus_parameters_json: JSON list of stimulus epoch parameter
             dictionaries.
+        run_metadata: Optional run metadata attributes.
 
     Returns:
         Path to ``recording_data.h5``.
@@ -128,7 +130,7 @@ def _write_converted_recording(
         alignment_valid_crop=alignment_valid_crop,
         source_session_dir=source_session_dir,
         acquisition_metadata={"acq.frameRate": 10.0, "acq.zoomFactor": 2.0},
-        run_metadata={"rig_name": "TestRig"},
+        run_metadata={"rig_name": "TestRig"} if run_metadata is None else run_metadata,
         stimulus_data=stimulus_data,
         stimulus_data_column_names=stimulus_data_column_names,
         stimulus_parameters_json=stimulus_parameters_json,

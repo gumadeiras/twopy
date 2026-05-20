@@ -210,6 +210,7 @@ Scripts and napari can pass `ResponseProcessingOptions` for post-dF/F response p
 - Correlation filtering scores grouped trials and saves the selected settings plus QC scores in `analysis_outputs.h5`.
 - Use `finite_mean_and_sem(values, axis=...)` from `twopy`, `twopy.api`, or `twopy.custom` when scripts or custom workflows need the same finite-sample mean and sample-SEM convention used by response plots and CSV exports.
 - Custom workflows can pass `CustomLinePlot(colors=...)` or call `ctx.roi_colors_for_labels(labels)`; the napari Custom tab also colors ROI-labeled plots automatically when line labels match current ROI labels.
+- Custom workflows can call `ctx.recording_metadata()` to inspect converted metadata through stable raw mappings and typed helpers such as `metadata.text("run", "rig_name")` and `metadata.float("acquisition", "acq.zoomFactor")`.
 - Use `validate_grouped_roi_responses` when a script constructs grouped response objects directly; processing, persistence, and CSV exports call the same validator before trusting time, frame, and ROI axes.
 
 Manual FOV groups and cross-recording ROI matches are stored as plain CSV tables. Napari's Group Matching window writes the same formats, and scripts can read or extend them through the core API:

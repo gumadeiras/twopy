@@ -17,6 +17,7 @@ from twopy.converted import load_converted_recording
 from twopy.custom import (
     CustomLineBand,
     CustomLinePlot,
+    CustomRecordingMetadata,
     CustomResult,
     CustomRunContext,
     CustomWorkflowProvenance,
@@ -440,6 +441,10 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
         np.testing.assert_allclose(means, np.array([2.0, 2.0]))
         np.testing.assert_allclose(sems, np.array([1.0, 0.0]))
 
+    def test_custom_api_exposes_recording_metadata(self) -> None:
+        """Confirm workflow files can import the recording metadata object."""
+        self.assertEqual(CustomRecordingMetadata.__name__, "CustomRecordingMetadata")
+
 
 class CustomRunContextApiTest(unittest.TestCase):
     """Tests the public context API exposed to workflows."""
@@ -484,6 +489,67 @@ class CustomRunContextApiTest(unittest.TestCase):
                 ctx.epoch_window(1.0, 1.0)
             with self.assertRaisesRegex(ValueError, "stop"):
                 ctx.response_window(1.0, 1.0)
+
+    def test_recording_metadata_returns_snapshot_with_typed_reads(self) -> None:
+        """Confirm workflows can inspect converted metadata without internals."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = write_converted_recording_files(
+                root,
+                acquisition_metadata={
+                    "acq.frameRate": 10.0,
+                    "acq.zoomFactor": 2.0,
+                },
+                run_metadata={"rig_name": "OdorRig", "run_number": 4},
+                stimulus_parameters_json='[{"epochName": "Odor"}]',
+                stimulus_specific_columns_json=(
+                    '{"62002": {"columns": ['
+                    '{"mat_slot": 5, "column_name": "stimulus_specific_05"}]}}'
+                ),
+            )
+            ctx = _custom_context(recording_path)
+
+            metadata = ctx.recording_metadata()
+            with self.assertRaises(TypeError):
+                cast(dict[str, object], metadata.run)["rig_name"] = "Changed"
+
+            self.assertEqual(metadata.text("run", "rig_name"), "OdorRig")
+            self.assertEqual(
+                metadata.text("run", "missing", default="fallback"),
+                "fallback",
+            )
+            self.assertEqual(metadata.float("acquisition", "acq.zoomFactor"), 2.0)
+            self.assertEqual(metadata.int("run", "run_number"), 4)
+            self.assertEqual(metadata.stimulus_parameters[0]["epochName"], "Odor")
+            self.assertEqual(
+                cast(
+                    Mapping[str, object],
+                    metadata.value("stimulus_specific_columns", "62002"),
+                )["columns"],
+                ({"mat_slot": 5, "column_name": "stimulus_specific_05"},),
+            )
+            self.assertIsInstance(
+                metadata.stimulus_specific_columns["62002"]["columns"],
+                tuple,
+            )
+            self.assertEqual(
+                ctx.recording.run_metadata["rig_name"],
+                "OdorRig",
+            )
+
+    def test_recording_metadata_fails_loudly_for_bad_reads(self) -> None:
+        """Confirm metadata helpers reject unknown sections and wrong types."""
+        with temporary_directory() as temp_dir:
+            recording_path = write_converted_recording_files(
+                Path(temp_dir),
+                run_metadata={"rig_name": "OdorRig"},
+            )
+            metadata = _custom_context(recording_path).recording_metadata()
+
+            with self.assertRaisesRegex(ValueError, "Unknown"):
+                metadata.value("not_a_section", "rig_name")
+            with self.assertRaisesRegex(ValueError, "float"):
+                metadata.float("run", "rig_name")
 
     def test_roi_selector_returns_visible_subset(self) -> None:
         """Confirm workflows can request all or visible ROIs through the API."""
@@ -820,6 +886,7 @@ class _DsiFakeContext:
         roi_set: RoiSet | None = None,
     ) -> _DsiFakeComputation:
         """Return fake grouped responses for DSI calls."""
+        del roi_set
         return _DsiFakeComputation(grouped_responses=object())
 
     def epoch_window(
@@ -839,6 +906,7 @@ class _DsiFakeContext:
         window_seconds: tuple[float, float] | None = None,
     ) -> np.ndarray:
         """Return deterministic preferred and null responses."""
+        del grouped, metric, window_seconds
         if epoch == "preferred":
             return np.array([0.8, 0.2, -0.4], dtype=np.float64)
         if self._zero_sum_first_roi:
@@ -877,6 +945,7 @@ class _DsiFakeContext:
         roi_indices: Sequence[int] | None = None,
     ) -> ResponsePlotData:
         """Record ROI indices selected for plotting."""
+        del grouped, max_rois
         self.plotted_roi_indices = tuple(roi_indices or ())
         return ResponsePlotData(source_path=source_path, epochs=())
 

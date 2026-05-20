@@ -211,6 +211,7 @@ def run(ctx: CustomRunContext, params: ReferenceParams) -> CustomResult:
         Result using every supported output type.
     """
     rois = ctx.rois_for_selector(params.roi_selector)
+    metadata = ctx.recording_metadata()
     computation = ctx.compute_standard_responses(rois)
     epoch = params.selected_epoch or _first_epoch_label(ctx)
     baseline_epoch = params.baseline_epoch or _first_epoch_label(ctx)
@@ -253,6 +254,8 @@ def run(ctx: CustomRunContext, params: ReferenceParams) -> CustomResult:
     note_path.write_text(
         (
             f"{params.note}\n"
+            f"rig_name={metadata.text('run', 'rig_name', default='')}\n"
+            f"zoom={metadata.float('acquisition', 'acq.zoomFactor')}\n"
             f"metric={params.metric}\n"
             f"epoch={epoch}\n"
             f"response_window={response_window_seconds}\n"

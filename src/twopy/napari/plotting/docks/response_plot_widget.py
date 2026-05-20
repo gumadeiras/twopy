@@ -42,6 +42,7 @@ from twopy.converted import RecordingData
 from twopy.custom import (
     CustomLinePlot,
     CustomParameterSpec,
+    CustomRecordingMetadata,
     CustomResult,
     CustomRunContext,
     CustomWorkflow,
@@ -644,14 +645,18 @@ class _ResponsePlotWidget(QWidget):
         if metric_stop_seconds is not None:
             response_stop_seconds = metric_stop_seconds + post_window_seconds
         return tuple(
-            _recording_parameter_spec(
-                spec,
+            _workflow_recording_parameter_spec(
+                workflow,
+                _recording_parameter_spec(
+                    spec,
+                    recording=self._recording,
+                    epoch_choices=epoch_choices,
+                    stimulus_column_choices=stimulus_column_choices,
+                    metric_stop_seconds=metric_stop_seconds,
+                    response_start_seconds=-pre_window_seconds,
+                    response_stop_seconds=response_stop_seconds,
+                ),
                 recording=self._recording,
-                epoch_choices=epoch_choices,
-                stimulus_column_choices=stimulus_column_choices,
-                metric_stop_seconds=metric_stop_seconds,
-                response_start_seconds=-pre_window_seconds,
-                response_stop_seconds=response_stop_seconds,
             )
             for spec in specs
         )
@@ -1254,7 +1259,7 @@ class _ResponsePlotWidget(QWidget):
             existing_visibility,
             self._correlation_roi_visibility,
         ):
-            self._roi_visibility = {index: True for index in range(len(roi_labels))}
+            self._roi_visibility = dict.fromkeys(range(len(roi_labels)), True)
         else:
             self._roi_visibility = existing_visibility
         self._correlation_roi_visibility = None
@@ -1714,6 +1719,30 @@ def _recording_parameter_spec(
             decimals=spec.decimals if spec.decimals is not None else 3,
         )
     return spec
+
+
+def _workflow_recording_parameter_spec(
+    workflow: CustomWorkflow,
+    spec: CustomParameterSpec,
+    *,
+    recording: RecordingData,
+) -> CustomParameterSpec:
+    """Apply workflow-specific recording defaults to one control."""
+    if workflow.id == "response-kernels" and spec.name == "stimulus_modality":
+        return replace(
+            spec,
+            default=_default_kernel_stimulus_modality(recording),
+        )
+    return spec
+
+
+def _default_kernel_stimulus_modality(recording: RecordingData) -> str:
+    """Return the Response kernels modality default from recording metadata."""
+    metadata = CustomRecordingMetadata._from_recording(recording)
+    rig_name = metadata.text("run", "rig_name", default="") or ""
+    if rig_name.strip().casefold() == "odorrig":
+        return "olfaction"
+    return "vision"
 
 
 def _custom_choice_parameter_spec(
