@@ -4,6 +4,7 @@ Inputs: shared fake napari state and tiny response data.
 Outputs: assertions for plot-control behavior.
 """
 
+from qtpy.QtWidgets import QSizePolicy
 from tests.napari_support import (
     PLOT_CONTROL_WIDTH,
     PLOT_DROPDOWN_WIDTH,
@@ -19,6 +20,7 @@ from tests.napari_support import (
     QDoubleSpinBox,
     QFormLayout,
     QLabel,
+    QScrollArea,
     QSpinBox,
     Qt,
     QWidget,
@@ -34,9 +36,66 @@ from tests.napari_support import (
     unittest,
 )
 
+from twopy.napari.plotting.panels import SidebarTextLabel, response_metadata_tab
+
 
 class NapariPlotControlsTest(NapariAdapterTestCase):
     """Napari plot layout and display-control tests."""
+
+    def test_metadata_tab_uses_sidebar_width_and_selectable_text(self) -> None:
+        """Confirm Metadata text wraps in the sidebar and can be copied.
+
+        Inputs: Metadata-tab labels with long path-like text.
+        Outputs: the scroll area is vertical-only and labels are selectable,
+        wrapped, and shrinkable to the sidebar width.
+        """
+        _ = QApplication.instance() or QApplication([])
+        analysis_text = "Analysis output: /very/long/path/to/analysis_outputs.h5"
+        labels = (
+            SidebarTextLabel("Recording: /very/long/path/to/a/recording"),
+            SidebarTextLabel("Microscope: scan settings"),
+            SidebarTextLabel(analysis_text),
+            SidebarTextLabel("ROI output: /very/long/path/to/rois.h5"),
+        )
+
+        tab = response_metadata_tab(
+            recording_summary_label=labels[0],
+            microscope_summary_label=labels[1],
+            analysis_output_label=labels[2],
+            roi_output_label=labels[3],
+        )
+
+        self.assertIsInstance(tab, QScrollArea)
+        scroll_tab = cast(QScrollArea, tab)
+        self.assertEqual(
+            scroll_tab.horizontalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        content = scroll_tab.widget()
+        if content is None:
+            self.fail("Metadata tab is missing scroll content")
+        self.assertEqual(
+            content.sizePolicy().horizontalPolicy(),
+            QSizePolicy.Policy.Ignored,
+        )
+        for label in labels:
+            self.assertTrue(
+                label.textInteractionFlags()
+                & Qt.TextInteractionFlag.TextSelectableByMouse,
+            )
+            self.assertTrue(label.wordWrap())
+            self.assertTrue(label.hasHeightForWidth())
+            self.assertEqual(
+                label.sizePolicy().horizontalPolicy(),
+                QSizePolicy.Policy.Ignored,
+            )
+            self.assertEqual(label.minimumWidth(), 1)
+        self.assertEqual(labels[2].text(), analysis_text)
+        self.assertGreater(
+            labels[2].heightForWidth(90),
+            labels[2].heightForWidth(400),
+        )
+        self.assertFalse(hasattr(labels[2], "verticalScrollBar"))
 
     def test_plot_tab_option_sections_have_expected_order(self) -> None:
         """Confirm the Plot tab presents response options in workflow order.

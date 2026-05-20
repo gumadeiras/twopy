@@ -4,6 +4,7 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from qtpy.QtWidgets import QSizePolicy
 from tests.napari_support import (
     EpochResponseMap,
     Figure,
@@ -11,8 +12,9 @@ from tests.napari_support import (
     NapariAdapterTestCase,
     Path,
     QApplication,
-    QLabel,
     QPushButton,
+    QScrollArea,
+    Qt,
     ResponseExportState,
     ResponseMapData,
     ResponseMapOptions,
@@ -39,9 +41,77 @@ from tests.napari_support import (
     unittest,
 )
 
+from twopy.napari.plotting.panels import SidebarTextLabel
+
 
 class NapariExportTest(NapariAdapterTestCase):
     """Napari response export tests."""
+
+    def test_response_export_tab_uses_sidebar_width_without_horizontal_scroll(
+        self,
+    ) -> None:
+        """Confirm Export status text wraps instead of widening the sidebar.
+
+        Inputs: an Export tab with its shared status label.
+        Outputs: the scroll area keeps horizontal scrolling disabled and allows
+        its content and status label to shrink to the sidebar width.
+        """
+        _ = QApplication.instance() or QApplication([])
+        long_status = (
+            "Exports save to /very/long/path/without/spaces/recording_view.pdf"
+        )
+        status_label = SidebarTextLabel(long_status)
+
+        tab = create_response_export_tab(
+            lambda: ResponseExportState(
+                viewer=None,
+                recording=None,
+                roi_labels_layer=None,
+                plot_data=None,
+                output_dir=Path("/tmp/twopy-export-test"),
+                roi_label_values=(),
+                roi_colors=(),
+                epoch_indices=(),
+                response_map_epoch_indices=(),
+                roi_indices=(),
+                show_sem=True,
+                time_bounds=(0.0, 1.0),
+                value_bounds=(0.0, 1.0),
+            ),
+            save_analysis_button=QPushButton("Save ROIs + analysis"),
+            status_label=status_label,
+        )
+
+        self.assertIsInstance(tab, QScrollArea)
+        scroll_tab = cast(QScrollArea, tab)
+        self.assertEqual(
+            scroll_tab.horizontalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        content = scroll_tab.widget()
+        if content is None:
+            self.fail("Export tab is missing scroll content")
+        self.assertEqual(
+            content.sizePolicy().horizontalPolicy(),
+            QSizePolicy.Policy.Ignored,
+        )
+        self.assertEqual(
+            status_label.sizePolicy().horizontalPolicy(),
+            QSizePolicy.Policy.Ignored,
+        )
+        self.assertTrue(status_label.wordWrap())
+        self.assertTrue(status_label.hasHeightForWidth())
+        self.assertGreater(
+            status_label.heightForWidth(90),
+            status_label.heightForWidth(400),
+        )
+        self.assertEqual(status_label.text(), long_status)
+        self.assertTrue(
+            status_label.textInteractionFlags()
+            & Qt.TextInteractionFlag.TextSelectableByMouse,
+        )
+        self.assertEqual(status_label.minimumWidth(), 1)
+        self.assertFalse(hasattr(status_label, "verticalScrollBar"))
 
     def test_response_plot_export_writes_editable_figure_bundle(self) -> None:
         """Confirm response plots export in the expected file formats.
@@ -219,7 +289,7 @@ class NapariExportTest(NapariAdapterTestCase):
                     button.text(): button for button in tab.findChildren(QPushButton)
                 }
                 buttons["Save recording view"].click()
-                status = tab.findChild(QLabel)
+                status = tab.findChild(SidebarTextLabel)
             finally:
                 chdir(original_cwd)
 

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 from twopy.analysis.response_maps import ResponseMapData
 from twopy.analysis_cache import (
@@ -31,7 +31,7 @@ from twopy.napari.plotting.export import (
     export_response_heatmaps,
     export_roi_view,
 )
-from twopy.napari.plotting.panels import scrolling_tab
+from twopy.napari.plotting.panels import SidebarTextLabel, scrolling_tab
 from twopy.napari.text import counted_noun
 
 __all__ = ["ResponseExportState", "create_response_export_tab"]
@@ -67,7 +67,7 @@ def create_response_export_tab(
     get_state: Callable[[], ResponseExportState],
     *,
     save_analysis_button: QPushButton,
-    status_label: QLabel | None = None,
+    status_label: SidebarTextLabel | None = None,
 ) -> QWidget:
     """Create the response export tab.
 
@@ -81,8 +81,7 @@ def create_response_export_tab(
         Qt widget with export buttons and status text.
     """
     if status_label is None:
-        status_label = QLabel("Exports save beside the recording.")
-    status_label.setWordWrap(True)
+        status_label = SidebarTextLabel("Exports save beside the recording.")
     layout = QVBoxLayout()
     layout.addWidget(save_analysis_button)
     for text, callback in (
@@ -192,7 +191,7 @@ def _save_heatmaps(state: ResponseExportState) -> tuple[Path, ...] | str:
 def _button(
     text: str,
     get_state: Callable[[], ResponseExportState],
-    status_label: QLabel,
+    status_label: SidebarTextLabel,
     callback: Callable[[ResponseExportState], tuple[Path, ...] | str],
 ) -> QPushButton:
     """Create one export button.

@@ -28,7 +28,11 @@ from twopy.napari.plotting.export_controls import (
     create_response_export_tab,
 )
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
-from twopy.napari.plotting.panels import response_metadata_tab, scrolling_tab
+from twopy.napari.plotting.panels import (
+    SidebarTextLabel,
+    response_metadata_tab,
+    scrolling_tab,
+)
 from twopy.napari.plotting.processing_options import ResponseProcessingOptionsWidget
 from twopy.napari.plotting.response_map_options import ResponseMapOptionsWidget
 from twopy.napari.plotting.response_window_options import ResponseWindowOptionsWidget
@@ -72,12 +76,12 @@ class ResponseOptionsPanel:
     """
 
     tabs: QTabWidget
-    recording_summary_label: QLabel
-    microscope_summary_label: QLabel
-    analysis_path_label: QLabel
-    roi_save_path_label: QLabel
+    recording_summary_label: SidebarTextLabel
+    microscope_summary_label: SidebarTextLabel
+    analysis_path_label: SidebarTextLabel
+    roi_save_path_label: SidebarTextLabel
     update_status_label: QLabel
-    export_status_label: QLabel
+    export_status_label: SidebarTextLabel
     reload_saved_button: QPushButton
     plot_options_layout: QVBoxLayout
     plot_display_options_layout: QVBoxLayout
@@ -141,18 +145,13 @@ def create_response_options_panel(
     save_analysis_button = QPushButton("Save ROIs + analysis")
     save_analysis_button.clicked.connect(on_save_analysis)
 
-    recording_summary_label = QLabel("No recording loaded.")
-    recording_summary_label.setWordWrap(True)
-    microscope_summary_label = QLabel("No microscope metadata.")
-    microscope_summary_label.setWordWrap(True)
-    analysis_path_label = QLabel(f"Analysis output: {DEFAULT_PATH_TEXT}")
-    analysis_path_label.setWordWrap(True)
-    roi_save_path_label = QLabel(f"ROI output: {DEFAULT_PATH_TEXT}")
-    roi_save_path_label.setWordWrap(True)
+    recording_summary_label = SidebarTextLabel("No recording loaded.")
+    microscope_summary_label = SidebarTextLabel("No microscope metadata.")
+    analysis_path_label = SidebarTextLabel(f"Analysis output: {DEFAULT_PATH_TEXT}")
+    roi_save_path_label = SidebarTextLabel(f"ROI output: {DEFAULT_PATH_TEXT}")
     update_status_label = QLabel("")
     update_status_label.setWordWrap(True)
-    export_status_label = QLabel("Exports save beside the recording.")
-    export_status_label.setWordWrap(True)
+    export_status_label = SidebarTextLabel("Exports save beside the recording.")
 
     plot_options_layout = QVBoxLayout()
     plot_options_layout.setSpacing(6)

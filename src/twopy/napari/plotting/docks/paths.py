@@ -10,8 +10,6 @@ status display code.
 
 from pathlib import Path
 
-from qtpy.QtWidgets import QLabel
-
 from twopy.converted import RecordingData
 from twopy.filenames import ANALYSIS_OUTPUT_FILENAME, ROI_FILENAME
 from twopy.napari.display_paths import (
@@ -21,6 +19,7 @@ from twopy.napari.display_paths import (
 )
 from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import default_analysis_output_path
+from twopy.napari.plotting.panels import SidebarTextLabel
 
 
 def resolved_analysis_path(
@@ -68,10 +67,10 @@ def refresh_update_path_labels(
     recording: RecordingData | None,
     analysis_path: Path | None,
     roi_save_file: Path | None,
-    recording_summary_label: QLabel,
-    microscope_summary_label: QLabel,
-    analysis_path_label: QLabel,
-    roi_save_path_label: QLabel,
+    recording_summary_label: SidebarTextLabel,
+    microscope_summary_label: SidebarTextLabel,
+    analysis_path_label: SidebarTextLabel,
+    roi_save_path_label: SidebarTextLabel,
 ) -> None:
     """Refresh compact recording and output labels in the Metadata tab.
 

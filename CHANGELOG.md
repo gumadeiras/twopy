@@ -20,6 +20,7 @@
 
 ### Fixes
 
+- Kept the napari Metadata and Export tabs from widening the sidebar with a horizontal scrollbar when status paths are long, and made Metadata text selectable for copying.
 - Cleared stale Custom-tab workflow outputs when loading, selecting, or clearing a recording.
 - Kept native response-kernel mean plot legends focused on mean traces by omitting separate SEM band legend entries.
 - Cleared stale Custom-tab workflow outputs after failed DSI or response-kernel runs and when a run returns no displayable outputs.

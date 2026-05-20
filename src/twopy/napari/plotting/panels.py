@@ -7,11 +7,14 @@ This module owns generic panel layout only. It does not load data, compute
 responses, or export figures.
 """
 
+from html import escape
+
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QGroupBox,
     QLabel,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -19,10 +22,89 @@ from qtpy.QtWidgets import (
 from twopy.napari.plotting.widgets import EpochPlotWidget
 
 __all__ = [
+    "SidebarTextLabel",
     "epoch_plot_panel",
     "response_metadata_tab",
     "scrolling_tab",
 ]
+
+
+class SidebarTextLabel(QLabel):
+    """Selectable sidebar text that wraps long paths inside the dock width.
+
+    Args:
+        text: Initial plain text shown in the sidebar label.
+
+    Returns:
+        A label that keeps a copy-clean plain text value while giving Qt
+        display-only break opportunities for long path-like tokens.
+
+    Metadata and export status often contain unspaced filesystem paths. A plain
+    QLabel wraps words but not every path-like token, so this label renders
+    escaped rich text with zero-width break hints and keeps the original text in
+    ``text()`` for programmatic reads.
+    """
+
+    def __init__(self, text: str = "") -> None:
+        """Create a copyable, wrapping sidebar text label."""
+        super().__init__()
+        self._plain_text = ""
+        self._configure_text_label()
+        if text:
+            self.setText(text)
+
+    def setText(self, a0: str | None) -> None:
+        """Replace the visible text with plain copyable text.
+
+        Args:
+            a0: Text to display and expose for copying.
+
+        Returns:
+            None.
+        """
+        self._plain_text = a0 or ""
+        super().setText(_sidebar_label_markup(self._plain_text))
+
+    def text(self) -> str:
+        """Return the plain text currently visible in the label.
+
+        Args:
+            None.
+
+        Returns:
+            Copy-clean text without inserted line-break characters.
+        """
+        return self._plain_text
+
+    def _configure_text_label(self) -> None:
+        """Apply label behavior needed for narrow sidebar tabs."""
+        self.setWordWrap(True)
+        self.setTextFormat(Qt.TextFormat.RichText)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(1)
+
+
+def _sidebar_label_markup(text: str) -> str:
+    """Return rich text with break opportunities for path-like sidebar values.
+
+    Args:
+        text: Plain user-visible text.
+
+    Returns:
+        Escaped rich text that preserves explicit newlines and lets Qt wrap long
+        path-like tokens at natural separators.
+    """
+    break_after = frozenset(("/", "\\", "_", "-", ".", ",", ";", ":", "+"))
+    parts: list[str] = []
+    for character in text:
+        if character == "\n":
+            parts.append("<br>")
+            continue
+        parts.append(escape(character))
+        if character in break_after:
+            parts.append("&#8203;")
+    return "".join(parts)
 
 
 def epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
@@ -47,10 +129,10 @@ def epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
 
 def response_metadata_tab(
     *,
-    recording_summary_label: QLabel,
-    microscope_summary_label: QLabel,
-    analysis_output_label: QLabel,
-    roi_output_label: QLabel,
+    recording_summary_label: SidebarTextLabel,
+    microscope_summary_label: SidebarTextLabel,
+    analysis_output_label: SidebarTextLabel,
+    roi_output_label: SidebarTextLabel,
 ) -> QWidget:
     """Create the tab that shows selected-recording metadata.
 
@@ -75,7 +157,7 @@ def response_metadata_tab(
     return scrolling_tab(layout)
 
 
-def _metadata_group(title: str, *labels: QLabel) -> QGroupBox:
+def _metadata_group(title: str, *labels: SidebarTextLabel) -> QGroupBox:
     """Create one Metadata-tab subsection using Plot-tab group styling."""
     group = QGroupBox(title)
     layout = QVBoxLayout()
@@ -97,7 +179,10 @@ def scrolling_tab(layout: QVBoxLayout) -> QScrollArea:
     """
     content = QWidget()
     content.setLayout(layout)
+    content.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+    content.setMinimumWidth(1)
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     scroll.setWidget(content)
     return scroll
