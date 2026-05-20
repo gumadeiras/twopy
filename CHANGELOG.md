@@ -8,6 +8,8 @@
 
 ### Changes
 
+- Made Custom-tab workflow results show one selectable compact output folder and avoid horizontal scrolling from long output paths.
+- Changed native Response kernels defaults to 100 past stimulus samples and 10 future stimulus samples for both olfaction and vision.
 - Added a developer function-inventory script that reports action-oriented per-function size, docstring size, direct call counts, direct test counts, API surface, domain, git churn, risk score, and simple complexity.
 - Made the native Response kernels Stimulus control default to olfaction for `OdorRig` recordings and vision for other rigs.
 - Reworked the napari Group Matching FOV and ROI assignment views with larger image previews, clearer staged headings, grouped file/action/preview sections, theme-aware colors, more legible primary and destructive actions, and a compact two-column FOV assignment layout with image-overlaid recording labels, vertical contrast sliders, a vertical-only scrollable left control column, and compact FOV ID step buttons.
@@ -17,6 +19,8 @@
 
 ### Fixes
 
+- Kept native response-kernel mean plot legends focused on mean traces by omitting separate SEM band legend entries.
+- Cleared stale Custom-tab workflow outputs after failed DSI or response-kernel runs and when a run returns no displayable outputs.
 - Kept Group Matching's auto-managed ROI match CSV path following the current loaded-recordings CSV folder after unloading all recordings and loading a new CSV list, while preserving explicitly chosen ROI CSV paths.
 - Kept Group Matching ROI-view selection changes from moving focus back to the main napari window, from flashing the response preview rows on each update, and from carrying hidden response chips into a newly selected saved group.
 - Kept napari Load manually and Load CSV list dialog folders independent so choosing one no longer overwrites the other's remembered location.

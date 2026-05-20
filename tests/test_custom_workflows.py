@@ -276,6 +276,8 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
             kernel_specs["stimulus_modality"].choices,
             ("olfaction", "vision"),
         )
+        self.assertEqual(kernel_specs["num_stim_past"].default, 100)
+        self.assertEqual(kernel_specs["num_stim_future"].default, 10)
 
     def test_custom_line_plot_validates_y_label(self) -> None:
         """Confirm custom line plots require a readable y-axis label."""
@@ -735,14 +737,13 @@ class NativeResponseKernelWorkflowTest(unittest.TestCase):
         mean, band = _mean_sem_plot_series(
             np.array([[1.0, 3.0], [3.0, 7.0]], dtype=np.float64),
             series_index=2,
-            label="odor ipsi",
         )
 
         np.testing.assert_allclose(mean, np.array([2.0, 5.0]))
         np.testing.assert_allclose(band.lower, np.array([1.0, 3.0]))
         np.testing.assert_allclose(band.upper, np.array([3.0, 7.0]))
         self.assertEqual(band.series_index, 2)
-        self.assertEqual(band.label, "odor ipsi SEM")
+        self.assertEqual(band.label, "")
 
 
 class CustomWorkflowProvenanceTest(unittest.TestCase):

@@ -17,6 +17,7 @@ from tests.napari_support import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    Qt,
     QTableWidget,
     QTabWidget,
     QWidget,
@@ -45,6 +46,7 @@ from twopy.custom import (
     CustomRunContext,
     CustomTable,
     CustomWorkflow,
+    WorkflowDiscoveryResult,
 )
 from twopy.napari.custom_tab import CustomWorkflowPanel, _parameter_widget
 from twopy.napari.plotting.docks.response_plot_widget import (
@@ -163,18 +165,38 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
                 / "1.0"
                 / "dsi.csv"
             )
+            file_path = (
+                root
+                / "cache"
+                / "custom_outputs"
+                / "direction-selectivity"
+                / "1.0"
+                / "dsi_notes.txt"
+            )
             sync_plan = AnalysisSyncPlan(
                 local_root=root / "cache",
                 publish_root=root / "publish",
-                local_paths=(local_path,),
+                local_paths=(local_path, file_path),
             )
             result = CustomResult(
                 message="ok",
+                files=(file_path,),
                 tables=(CustomTable("Direction selectivity", local_path),),
             )
 
             display_result = _custom_workflow_display_result(result, sync_plan)
 
+            self.assertEqual(
+                display_result.files,
+                (
+                    root
+                    / "publish"
+                    / "custom_outputs"
+                    / "direction-selectivity"
+                    / "1.0"
+                    / "dsi_notes.txt",
+                ),
+            )
             self.assertEqual(display_result.tables[0].path, local_path)
             self.assertEqual(
                 display_result.tables[0].display_path,
@@ -260,6 +282,156 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             foreground = highlighted_item.foreground().color()
             self.assertNotEqual(background.getRgb(), QColor("#fff2a8").getRgb())
             self.assertNotEqual(background.getRgb(), foreground.getRgb())
+
+    def test_custom_workflow_panel_shows_one_selectable_output_path(self) -> None:
+        """Confirm custom outputs show one compact selectable folder path."""
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            local_output_root = root / "custom_outputs" / "response_kernels"
+            local_version_root = local_output_root / "1.0"
+            publish_output_root = (
+                root / "published" / "custom_outputs" / "response_kernels"
+            )
+            publish_version_root = publish_output_root / "1.0"
+            ipsi_path = (
+                local_version_root / "response_kernels_group_01_epochs_2_Both_ipsi.csv"
+            )
+            contra_path = (
+                local_version_root
+                / "response_kernels_group_01_epochs_2_Both_contra.csv"
+            )
+            summary_path = local_version_root / "response_kernels_summary.csv"
+            summary_display_path = publish_version_root / "response_kernels_summary.csv"
+            summary_path.parent.mkdir(parents=True)
+            summary_path.write_text("name,count\nBoth,2\n", encoding="utf-8")
+            panel = CustomWorkflowPanel(
+                workflow_paths=(),
+                on_run=_unused_custom_run,
+            )
+
+            panel._render_result(
+                CustomResult(
+                    message="ok",
+                    files=(ipsi_path, contra_path),
+                    tables=(
+                        CustomTable(
+                            "Kernel summary",
+                            summary_path,
+                            display_path=summary_display_path,
+                        ),
+                    ),
+                )
+            )
+
+            labels = [label.text() for label in panel.findChildren(QLabel)]
+            output_labels = [
+                label
+                for label in panel.findChildren(QLabel)
+                if label.text().startswith("Output path:")
+            ]
+            self.assertEqual(
+                [label.text() for label in output_labels],
+                [f"Output path: {publish_output_root}/"],
+            )
+            self.assertFalse(any(text.startswith("File:") for text in labels))
+            self.assertNotIn(str(ipsi_path), labels)
+            self.assertNotIn(str(contra_path), labels)
+            self.assertEqual(
+                panel.horizontalScrollBarPolicy(),
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+            )
+            self.assertTrue(
+                output_labels[0].textInteractionFlags()
+                & Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+
+    def test_custom_workflow_panel_clears_result_after_failure(self) -> None:
+        """Confirm failed reruns remove stale custom workflow outputs."""
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            table_path = root / "direction_selectivity.csv"
+            table_path.write_text("roi_label,dsi\nroi_0001,0.5\n", encoding="utf-8")
+            workflow = CustomWorkflow(
+                id="direction-selectivity",
+                name="Direction selectivity",
+                version="1.0",
+                description="Computes a direction-selectivity index.",
+                params_type=None,
+                author="twopy",
+                requires_rois=True,
+                output_prefix="direction-selectivity",
+                function=_unused_custom_run,
+                source_path=root / "workflow.py",
+                source_hash="abc123",
+            )
+            outcomes: list[CustomResult | Exception] = [
+                CustomResult(
+                    message="ok",
+                    tables=(CustomTable("Direction selectivity", table_path),),
+                ),
+                ValueError("missing stimulus output"),
+            ]
+
+            def run_once(
+                workflow: CustomWorkflow,
+                params: object | None,
+            ) -> CustomResult:
+                """Return the next result or failure for the panel callback."""
+                del workflow, params
+                outcome = outcomes.pop(0)
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+
+            with patch(
+                "twopy.napari.custom_tab.discover_custom_workflows",
+                return_value=WorkflowDiscoveryResult((workflow,), ()),
+            ):
+                panel = CustomWorkflowPanel(
+                    workflow_paths=(root / "workflow.py",),
+                    on_run=run_once,
+                )
+
+            panel._run_selected_workflow()
+            self.assertIsNotNone(panel.findChild(QTableWidget))
+
+            panel._run_selected_workflow()
+
+            self.assertIsNone(panel.findChild(QTableWidget))
+            labels = {label.text() for label in panel.findChildren(QLabel)}
+            self.assertIn(
+                "Custom workflow failed: missing stimulus output",
+                labels,
+            )
+            self.assertIn("No custom workflow outputs.", labels)
+
+    def test_custom_workflow_panel_empty_result_replaces_stale_table(self) -> None:
+        """Confirm empty successful results remove stale table previews."""
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            table_path = root / "direction_selectivity.csv"
+            table_path.write_text("roi_label,dsi\nroi_0001,0.5\n", encoding="utf-8")
+            panel = CustomWorkflowPanel(
+                workflow_paths=(),
+                on_run=_unused_custom_run,
+            )
+
+            panel._render_result(
+                CustomResult(
+                    message="ok",
+                    tables=(CustomTable("Direction selectivity", table_path),),
+                )
+            )
+            self.assertIsNotNone(panel.findChild(QTableWidget))
+
+            panel._render_result(CustomResult(message="no display outputs"))
+
+            self.assertIsNone(panel.findChild(QTableWidget))
+            labels = {label.text() for label in panel.findChildren(QLabel)}
+            self.assertIn("No custom workflow outputs.", labels)
 
     def test_create_viewer_uses_twopy_version_window_title(self) -> None:
         """Confirm the launcher brands the top-level napari window.
@@ -475,12 +647,9 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             np.testing.assert_array_equal(loaded.masks, saved.masks)
 
 
-def _unused_custom_run(
-    workflow: CustomWorkflow,
-    params: object | None,
-) -> CustomResult:
+def _unused_custom_run(*args: object) -> CustomResult:
     """Raise if a custom workflow panel test unexpectedly runs a workflow."""
-    raise AssertionError((workflow, params))
+    raise AssertionError(args)
 
 
 class _FakeColorContext:

@@ -189,8 +189,8 @@ kernels = fit_recording_stimulus_kernels(
     computation,
     StimulusKernelOptions(
         stimulus_modality="olfaction",
-        num_stim_past=150,
-        num_stim_future=25,
+        num_stim_past=100,
+        num_stim_future=10,
         method="ols",
     ),
 )

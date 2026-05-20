@@ -23,11 +23,13 @@ from qtpy.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLayout,
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -75,6 +77,7 @@ _PLOT_TRACE_COLORS = (
     "#b5179e",
     "#43aa8b",
 )
+_EMPTY_RESULT_TEXT = "No custom workflow outputs."
 
 
 class CustomWorkflowPanel(QScrollArea):
@@ -139,7 +142,9 @@ class CustomWorkflowPanel(QScrollArea):
 
         content = QWidget()
         content.setLayout(root_layout)
+        content.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setWidget(content)
         self.reload_workflows()
 
@@ -194,7 +199,9 @@ class CustomWorkflowPanel(QScrollArea):
         workflow = self._selected_workflow()
         if workflow is None:
             self._status_label.setText("No custom workflow selected.")
+            self._show_empty_result()
             return
+        self._show_empty_result()
         try:
             params = build_parameter_object(
                 workflow.params_type,
@@ -255,24 +262,54 @@ class CustomWorkflowPanel(QScrollArea):
     def _render_result(self, result: CustomResult) -> None:
         """Show files, tables, and plots returned by a workflow."""
         _clear_layout(self._result_layout)
-        for path in result.files:
-            self._result_layout.addWidget(_wrapped_label(f"File: {path}"))
+        output_root = _custom_output_display_root(result)
+        if output_root is not None:
+            self._result_layout.addWidget(
+                _wrapped_label(f"Output path: {output_root}/")
+            )
         for table in result.tables:
             self._result_layout.addWidget(_wrapped_label(f"Table: {table.title}"))
-            self._result_layout.addWidget(
-                _wrapped_label(str(_table_display_path(table)))
-            )
             self._result_layout.addWidget(_table_widget(table))
         y_bounds = _line_plot_y_bounds(result.plots)
         for plot in result.plots:
             self._result_layout.addWidget(_line_plot_widget(plot, y_bounds=y_bounds))
         if self._result_layout.count() == 0:
-            self._result_layout.addWidget(QLabel("No file or plot outputs."))
+            self._add_empty_result_label()
+
+    def _show_empty_result(self) -> None:
+        """Clear stale workflow outputs from the Result panel."""
+        _clear_layout(self._result_layout)
+        self._add_empty_result_label()
+
+    def _add_empty_result_label(self) -> None:
+        """Show the empty-state label in the Result panel."""
+        self._result_layout.addWidget(_wrapped_label(_EMPTY_RESULT_TEXT))
 
 
 def _workflow_label(workflow: CustomWorkflow) -> str:
     """Return the dropdown label for one workflow."""
     return f"{workflow.name} {workflow.version}"
+
+
+def _custom_output_display_root(result: CustomResult) -> str | None:
+    """Return the compact common output folder shown for workflow artifacts."""
+    paths = (*(_table_display_path(table) for table in result.tables), *result.files)
+    if len(paths) == 0:
+        return None
+    return _custom_output_root_text(paths[0])
+
+
+def _custom_output_root_text(path: Path) -> str:
+    """Return ``path`` through ``custom_outputs/<workflow>`` when present."""
+    parts = path.parts
+    try:
+        custom_outputs_index = parts.index("custom_outputs")
+    except ValueError:
+        return str(path.parent)
+    workflow_index = custom_outputs_index + 1
+    if workflow_index >= len(parts):
+        return str(path)
+    return str(Path(*parts[: workflow_index + 1]))
 
 
 def _parameter_widget(spec: CustomParameterSpec) -> QWidget:
@@ -458,6 +495,8 @@ def _line_plot_canvas(figure: Figure) -> QWidget:
 
     canvas = WheelPassthroughCanvas(figure)
     canvas.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    canvas.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+    canvas.setMinimumWidth(1)
     return canvas
 
 
@@ -505,6 +544,9 @@ def _wrapped_label(text: str) -> QLabel:
     """Return a word-wrapped label."""
     label = QLabel(text)
     label.setWordWrap(True)
+    label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+    label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+    label.setMinimumWidth(1)
     return label
 
 
@@ -519,6 +561,13 @@ def _table_widget(table_result: CustomTable) -> QWidget:
         return _wrapped_label("Table is empty.")
     table = QTableWidget(len(rows), len(header))
     table.setHorizontalHeaderLabels(header)
+    table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    table.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+    table.setMinimumWidth(1)
+    header_view = table.horizontalHeader()
+    if header_view is not None:
+        header_view.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.setWordWrap(True)
     highlighted_rows = {
         row_index
         for row_index in table_result.highlighted_rows
@@ -530,7 +579,6 @@ def _table_widget(table_result: CustomTable) -> QWidget:
             if row_index in highlighted_rows:
                 _apply_table_highlight(item, table)
             table.setItem(row_index, column_index, item)
-    table.resizeColumnsToContents()
     table.setMinimumHeight(min(360, 44 + 28 * max(1, len(rows))))
     return table
 

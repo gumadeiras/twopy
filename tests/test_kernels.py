@@ -35,6 +35,13 @@ from twopy.roi import make_roi_set
 class StimulusKernelFitTest(unittest.TestCase):
     """Tests for design-matrix kernel fitting."""
 
+    def test_kernel_options_default_to_native_workflow_lag_window(self) -> None:
+        """Confirm public API and native workflow use the same lag defaults."""
+        options = StimulusKernelOptions()
+
+        self.assertEqual(options.num_stim_past, 100)
+        self.assertEqual(options.num_stim_future, 10)
+
     def test_ols_recovers_known_future_to_past_kernel(self) -> None:
         """Confirm OLS returns coefficients on the documented lag axis."""
         rng = np.random.default_rng(5)

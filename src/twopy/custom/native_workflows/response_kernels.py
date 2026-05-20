@@ -95,7 +95,7 @@ class ResponseKernelParams:
         },
     )
     num_stim_past: int = field(
-        default=150,
+        default=100,
         metadata={
             "label": "Past samples",
             "description": "Stimulus samples before each response sample.",
@@ -103,7 +103,7 @@ class ResponseKernelParams:
         },
     )
     num_stim_future: int = field(
-        default=25,
+        default=10,
         metadata={
             "label": "Future samples",
             "description": "Future stimulus samples used as negative-lag QC.",
@@ -244,7 +244,6 @@ def _olfactory_kernel_result(
         ipsi_mean, ipsi_band = _mean_sem_plot_series(
             kernels.ipsilateral[epoch_index],
             series_index=len(mean_rows),
-            label=f"{epoch_name} ipsi",
         )
         mean_rows.append(ipsi_mean)
         mean_labels.append(f"{epoch_name} ipsi")
@@ -252,7 +251,6 @@ def _olfactory_kernel_result(
         contra_mean, contra_band = _mean_sem_plot_series(
             kernels.contralateral[epoch_index],
             series_index=len(mean_rows),
-            label=f"{epoch_name} contra",
         )
         mean_rows.append(contra_mean)
         mean_labels.append(f"{epoch_name} contra")
@@ -324,7 +322,6 @@ def _visual_kernel_result(
         contrast_mean, contrast_band = _mean_sem_plot_series(
             contrast,
             series_index=len(mean_rows),
-            label=epoch_name,
         )
         mean_rows.append(contrast_mean)
         mean_labels.append(epoch_name)
@@ -355,7 +352,6 @@ def _mean_sem_plot_series(
     values: np.ndarray,
     *,
     series_index: int,
-    label: str,
 ) -> tuple[np.ndarray, CustomLineBand]:
     """Return one mean row and filled SEM band for one kernel matrix."""
     mean, sem = finite_mean_and_sem(values, axis=0)
@@ -363,7 +359,6 @@ def _mean_sem_plot_series(
         series_index=series_index,
         lower=mean - sem,
         upper=mean + sem,
-        label=f"{label} SEM",
     )
 
 

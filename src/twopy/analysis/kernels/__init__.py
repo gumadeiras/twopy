@@ -80,8 +80,8 @@ class StimulusKernelOptions:
     baseline_epoch_number: int = 1
     discard_first_stimulus_epoch: bool = True
     selected_epoch_numbers: tuple[int, ...] | None = None
-    num_stim_past: int = 150
-    num_stim_future: int = 25
+    num_stim_past: int = 100
+    num_stim_future: int = 10
     method: KernelFitMethod = "ols"
     hemisphere: Hemisphere | None = None
 

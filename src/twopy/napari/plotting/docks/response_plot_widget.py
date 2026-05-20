@@ -1578,11 +1578,14 @@ def _custom_workflow_display_result(
     result: CustomResult,
     sync_plan: AnalysisSyncPlan | None,
 ) -> CustomResult:
-    """Show publish paths for tables when sync is active."""
+    """Show publish paths for workflow artifacts when sync is active."""
     if sync_plan is None:
         return result
     return replace(
         result,
+        files=tuple(
+            _custom_workflow_display_path(path, sync_plan) for path in result.files
+        ),
         tables=tuple(
             replace(
                 table,
@@ -1591,6 +1594,14 @@ def _custom_workflow_display_result(
             for table in result.tables
         ),
     )
+
+
+def _custom_workflow_display_path(
+    path: Path,
+    sync_plan: AnalysisSyncPlan,
+) -> Path:
+    """Return the publish path for display, or the local path if not synced."""
+    return _custom_workflow_publish_path(path, sync_plan) or path
 
 
 def _custom_workflow_result_with_roi_colors(
