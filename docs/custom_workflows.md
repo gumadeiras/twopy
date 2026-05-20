@@ -2,7 +2,7 @@
 
 Custom workflows are trusted Python files shown in the napari Custom tab. twopy ships Direction selectivity by default and can also load lab-local workflows from `config.yml`. Use a local workflow when an analysis should run on converted twopy data but should live outside the shared repo.
 
-Direction selectivity uses the loaded recording's epoch names for its preferred and null epoch dropdowns. It computes DSI per ROI, shows the table in the Custom tab, highlights rows that pass the absolute DSI threshold, and sends only passing ROIs to the response plot.
+Direction selectivity uses the loaded recording's epoch names for its preferred and null epoch dropdowns. It computes DSI per ROI, shows the table in the Custom tab, highlights rows that pass the absolute DSI threshold, and selects only passing ROIs in the current response plot without replacing plot data.
 
 Response kernels is a separate workflow. It fits random-noise temporal kernels for the current ROIs, supports olfactory antenna activation and visual contrast with a Stimulus dropdown, uses a Baseline epoch dropdown to exclude gray or interleave samples, writes one CSV matrix per unique epoch name and kernel stream, and shows per-ROI plus mean +/- SEM kernel plots.
 
@@ -69,6 +69,7 @@ twopy rejects workflows that are missing `id`, `name`, `version`, `description`,
 
 - `ctx.current_rois()` returns the current ROI masks or raises a clear error.
 - `ctx.rois_for_selector(selector)` returns all current ROIs or the visible response-plot ROI subset for a standard `roi_selector` parameter.
+- `ctx.roi_indices_for_selector(selector)` returns the matching zero-based ROI rows from the full current ROI set, which is useful when a workflow computes on a subset but needs to update the existing Plot-tab ROI visibility without replacing plot data.
 - `ctx.compute_standard_responses()` runs the same dF/F and response grouping used by the Plot tab.
 - `ctx.recording_metadata()` returns a stable metadata snapshot for the converted recording. Use `metadata.text("run", "rig_name", default="")`, `metadata.float("acquisition", "acq.zoomFactor")`, `metadata.int("run", "run_number")`, or raw mappings such as `metadata.run` and `metadata.stimulus_parameters` when a workflow needs lab metadata without importing internal recording objects.
 - `ctx.epoch_names()` returns `{epoch_number: epoch_name}` for the loaded recording.
@@ -109,7 +110,7 @@ Roles are not tied to field names. A field named `start`, `window_start_seconds`
 
 ## Outputs And Provenance
 
-Workflows return `CustomResult` objects. A result can list files, tables, line plots, replacement ROIs, or response plot data. File and table outputs must be below `ctx.output_dir`; use `ctx.output_path("name.csv")` instead of building paths by hand. Returned CSV and TSV tables are previewed in the Custom tab, `CustomTable(..., highlighted_rows=(...))` marks zero-based data rows, `CustomLinePlot(..., y_label="Weight")` sets the plot y-axis label when the default `Value` is too generic, `CustomLinePlot(..., colors=("#4cc9f0",))` can explicitly color each series, and `CustomLineBand(...)` draws filled uncertainty bands behind line-plot series. Files written through `ctx.write_roi_table()` and `ctx.write_matrix_csv()` automatically receive workflow metadata; pass `column_labels=(...)` to `ctx.write_matrix_csv()` when matrix columns have scientific coordinates such as lag seconds. Files returned in `CustomResult.files` or `CustomResult.tables` receive metadata after the workflow returns.
+Workflows return `CustomResult` objects. A result can list files, tables, line plots, replacement ROIs, response plot data, or `visible_roi_indices` for updating the current Plot-tab ROI selection without replacing plot data. File and table outputs must be below `ctx.output_dir`; use `ctx.output_path("name.csv")` instead of building paths by hand. Returned CSV and TSV tables are previewed in the Custom tab, `CustomTable(..., highlighted_rows=(...))` marks zero-based data rows, `CustomLinePlot(..., y_label="Weight")` sets the plot y-axis label when the default `Value` is too generic, `CustomLinePlot(..., colors=("#4cc9f0",))` can explicitly color each series, and `CustomLineBand(...)` draws filled uncertainty bands behind line-plot series. Files written through `ctx.write_roi_table()` and `ctx.write_matrix_csv()` automatically receive workflow metadata; pass `column_labels=(...)` to `ctx.write_matrix_csv()` when matrix columns have scientific coordinates such as lag seconds. Files returned in `CustomResult.files` or `CustomResult.tables` receive metadata after the workflow returns.
 
 For CSV, PDF, PNG, and other non-HDF5 outputs, twopy writes a sidecar like `direction_selectivity.twopy-workflow.yml`. For HDF5 outputs, twopy writes a `twopy_workflow` metadata group. The metadata records the workflow id, name, version, source path, source hash, twopy version, run time, parameters, and recording path. When analysis caching is enabled, custom outputs and their metadata sync to the configured analysis output folder.
 

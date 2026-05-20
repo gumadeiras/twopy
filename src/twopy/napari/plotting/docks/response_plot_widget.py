@@ -724,6 +724,23 @@ class _ResponsePlotWidget(QWidget):
             self._live_controller.request_update()
         if result.response_plot_data is not None:
             self.set_response_plot_data(result.response_plot_data, reset_axes=True)
+        if result.visible_roi_indices is not None:
+            self._apply_custom_workflow_roi_visibility(result.visible_roi_indices)
+
+    def _apply_custom_workflow_roi_visibility(
+        self,
+        visible_roi_indices: tuple[int, ...],
+    ) -> None:
+        """Apply workflow-selected ROI rows to the current plot state."""
+        roi_count = len(self._roi_labels())
+        if roi_count == 0:
+            return
+        visible_rows = {
+            index for index in visible_roi_indices if 0 <= index < roi_count
+        }
+        self._set_roi_visibility_batch(
+            {index: index in visible_rows for index in range(roi_count)},
+        )
 
     def _start_sync(self, sync_plan: AnalysisSyncPlan) -> None:
         """Start background sync for just-saved analysis outputs.

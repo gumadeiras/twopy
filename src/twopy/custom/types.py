@@ -176,6 +176,8 @@ class CustomResult:
         plots: Line plots to show in the Custom tab.
         roi_set: Optional ROIs to replace the active Labels layer.
         response_plot_data: Optional responses to show in the response dock.
+        visible_roi_indices: Optional ROI rows to select in the existing
+            response dock without replacing its plot data.
 
     Returns:
         Immutable workflow result.
@@ -187,6 +189,7 @@ class CustomResult:
     plots: tuple[CustomLinePlot, ...] = ()
     roi_set: RoiSet | None = None
     response_plot_data: ResponsePlotData | None = None
+    visible_roi_indices: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -532,11 +535,29 @@ class CustomRunContext:
         Returns:
             All ROIs or the visible ROI subset.
         """
+        rois = self.current_rois()
+        indices = self.roi_indices_for_selector(selector)
+        if indices == tuple(range(len(rois.labels))):
+            return rois
+        return make_roi_set(
+            rois.masks[np.array(indices, dtype=np.int64), :, :],
+            labels=tuple(rois.labels[index] for index in indices),
+        )
+
+    def roi_indices_for_selector(self, selector: str) -> tuple[int, ...]:
+        """Return current ROI row indices selected by a ``roi_selector`` value.
+
+        Args:
+            selector: ``all_rois`` or ``visible_rois``.
+
+        Returns:
+            Zero-based row indices into ``current_rois()``.
+        """
         normalized = selector.strip().casefold()
         if normalized in {"", "all", "all_rois"}:
-            return self.current_rois()
+            return tuple(range(len(self.current_rois().labels)))
         if normalized in {"visible", "visible_rois"}:
-            return self._visible_rois()
+            return self._visible_roi_indices()
         msg = f"Unknown ROI selector {selector!r}."
         raise ValueError(msg)
 
@@ -800,8 +821,8 @@ class CustomRunContext:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         return output_path
 
-    def _visible_rois(self) -> RoiSet:
-        """Return the ROI subset currently visible in the response plot."""
+    def _visible_roi_indices(self) -> tuple[int, ...]:
+        """Return visible ROI row indices or raise when none are selected."""
         rois = self.current_rois()
         indices = tuple(
             index for index in self.visible_roi_indices if 0 <= index < len(rois.labels)
@@ -809,10 +830,7 @@ class CustomRunContext:
         if len(indices) == 0:
             msg = "ROI selector 'visible_rois' has no visible ROIs."
             raise ValueError(msg)
-        return make_roi_set(
-            rois.masks[np.array(indices, dtype=np.int64), :, :],
-            labels=tuple(rois.labels[index] for index in indices),
-        )
+        return indices
 
     def _visible_epoch_numbers(self) -> tuple[int, ...]:
         """Return visible stimulus epoch numbers without duplicates."""

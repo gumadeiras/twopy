@@ -87,6 +87,7 @@ def validate_custom_result(
         raise ValueError(msg)
     if result.response_plot_data is not None:
         _validate_response_plot_data(result.response_plot_data)
+    _validate_custom_result_visible_rois(result.visible_roi_indices)
     return result
 
 
@@ -98,6 +99,19 @@ def _validate_table_highlighted_rows(highlighted_rows: object) -> None:
     for row_index in highlighted_rows:
         if type(row_index) is not int or row_index < 0:
             msg = "CustomTable.highlighted_rows must contain non-negative integers."
+            raise ValueError(msg)
+
+
+def _validate_custom_result_visible_rois(visible_roi_indices: object) -> None:
+    """Check optional ROI rows selected by a workflow result."""
+    if visible_roi_indices is None:
+        return
+    if not isinstance(visible_roi_indices, tuple):
+        msg = "CustomResult.visible_roi_indices must be a tuple of integers."
+        raise ValueError(msg)
+    for index in visible_roi_indices:
+        if type(index) is not int or index < 0:
+            msg = "CustomResult.visible_roi_indices must contain non-negative integers."
             raise ValueError(msg)
 
 

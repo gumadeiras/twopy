@@ -658,7 +658,7 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
     """Tests for the packaged DSI custom workflow."""
 
     def test_absolute_threshold_filters_and_highlights_rois(self) -> None:
-        """Confirm absolute DSI threshold controls plotting and row highlights."""
+        """Confirm absolute DSI threshold controls ROI display and highlights."""
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
             ctx = _DsiFakeContext(root)
@@ -676,9 +676,33 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
             self.assertIn("roi_0001,0.600", table_text)
             self.assertIn("roi_0002,-0.200", table_text)
             self.assertIn("roi_0003,-1.000", table_text)
-            self.assertEqual(ctx.plotted_roi_indices, (0, 2))
+            self.assertIsNone(result.response_plot_data)
+            self.assertEqual(result.visible_roi_indices, (0, 2))
             self.assertEqual(result.tables[0].highlighted_rows, (0, 2))
-            self.assertIsNotNone(result.response_plot_data)
+
+    def test_visible_roi_selector_maps_threshold_to_original_rows(self) -> None:
+        """Confirm visible-ROI DSI updates existing plot rows, not plot data."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            ctx = _DsiFakeContext(root, visible_roi_indices=(0, 2))
+            params = DirectionSelectivityParams(
+                preferred_epoch="preferred",
+                null_epoch="null",
+                roi_selector="visible_rois",
+                dsi_threshold=0.5,
+            )
+
+            result = run_direction_selectivity(cast(CustomRunContext, ctx), params)
+
+            table_text = (root / "direction_selectivity.csv").read_text(
+                encoding="utf-8",
+            )
+            self.assertIn("roi_0001,0.600", table_text)
+            self.assertIn("roi_0003,-1.000", table_text)
+            self.assertNotIn("roi_0002", table_text)
+            self.assertIsNone(result.response_plot_data)
+            self.assertEqual(result.visible_roi_indices, (0, 2))
+            self.assertEqual(result.tables[0].highlighted_rows, (0, 1))
 
     def test_unchecked_rectification_uses_signed_response_sum(self) -> None:
         """Confirm unchecked rectification uses signed response sums."""
@@ -700,7 +724,7 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
             self.assertIn("roi_0001,0.600", table_text)
             self.assertIn("roi_0002,-0.200", table_text)
             self.assertIn("roi_0003,1.667", table_text)
-            self.assertEqual(ctx.plotted_roi_indices, (0, 2))
+            self.assertEqual(result.visible_roi_indices, (0, 2))
             self.assertEqual(result.tables[0].highlighted_rows, (0, 2))
 
     def test_zero_sum_dsi_is_nan_and_does_not_pass_threshold(self) -> None:
@@ -721,7 +745,7 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertIn("roi_0001,nan", table_text)
-            self.assertEqual(ctx.plotted_roi_indices, (2,))
+            self.assertEqual(result.visible_roi_indices, (2,))
             self.assertEqual(result.tables[0].highlighted_rows, (2,))
 
 
@@ -844,6 +868,18 @@ class CustomWorkflowProvenanceTest(unittest.TestCase):
                     expected_roi_shape=(2, 2),
                 )
 
+    def test_rejects_invalid_custom_result_visible_roi_indices(self) -> None:
+        """Confirm workflow-selected ROI rows must be non-negative integers."""
+        with (
+            temporary_directory() as temp_dir,
+            self.assertRaisesRegex(ValueError, "visible_roi_indices"),
+        ):
+            validate_custom_result(
+                CustomResult(message="ok", visible_roi_indices=(-1,)),
+                output_dir=Path(temp_dir) / "custom_outputs",
+                expected_roi_shape=(2, 2),
+            )
+
 
 @dataclass(frozen=True)
 class _FakeResponsePlotData:
@@ -862,25 +898,44 @@ class _DsiFakeComputation:
 class _DsiFakeContext:
     """Minimal DSI context that records which ROIs were sent to plotting."""
 
-    def __init__(self, root: Path, *, zero_sum_first_roi: bool = False) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        zero_sum_first_roi: bool = False,
+        visible_roi_indices: tuple[int, ...] = (),
+    ) -> None:
         """Create fake ROI and output state under ``root``."""
         self._root = root
         self._zero_sum_first_roi = zero_sum_first_roi
+        self._visible_roi_indices = visible_roi_indices
+        self._selected_roi_indices = (0, 1, 2)
         self._rois = make_roi_set(
             np.ones((3, 1, 1), dtype=np.bool_),
             labels=("roi_0001", "roi_0002", "roi_0003"),
         )
-        self.plotted_roi_indices: tuple[int, ...] = ()
 
     def current_rois(self) -> RoiSet:
         """Return three fake ROIs."""
         return self._rois
 
+    def roi_indices_for_selector(self, selector: str) -> tuple[int, ...]:
+        """Return fake row indices for the standard DSI ROI selector."""
+        if selector == "all_rois":
+            self._selected_roi_indices = (0, 1, 2)
+            return self._selected_roi_indices
+        if selector == "visible_rois":
+            self._selected_roi_indices = self._visible_roi_indices
+            return self._selected_roi_indices
+        raise ValueError(selector)
+
     def rois_for_selector(self, selector: str) -> RoiSet:
         """Return fake ROIs for the standard DSI ROI selector."""
-        if selector != "all_rois":
-            raise ValueError(selector)
-        return self._rois
+        indices = self.roi_indices_for_selector(selector)
+        return make_roi_set(
+            self._rois.masks[np.array(indices, dtype=np.int64), :, :],
+            labels=tuple(self._rois.labels[index] for index in indices),
+        )
 
     def compute_standard_responses(
         self,
@@ -909,10 +964,13 @@ class _DsiFakeContext:
         """Return deterministic preferred and null responses."""
         del grouped, metric, window_seconds
         if epoch == "preferred":
-            return np.array([0.8, 0.2, -0.4], dtype=np.float64)
+            values = np.array([0.8, 0.2, -0.4], dtype=np.float64)
+            return values[np.array(self._selected_roi_indices, dtype=np.int64)]
         if self._zero_sum_first_roi:
-            return np.array([-0.8, 0.3, 0.1], dtype=np.float64)
-        return np.array([0.2, 0.3, 0.1], dtype=np.float64)
+            values = np.array([-0.8, 0.3, 0.1], dtype=np.float64)
+        else:
+            values = np.array([0.2, 0.3, 0.1], dtype=np.float64)
+        return values[np.array(self._selected_roi_indices, dtype=np.int64)]
 
     def output_path(self, filename: str | Path) -> Path:
         """Return an output path inside the temporary directory."""
@@ -945,10 +1003,9 @@ class _DsiFakeContext:
         max_rois: int | None = None,
         roi_indices: Sequence[int] | None = None,
     ) -> ResponsePlotData:
-        """Record ROI indices selected for plotting."""
-        del grouped, max_rois
-        self.plotted_roi_indices = tuple(roi_indices or ())
-        return ResponsePlotData(source_path=source_path, epochs=())
+        """Fail when DSI tries to replace existing plot data."""
+        del grouped, source_path, max_rois, roi_indices
+        raise AssertionError("DSI should update ROI visibility without plot data")
 
 
 def _custom_context(

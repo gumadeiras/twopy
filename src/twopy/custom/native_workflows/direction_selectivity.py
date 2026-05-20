@@ -25,7 +25,7 @@ class DirectionSelectivityParams:
         window_stop_seconds: Epoch-relative metric stop time.
         rectify_responses: Whether negative preferred/null responses are set
             to zero before computing DSI.
-        dsi_threshold: Minimum absolute DSI to plot and highlight.
+        dsi_threshold: Minimum absolute DSI to show and highlight.
         output_name: CSV filename under the workflow output folder.
 
     Returns:
@@ -88,9 +88,9 @@ class DirectionSelectivityParams:
     dsi_threshold: float = field(
         default=0.0,
         metadata={
-            "label": "DSI plot threshold",
+            "label": "DSI show threshold",
             "description": (
-                "Only ROIs with absolute DSI at or above this value are plotted."
+                "Only ROIs with absolute DSI at or above this value are shown."
             ),
             "max": 1.0,
             "twopy_role": "table_highlight_threshold",
@@ -125,8 +125,9 @@ def run(
         params: Custom tab values.
 
     Returns:
-        Table and response plot data for the Custom tab.
+        Table output plus ROI visibility rows for the current response plot.
     """
+    selected_roi_indices = ctx.roi_indices_for_selector(params.roi_selector)
     rois = ctx.rois_for_selector(params.roi_selector)
     computation = ctx.compute_standard_responses(rois)
     window_seconds = ctx.epoch_window(
@@ -158,27 +159,27 @@ def run(
         },
         roi_labels=rois.labels,
     )
-    passing_roi_indices = tuple(
+    passing_table_rows = tuple(
         int(index) for index in np.flatnonzero(np.abs(dsi) >= params.dsi_threshold)
     )
-    response_plot_data = ctx.response_plot_data(
-        computation.grouped_responses,
-        source_path=csv_path,
-        roi_indices=passing_roi_indices,
+    visible_roi_indices = tuple(
+        selected_roi_indices[index]
+        for index in passing_table_rows
+        if index < len(selected_roi_indices)
     )
     return CustomResult(
         message=(
             f"Computed DSI for {len(rois.labels)} ROIs; "
-            f"plotting {len(passing_roi_indices)} above absolute threshold."
+            f"showing {len(visible_roi_indices)} above absolute threshold."
         ),
         tables=(
             CustomTable(
                 "Direction selectivity",
                 csv_path,
-                highlighted_rows=passing_roi_indices,
+                highlighted_rows=passing_table_rows,
             ),
         ),
-        response_plot_data=response_plot_data,
+        visible_roi_indices=visible_roi_indices,
     )
 
 

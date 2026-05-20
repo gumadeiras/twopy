@@ -27,6 +27,8 @@ from tests.napari_support import (
     visibility_options_widget,
 )
 
+from twopy.custom import CustomResult
+
 
 class NapariRoiVisibilityTest(NapariAdapterTestCase):
     """Napari ROI visibility tests."""
@@ -69,6 +71,22 @@ class NapariRoiVisibilityTest(NapariAdapterTestCase):
         self.assertEqual(response_widget._roi_labels(), ("roi_0001", "roi_0002"))
         self.assertEqual(response_widget._visible_roi_indices(), (0,))
         self.assertEqual(response_widget._roi_visibility, {0: True, 1: False})
+
+    def test_custom_result_roi_visibility_keeps_existing_plot_data(self) -> None:
+        """Confirm workflow ROI filters update checkboxes without replacing data."""
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        plot_data = _two_roi_response_plot_data()
+        response_widget.set_response_plot_data(plot_data, reset_axes=True)
+
+        response_widget._apply_custom_workflow_result(
+            CustomResult(message="ok", visible_roi_indices=(1,)),
+        )
+
+        self.assertIs(response_widget._plot_data, plot_data)
+        self.assertEqual(response_widget._roi_labels(), ("roi_0001", "roi_0002"))
+        self.assertEqual(response_widget._visible_roi_indices(), (1,))
+        self.assertEqual(response_widget._roi_visibility, {0: False, 1: True})
 
     def test_global_value_bounds_accepts_empty_roi_selection(self) -> None:
         """Confirm empty ROI selection uses stable default y-axis bounds.
