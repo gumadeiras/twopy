@@ -862,7 +862,65 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         ):
             view._render_response_preview()
 
-        self.assertFalse(view._response_status.isVisible())
+        self.assertFalse(view._response_status.isHidden())
+        self.assertEqual(
+            view._response_status.text(),
+            "Showing the selected recording trace.",
+        )
+
+    def test_group_matching_response_status_shows_all_and_partial_visibility(
+        self,
+    ) -> None:
+        """Confirm Selected ROIs always summarizes hidden trace chips.
+
+        Inputs: a ROI assignment view with two selected responses whose trace
+        chips move from all visible to partially hidden.
+        Outputs: the status text reports the current visible and hidden trace
+        counts while plots still render.
+        """
+        _ = QApplication.instance() or QApplication([])
+        first_path = Path("/recordings/first")
+        second_path = Path("/recordings/second")
+        view = group_matching_roi.RoiAssignmentView(
+            state=SimpleNamespace(loaded_recordings=[]),
+            fov_groups={},
+            current_rois={},
+            output_path=Path("roi_matches.csv"),
+            on_output_path_changed=lambda _path: None,
+            on_back=lambda: None,
+        )
+        view._selected_responses = (
+            group_matching_roi._SelectedRoiResponse(
+                recording_path=first_path,
+                roi_label="roi_0001",
+                plot_data=_tiny_response_plot_data(),
+                color=QColor("#1f77b4"),
+            ),
+            group_matching_roi._SelectedRoiResponse(
+                recording_path=second_path,
+                roi_label="roi_0002",
+                plot_data=_tiny_response_plot_data(),
+                color=QColor("#ff7f0e"),
+            ),
+        )
+
+        view._render_response_preview()
+
+        self.assertFalse(view._response_status.isHidden())
+        self.assertEqual(
+            view._response_status.text(),
+            "Showing all 2 selected recording traces.",
+        )
+
+        view._hidden_response_recordings.add(second_path)
+
+        view._render_response_preview()
+
+        self.assertFalse(view._response_status.isHidden())
+        self.assertEqual(
+            view._response_status.text(),
+            "Showing 1 of 2 selected recording traces; 1 recording trace hidden.",
+        )
 
     def test_group_matching_saved_group_selection_resets_hidden_traces(self) -> None:
         """Confirm saved-group restore starts with all selected responses visible.

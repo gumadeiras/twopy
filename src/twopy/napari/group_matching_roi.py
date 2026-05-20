@@ -77,7 +77,7 @@ from twopy.napari.plotting.processing_options import SmoothingOptionsWidget
 from twopy.napari.plotting.widgets import clear_layout
 from twopy.napari.roi import roi_label_image_from_layer_for_recording
 from twopy.napari.session import LoadedNapariRecording
-from twopy.napari.text import configure_placeholder
+from twopy.napari.text import configure_placeholder, counted_noun
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 __all__ = [
@@ -594,7 +594,12 @@ class RoiAssignmentView(QWidget):
         if len(epoch_indices) == 0:
             self._show_response_status("Choose at least one epoch to plot.")
             return
-        self._response_status.setVisible(False)
+        self._set_response_status(
+            _selected_response_visibility_status(
+                total_count=len(self._selected_responses),
+                visible_count=len(visible_responses),
+            ),
+        )
         self._response_strip.render(
             combined,
             epoch_indices=epoch_indices,
@@ -613,6 +618,10 @@ class RoiAssignmentView(QWidget):
         """Show a response status message and hide cached plot strips."""
         self._response_strip.clear()
         self._mean_response_strip.clear()
+        self._set_response_status(text)
+
+    def _set_response_status(self, text: str) -> None:
+        """Show the Selected ROIs status text without changing cached plots."""
         self._response_status.setText(text)
         self._response_status.setVisible(True)
 
@@ -1371,6 +1380,22 @@ def _mean_response_plot_data(plot_data: ResponsePlotData) -> ResponsePlotData:
             ),
         )
     return ResponsePlotData(source_path=plot_data.source_path, epochs=tuple(epochs))
+
+
+def _selected_response_visibility_status(
+    *,
+    total_count: int,
+    visible_count: int,
+) -> str:
+    """Return the Selected ROIs summary for the current trace visibility."""
+    if visible_count == total_count:
+        if total_count == 1:
+            return "Showing the selected recording trace."
+        selected_traces = counted_noun(total_count, "selected recording trace")
+        return f"Showing all {selected_traces}."
+    total_traces = counted_noun(total_count, "selected recording trace")
+    hidden_traces = counted_noun(total_count - visible_count, "recording trace")
+    return f"Showing {visible_count} of {total_traces}; {hidden_traces} hidden."
 
 
 def _matching_epoch(

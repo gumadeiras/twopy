@@ -23,6 +23,7 @@
 - Cleared stale Custom-tab workflow outputs after failed DSI or response-kernel runs and when a run returns no displayable outputs.
 - Kept Group Matching's auto-managed ROI match CSV path following the current loaded-recordings CSV folder after unloading all recordings and loading a new CSV list, while preserving explicitly chosen ROI CSV paths.
 - Kept Group Matching ROI-view selection changes from moving focus back to the main napari window, from flashing the response preview rows on each update, and from carrying hidden response chips into a newly selected saved group.
+- Kept the Group Matching Selected ROIs panel showing a current trace-visibility status for single, all-visible, partially hidden, and fully hidden selections.
 - Kept napari Load manually and Load CSV list dialog folders independent so choosing one no longer overwrites the other's remembered location.
 - Kept napari response plots from carrying stale epoch visibility into newly loaded recordings, so gray/interleave epochs are hidden by default after loading a CSV list.
 
