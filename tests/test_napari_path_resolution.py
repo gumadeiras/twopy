@@ -254,6 +254,46 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 (cache_dir / "aligned_movie.h5").resolve(),
             )
 
+    def test_missing_configured_source_reports_all_data_path_candidates(self) -> None:
+        """Confirm missing mirrored source loads report every configured root.
+
+        Inputs: two configured ``data_paths`` and no source or cache files.
+        Outputs: the load error lists both mirrored source candidates.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            first_data_root = root / "data_first"
+            second_data_root = root / "data_second"
+            relative_recording = Path("fly") / "stim" / "2023" / "10_17"
+            source_dir = first_data_root / relative_recording
+            cache_root = root / "cache"
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {first_data_root.resolve()}\n"
+                f"  - {second_data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Checked configured data_paths",
+                ) as raised:
+                    resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
+
+            message = str(raised.exception)
+            self.assertIn(str(first_data_root / relative_recording), message)
+            self.assertIn(str(second_data_root / relative_recording), message)
+            self.assertIn("Could not find recording_data.h5", message)
+
     def test_recording_path_resolution_pulls_published_rois_into_cache(self) -> None:
         """Confirm cached source loads reuse published ROI files locally.
 

@@ -12,6 +12,7 @@ from tests.tempdir import temporary_directory
 from twopy.config import (
     DEFAULT_ANALYSIS_CACHE_DIR,
     data_path_match,
+    data_path_recording_candidates,
     load_config,
     resolve_analysis_cache_dir,
     resolve_analysis_output_dir,
@@ -410,6 +411,33 @@ class LoadConfigTest(unittest.TestCase):
             self.assertEqual(
                 resolve_data_recording_path(config, relative_parts),
                 first_root.joinpath(*relative_parts),
+            )
+
+    def test_data_path_recording_candidates_lists_mirrored_roots(self) -> None:
+        """Confirm diagnostics can show every configured recording mirror."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            first_root = root / "data"
+            second_root = root / "archive"
+            recording_dir = first_root / "fly" / "stim" / "2023" / "10_17"
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {first_root}\n"
+                f"  - {second_root}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+
+            config = load_config(config_path)
+
+            self.assertEqual(
+                data_path_recording_candidates(config, recording_dir),
+                (
+                    first_root / "fly" / "stim" / "2023" / "10_17",
+                    second_root / "fly" / "stim" / "2023" / "10_17",
+                ),
             )
 
     def test_data_path_match_uses_first_matching_root(self) -> None:

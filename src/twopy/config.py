@@ -21,6 +21,7 @@ __all__ = [
     "DatabaseAccess",
     "TwopyConfig",
     "data_path_match",
+    "data_path_recording_candidates",
     "load_config",
     "resolve_data_recording_path",
     "resolve_analysis_cache_dir",
@@ -136,13 +137,7 @@ def resolve_data_recording_path(
     function is the ordered availability check that picks the preferred mounted
     copy without hiding missing-data errors behind a second abstraction.
     """
-    candidates = tuple(
-        data_root.expanduser().joinpath(*relative_parts)
-        for data_root in config.data_paths
-    )
-    if not candidates:
-        msg = "twopy config must include at least one data path"
-        raise ValueError(msg)
+    candidates = _recording_candidates_for_relative_parts(config, relative_parts)
 
     for candidate in candidates:
         if candidate.exists():
@@ -175,6 +170,35 @@ def data_path_match(
         except ValueError:
             continue
     return None
+
+
+def data_path_recording_candidates(
+    config: TwopyConfig,
+    recording_dir: Path,
+) -> tuple[Path, ...]:
+    """Return every configured mirror candidate for one recording path.
+
+    Args:
+        config: Loaded twopy configuration with ordered data roots.
+        recording_dir: Recording folder under one configured data root.
+
+    Returns:
+        Candidate recording folders under every configured root with the same
+        root-relative path, or an empty tuple when ``recording_dir`` is external.
+
+    Database loads may fall back to the first configured root when no source
+    copy is mounted so cache-only loads can still work. This helper exposes the
+    full mirrored candidate set for diagnostics and audits without changing
+    that load behavior.
+    """
+    match = data_path_match(config, recording_dir)
+    if match is None:
+        return ()
+    _matched_root, relative_recording = match
+    return _recording_candidates_for_relative_parts(
+        config,
+        tuple(str(part) for part in relative_recording.parts),
+    )
 
 
 def resolve_analysis_output_dir(config: TwopyConfig, recording_dir: Path) -> Path:
@@ -312,6 +336,21 @@ def _required_path_tuple(
             raise ValueError(msg)
         paths.append(_path_from_config_value(item))
     return tuple(paths)
+
+
+def _recording_candidates_for_relative_parts(
+    config: TwopyConfig,
+    relative_parts: tuple[str, ...],
+) -> tuple[Path, ...]:
+    """Return ordered data-root candidates for one relative recording path."""
+    candidates = tuple(
+        data_root.expanduser().joinpath(*relative_parts)
+        for data_root in config.data_paths
+    )
+    if not candidates:
+        msg = "twopy config must include at least one data path"
+        raise ValueError(msg)
+    return candidates
 
 
 def _external_analysis_cache_dir(

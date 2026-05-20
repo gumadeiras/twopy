@@ -18,6 +18,7 @@ from twopy.config import (
     DEFAULT_CONFIG_PATH,
     TwopyConfig,
     data_path_match,
+    data_path_recording_candidates,
     load_config,
     resolve_analysis_work_dir,
 )
@@ -82,7 +83,7 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
         paths = resolve_converted_paths(selected)
     except ValueError as error:
         if source_dir is None:
-            raise error
+            raise _configured_data_path_error(selected, error) from error
         converted = convert_recording_to_twopy(source_dir)
         return ResolvedNapariRecording(
             paths=resolve_converted_paths(converted.path),
@@ -335,6 +336,41 @@ def _source_is_under_data_path(config: TwopyConfig, source_dir: Path) -> bool:
         the configured cache mirror.
     """
     return data_path_match(config, source_dir.resolve(strict=False)) is not None
+
+
+def _configured_data_path_error(selected: Path, error: ValueError) -> ValueError:
+    """Return a load error that lists every configured mirror candidate.
+
+    Args:
+        selected: Missing path that failed the normal converted-output lookup.
+        error: Original converted-output resolver error.
+
+    Returns:
+        Original error, or a clearer error when ``selected`` sits under one of
+        the configured ``data_paths`` roots.
+
+    Database search passes one source path into the normal loader so existing
+    cache-only loads still work. When that path and cache are both absent, the
+    user needs to see every configured data mirror that was relevant, not just
+    the first fallback path chosen for cache routing.
+    """
+    try:
+        config = load_config(DEFAULT_CONFIG_PATH)
+    except (FileNotFoundError, ValueError):
+        return error
+
+    candidates = data_path_recording_candidates(config, selected)
+    if len(candidates) <= 1:
+        return error
+
+    candidate_list = "\n".join(f"- {candidate}" for candidate in candidates)
+    msg = (
+        "Could not find source recording or converted twopy output under "
+        "configured data_paths.\n"
+        f"Checked configured data_paths:\n{candidate_list}\n\n"
+        f"Converted-output check:\n{error}"
+    )
+    return ValueError(msg)
 
 
 def _source_file_is_newer(source: Path, target: Path) -> bool:
