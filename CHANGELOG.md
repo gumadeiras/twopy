@@ -2,13 +2,21 @@
 
 ## Unreleased
 
+### Features
+
+- Added stable custom-workflow access to converted recording metadata through `ctx.recording_metadata()`, including typed helpers for run and acquisition fields.
+
 ### Changes
 
+- Added a developer function-inventory script that reports action-oriented per-function size, docstring size, direct call counts, direct test counts, API surface, domain, git churn, risk score, and simple complexity.
+- Made the native Response kernels Stimulus control default to olfaction for `OdorRig` recordings and vision for other rigs.
 - Reworked the napari Group Matching FOV and ROI assignment views with larger image previews, clearer staged headings, grouped file/action/preview sections, theme-aware colors, more legible primary and destructive actions, and a compact two-column FOV assignment layout with image-overlaid recording labels, vertical contrast sliders, a vertical-only scrollable left control column, and compact FOV ID step buttons.
 - Made the Group Matching popup expand to the current display without entering macOS fullscreen, removed the maximum-height cap, added hover color feedback to matching buttons, and added a compact four-row current-FOV table that reselects assigned recording cards for edits.
+- Moved the Group Matching ROI controls into a compact left sidebar, placed a selected-ROI chip panel above separate ROI-response and combined-response plot sections, and added numeric FOV IDs, numeric ROI dropdown labels, selectable ROI load-status paths, inline ROI color chips, resizable saved-group columns, epoch visibility controls, ROI-response plot toggles, and resize-safe response previews with size-aware plot text.
 
 ### Fixes
 
+- Kept Group Matching's auto-managed ROI match CSV path following the current loaded-recordings CSV folder after unloading all recordings and loading a new CSV list, while preserving explicitly chosen ROI CSV paths.
 - Kept napari Load manually and Load CSV list dialog folders independent so choosing one no longer overwrites the other's remembered location.
 - Kept napari response plots from carrying stale epoch visibility into newly loaded recordings, so gray/interleave epochs are hidden by default after loading a CSV list.
 
