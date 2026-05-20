@@ -4,6 +4,7 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from qtpy.QtCore import QRectF
 from qtpy.QtGui import QPalette
 from qtpy.QtWidgets import QCheckBox, QGridLayout, QPushButton, QTableWidget
 
@@ -1147,6 +1148,103 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
 
         self.assertEqual(widget.sizeHint().width(), 320)
         self.assertEqual(widget.sizeHint().height(), 304)
+
+    def test_epoch_plot_widget_reuses_pixmap_until_display_changes(self) -> None:
+        """Confirm scroll paints reuse the cached raster plot.
+
+        Inputs: one epoch plot widget rendered twice, then changed display
+        options.
+        Outputs: the second render reuses the same pixmap and the display
+        change invalidates it.
+        """
+        _ = QApplication.instance() or QApplication([])
+        plot_data = _tiny_response_plot_data()
+        widget = EpochPlotWidget(
+            plot_data.epochs[0],
+            show_sem=True,
+            roi_indices=(0,),
+            roi_colors=(QColor("#ff0000"),),
+            time_min=0.0,
+            time_max=1.0,
+            value_min=0.0,
+            value_max=1.0,
+            plot_size=320,
+        )
+
+        first = widget._rendered_pixmap()
+        second = widget._rendered_pixmap()
+        widget.update_display(
+            show_sem=False,
+            roi_indices=(0,),
+            roi_colors=(QColor("#ff0000"),),
+            time_min=0.0,
+            time_max=1.0,
+            value_min=0.0,
+            value_max=1.0,
+            plot_size=320,
+        )
+        third = widget._rendered_pixmap()
+
+        self.assertIs(first, second)
+        self.assertIsNot(first, third)
+
+    def test_dense_trace_path_preserves_extrema_per_pixel(self) -> None:
+        """Confirm binned trace drawing keeps narrow peaks and troughs.
+
+        Inputs: ten samples that all land inside one drawable x pixel.
+        Outputs: the built path includes both the minimum and maximum response
+        values instead of selecting one representative sample.
+        """
+        rect = QRectF(0.0, 0.0, 1.0, 10.0)
+        path = plotting_widgets._trace_path(
+            rect,
+            np.linspace(0.0, 0.9, 10, dtype=np.float64),
+            np.array(
+                [0.0, 5.0, -4.0, 1.0, 0.0, 2.0, 1.0, 0.0, 0.5, 0.0],
+                dtype=np.float64,
+            ),
+            0.0,
+            0.9,
+            -5.0,
+            5.0,
+        )
+        y_values = tuple(
+            path.elementAt(index).y for index in range(path.elementCount())
+        )
+
+        self.assertEqual(path.elementCount(), 2)
+        self.assertAlmostEqual(min(y_values), 0.0)
+        self.assertAlmostEqual(max(y_values), 9.0)
+
+    def test_dense_sem_band_preserves_pixel_extent(self) -> None:
+        """Confirm binned SEM bands keep the full vertical envelope.
+
+        Inputs: ten upper/lower samples inside one drawable x pixel.
+        Outputs: the path spans the maximum upper value and minimum lower value.
+        """
+        rect = QRectF(0.0, 0.0, 1.0, 10.0)
+        path = plotting_widgets._sem_band_path(
+            rect,
+            np.linspace(0.0, 0.9, 10, dtype=np.float64),
+            np.array(
+                [1.0, 3.0, 2.0, 0.0, 1.0, 2.0, 1.0, 0.0, 0.5, 0.0],
+                dtype=np.float64,
+            ),
+            np.array(
+                [-1.0, -4.0, -2.0, 0.0, -1.0, -2.0, -1.0, 0.0, -0.5, 0.0],
+                dtype=np.float64,
+            ),
+            0.0,
+            0.9,
+            -5.0,
+            5.0,
+        )
+        y_values = tuple(
+            path.elementAt(index).y for index in range(path.elementCount())
+        )
+
+        self.assertAlmostEqual(min(y_values), 2.0)
+        self.assertAlmostEqual(max(y_values), 9.0)
 
     def test_response_widget_reuses_epoch_plots_for_live_refreshes(self) -> None:
         """Confirm repeated live results update cached epoch widgets in place.

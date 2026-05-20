@@ -8,6 +8,7 @@ This module owns the mutable Qt plot cache so the dock widget can coordinate
 analysis state without also managing layout internals.
 """
 
+from qtpy.QtCore import QTimer
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget
 
@@ -32,6 +33,10 @@ class ResponsePlotArea:
         self.epoch_plot_widgets: dict[int, EpochPlotWidget] = {}
         self.epoch_plot_panels: dict[int, QWidget] = {}
         self._epoch_keys: dict[int, tuple[int, str]] = {}
+        self._render_cache_queue: list[int] = []
+        self._render_cache_timer = QTimer()
+        self._render_cache_timer.setInterval(10)
+        self._render_cache_timer.timeout.connect(self._prepare_next_render_cache)
         self._status_label = QLabel(initial_status)
         self._layout = QHBoxLayout()
         self._layout.addWidget(self._status_label)
@@ -205,6 +210,7 @@ class ResponsePlotArea:
                 value_max=value_max,
                 plot_size=plot_size,
             )
+        self.schedule_epoch_render_cache(epoch_indices)
 
     def has_epoch_widgets(self, epoch_indices: tuple[int, ...]) -> bool:
         """Return whether all requested epoch plots already exist.
@@ -282,11 +288,47 @@ class ResponsePlotArea:
 
     def clear_epoch_cache(self) -> None:
         """Delete cached epoch plot panels and widgets."""
+        self._render_cache_timer.stop()
+        self._render_cache_queue.clear()
         for panel in self.epoch_plot_panels.values():
             panel.deleteLater()
         self.epoch_plot_widgets.clear()
         self.epoch_plot_panels.clear()
         self._epoch_keys.clear()
+
+    def schedule_epoch_render_cache(self, epoch_indices: tuple[int, ...]) -> None:
+        """Prepare visible plot rasters incrementally after display updates.
+
+        Args:
+            epoch_indices: Epoch plot rows that may be exposed by scrolling.
+
+        Returns:
+            None.
+
+        Plot rasterization can be expensive with many ROIs. Preparing one epoch
+        per timer tick avoids moving that whole cost into checkbox and axis
+        interactions while still warming the scroll path during idle time.
+        """
+        self._render_cache_queue = [
+            index for index in epoch_indices if index in self.epoch_plot_widgets
+        ]
+        if len(self._render_cache_queue) == 0:
+            self._render_cache_timer.stop()
+            return
+        if not self._render_cache_timer.isActive():
+            self._render_cache_timer.start()
+
+    def _prepare_next_render_cache(self) -> None:
+        """Render one queued plot pixmap and yield back to Qt."""
+        while self._render_cache_queue:
+            epoch_index = self._render_cache_queue.pop(0)
+            plot = self.epoch_plot_widgets.get(epoch_index)
+            if plot is None:
+                continue
+            plot.prepare_render_cache()
+            break
+        if len(self._render_cache_queue) == 0:
+            self._render_cache_timer.stop()
 
     def clear_layout_preserving_epoch_cache(self) -> None:
         """Clear the plot strip while keeping cached epoch panels alive."""

@@ -13,7 +13,7 @@ from typing import Protocol, cast
 import numpy as np
 import numpy.typing as npt
 from qtpy.QtCore import QPointF, QRectF, QSize, Qt
-from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
+from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
 from qtpy.QtWidgets import QLayout, QSizePolicy, QWidget
 
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
@@ -24,6 +24,7 @@ _TOP_MARGIN = 12.0
 _RIGHT_MARGIN = 18.0
 _BOTTOM_MARGIN = 46.0
 _STIMULUS_MARKER_Y_OFFSET = 8.0
+_EXACT_PATH_POINTS_PER_PIXEL = 8.0
 
 __all__ = [
     "EpochPlotWidget",
@@ -93,6 +94,9 @@ class EpochPlotWidget(QWidget):
         self._value_min = value_min
         self._value_max = value_max
         self._plot_size = int(plot_size)
+        self._cached_pixmap: QPixmap | None = None
+        self._cached_pixmap_size: QSize | None = None
+        self._cached_device_pixel_ratio: float | None = None
         self.setFixedSize(self._plot_size, _plot_widget_height(self._plot_size))
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
@@ -149,7 +153,7 @@ class EpochPlotWidget(QWidget):
         self._plot_size = int(plot_size)
         self.setFixedSize(self._plot_size, _plot_widget_height(self._plot_size))
         self.updateGeometry()
-        self.update()
+        self._invalidate_render_cache()
 
     def update_data(self, data: EpochResponsePlotData) -> None:
         """Replace computed response data without rebuilding the widget.
@@ -161,7 +165,7 @@ class EpochPlotWidget(QWidget):
             None.
         """
         self._data = data
-        self.update()
+        self._invalidate_render_cache()
 
     def paintEvent(self, a0: QPaintEvent | None) -> None:
         """Draw response traces.
@@ -174,6 +178,59 @@ class EpochPlotWidget(QWidget):
         """
         del a0
         painter = QPainter(self)
+        painter.drawPixmap(0, 0, self._rendered_pixmap())
+        painter.end()
+
+    def _invalidate_render_cache(self) -> None:
+        """Drop the cached plot image and request a repaint."""
+        self._cached_pixmap = None
+        self._cached_pixmap_size = None
+        self._cached_device_pixel_ratio = None
+        self.update()
+
+    def prepare_render_cache(self) -> None:
+        """Render the plot pixmap before scroll exposure.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        Response strips contain many horizontally arranged widgets. Preparing
+        visible plot rasters during display updates keeps scrollbar movement
+        from becoming the first expensive paint site.
+        """
+        self._rendered_pixmap()
+
+    def _rendered_pixmap(self) -> QPixmap:
+        """Return a cached raster rendering for the current display state."""
+        pixel_ratio = float(self.devicePixelRatioF())
+        logical_size = QSize(self.size())
+        if (
+            self._cached_pixmap is not None
+            and self._cached_pixmap_size == logical_size
+            and self._cached_device_pixel_ratio == pixel_ratio
+        ):
+            return self._cached_pixmap
+
+        physical_size = QSize(
+            max(1, round(logical_size.width() * pixel_ratio)),
+            max(1, round(logical_size.height() * pixel_ratio)),
+        )
+        pixmap = QPixmap(physical_size)
+        pixmap.setDevicePixelRatio(pixel_ratio)
+        pixmap.fill(QColor("#20252d"))
+        painter = QPainter(pixmap)
+        self._render_plot(painter)
+        painter.end()
+        self._cached_pixmap = pixmap
+        self._cached_pixmap_size = logical_size
+        self._cached_device_pixel_ratio = pixel_ratio
+        return pixmap
+
+    def _render_plot(self, painter: QPainter) -> None:
+        """Draw the current response plot into an active paint device."""
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         font = painter.font()
         font.setPixelSize(_plot_text_pixel_size(self._plot_size))
@@ -221,7 +278,6 @@ class EpochPlotWidget(QWidget):
                 value_max=self._value_max,
                 color=color,
             )
-        painter.end()
 
 
 def _square_plot_rect(bounds: QRectF) -> QRectF:
@@ -764,26 +820,16 @@ def _draw_sem_band(
     """
     upper = mean_values + sem_values
     lower = mean_values - sem_values
-    path = _trace_path(
+    path = _sem_band_path(
         rect,
         time_values,
         upper,
+        lower,
         time_min,
         time_max,
         value_min,
         value_max,
     )
-    for index in range(len(time_values) - 1, -1, -1):
-        point = _plot_point(
-            rect,
-            time_values[index],
-            lower[index],
-            time_min,
-            time_max,
-            value_min,
-            value_max,
-        )
-        path.lineTo(point)
     band_color = QColor(color)
     band_color.setAlpha(55)
     painter.fillPath(path, band_color)
@@ -812,6 +858,37 @@ def _trace_path(
     Returns:
         Painter path for valid values.
     """
+    if _should_bin_path(rect, time_values, time_min, time_max):
+        return _binned_trace_path(
+            rect,
+            time_values,
+            values,
+            time_min,
+            time_max,
+            value_min,
+            value_max,
+        )
+    return _exact_trace_path(
+        rect,
+        time_values,
+        values,
+        time_min,
+        time_max,
+        value_min,
+        value_max,
+    )
+
+
+def _exact_trace_path(
+    rect: QRectF,
+    time_values: npt.NDArray[np.float64],
+    values: npt.NDArray[np.float64],
+    time_min: float,
+    time_max: float,
+    value_min: float,
+    value_max: float,
+) -> QPainterPath:
+    """Build a path with one vertex per finite visible sample."""
     path = QPainterPath()
     first = True
     for time_value, value in zip(time_values, values, strict=True):
@@ -833,6 +910,285 @@ def _trace_path(
         else:
             path.lineTo(point)
     return path
+
+
+def _binned_trace_path(
+    rect: QRectF,
+    time_values: npt.NDArray[np.float64],
+    values: npt.NDArray[np.float64],
+    time_min: float,
+    time_max: float,
+    value_min: float,
+    value_max: float,
+) -> QPainterPath:
+    """Build a trace path whose vertices are bounded by screen pixels.
+
+    Dense recordings can have many samples inside one output pixel column. For
+    those columns, the path draws the per-column minimum and maximum in the
+    order they occurred so brief responses remain visible.
+    """
+    path = QPainterPath()
+    pixel_width = _plot_pixel_width(rect)
+    first = True
+    for indices in _finite_visible_segments(time_values, values, time_min, time_max):
+        bins = _sample_pixel_bins(
+            time_values[indices],
+            time_min,
+            time_max,
+            pixel_width,
+        )
+        for start, stop in _bin_runs(bins):
+            run_indices = indices[start:stop]
+            run_values = values[run_indices]
+            x = _bin_center_x(rect, int(bins[start]), pixel_width)
+            if len(run_values) == 1:
+                ordered_values = (float(run_values[0]),)
+            else:
+                min_index = int(np.argmin(run_values))
+                max_index = int(np.argmax(run_values))
+                if min_index == max_index:
+                    ordered_values = (float(run_values[min_index]),)
+                elif min_index < max_index:
+                    ordered_values = (
+                        float(run_values[min_index]),
+                        float(run_values[max_index]),
+                    )
+                else:
+                    ordered_values = (
+                        float(run_values[max_index]),
+                        float(run_values[min_index]),
+                    )
+            for value in ordered_values:
+                point = QPointF(x, _value_position(rect, value, value_min, value_max))
+                if first:
+                    path.moveTo(point)
+                    first = False
+                else:
+                    path.lineTo(point)
+        first = True
+    return path
+
+
+def _sem_band_path(
+    rect: QRectF,
+    time_values: npt.NDArray[np.float64],
+    upper_values: npt.NDArray[np.float64],
+    lower_values: npt.NDArray[np.float64],
+    time_min: float,
+    time_max: float,
+    value_min: float,
+    value_max: float,
+) -> QPainterPath:
+    """Build a closed path for one SEM band."""
+    if _should_bin_path(rect, time_values, time_min, time_max):
+        return _binned_sem_band_path(
+            rect,
+            time_values,
+            upper_values,
+            lower_values,
+            time_min,
+            time_max,
+            value_min,
+            value_max,
+        )
+    return _exact_sem_band_path(
+        rect,
+        time_values,
+        upper_values,
+        lower_values,
+        time_min,
+        time_max,
+        value_min,
+        value_max,
+    )
+
+
+def _exact_sem_band_path(
+    rect: QRectF,
+    time_values: npt.NDArray[np.float64],
+    upper_values: npt.NDArray[np.float64],
+    lower_values: npt.NDArray[np.float64],
+    time_min: float,
+    time_max: float,
+    value_min: float,
+    value_max: float,
+) -> QPainterPath:
+    """Build an exact closed SEM band path."""
+    path = QPainterPath()
+    finite_values = np.isfinite(upper_values) & np.isfinite(lower_values)
+    for indices in _visible_segments(time_values, finite_values, time_min, time_max):
+        if len(indices) == 0:
+            continue
+        first_index = int(indices[0])
+        path.moveTo(
+            _plot_point(
+                rect,
+                time_values[first_index],
+                upper_values[first_index],
+                time_min,
+                time_max,
+                value_min,
+                value_max,
+            )
+        )
+        for index in indices[1:]:
+            path.lineTo(
+                _plot_point(
+                    rect,
+                    time_values[int(index)],
+                    upper_values[int(index)],
+                    time_min,
+                    time_max,
+                    value_min,
+                    value_max,
+                )
+            )
+        for index in indices[::-1]:
+            path.lineTo(
+                _plot_point(
+                    rect,
+                    time_values[int(index)],
+                    lower_values[int(index)],
+                    time_min,
+                    time_max,
+                    value_min,
+                    value_max,
+                )
+            )
+        path.closeSubpath()
+    return path
+
+
+def _binned_sem_band_path(
+    rect: QRectF,
+    time_values: npt.NDArray[np.float64],
+    upper_values: npt.NDArray[np.float64],
+    lower_values: npt.NDArray[np.float64],
+    time_min: float,
+    time_max: float,
+    value_min: float,
+    value_max: float,
+) -> QPainterPath:
+    """Build a pixel-binned SEM band preserving visible vertical extent."""
+    path = QPainterPath()
+    pixel_width = _plot_pixel_width(rect)
+    finite_values = np.isfinite(upper_values) & np.isfinite(lower_values)
+    for indices in _visible_segments(time_values, finite_values, time_min, time_max):
+        bins = _sample_pixel_bins(
+            time_values[indices],
+            time_min,
+            time_max,
+            pixel_width,
+        )
+        upper_points: list[QPointF] = []
+        lower_points: list[QPointF] = []
+        for start, stop in _bin_runs(bins):
+            run_indices = indices[start:stop]
+            x = _bin_center_x(rect, int(bins[start]), pixel_width)
+            upper = float(np.max(upper_values[run_indices]))
+            lower = float(np.min(lower_values[run_indices]))
+            upper_points.append(
+                QPointF(x, _value_position(rect, upper, value_min, value_max))
+            )
+            lower_points.append(
+                QPointF(x, _value_position(rect, lower, value_min, value_max))
+            )
+        if len(upper_points) == 0:
+            continue
+        path.moveTo(upper_points[0])
+        for point in upper_points[1:]:
+            path.lineTo(point)
+        for point in reversed(lower_points):
+            path.lineTo(point)
+        path.closeSubpath()
+    return path
+
+
+def _should_bin_path(
+    rect: QRectF,
+    time_values: npt.NDArray[np.float64],
+    time_min: float,
+    time_max: float,
+) -> bool:
+    """Return whether visible sample density exceeds drawable resolution."""
+    visible_count = int(
+        np.count_nonzero((time_values >= time_min) & (time_values <= time_max))
+    )
+    return visible_count > _EXACT_PATH_POINTS_PER_PIXEL * _plot_pixel_width(rect)
+
+
+def _plot_pixel_width(rect: QRectF) -> int:
+    """Return the integer width available for data samples."""
+    return max(1, int(np.ceil(rect.width())))
+
+
+def _finite_visible_segments(
+    time_values: npt.NDArray[np.float64],
+    values: npt.NDArray[np.float64],
+    time_min: float,
+    time_max: float,
+) -> tuple[npt.NDArray[np.int64], ...]:
+    """Return contiguous finite sample runs inside the visible time bounds."""
+    return _visible_segments(
+        time_values,
+        np.isfinite(values),
+        time_min,
+        time_max,
+    )
+
+
+def _visible_segments(
+    time_values: npt.NDArray[np.float64],
+    finite_values: npt.NDArray[np.bool_],
+    time_min: float,
+    time_max: float,
+) -> tuple[npt.NDArray[np.int64], ...]:
+    """Return contiguous sample-index runs that should be connected."""
+    visible = finite_values & (time_values >= time_min) & (time_values <= time_max)
+    indices = np.flatnonzero(visible).astype(np.int64, copy=False)
+    if len(indices) == 0:
+        return ()
+    split_after = np.flatnonzero(np.diff(indices) > 1) + 1
+    return tuple(
+        np.asarray(segment, dtype=np.int64)
+        for segment in np.split(indices, split_after)
+    )
+
+
+def _sample_pixel_bins(
+    time_values: npt.NDArray[np.float64],
+    time_min: float,
+    time_max: float,
+    pixel_width: int,
+) -> npt.NDArray[np.int64]:
+    """Map visible sample times to integer x-pixel columns."""
+    time_span = time_max - time_min
+    if time_span == 0:
+        return np.zeros(len(time_values), dtype=np.int64)
+    fractions = (time_values - time_min) / time_span
+    bins = np.floor(fractions * pixel_width).astype(np.int64)
+    return np.clip(bins, 0, pixel_width - 1)
+
+
+def _bin_runs(bins: npt.NDArray[np.int64]) -> tuple[tuple[int, int], ...]:
+    """Return start/stop slices for consecutive samples in the same pixel."""
+    if len(bins) == 0:
+        return ()
+    starts = np.concatenate(
+        (
+            np.array([0], dtype=np.int64),
+            np.flatnonzero(np.diff(bins) != 0).astype(np.int64) + 1,
+        )
+    )
+    stops = np.concatenate((starts[1:], np.array([len(bins)], dtype=np.int64)))
+    return tuple(
+        (int(start), int(stop)) for start, stop in zip(starts, stops, strict=True)
+    )
+
+
+def _bin_center_x(rect: QRectF, bin_index: int, pixel_width: int) -> float:
+    """Return the center x coordinate for one data pixel bin."""
+    return rect.left() + ((float(bin_index) + 0.5) / float(pixel_width)) * rect.width()
 
 
 def _plot_point(
@@ -860,10 +1216,19 @@ def _plot_point(
     """
     time_span = time_max - time_min
     x_fraction = 0.0 if time_span == 0 else (time_value - time_min) / time_span
-    y_fraction = (value - value_min) / (value_max - value_min)
     x = rect.left() + x_fraction * rect.width()
-    y = rect.bottom() - y_fraction * rect.height()
-    return QPointF(x, y)
+    return QPointF(x, _value_position(rect, value, value_min, value_max))
+
+
+def _value_position(
+    rect: QRectF,
+    value: float,
+    value_min: float,
+    value_max: float,
+) -> float:
+    """Map one response value into the plot rectangle's y coordinate."""
+    y_fraction = (value - value_min) / (value_max - value_min)
+    return rect.bottom() - y_fraction * rect.height()
 
 
 def _time_position(

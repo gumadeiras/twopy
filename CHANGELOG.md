@@ -25,6 +25,7 @@
 
 ### Fixes
 
+- Kept napari response-plot scrolling responsive for long recordings and many visible ROIs by caching epoch plot rasters and using pixel-density-aware trace drawing.
 - Made Return in the napari database-search window search from filter fields and load selected result rows from the result tree.
 - Kept the napari Metadata and Export tabs from widening the sidebar with a horizontal scrollbar when status paths are long, and made Metadata text selectable for copying.
 - Made missing database-loaded recordings report every configured `data_paths` candidate instead of only the first cache fallback path.
