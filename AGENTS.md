@@ -91,8 +91,7 @@ twopy is a two-photon imaging analysis tool.
 ## Environment
 
 - Keep the environment reproducible.
-- When adding, removing, or changing dependencies, update `environment.yml` or a requirements file in the same change.
-- Prefer `environment.yml` for the micromamba development environment.
+- When adding, removing, or changing dependencies, update `environment.yml` (the canonical micromamba environment file) in the same change.
 - Keep one install path. Do not split dependencies into dev or GUI extras.
 - Install pre-commit hooks with `micromamba run -n twopy pre-commit install` after creating the environment.
 
@@ -131,6 +130,50 @@ twopy is a two-photon imaging analysis tool.
 - Write documentation and comments from the reader's concrete object first: say what the user sees, what data value is used, and why it stays correct; avoid dense phrases that combine implementation jargon such as "factory", "derive", "identity", or "contract" unless those words are the subject being explained.
 - Key analysis code must include inline comments that explain the reasoning behind the logic.
 - Comments should clarify scientific or data-processing intent. Do not restate obvious syntax.
+
+### User-facing docs site (`docs/`)
+
+The user-facing docs live under `docs/` and are published with Sphinx + MyST + Furo to `twopy.gumadeiras.com`. Treat the code (and the actual GUI behavior it produces) as the source of truth, not the previous doc. When the code changes a button label, a tab order, a parameter default, or a public API name, update the affected page in the same change.
+
+**Audience and file layout.** Each page has one audience and one job. Do not merge audiences.
+
+- `docs/index.md` — short landing page that routes readers to the right track (GUI user, Python scripter, workflow author, reference). Keep it brief; link out.
+- `docs/getting_started.md` — install → configure → launch → first save, for any new user. About ten minutes end-to-end.
+- `docs/gui/*.md` — one page per user task in the napari app (`loading.md`, `rois.md`, `plots.md`, `custom_tab.md`, `group_matching.md`, `saving.md`). Do **not** recreate a monolithic `gui.md`. New GUI surface gets a new task page or extends an existing one.
+- `docs/python_api.md` — task-oriented Python scripting guide. Organize by what the user wants to do (find recordings, convert, extract traces, save, …), not by twopy module.
+- `docs/writing_custom_workflows.md` — developer guide for people adding workflows. Usage of the Custom tab belongs in `docs/gui/custom_tab.md`; cross-link both directions.
+- `docs/development.md` — for people working on twopy itself only.
+- `docs/input_data_spec.md` — short high-level contract.
+- `docs/recording_file_schema.md` — long developer / auditor reference.
+
+When in doubt, split. A page that mixes "click here" with "import this" with "the converted HDF5 layout" is doing three jobs.
+
+**Page shape.** Lead with a one-sentence hook stating what the page is for, then jump straight into action-oriented H2 sections. No long preambles, no "background" sections at the top, no restating what the project is on every page. Reference details (parameter tables, file layouts, edge cases) go at the bottom of the page they belong to, never as the first thing the reader sees.
+
+**Walls of text are bugs.** Break dense prose with subheadings, bulleted lists, or tables. If a paragraph runs past four or five sentences, split it or convert it. The user should be able to scan the page in seconds and find what they need.
+
+**Voice and language.** The general docs-and-comments rules above still apply (human language, reader's concrete object first, no implementation jargon). On top of those, for the docs site:
+
+- Second person, present tense, imperative: "Click **Save ROIs + analysis**", not "the user clicks" or "the button is clicked".
+- Prefer concrete user verbs to engineering verbs: "saves" over "persists", "writes" over "emits", "uses" over "consumes", "settings" over "options surface".
+- Describe the current behavior. Do not document deprecated paths, transition shims, or "this used to be" notes.
+
+**Verify before writing.**
+
+- Quote GUI labels exactly as they appear in code. Grep the napari source (`src/twopy/napari/`) for `QPushButton("...")`, `addTab(..., "...")`, and `QLabel("...")` to confirm wording. Wrong button names rot the doc and break user trust faster than missing detail.
+- Confirm tab order from the actual `addTab` calls, not memory or the prior doc.
+- Confirm Python API names against `twopy/__init__.py`'s `__all__` and the function's actual signature before writing an example. Run examples mentally against the real types.
+- Confirm config keys against `config.example.yml`.
+
+**Cross-link generously.** Every GUI task page that has a Python equivalent should link to `python_api.md` and vice versa. The Custom-tab usage page and the writing-workflows page must link to each other. Reference pages link back up to their high-level intros.
+
+**Sphinx / MyST hygiene.**
+
+- `docs/conf.py` sets `myst_heading_anchors = 3`, so use plain `[link text](page.md#heading-slug)` for in-page jumps; do not hand-roll anchors.
+- Each top-level grouping in `index.md` gets its own `{toctree}` with a `:caption:`. Pages inside a subdirectory (`docs/gui/`) need their own `index.md` with a nested toctree so the navigation tree stays usable.
+- The site must build cleanly with `sphinx-build -W -b html docs build/docs`. Treat warnings as errors locally before shipping.
+
+**Do not create new top-level Markdown docs unless they earn their place.** If new material fits inside an existing page, extend that page. New files mean new navigation surface for every reader.
 
 ## Typing
 
