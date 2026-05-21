@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
 )
 
+from twopy.napari.display_paths import format_recording_minute_label
 from twopy.napari.group_matching.cards import fov_group_display_id, image_overlay_stack
 from twopy.napari.group_matching.images import (
     THUMBNAIL_SIZE,
@@ -54,6 +55,7 @@ class FovRecordingCard(QFrame):
         """
         super().__init__()
         self.recording_path = recording.recording.source_session_dir.expanduser()
+        self._recording_label = format_recording_minute_label(self.recording_path)
         self._mean_image_layer = recording.mean_image_layer
         self._image_label = QLabel()
         self._overlay_label = QLabel()
@@ -108,7 +110,7 @@ class FovRecordingCard(QFrame):
         """Set the visual FOV assignment label."""
         fov_text = fov_group_id if fov_group_id else "none"
         self._overlay_label.setText(
-            f"{self.recording_path.name} - FOV ID: {fov_group_display_id(fov_text)}",
+            f"{self._recording_label} - FOV ID: {fov_group_display_id(fov_text)}",
         )
 
     def note(self) -> str:

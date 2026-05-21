@@ -55,6 +55,9 @@ from twopy.custom import CustomResult, CustomTable
 from twopy.napari.group_matching import (
     response_preview as group_matching_response_preview,
 )
+from twopy.napari.group_matching.fov_assignment import FovAssignmentView
+from twopy.napari.group_matching.fov_cards import FovRecordingCard
+from twopy.napari.group_matching.roi_cards import RoiRecordingCard
 from twopy.napari.group_matching.style import style_group_matching_panel
 from twopy.napari.plotting import widgets as plotting_widgets
 from twopy.napari.plotting.preview_strip import ResponsePreviewStrip
@@ -643,18 +646,20 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         widget = QWidget()
         layout = QGridLayout()
         widget.setLayout(layout)
+        first_path = Path("/recordings/gh146/stim/2025/12_21/17_42_22")
+        second_path = Path("/recordings/gh146/stim/2026/01_03/08_09_10")
 
         group_matching_response_preview.add_response_legend(
             layout,
             (
                 group_matching_response_preview.SelectedRoiResponse(
-                    recording_path=Path("/recordings/first"),
+                    recording_path=first_path,
                     roi_label="roi_0001",
                     plot_data=_tiny_response_plot_data(),
                     color=QColor("#1f77b4"),
                 ),
                 group_matching_response_preview.SelectedRoiResponse(
-                    recording_path=Path("/recordings/second"),
+                    recording_path=second_path,
                     roi_label="roi_0012",
                     plot_data=_tiny_response_plot_data(),
                     color=QColor("#d95f02"),
@@ -670,7 +675,111 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             for button in widget.findChildren(QPushButton)
             if " - ROI " in button.text()
         ]
-        self.assertEqual(button_texts, ["first - ROI 1", "second - ROI 12"])
+        self.assertEqual(
+            button_texts,
+            ["2025.12.21 17:42 - ROI 1", "2026.01.03 08:09 - ROI 12"],
+        )
+
+    def test_group_matching_card_overlays_use_recording_dates(self) -> None:
+        """Confirm FOV and ROI card overlays show date plus recording minute.
+
+        Inputs: one loaded recording whose source folder follows the lab
+        ``YYYY/MM_DD/HH_MM_SS`` layout.
+        Outputs: both assignment card overlays show ``YYYY.MM.DD HH:MM``.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = (
+                root / "data" / "gh146" / "stimulus" / "2025" / "12_21" / "17_42_22"
+            )
+            recording = load_converted_recording(
+                _write_converted_recording(root, source_session_dir=source_dir),
+            )
+            loaded = LoadedNapariRecording(
+                recording=recording,
+                roi_save_file=root / "rois.h5",
+                mean_image_layer=_FakeLayer("mean", np.ones((2, 2)), {}),
+                movie_layer=None,
+                roi_labels_layer=_FakeLayer(
+                    "rois",
+                    np.array([[0, 1], [0, 0]], dtype=np.int64),
+                    {},
+                ),
+            )
+
+            fov_card = FovRecordingCard(
+                recording=loaded,
+                fov_group_id="fov_1",
+                note="",
+            )
+            roi_card = RoiRecordingCard(
+                recording=loaded,
+                fov_group_id="fov_1",
+                selected_roi="roi_0001",
+                trace_color=QColor("#1f77b4"),
+                on_selection_changed=lambda: None,
+            )
+
+            fov_overlay = fov_card.findChild(QLabel, "fov_card_overlay")
+            roi_overlay = roi_card.findChild(QLabel, "fov_card_overlay")
+            assert fov_overlay is not None
+            assert roi_overlay is not None
+            self.assertEqual(fov_overlay.text(), "2025.12.21 17:42 - FOV ID: 1")
+            self.assertEqual(roi_overlay.text(), "2025.12.21 17:42 - FOV ID: 1")
+
+    def test_group_matching_tables_use_recording_dates(self) -> None:
+        """Confirm FOV and ROI tables summarize recordings by date and minute.
+
+        Inputs: private table-summary methods with card paths in the lab
+        ``YYYY/MM_DD/HH_MM_SS`` layout.
+        Outputs: table display strings use ``YYYY.MM.DD HH:MM``.
+        """
+        _ = QApplication.instance() or QApplication([])
+        first_path = Path("/recordings/gh146/stim/2025/12_21/17_42_22")
+        second_path = Path("/recordings/gh146/stim/2026/01_03/08_09_10")
+        fov_view = FovAssignmentView(
+            state=SimpleNamespace(loaded_recordings=[]),
+            fov_groups={},
+            fov_notes={},
+            output_path=Path("fov_groups.csv"),
+            on_output_path_changed=lambda _path: None,
+            on_finalize=lambda: None,
+        )
+        roi_view = group_matching_roi.RoiAssignmentView(
+            state=SimpleNamespace(loaded_recordings=[]),
+            fov_groups={},
+            current_rois={},
+            output_path=Path("roi_matches.csv"),
+            on_output_path_changed=lambda _path: None,
+            on_back=lambda: None,
+        )
+        cast(Any, fov_view)._cards = (
+            SimpleNamespace(recording_path=first_path),
+            SimpleNamespace(recording_path=second_path),
+        )
+        cast(Any, fov_view)._fov_groups = {
+            first_path: "fov_1",
+            second_path: "fov_1",
+        }
+        cast(Any, roi_view)._cards = (
+            SimpleNamespace(recording_path=first_path),
+            SimpleNamespace(recording_path=second_path),
+        )
+
+        self.assertEqual(
+            fov_view._visible_fov_group_summary(),
+            (("fov_1", ("2025.12.21 17:42", "2026.01.03 08:09")),),
+        )
+        self.assertEqual(
+            roi_view._group_summary(
+                (
+                    ManualRoiMatchRow("fov_1", 1, first_path, "roi_0001", "matched"),
+                    ManualRoiMatchRow("fov_1", 1, second_path, "roi_0012", "matched"),
+                ),
+            ),
+            "2025.12.21 17:42: roi_0001 | 2026.01.03 08:09: roi_0012",
+        )
 
     def test_group_matching_epoch_controls_filter_response_previews(self) -> None:
         """Confirm ROI matching has compact epoch visibility controls."""

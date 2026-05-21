@@ -37,6 +37,7 @@ from twopy.analysis.group_matching import (
     make_manual_fov_group_rows,
     save_manual_fov_group_rows,
 )
+from twopy.napari.display_paths import format_recording_minute_label
 from twopy.napari.group_matching.cards import (
     GROUP_MATCHING_CARD_SPACING,
     card_columns_for_width,
@@ -559,7 +560,9 @@ class FovAssignmentView(QWidget):
             fov_group_id = self._fov_groups.get(card.recording_path, "")
             if fov_group_id == "":
                 continue
-            grouped.setdefault(fov_group_id, []).append(card.recording_path.name)
+            grouped.setdefault(fov_group_id, []).append(
+                format_recording_minute_label(card.recording_path),
+            )
         return tuple(
             (fov_group_id, tuple(sorted(recording_names)))
             for fov_group_id, recording_names in sorted(grouped.items())

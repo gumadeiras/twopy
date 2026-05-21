@@ -19,6 +19,7 @@ from twopy.converted import RecordingData
 __all__ = [
     "RecordingDisplaySummary",
     "format_output_folder",
+    "format_recording_minute_label",
     "format_twopy_h5_output",
     "microscope_display_lines",
     "recording_display_summary",
@@ -130,6 +131,31 @@ def format_twopy_h5_output(path: Path) -> str:
         ``./twopy/<filename>.h5`` style string.
     """
     return f"./twopy/{path.name}"
+
+
+def format_recording_minute_label(recording_dir: Path) -> str:
+    """Return the compact recording date and minute for UI labels.
+
+    Args:
+        recording_dir: Source recording folder.
+
+    Returns:
+        ``YYYY.MM.DD HH:MM`` when the folder follows the lab
+        ``YYYY/MM_DD/HH_MM_SS`` layout, otherwise the folder name.
+
+    Group-matching cards need a short label that distinguishes recordings from
+    different dates while hiding seconds that do not help manual matching.
+    """
+    root = recording_dir.expanduser()
+    date_index = _recording_date_index(root)
+    if date_index is None:
+        return root.name
+
+    parts = root.parts
+    year = parts[date_index]
+    month_day = parts[date_index + 1].replace("_", ".")
+    hour, minute, _second = parts[date_index + 2].split("_")
+    return f"{year}.{month_day} {hour}:{minute}"
 
 
 def _metadata_text(metadata: dict[str, object], key: str) -> str:

@@ -23,6 +23,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from twopy.napari.display_paths import format_recording_minute_label
 from twopy.napari.group_matching.cards import fov_group_display_id, image_overlay_stack
 from twopy.napari.group_matching.images import (
     THUMBNAIL_SIZE,
@@ -66,12 +67,13 @@ class RoiRecordingCard(QFrame):
         """Create one ROI card."""
         super().__init__()
         self.recording_path = recording.recording.source_session_dir.expanduser()
+        self._recording_label = format_recording_minute_label(self.recording_path)
         self.recording = recording
         self.trace_color = trace_color
         self._image_label = QLabel()
         self._image_label.setObjectName("roi_preview_image")
         fov_id = fov_group_display_id(fov_group_id)
-        self._overlay_label = QLabel(f"{self.recording_path.name} - FOV ID: {fov_id}")
+        self._overlay_label = QLabel(f"{self._recording_label} - FOV ID: {fov_id}")
         self._roi_selector = QComboBox()
         self._roi_selector.setObjectName("roi_selector")
         self._roi_selector.setMinimumWidth(118)

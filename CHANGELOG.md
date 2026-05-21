@@ -15,6 +15,7 @@
 - Made the napari Plot tab's Show SEM toggle start unchecked.
 - Made Custom-tab workflow results show one selectable compact output folder and avoid horizontal scrolling from long output paths.
 - Changed native Response kernels defaults to 100 past stimulus samples and 10 future stimulus samples for both olfaction and vision.
+- Changed Group Matching FOV and ROI card overlays and ROI trace chips to show recording labels as `YYYY.MM.DD HH:MM`.
 - Added a developer function-inventory script that reports action-oriented per-function size, docstring size, direct call counts, direct test counts, API surface, domain, git churn, risk score, and simple complexity.
 - Made the native Response kernels Stimulus control default to olfaction for `OdorRig` recordings and vision for other rigs.
 - Reworked the napari Group Matching FOV and ROI assignment views with larger image previews, clearer staged headings, grouped file/action/preview sections, theme-aware colors, more legible primary and destructive actions, and a compact two-column FOV assignment layout with image-overlaid recording labels, vertical contrast sliders, a vertical-only scrollable left control column, and compact FOV ID step buttons.

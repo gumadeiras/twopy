@@ -24,6 +24,7 @@ from twopy.analysis.response_processing import (
 )
 from twopy.analysis.responses import finite_mean_and_sem
 from twopy.analysis.trials import is_baseline_epoch_name
+from twopy.napari.display_paths import format_recording_minute_label
 from twopy.napari.group_matching.responses import SelectedRoiResponseCache
 from twopy.napari.group_matching.roi_cards import (
     roi_label_display_id,
@@ -97,7 +98,7 @@ def combined_response_plot_data(
     if len(reference_epochs) == 0:
         return None
     roi_labels = tuple(
-        f"{response.recording_path.name} {response.roi_label}"
+        f"{format_recording_minute_label(response.recording_path)} {response.roi_label}"
         for response in selected_responses
     )
     combined_epochs: list[EpochResponsePlotData] = []
@@ -271,9 +272,9 @@ def add_response_legend(
     available_width = max(120, max_width)
     for response in selected_responses:
         visible = response.recording_path not in hidden_recordings
+        recording_label = format_recording_minute_label(response.recording_path)
         button = QPushButton(
-            f"{response.recording_path.name} - ROI "
-            f"{roi_label_display_id(response.roi_label)}",
+            f"{recording_label} - ROI {roi_label_display_id(response.roi_label)}",
         )
         button.setCheckable(True)
         button.setChecked(visible)

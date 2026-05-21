@@ -55,6 +55,7 @@ from twopy.analysis.response_processing import (
     SmoothingOptions,
 )
 from twopy.analysis.trials import is_baseline_epoch_name
+from twopy.napari.display_paths import format_recording_minute_label
 from twopy.napari.group_matching.cards import (
     GROUP_MATCHING_CARD_SPACING,
     card_columns_for_width,
@@ -1003,7 +1004,9 @@ class RoiAssignmentView(QWidget):
         for card in self._cards:
             row = rows_by_path.get(card.recording_path)
             roi_label = row.roi_label if row is not None else "none"
-            parts.append(f"{card.recording_path.name}: {roi_label}")
+            parts.append(
+                f"{format_recording_minute_label(card.recording_path)}: {roi_label}",
+            )
         return " | ".join(parts)
 
     def _restore_selected_group(self) -> None:
