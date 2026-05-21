@@ -6,7 +6,16 @@ Outputs: assertions for one napari workflow area.
 
 from qtpy.QtCore import QRectF
 from qtpy.QtGui import QPalette
-from qtpy.QtWidgets import QCheckBox, QGridLayout, QPushButton, QTableWidget
+from qtpy.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QGridLayout,
+    QPushButton,
+    QScrollArea,
+    QTableWidget,
+    QVBoxLayout,
+)
 
 from tests.napari_support import (
     Any,
@@ -59,6 +68,7 @@ from twopy.napari.group_matching.fov_assignment import FovAssignmentView
 from twopy.napari.group_matching.fov_cards import FovRecordingCard
 from twopy.napari.group_matching.roi_cards import RoiRecordingCard
 from twopy.napari.group_matching.style import style_group_matching_panel
+from twopy.napari.group_matching.window import GroupMatchingPanel
 from twopy.napari.plotting import widgets as plotting_widgets
 from twopy.napari.plotting.preview_strip import ResponsePreviewStrip
 from twopy.napari.session import LoadedNapariRecording
@@ -864,58 +874,62 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         checkboxes[1].click()
         self.assertEqual(view._visible_response_epoch_indices(plot_data), ())
 
-    def test_group_matching_processing_dropdowns_show_all_choices(self) -> None:
-        """Confirm ROI matching plot-setting dropdowns open without scrolling.
+    def test_group_matching_smoothing_dropdown_opens_without_scroll(self) -> None:
+        """Confirm Group Matching uses the standard Plot-tab smoothing dropdown.
 
-        Inputs: an empty ROI assignment view and three normalization epochs.
-        Outputs: smoothing and normalization dropdowns show all current items
-        with the non-native Qt popup that honors visible-item counts.
+        Inputs: a full Group Matching panel in a dialog with the ROI stage
+        visible and the left sidebar scrolled to Plot settings.
+        Outputs: the smoothing method dropdown opens with every item visible
+        and no popup scrollbar range.
         """
         _ = QApplication.instance() or QApplication([])
-        view = group_matching_roi.RoiAssignmentView(
-            state=SimpleNamespace(loaded_recordings=[]),
-            fov_groups={},
-            current_rois={},
-            output_path=Path("roi_matches.csv"),
-            on_output_path_changed=lambda _path: None,
-            on_back=lambda: None,
-        )
-        view._normalization_widget.set_epoch_choices(
-            {1: "Gray Interleave", 2: "Odor", 3: "Clean Air"},
-        )
+        panel = GroupMatchingPanel(SimpleNamespace(loaded_recordings=[]))
+        panel._stack.setCurrentWidget(panel._roi_view)
+        dialog = QDialog()
+        layout = QVBoxLayout()
+        layout.addWidget(panel)
+        dialog.setLayout(layout)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            dialog.setGeometry(screen.availableGeometry())
+        else:
+            dialog.resize(1280, 760)
+        dialog.show()
+        QApplication.processEvents()
+        dropdown: QComboBox | None = None
+        try:
+            left_scroll = panel._roi_view.findChild(
+                QScrollArea,
+                "roi_assignment_left_scroll",
+            )
+            self.assertIsNotNone(left_scroll)
+            if left_scroll is None:
+                return
+            left_scrollbar = left_scroll.verticalScrollBar()
+            self.assertIsNotNone(left_scrollbar)
+            if left_scrollbar is None:
+                return
+            left_scrollbar.setValue(left_scrollbar.maximum())
+            QApplication.processEvents()
 
-        dropdowns = (
-            view._smoothing_widget._smoothing_method,
-            view._normalization_widget._epoch,
-        )
-
-        for dropdown in dropdowns:
+            dropdown = panel._roi_view._smoothing_widget._smoothing_method
             self.assertEqual(dropdown.maxVisibleItems(), dropdown.count())
-            self.assertIn("combobox-popup: 0", dropdown.styleSheet())
             dropdown_view = dropdown.view()
             self.assertIsNotNone(dropdown_view)
             if dropdown_view is None:
-                continue
-            row_heights = [
-                dropdown_view.sizeHintForRow(index) for index in range(dropdown.count())
-            ]
-            expected_height = (
-                sum(
-                    row_height if row_height > 0 else dropdown.sizeHint().height()
-                    for row_height in row_heights
-                )
-                + 2 * dropdown_view.frameWidth()
-            )
-            self.assertEqual(dropdown_view.height(), expected_height)
-            try:
-                dropdown.showPopup()
-                QApplication.processEvents()
-                scrollbar = dropdown_view.verticalScrollBar()
-                self.assertIsNotNone(scrollbar)
-                if scrollbar is not None:
-                    self.assertFalse(scrollbar.isVisible())
-            finally:
+                return
+
+            dropdown.showPopup()
+            QApplication.processEvents()
+            scrollbar = dropdown_view.verticalScrollBar()
+            self.assertIsNotNone(scrollbar)
+            if scrollbar is not None:
+                self.assertEqual(scrollbar.maximum(), 0)
+                self.assertFalse(scrollbar.isVisible())
+        finally:
+            if dropdown is not None:
                 dropdown.hidePopup()
+            dialog.close()
 
     def test_group_matching_plot_size_redraws_without_recompute(self) -> None:
         """Confirm display-only plot sizing does not rerun ROI analysis.

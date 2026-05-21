@@ -23,7 +23,6 @@ __all__ = [
     "plot_form_layout",
     "set_plot_control_width",
     "set_plot_dropdown_width",
-    "show_all_plot_dropdown_items",
 ]
 
 PLOT_CONTROL_WIDTH = 100
@@ -81,38 +80,6 @@ def set_plot_dropdown_width(control: QComboBox) -> None:
     popup = view.window()
     if popup is not None:
         popup.setFixedWidth(PLOT_DROPDOWN_WIDTH)
-
-
-def show_all_plot_dropdown_items(control: QComboBox) -> None:
-    """Make one Plot-tab dropdown popup show every current item.
-
-    Args:
-        control: Dropdown whose current choices should fit without a popup
-            scrollbar.
-
-    Returns:
-        None.
-    """
-    control.setMaxVisibleItems(max(1, control.count()))
-    control.setStyleSheet(f"width: {PLOT_DROPDOWN_WIDTH}px; combobox-popup: 0;")
-    view = control.view()
-    if view is None:
-        return
-    fallback_row_height = control.sizeHint().height()
-    row_heights = [view.sizeHintForRow(index) for index in range(control.count())]
-    popup_height = sum(
-        row_height if row_height > 0 else max(1, fallback_row_height)
-        for row_height in row_heights
-    )
-    if popup_height == 0:
-        popup_height = max(1, fallback_row_height)
-    popup_height += 2 * view.frameWidth()
-    view.setMinimumHeight(popup_height)
-    view.setFixedHeight(popup_height)
-    popup = view.window()
-    if popup is not None:
-        popup.setMinimumHeight(popup_height)
-        popup.setFixedHeight(popup_height)
 
 
 def _set_plot_field_width(control: QWidget, width: int) -> None:

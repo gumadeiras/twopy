@@ -142,14 +142,14 @@ QToolButton#fov_id_step_button:disabled {
     color: $disabled_text;
     border-color: $border;
 }
-QLineEdit, QComboBox, QSpinBox {
+QLineEdit, QSpinBox {
     background: $input_base;
     color: $text;
     border: 1px solid $border;
     border-radius: 4px;
     padding: 3px 5px;
 }
-QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {
+QLineEdit:disabled, QSpinBox:disabled {
     background: $disabled_base;
     color: $disabled_text;
     border-color: $border;
