@@ -640,8 +640,8 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         np.testing.assert_allclose(epoch.mean_values, np.array([[2.0, 5.0]]))
         np.testing.assert_allclose(epoch.sem_values, np.array([[1.0, 2.0]]))
 
-    def test_group_matching_selected_roi_buttons_use_numeric_roi_ids(self) -> None:
-        """Confirm selected-ROI chips use compact recording and ROI text."""
+    def test_group_matching_selected_roi_buttons_fit_text_and_wrap(self) -> None:
+        """Confirm selected-ROI chips fit their text and wrap by row width."""
         _ = QApplication.instance() or QApplication([])
         widget = QWidget()
         layout = QGridLayout()
@@ -649,25 +649,26 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         first_path = Path("/recordings/gh146/stim/2025/12_21/17_42_22")
         second_path = Path("/recordings/gh146/stim/2026/01_03/08_09_10")
 
+        selected_responses = (
+            group_matching_response_preview.SelectedRoiResponse(
+                recording_path=first_path,
+                roi_label="roi_0001",
+                plot_data=_tiny_response_plot_data(),
+                color=QColor("#1f77b4"),
+            ),
+            group_matching_response_preview.SelectedRoiResponse(
+                recording_path=second_path,
+                roi_label="roi_0012",
+                plot_data=_tiny_response_plot_data(),
+                color=QColor("#d95f02"),
+            ),
+        )
         group_matching_response_preview.add_response_legend(
             layout,
-            (
-                group_matching_response_preview.SelectedRoiResponse(
-                    recording_path=first_path,
-                    roi_label="roi_0001",
-                    plot_data=_tiny_response_plot_data(),
-                    color=QColor("#1f77b4"),
-                ),
-                group_matching_response_preview.SelectedRoiResponse(
-                    recording_path=second_path,
-                    roi_label="roi_0012",
-                    plot_data=_tiny_response_plot_data(),
-                    color=QColor("#d95f02"),
-                ),
-            ),
+            selected_responses,
             hidden_recordings=set(),
             set_visible=lambda _path, _visible: None,
-            max_width=320,
+            max_width=1000,
         )
 
         button_texts = [
@@ -679,6 +680,42 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             button_texts,
             ["2025.12.21 17:42 - ROI 1", "2026.01.03 08:09 - ROI 12"],
         )
+        for button in widget.findChildren(QPushButton):
+            if " - ROI " not in button.text():
+                continue
+            self.assertEqual(button.minimumWidth(), button.sizeHint().width())
+            self.assertEqual(button.maximumWidth(), button.sizeHint().width())
+        row_item = layout.itemAtPosition(0, 0)
+        self.assertIsNotNone(row_item)
+        row_widget = row_item.widget() if row_item is not None else None
+        self.assertIsNotNone(row_widget)
+        row_layout = row_widget.layout() if row_widget is not None else None
+        self.assertIsNotNone(row_layout)
+        if row_layout is not None:
+            self.assertEqual(row_layout.count(), 2)
+            self.assertTrue(row_layout.alignment() & Qt.AlignmentFlag.AlignLeft)
+            self.assertEqual(layout.itemAtPosition(0, 1), None)
+
+        narrow_widget = QWidget()
+        narrow_layout = QGridLayout()
+        narrow_widget.setLayout(narrow_layout)
+        group_matching_response_preview.add_response_legend(
+            narrow_layout,
+            selected_responses,
+            hidden_recordings=set(),
+            set_visible=lambda _path, _visible: None,
+            max_width=320,
+        )
+        self.assertEqual(narrow_layout.count(), 2)
+        for row_index in range(2):
+            row_item = narrow_layout.itemAtPosition(row_index, 0)
+            self.assertIsNotNone(row_item)
+            row_widget = row_item.widget() if row_item is not None else None
+            self.assertIsNotNone(row_widget)
+            row_layout = row_widget.layout() if row_widget is not None else None
+            self.assertIsNotNone(row_layout)
+            if row_layout is not None:
+                self.assertEqual(row_layout.count(), 1)
 
     def test_group_matching_card_overlays_use_recording_dates(self) -> None:
         """Confirm FOV and ROI card overlays show date plus recording minute.

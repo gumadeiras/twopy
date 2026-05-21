@@ -31,6 +31,7 @@
 ### Fixes
 
 - Made ROI y-stripe background correction stop before dF/F when it over-subtracts any ROI baseline, with guidance to use shared y-stripe/global background or redraw ROIs with dim local background pixels.
+- Made Group Matching Selected ROI chips sit directly next to each other while still wrapping to new rows when the window is narrow.
 - Made the Group Matching ROI plot-setting smoothing and normalization dropdowns show all choices without scrolling.
 - Kept napari response-plot scrolling responsive for long recordings and many visible ROIs by caching epoch plot rasters and using pixel-density-aware trace drawing.
 - Made Return in the napari database-search window search from filter fields and load selected result rows from the result tree.

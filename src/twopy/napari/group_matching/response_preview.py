@@ -14,8 +14,9 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QColor
-from qtpy.QtWidgets import QGridLayout, QPushButton
+from qtpy.QtWidgets import QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QWidget
 
 from twopy.analysis.response_processing import (
     NormalizationOptions,
@@ -266,10 +267,10 @@ def add_response_legend(
 ) -> None:
     """Add clickable color toggles for overlaid recording traces."""
     row_index = 0
-    column_index = 0
     row_width = 0
     spacing = max(0, layout.spacing())
     available_width = max(120, max_width)
+    row_layout = _new_response_legend_row(layout, row_index, spacing)
     for response in selected_responses:
         visible = response.recording_path not in hidden_recordings
         recording_label = format_recording_minute_label(response.recording_path)
@@ -283,18 +284,39 @@ def add_response_legend(
             lambda checked, path=response.recording_path: set_visible(path, checked),
         )
         button_width = button.sizeHint().width()
+        button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        button.setFixedWidth(button_width)
         next_width = (
-            button_width if column_index == 0 else row_width + spacing + button_width
+            button_width
+            if row_layout.count() == 0
+            else row_width + spacing + button_width
         )
-        if column_index > 0 and next_width > available_width:
+        if row_layout.count() > 0 and next_width > available_width:
             row_index += 1
-            column_index = 0
             row_width = 0
-        layout.addWidget(button, row_index, column_index)
+            row_layout = _new_response_legend_row(layout, row_index, spacing)
+        row_layout.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
         row_width = (
-            button_width if column_index == 0 else row_width + spacing + button_width
+            button_width
+            if row_layout.count() == 1
+            else row_width + spacing + button_width
         )
-        column_index += 1
+
+
+def _new_response_legend_row(
+    layout: QGridLayout,
+    row_index: int,
+    spacing: int,
+) -> QHBoxLayout:
+    """Add one packed left-aligned chip row to the legend grid."""
+    row_widget = QWidget()
+    row_layout = QHBoxLayout()
+    row_layout.setContentsMargins(0, 0, 0, 0)
+    row_layout.setSpacing(spacing)
+    row_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    row_widget.setLayout(row_layout)
+    layout.addWidget(row_widget, row_index, 0)
+    return row_layout
 
 
 def trace_button_style(color: QColor, *, visible: bool) -> str:
