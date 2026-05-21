@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-05-21
+
 ### Features
 
 - Added a GitHub Pages documentation site for `twopy.gumadeiras.com`.
