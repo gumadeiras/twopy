@@ -31,7 +31,7 @@ The layout mirrors stage 1: a vertical-only left column for file controls, FOV f
 
 The **FOV** dropdown shows compact numeric FOV ids while preserving the saved `fov_#` values internally.
 
-Each ROI card stacks a colored ROI chip plus a numeric ROI dropdown above the mean image, which carries the same recording-id and FOV-id overlay used by FOV cards. Cards wrap to fit as many per row as the window allows.
+Each ROI card stacks a colored ROI chip plus a numeric ROI dropdown above the mean image, which carries the same recording-id and FOV-id overlay used by FOV cards. Click an ROI in the mean-image overlay to select it; click the selected ROI again to return that card to **No ROI**. The dropdown stays available for precise selection. Cards wrap to fit as many per row as the window allows.
 
 Above the cards:
 

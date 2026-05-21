@@ -13,7 +13,7 @@ from typing import Protocol, cast
 
 import numpy as np
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QColor
+from qtpy.QtGui import QColor, QMouseEvent
 from qtpy.QtWidgets import (
     QComboBox,
     QFrame,
@@ -52,6 +52,35 @@ class _LayerWithData(Protocol):
     data: object
 
 
+class _RoiPreviewLabel(QLabel):
+    """Mean-image ROI preview that reports left-click image coordinates."""
+
+    def __init__(self, on_click: Callable[[int, int], None]) -> None:
+        """Create a clickable preview label.
+
+        Args:
+            on_click: Callback receiving the click position in label pixels.
+
+        Returns:
+            None.
+
+        The ROI card uses this widget so image clicks can drive the same
+        selector state as the dropdown without adding a second selection model.
+        """
+        super().__init__()
+        self._on_click = on_click
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, ev: QMouseEvent | None) -> None:  # noqa: N802
+        """Forward primary-button clicks to the owning ROI card."""
+        if ev is not None and ev.button() == Qt.MouseButton.LeftButton:
+            position = ev.pos()
+            self._on_click(position.x(), position.y())
+            ev.accept()
+            return
+        super().mousePressEvent(ev)
+
+
 class RoiRecordingCard(QFrame):
     """One visual ROI assignment card for a loaded recording."""
 
@@ -70,7 +99,7 @@ class RoiRecordingCard(QFrame):
         self._recording_label = format_recording_minute_label(self.recording_path)
         self.recording = recording
         self.trace_color = trace_color
-        self._image_label = QLabel()
+        self._image_label = _RoiPreviewLabel(self._toggle_roi_at_preview_point)
         self._image_label.setObjectName("roi_preview_image")
         fov_id = fov_group_display_id(fov_group_id)
         self._overlay_label = QLabel(f"{self._recording_label} - FOV ID: {fov_id}")
@@ -155,6 +184,39 @@ class RoiRecordingCard(QFrame):
         self.refresh_preview()
         callback()
 
+    def _toggle_roi_at_preview_point(self, x: int, y: int) -> None:
+        """Select or clear the ROI under one preview-image click.
+
+        Args:
+            x: Horizontal click coordinate in preview-label pixels.
+            y: Vertical click coordinate in preview-label pixels.
+
+        Returns:
+            None.
+
+        Clicking an unselected ROI chooses it. Clicking the already selected ROI
+        returns the card to ``No ROI`` so quick visual review does not require
+        opening the dropdown.
+        """
+        pixmap = self._image_label.pixmap()
+        if pixmap is None or pixmap.isNull():
+            return
+        clicked_roi = _roi_label_at_preview_point(
+            self.recording.roi_labels_layer,
+            x=x,
+            y=y,
+            preview_width=self._image_label.width(),
+            preview_height=self._image_label.height(),
+            pixmap_width=pixmap.width(),
+            pixmap_height=pixmap.height(),
+        )
+        if clicked_roi is None:
+            return
+        next_roi = "" if self.selected_roi_label() == clicked_roi else clicked_roi
+        index = 0 if next_roi == "" else self._roi_selector.findData(next_roi)
+        if index >= 0:
+            self._roi_selector.setCurrentIndex(index)
+
 
 def roi_labels_from_layer_data(layer: object | None) -> tuple[str, ...]:
     """Return selectable twopy ROI labels from a napari Labels layer.
@@ -180,6 +242,106 @@ def roi_labels_from_layer_data(layer: object | None) -> tuple[str, ...]:
         },
     )
     return tuple(f"roi_{label_value:04d}" for label_value in labels)
+
+
+def _roi_label_at_preview_point(
+    layer: object | None,
+    *,
+    x: int,
+    y: int,
+    preview_width: int,
+    preview_height: int,
+    pixmap_width: int,
+    pixmap_height: int,
+) -> str | None:
+    """Return the ROI label under one rendered preview coordinate.
+
+    Args:
+        layer: Napari Labels layer or test double exposing integer ``data``.
+        x: Horizontal click coordinate in preview-label pixels.
+        y: Vertical click coordinate in preview-label pixels.
+        preview_width: Width of the fixed Qt label displaying the pixmap.
+        preview_height: Height of the fixed Qt label displaying the pixmap.
+        pixmap_width: Width of the aspect-preserving rendered pixmap.
+        pixmap_height: Height of the aspect-preserving rendered pixmap.
+
+    Returns:
+        ``roi_####`` label under the click, or ``None`` for background, invalid
+        geometry, clicks in letterbox padding, or unavailable label data.
+
+    Group Matching previews scale images with preserved aspect ratio. This
+    helper removes the centered padding before reading the underlying Labels
+    image, so clicks select the cell mask the user sees rather than a distorted
+    thumbnail coordinate.
+    """
+    label_image = _label_image(layer)
+    if label_image is None:
+        return None
+    image_index = _image_index_at_preview_point(
+        x=x,
+        y=y,
+        preview_width=preview_width,
+        preview_height=preview_height,
+        pixmap_width=pixmap_width,
+        pixmap_height=pixmap_height,
+        image_shape=label_image.shape,
+    )
+    if image_index is None:
+        return None
+    row_index, column_index = image_index
+    try:
+        label_value = int(label_image[row_index, column_index])
+    except (OverflowError, TypeError, ValueError):
+        return None
+    return f"roi_{label_value:04d}" if label_value > 0 else None
+
+
+def _label_image(layer: object | None) -> np.ndarray | None:
+    """Return a two-dimensional Labels image from a napari-shaped layer."""
+    if layer is None or not hasattr(layer, "data"):
+        return None
+    label_image = np.asarray(cast(_LayerWithData, layer).data)
+    if label_image.ndim != 2 or 0 in label_image.shape:
+        return None
+    return label_image
+
+
+def _image_index_at_preview_point(
+    *,
+    x: int,
+    y: int,
+    preview_width: int,
+    preview_height: int,
+    pixmap_width: int,
+    pixmap_height: int,
+    image_shape: tuple[int, ...],
+) -> tuple[int, int] | None:
+    """Return the image row and column under one preview-label coordinate."""
+    if (
+        preview_width <= 0
+        or preview_height <= 0
+        or pixmap_width <= 0
+        or pixmap_height <= 0
+        or len(image_shape) < 2
+    ):
+        return None
+    image_height, image_width = image_shape[:2]
+    if image_width <= 0 or image_height <= 0:
+        return None
+    x_offset = (preview_width - pixmap_width) / 2.0
+    y_offset = (preview_height - pixmap_height) / 2.0
+    if (
+        x < x_offset
+        or y < y_offset
+        or x >= x_offset + pixmap_width
+        or y >= y_offset + pixmap_height
+    ):
+        return None
+    image_x = int((x - x_offset) * image_width / pixmap_width)
+    image_y = int((y - y_offset) * image_height / pixmap_height)
+    column_index = min(max(image_x, 0), image_width - 1)
+    row_index = min(max(image_y, 0), image_height - 1)
+    return row_index, column_index
 
 
 def _trace_label_style(color: QColor) -> str:
