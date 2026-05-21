@@ -8,7 +8,10 @@ import unittest
 
 import numpy as np
 
-from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
+from twopy.analysis.background_subtraction import (
+    BackgroundCorrectedRoiTraces,
+    BackgroundCorrectionMethod,
+)
 from twopy.analysis.dff import compute_roi_delta_f_over_f
 from twopy.analysis.trials import FrameWindow
 
@@ -196,6 +199,31 @@ class DeltaFOverFTest(unittest.TestCase):
 
         self.assertTrue(np.isfinite(result.values).all())
 
+    def test_roi_y_stripe_rejects_nonpositive_baseline_sample(self) -> None:
+        """Confirm ROI y-stripe fails when baseline correction over-subtracts.
+
+        Inputs: ROI y-stripe-corrected traces with one negative baseline sample.
+        Outputs: a clear error that names the affected ROI and safer options.
+        """
+        traces = self._traces(
+            np.array([[5.0], [-0.5], [8.0]]),
+            method="roi_y_stripe_percentile",
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "ROI y-stripe P% background subtraction over-subtracted.*roi_1",
+        ):
+            compute_roi_delta_f_over_f(
+                traces,
+                (
+                    FrameWindow(0, 0, 1, "gray_1"),
+                    FrameWindow(1, 1, 2, "gray_2"),
+                ),
+                data_rate_hz=1.0,
+                baseline_sample_seconds=None,
+            )
+
     def test_bounded_tau_and_log_amplitude_rejects_nonpositive_sample(self) -> None:
         """Confirm bounded log-amplitude mode rejects nonpositive fit samples.
 
@@ -280,12 +308,14 @@ class DeltaFOverFTest(unittest.TestCase):
         values: np.ndarray,
         *,
         start_frame: int = 0,
+        method: BackgroundCorrectionMethod = "none",
     ) -> BackgroundCorrectedRoiTraces:
         """Create background-corrected traces from known fluorescence values.
 
         Args:
             values: Corrected ROI fluorescence shaped ``(frames, rois)``.
             start_frame: Absolute frame index for ``values[0]``.
+            method: Background correction method recorded on the traces.
 
         Returns:
             ``BackgroundCorrectedRoiTraces`` suitable for dF/F tests.
@@ -298,8 +328,8 @@ class DeltaFOverFTest(unittest.TestCase):
             start_frame=start_frame,
             stop_frame=start_frame + values.shape[0],
             statistic="mean",
-            method="none",
-            metadata={"method": "none"},
+            method=method,
+            metadata={"method": method},
         )
 
 

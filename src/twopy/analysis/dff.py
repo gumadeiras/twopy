@@ -115,6 +115,10 @@ def compute_roi_delta_f_over_f(
         data_rate_hz=data_rate_hz,
         baseline_sample_seconds=baseline_sample_seconds,
     )
+    _validate_baseline_samples_for_background_method(
+        traces=traces,
+        baseline_samples=baseline_samples,
+    )
     tau = _fit_shared_tau(
         frame_numbers=baseline_samples.frame_numbers,
         mean_fluorescence=baseline_samples.values.mean(axis=1),
@@ -272,6 +276,35 @@ def _baseline_samples(
         frame_numbers=np.asarray(frame_numbers, dtype=np.float64),
         values=np.asarray(values, dtype=np.float64),
     )
+
+
+def _validate_baseline_samples_for_background_method(
+    *,
+    traces: BackgroundCorrectedRoiTraces,
+    baseline_samples: _BaselineSamples,
+) -> None:
+    """Reject background-corrected baselines that cannot support dF/F."""
+    if traces.method != "roi_y_stripe_percentile":
+        return
+
+    invalid = ~np.isfinite(baseline_samples.values) | (baseline_samples.values <= 0.0)
+    if not np.any(invalid):
+        return
+
+    roi_indices = np.flatnonzero(np.any(invalid, axis=0))
+    labels = ", ".join(traces.labels[index] for index in roi_indices[:5])
+    if roi_indices.size > 5:
+        labels = f"{labels}, ..."
+    minimum = float(np.nanmin(baseline_samples.values[:, roi_indices]))
+    msg = (
+        "ROI y-stripe P% background subtraction over-subtracted baseline "
+        f"fluorescence for {labels}; minimum corrected baseline sample is "
+        f"{minimum:.6g}. dF/F needs positive baseline fluorescence, so the "
+        "local y-stripe pixels are not a valid additive background for those "
+        "ROIs. Use shared y-stripe P%, global percentile, or revise the ROIs "
+        "to leave dim local background pixels."
+    )
+    raise ValueError(msg)
 
 
 def _validate_baseline_local_range(
