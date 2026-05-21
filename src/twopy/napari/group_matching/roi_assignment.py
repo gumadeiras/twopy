@@ -301,8 +301,34 @@ class RoiAssignmentView(QWidget):
         group_panel.setAlignment(Qt.AlignmentFlag.AlignTop)
         group_panel.addWidget(self._group_table, 1)
 
+        self._roi_response_scroll = _scroll_area_for_widget(
+            self._response_widget,
+            object_name="roi_assignment_response_scroll",
+            horizontal_policy=Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+            vertical_policy=Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        self._combined_response_scroll = _scroll_area_for_widget(
+            self._mean_response_widget,
+            object_name="roi_assignment_combined_response_scroll",
+            horizontal_policy=Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+            vertical_policy=Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        for plot_scroll in (self._roi_response_scroll, self._combined_response_scroll):
+            plot_scroll.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
+        self._roi_cards_scroll = _scroll_area_for_widget(
+            self._grid_widget,
+            object_name="roi_assignment_cards_scroll",
+            horizontal_policy=Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+            vertical_policy=Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+        )
+        self._roi_cards_scroll.setMinimumHeight(_ROI_CARD_HEIGHT + 24)
+
         card_section_layout = QVBoxLayout()
-        card_section_layout.addWidget(self._grid_widget)
+        card_section_layout.setContentsMargins(0, 0, 0, 0)
+        card_section_layout.addWidget(self._roi_cards_scroll)
 
         selected_rois_panel = QVBoxLayout()
         selected_rois_panel.setContentsMargins(0, 0, 0, 0)
@@ -311,10 +337,10 @@ class RoiAssignmentView(QWidget):
         selected_rois_panel.addWidget(self._legend_widget)
         roi_response_panel = QVBoxLayout()
         roi_response_panel.setContentsMargins(0, 0, 0, 0)
-        roi_response_panel.addWidget(self._response_widget)
+        roi_response_panel.addWidget(self._roi_response_scroll)
         combined_response_panel = QVBoxLayout()
         combined_response_panel.setContentsMargins(0, 0, 0, 0)
-        combined_response_panel.addWidget(self._mean_response_widget)
+        combined_response_panel.addWidget(self._combined_response_scroll)
 
         title = QLabel("ROI assignment")
         title.setObjectName("group_matching_title")
@@ -373,45 +399,54 @@ class RoiAssignmentView(QWidget):
             "Combined responses",
             combined_response_panel,
         )
+        response_sections_row = QHBoxLayout()
+        response_sections_row.setContentsMargins(0, 0, 0, 0)
+        response_sections_row.setSpacing(10)
+        response_sections_row.addWidget(self._roi_response_section, 1)
+        response_sections_row.addWidget(self._combined_response_section, 1)
+        response_sections_widget = QWidget()
+        response_sections_widget.setObjectName("roi_assignment_response_sections")
+        response_sections_widget.setLayout(response_sections_row)
+        self._response_sections_widget = response_sections_widget
         right_column.addWidget(self._selected_rois_section)
-        right_column.addWidget(self._roi_response_section)
-        right_column.addWidget(self._combined_response_section)
+        right_column.addWidget(self._response_sections_widget)
         right_column.addWidget(
             group_matching_section("ROI cards", card_section_layout),
             1,
         )
         right_content = QWidget()
+        right_content.setObjectName("roi_assignment_workspace")
         right_content.setLayout(right_column)
-        self._workspace_scroll = QScrollArea()
-        self._workspace_scroll.setObjectName("roi_assignment_workspace_scroll")
-        self._workspace_scroll.setWidgetResizable(True)
-        self._workspace_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
-        )
-        self._workspace_scroll.setWidget(right_content)
-        workspace_viewport = self._workspace_scroll.viewport()
-        assert workspace_viewport is not None
-        self._workspace_viewport = workspace_viewport
-        self._workspace_viewport.installEventFilter(self)
+        self._right_content = right_content
+        self._right_content.installEventFilter(self)
+        cards_viewport = self._roi_cards_scroll.viewport()
+        assert cards_viewport is not None
+        self._cards_viewport = cards_viewport
+        self._cards_viewport.installEventFilter(self)
 
         outer_layout = QVBoxLayout()
         outer_layout.setContentsMargins(0, 0, 0, 0)
         workspace = QHBoxLayout()
         workspace.setSpacing(12)
         workspace.addWidget(left_scroll)
-        workspace.addWidget(self._workspace_scroll, 1)
+        workspace.addWidget(right_content, 1)
         outer_layout.addLayout(workspace)
         self.setLayout(outer_layout)
         self.refresh_fov_filter()
 
     def eventFilter(self, a0: QObject | None, a1: QEvent | None) -> bool:
-        """Relayout fixed-size ROI cards when the workspace width changes."""
+        """Refresh subsection layouts when their local viewports change size."""
         if (
-            a0 is getattr(self, "_workspace_viewport", None)
-            and a1 is not None
+            a1 is not None
             and a1.type() == QEvent.Type.Resize
+            and a0 is getattr(self, "_cards_viewport", None)
         ):
             self._layout_cards()
+        elif (
+            a1 is not None
+            and a1.type() == QEvent.Type.Resize
+            and a0 is getattr(self, "_right_content", None)
+        ):
             self._render_response_preview()
         return super().eventFilter(a0, a1)
 
@@ -537,7 +572,7 @@ class RoiAssignmentView(QWidget):
         for column_index in range(self._card_grid_columns):
             self._grid.setColumnStretch(column_index, 0)
         columns = _roi_card_columns_for_width(
-            self._workspace_viewport.width(),
+            self._cards_viewport.width(),
             spacing=self._grid.spacing(),
         )
         for index, card in enumerate(self._cards):
@@ -567,7 +602,7 @@ class RoiAssignmentView(QWidget):
             self._selected_responses,
             hidden_recordings=self._hidden_response_recordings,
             set_visible=self._set_response_visible,
-            max_width=self._workspace_viewport.width() - 48,
+            max_width=max(1, self._right_content.width() - 48),
         )
         visible_responses = tuple(
             response
@@ -606,18 +641,33 @@ class RoiAssignmentView(QWidget):
             roi_colors=(QColor("#f2c14e"),),
             plot_size=self._plot_size,
         )
+        self._fit_response_scroll_heights()
         self._set_response_panel_visibility()
 
     def _show_response_status(self, text: str) -> None:
         """Show a response status message and hide cached plot strips."""
         self._response_strip.clear()
         self._mean_response_strip.clear()
+        self._fit_response_scroll_heights()
         self._set_response_status(text)
 
     def _set_response_status(self, text: str) -> None:
         """Show the Selected ROIs status text without changing cached plots."""
         self._response_status.setText(text)
         self._response_status.setVisible(True)
+
+    def _fit_response_scroll_heights(self) -> None:
+        """Keep response scroll areas tall enough for their visible plot strips."""
+        _fit_horizontal_scroll_area_to_content_height(
+            self._roi_response_scroll,
+            self._response_strip.visible_height_hint(),
+            self._response_strip.visible_width_hint(),
+        )
+        _fit_horizontal_scroll_area_to_content_height(
+            self._combined_response_scroll,
+            self._mean_response_strip.visible_height_hint(),
+            self._mean_response_strip.visible_width_hint(),
+        )
 
     def _set_response_visible(self, recording_path: Path, visible: bool) -> None:
         """Show or hide one selected recording in the shared response preview."""
@@ -633,6 +683,9 @@ class RoiAssignmentView(QWidget):
         show_combined_response = self._show_combined_response_checkbox.isChecked()
         self._roi_response_section.setVisible(show_roi_responses)
         self._combined_response_section.setVisible(show_combined_response)
+        self._response_sections_widget.setVisible(
+            show_roi_responses or show_combined_response,
+        )
 
     def _refresh_epoch_controls_from_names(self, epoch_names: dict[int, str]) -> None:
         """Refresh epoch checkboxes from metadata before responses are selected."""
@@ -1149,6 +1202,43 @@ def _roi_card_columns_for_width(width: int, *, spacing: int) -> int:
         card_width=_ROI_CARD_WIDTH,
         spacing=spacing,
     )
+
+
+def _scroll_area_for_widget(
+    widget: QWidget,
+    *,
+    object_name: str,
+    horizontal_policy: Qt.ScrollBarPolicy,
+    vertical_policy: Qt.ScrollBarPolicy,
+) -> QScrollArea:
+    """Return a scroll area that gives one ROI subsection local movement."""
+    scroll_area = QScrollArea()
+    scroll_area.setObjectName(object_name)
+    scroll_area.setWidgetResizable(True)
+    scroll_area.setHorizontalScrollBarPolicy(horizontal_policy)
+    scroll_area.setVerticalScrollBarPolicy(vertical_policy)
+    scroll_area.setWidget(widget)
+    return scroll_area
+
+
+def _fit_horizontal_scroll_area_to_content_height(
+    scroll_area: QScrollArea,
+    content_height: int,
+    content_width: int,
+) -> None:
+    """Reserve enough height to show a horizontal plot strip without clipping."""
+    horizontal_scrollbar = scroll_area.horizontalScrollBar()
+    if horizontal_scrollbar is None:
+        return
+    viewport = scroll_area.viewport()
+    viewport_width = viewport.width() if viewport is not None else 0
+    scrollbar_height = (
+        horizontal_scrollbar.sizeHint().height()
+        if content_width > viewport_width
+        else 0
+    )
+    height = content_height + scrollbar_height + 2 * scroll_area.frameWidth()
+    scroll_area.setFixedHeight(height)
 
 
 def _clear_nested_layout(layout: QLayout) -> None:

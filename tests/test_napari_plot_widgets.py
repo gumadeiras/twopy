@@ -1085,6 +1085,52 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             view._response_status.text(),
             "Showing the selected recording trace.",
         )
+        plot_scrolls = (
+            (view._roi_response_scroll, view._response_strip),
+            (view._combined_response_scroll, view._mean_response_strip),
+        )
+        for plot_scroll, strip in plot_scrolls:
+            horizontal_scrollbar = plot_scroll.horizontalScrollBar()
+            assert horizontal_scrollbar is not None
+            viewport = plot_scroll.viewport()
+            assert viewport is not None
+            expected_height = (
+                strip.visible_height_hint()
+                + (
+                    horizontal_scrollbar.sizeHint().height()
+                    if strip.visible_width_hint() > viewport.width()
+                    else 0
+                )
+                + 2 * plot_scroll.frameWidth()
+            )
+            self.assertEqual(plot_scroll.minimumHeight(), expected_height)
+            self.assertEqual(plot_scroll.maximumHeight(), expected_height)
+
+        initial_response_scroll_height = view._roi_response_scroll.minimumHeight()
+        initial_combined_scroll_height = view._combined_response_scroll.minimumHeight()
+        view._set_plot_size(240)
+
+        self.assertGreater(
+            view._roi_response_scroll.minimumHeight(),
+            initial_response_scroll_height,
+        )
+        self.assertGreater(
+            view._combined_response_scroll.minimumHeight(),
+            initial_combined_scroll_height,
+        )
+        large_response_scroll_height = view._roi_response_scroll.minimumHeight()
+        large_combined_scroll_height = view._combined_response_scroll.minimumHeight()
+        view._selected_responses = ()
+        view._render_response_preview()
+
+        self.assertLess(
+            view._roi_response_scroll.minimumHeight(),
+            large_response_scroll_height,
+        )
+        self.assertLess(
+            view._combined_response_scroll.minimumHeight(),
+            large_combined_scroll_height,
+        )
 
     def test_group_matching_response_status_shows_all_and_partial_visibility(
         self,

@@ -54,6 +54,31 @@ class ResponsePreviewStrip:
         for panel in self._epoch_plot_panels.values():
             panel.hide()
 
+    def visible_height_hint(self) -> int:
+        """Return the height needed to show the visible epoch panels."""
+        heights: list[int] = []
+        for epoch_index in self._layout_epoch_indices:
+            panel = self._epoch_plot_panels[epoch_index]
+            panel_layout = panel.layout()
+            if panel_layout is not None:
+                panel_layout.invalidate()
+                panel_layout.activate()
+                heights.append(panel_layout.sizeHint().height())
+            else:
+                heights.append(panel.sizeHint().height())
+        return max(heights, default=self.widget.sizeHint().height())
+
+    def visible_width_hint(self) -> int:
+        """Return the width needed to show the visible epoch panels."""
+        widths: list[int] = []
+        spacing = self._layout.spacing()
+        for epoch_index in self._layout_epoch_indices:
+            panel = self._epoch_plot_panels[epoch_index]
+            widths.append(panel.sizeHint().width())
+        if len(widths) == 0:
+            return self.widget.sizeHint().width()
+        return sum(widths) + spacing * max(0, len(widths) - 1)
+
     def render(
         self,
         plot_data: ResponsePlotData,

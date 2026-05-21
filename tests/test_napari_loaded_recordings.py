@@ -418,28 +418,34 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             fov_filter_view = fov_filter.view()
             assert fov_filter_view is not None
             self.assertGreaterEqual(fov_filter_view.minimumWidth(), 128)
-            roi_workspace_scroll = panel_widget._roi_view.findChild(
-                QScrollArea,
-                "roi_assignment_workspace_scroll",
+            roi_workspace = panel_widget._roi_view.findChild(
+                QWidget,
+                "roi_assignment_workspace",
             )
-            assert roi_workspace_scroll is not None
-            self.assertTrue(roi_workspace_scroll.widgetResizable())
-            roi_workspace_widget = roi_workspace_scroll.widget()
-            assert roi_workspace_widget is not None
-            right_layout = roi_workspace_widget.layout()
+            assert roi_workspace is not None
+            right_layout = roi_workspace.layout()
             assert right_layout is not None
             first_section = right_layout.itemAt(0).widget()
-            second_section = right_layout.itemAt(1).widget()
-            third_section = right_layout.itemAt(2).widget()
-            fourth_section = right_layout.itemAt(3).widget()
+            response_sections = right_layout.itemAt(1).widget()
+            cards_section = right_layout.itemAt(2).widget()
             self.assertIsInstance(first_section, QGroupBox)
-            self.assertIsInstance(second_section, QGroupBox)
-            self.assertIsInstance(third_section, QGroupBox)
-            self.assertIsInstance(fourth_section, QGroupBox)
+            self.assertIsInstance(response_sections, QWidget)
+            self.assertIsInstance(cards_section, QGroupBox)
             self.assertEqual(
                 cast(QGroupBox, first_section).title(),
                 "Selected ROIs",
             )
+            assert response_sections is not None
+            self.assertEqual(
+                response_sections.objectName(),
+                "roi_assignment_response_sections",
+            )
+            response_sections_layout = response_sections.layout()
+            assert response_sections_layout is not None
+            second_section = response_sections_layout.itemAt(0).widget()
+            third_section = response_sections_layout.itemAt(1).widget()
+            self.assertIsInstance(second_section, QGroupBox)
+            self.assertIsInstance(third_section, QGroupBox)
             self.assertEqual(
                 cast(QGroupBox, second_section).title(),
                 "ROI responses",
@@ -449,14 +455,57 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 "Combined responses",
             )
             self.assertEqual(
-                cast(QGroupBox, fourth_section).title(),
+                cast(QGroupBox, cards_section).title(),
                 "ROI cards",
+            )
+            roi_response_scroll = panel_widget._roi_view.findChild(
+                QScrollArea,
+                "roi_assignment_response_scroll",
+            )
+            combined_response_scroll = panel_widget._roi_view.findChild(
+                QScrollArea,
+                "roi_assignment_combined_response_scroll",
+            )
+            roi_cards_scroll = panel_widget._roi_view.findChild(
+                QScrollArea,
+                "roi_assignment_cards_scroll",
+            )
+            assert roi_response_scroll is not None
+            assert combined_response_scroll is not None
+            assert roi_cards_scroll is not None
+            for plot_scroll in (roi_response_scroll, combined_response_scroll):
+                self.assertTrue(plot_scroll.widgetResizable())
+                self.assertEqual(
+                    plot_scroll.horizontalScrollBarPolicy(),
+                    Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+                )
+                self.assertEqual(
+                    plot_scroll.verticalScrollBarPolicy(),
+                    Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+                )
+            self.assertTrue(roi_cards_scroll.widgetResizable())
+            self.assertEqual(
+                roi_cards_scroll.horizontalScrollBarPolicy(),
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+            )
+            self.assertEqual(
+                roi_cards_scroll.verticalScrollBarPolicy(),
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+            )
+            self.assertGreaterEqual(
+                roi_cards_scroll.minimumHeight(),
+                group_matching_roi._ROI_CARD_HEIGHT,
             )
             plot_toggles["ROI responses"].click()
             self.assertTrue(cast(QGroupBox, second_section).isHidden())
+            self.assertFalse(response_sections.isHidden())
             plot_toggles["ROI responses"].click()
             plot_toggles["Combined response"].click()
             self.assertTrue(cast(QGroupBox, third_section).isHidden())
+            self.assertFalse(response_sections.isHidden())
+            plot_toggles["ROI responses"].click()
+            self.assertTrue(response_sections.isHidden())
+            plot_toggles["ROI responses"].click()
             plot_toggles["Combined response"].click()
             self.assertNotIn(
                 "All FOVs",
@@ -491,7 +540,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             self.assertEqual(
                 roi_view._card_grid_columns,
                 group_matching_roi._roi_card_columns_for_width(
-                    roi_workspace_scroll.viewport().width(),
+                    roi_cards_scroll.viewport().width(),
                     spacing=roi_view._grid.spacing(),
                 ),
             )
