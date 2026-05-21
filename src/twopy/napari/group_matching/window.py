@@ -32,7 +32,10 @@ from twopy.napari.group_matching.roi_assignment import (
     RoiAssignmentView,
     roi_labels_from_layer_data,
 )
-from twopy.napari.group_matching.style import style_group_matching_panel
+from twopy.napari.group_matching.style import (
+    GROUP_MATCHING_OUTER_MARGIN,
+    style_group_matching_panel,
+)
 from twopy.napari.session import LoadedNapariRecording
 
 __all__ = [
@@ -141,7 +144,12 @@ class GroupMatchingPanel(QWidget):
 
         style_group_matching_panel(self)
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(
+            GROUP_MATCHING_OUTER_MARGIN,
+            GROUP_MATCHING_OUTER_MARGIN,
+            GROUP_MATCHING_OUTER_MARGIN,
+            GROUP_MATCHING_OUTER_MARGIN,
+        )
         layout.addWidget(self._stack)
         self.setLayout(layout)
         self.refresh()

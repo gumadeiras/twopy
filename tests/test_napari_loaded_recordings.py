@@ -44,6 +44,7 @@ from tests.napari_support import (
 )
 from twopy.napari.group_matching import cards as group_matching_cards
 from twopy.napari.group_matching import fov_assignment as group_matching_fov
+from twopy.napari.group_matching.style import GROUP_MATCHING_OUTER_MARGIN
 
 
 class NapariLoadedRecordingsTest(NapariAdapterTestCase):
@@ -126,6 +127,13 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                 sidebar_buttons["Open Group Matching"].click()
             show_full_screen.assert_not_called()
             self.assertFalse(group_matching_dialog.isFullScreen())
+            dialog_layout = group_matching_dialog.layout()
+            assert dialog_layout is not None
+            dialog_margins = dialog_layout.contentsMargins()
+            self.assertEqual(dialog_margins.left(), GROUP_MATCHING_OUTER_MARGIN)
+            self.assertEqual(dialog_margins.top(), GROUP_MATCHING_OUTER_MARGIN)
+            self.assertEqual(dialog_margins.right(), GROUP_MATCHING_OUTER_MARGIN)
+            self.assertEqual(dialog_margins.bottom(), GROUP_MATCHING_OUTER_MARGIN)
             dialog_geometry = group_matching_dialog.geometry()
             available_geometry = group_matching_screen.availableGeometry()
             self.assertEqual(dialog_geometry.left(), available_geometry.left())
@@ -138,6 +146,13 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             fov_path = root / "fov_groups.csv"
             match_path = root / "roi_matches.csv"
             group_matching_widget = cast(QWidget, control_docks.group_matching_widget)
+            panel_layout = group_matching_widget.layout()
+            assert panel_layout is not None
+            panel_margins = panel_layout.contentsMargins()
+            self.assertEqual(panel_margins.left(), GROUP_MATCHING_OUTER_MARGIN)
+            self.assertEqual(panel_margins.top(), GROUP_MATCHING_OUTER_MARGIN)
+            self.assertEqual(panel_margins.right(), GROUP_MATCHING_OUTER_MARGIN)
+            self.assertEqual(panel_margins.bottom(), GROUP_MATCHING_OUTER_MARGIN)
             fov_path_edit = group_matching_widget.findChild(
                 QLineEdit,
                 "fov_group_path",

@@ -21,6 +21,8 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from twopy.napari.group_matching.style import GROUP_MATCHING_OUTER_MARGIN
+
 __all__ = [
     "GroupMatchingWindowButton",
     "TWOPY_SIDEBAR_MINIMUM_WIDTH",
@@ -140,6 +142,12 @@ class GroupMatchingWindowButton(QPushButton):
         self._dialog = QDialog()
         self._dialog.setWindowTitle("twopy Group Matching")
         layout = QVBoxLayout()
+        layout.setContentsMargins(
+            GROUP_MATCHING_OUTER_MARGIN,
+            GROUP_MATCHING_OUTER_MARGIN,
+            GROUP_MATCHING_OUTER_MARGIN,
+            GROUP_MATCHING_OUTER_MARGIN,
+        )
         layout.addWidget(group_matching_widget)
         self._dialog.setLayout(layout)
         self._dialog.resize(1280, 760)

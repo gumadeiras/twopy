@@ -13,10 +13,13 @@ from qtpy.QtGui import QColor, QPalette
 from qtpy.QtWidgets import QGroupBox, QLayout, QPushButton, QWidget
 
 __all__ = [
+    "GROUP_MATCHING_OUTER_MARGIN",
     "group_matching_button",
     "group_matching_section",
     "style_group_matching_panel",
 ]
+
+GROUP_MATCHING_OUTER_MARGIN = 4
 
 _STYLE_TEMPLATE = Template(
     """

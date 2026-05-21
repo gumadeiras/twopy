@@ -27,7 +27,7 @@ The **Current FOV groups** table lists every assigned id with left-aligned heade
 
 Goal: identify the same cell across recordings that share a FOV.
 
-The layout mirrors stage 1: a vertical-only left column for file controls, FOV filter, response settings, and finish actions; a fixed right workspace where the two response previews sit side by side, scroll sideways without vertical clipping, and leave the ROI cards to scroll vertically.
+The layout mirrors stage 1 inside the same tight popup frame: a vertical-only left column for file controls, FOV filter, response settings, and finish actions; a fixed right workspace where the two response previews sit side by side, scroll sideways without vertical clipping, and leave the ROI cards to scroll vertically.
 
 The **FOV** dropdown shows compact numeric FOV ids while preserving the saved `fov_#` values internally.
 
