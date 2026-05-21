@@ -4,7 +4,7 @@ Inputs: shared fake napari state and tiny response data.
 Outputs: assertions for plot-control behavior.
 """
 
-from qtpy.QtWidgets import QSizePolicy
+from qtpy.QtWidgets import QSizePolicy, QStyleOptionViewItem
 
 from tests.napari_support import (
     PLOT_CONTROL_WIDTH,
@@ -322,6 +322,26 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
         self.assertNotIn("moving_average", smoothing_labels)
         self.assertIn("epoch mean", correlation_labels)
         self.assertNotIn("epoch_mean", correlation_labels)
+
+    def test_delta_f_over_f_rich_menu_label_fits_combo_height(self) -> None:
+        """Confirm y-stripe background labels have enough vertical room.
+
+        Inputs: dF/F controls with rich ``P%`` background menu labels.
+        Outputs: the rich-text delegate fits inside the closed combo box.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = cast(Any, DeltaFOverFOptionsWidget(DeltaFOverFOptions()))
+        combo = widget._background_method
+        option = QStyleOptionViewItem()
+        option.font = combo.font()
+        option.widget = combo
+
+        item_size = combo.itemDelegate().sizeHint(
+            option,
+            combo.model().index(2, 0),
+        )
+
+        self.assertLessEqual(item_size.height(), combo.sizeHint().height())
 
     def test_plot_display_size_label_preserves_ui_text(self) -> None:
         """Confirm the Plot subsection puts show SEM before size.

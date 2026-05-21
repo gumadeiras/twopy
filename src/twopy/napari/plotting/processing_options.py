@@ -35,6 +35,7 @@ from twopy.napari.plotting.form_controls import (
     plot_form_layout,
     set_plot_control_width,
     set_plot_dropdown_width,
+    show_all_plot_dropdown_items,
 )
 from twopy.typing_guards import require_string_choice
 
@@ -77,6 +78,7 @@ class SmoothingOptionsWidget(QWidget):
         options: SmoothingOptions,
         *,
         on_change: Callable[[SmoothingOptions], None] | None = None,
+        show_all_dropdown_items: bool = False,
     ) -> None:
         """Create standalone smoothing controls.
 
@@ -84,10 +86,14 @@ class SmoothingOptionsWidget(QWidget):
             options: Initial smoothing settings.
             on_change: Optional callback receiving new typed settings whenever
                 a GUI control changes.
+            show_all_dropdown_items: Show every smoothing method when the
+                dropdown opens.
         """
         super().__init__()
         self._on_change = on_change
         self._smoothing_method = _combo_box(_SMOOTHING_METHOD_LABELS)
+        if show_all_dropdown_items:
+            show_all_plot_dropdown_items(self._smoothing_method)
         self._smoothing_window_frames = _spin_box(
             minimum=1,
             maximum=1001,

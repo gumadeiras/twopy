@@ -718,6 +718,59 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         checkboxes[1].click()
         self.assertEqual(view._visible_response_epoch_indices(plot_data), ())
 
+    def test_group_matching_processing_dropdowns_show_all_choices(self) -> None:
+        """Confirm ROI matching plot-setting dropdowns open without scrolling.
+
+        Inputs: an empty ROI assignment view and three normalization epochs.
+        Outputs: smoothing and normalization dropdowns show all current items
+        with the non-native Qt popup that honors visible-item counts.
+        """
+        _ = QApplication.instance() or QApplication([])
+        view = group_matching_roi.RoiAssignmentView(
+            state=SimpleNamespace(loaded_recordings=[]),
+            fov_groups={},
+            current_rois={},
+            output_path=Path("roi_matches.csv"),
+            on_output_path_changed=lambda _path: None,
+            on_back=lambda: None,
+        )
+        view._normalization_widget.set_epoch_choices(
+            {1: "Gray Interleave", 2: "Odor", 3: "Clean Air"},
+        )
+
+        dropdowns = (
+            view._smoothing_widget._smoothing_method,
+            view._normalization_widget._epoch,
+        )
+
+        for dropdown in dropdowns:
+            self.assertEqual(dropdown.maxVisibleItems(), dropdown.count())
+            self.assertIn("combobox-popup: 0", dropdown.styleSheet())
+            dropdown_view = dropdown.view()
+            self.assertIsNotNone(dropdown_view)
+            if dropdown_view is None:
+                continue
+            row_heights = [
+                dropdown_view.sizeHintForRow(index) for index in range(dropdown.count())
+            ]
+            expected_height = (
+                sum(
+                    row_height if row_height > 0 else dropdown.sizeHint().height()
+                    for row_height in row_heights
+                )
+                + 2 * dropdown_view.frameWidth()
+            )
+            self.assertEqual(dropdown_view.height(), expected_height)
+            try:
+                dropdown.showPopup()
+                QApplication.processEvents()
+                scrollbar = dropdown_view.verticalScrollBar()
+                self.assertIsNotNone(scrollbar)
+                if scrollbar is not None:
+                    self.assertFalse(scrollbar.isVisible())
+            finally:
+                dropdown.hidePopup()
+
     def test_group_matching_plot_size_redraws_without_recompute(self) -> None:
         """Confirm display-only plot sizing does not rerun ROI analysis.
 

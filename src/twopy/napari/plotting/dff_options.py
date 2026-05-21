@@ -402,6 +402,7 @@ def _rich_text_document(
     """Build a text document matching the combo item's current font."""
     document = QTextDocument()
     document.setDefaultFont(option.font)
+    document.setDocumentMargin(0.0)
     document.setHtml(rich_text)
     return document
 

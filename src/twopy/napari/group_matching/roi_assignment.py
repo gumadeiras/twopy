@@ -174,6 +174,7 @@ class RoiAssignmentView(QWidget):
         self._smoothing_widget = SmoothingOptionsWidget(
             self._smoothing_options,
             on_change=self._set_smoothing_options,
+            show_all_dropdown_items=True,
         )
         self._normalization_widget = self._create_normalization_widget()
         self._normalization_widget.setMinimumWidth(0)
@@ -434,6 +435,7 @@ class RoiAssignmentView(QWidget):
         widget = NormalizationOptionsWidget(
             self._normalization_options,
             on_change=self._set_normalization_options,
+            show_all_dropdown_items=True,
         )
         for checkbox in widget.findChildren(QCheckBox):
             checkbox.setFixedWidth(240)

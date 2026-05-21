@@ -19,6 +19,7 @@ from twopy.napari.plotting.form_controls import (
     plot_form_layout,
     set_plot_control_width,
     set_plot_dropdown_width,
+    show_all_plot_dropdown_items,
 )
 
 __all__ = ["NormalizationOptionsWidget", "default_normalization_epoch_number"]
@@ -39,6 +40,7 @@ class NormalizationOptionsWidget(QWidget):
         options: NormalizationOptions,
         *,
         on_change: Callable[[NormalizationOptions], None] | None = None,
+        show_all_dropdown_items: bool = False,
     ) -> None:
         """Create the response normalization controls.
 
@@ -46,9 +48,12 @@ class NormalizationOptionsWidget(QWidget):
             options: Initial normalization settings.
             on_change: Optional callback receiving new typed settings whenever
                 a GUI control changes.
+            show_all_dropdown_items: Show every epoch choice when the dropdown
+                opens.
         """
         super().__init__()
         self._on_change = on_change
+        self._show_all_dropdown_items = show_all_dropdown_items
         self._normalize_to_epoch_peak = QCheckBox("Normalize to epoch peak")
         set_plot_control_width(
             self._normalize_to_epoch_peak,
@@ -126,6 +131,8 @@ class NormalizationOptionsWidget(QWidget):
                 _epoch_choice_label(epoch_number, epoch_name),
                 epoch_number,
             )
+        if self._show_all_dropdown_items:
+            show_all_plot_dropdown_items(self._epoch)
         if selected is not None:
             self._set_combo_data(self._epoch, selected)
         del blocker
