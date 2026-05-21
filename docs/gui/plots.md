@@ -21,7 +21,7 @@ The same window values are used by **Save ROIs + analysis** so the saved plots m
 
 In **Plot** tab → **dF/F** section:
 
-- **Background correction**: `none`, `global percentile`, `shared y-stripe P%`, or `ROI y-stripe P%`. The y-stripe variants are designed for dense axon / dendrite fields. ROI y-stripe needs unlabeled background near each ROI, so dense grids should use **shared y-stripe P%** or leave background gaps.
+- **Background correction**: `none`, `global percentile`, `shared y-stripe P%`, or `ROI y-stripe P%`. The y-stripe variants are designed for dense axon / dendrite fields. ROI y-stripe needs dim unlabeled background near each ROI; if that local band contains bright structures instead of additive background, it can subtract more than the ROI baseline and twopy stops before dF/F because zero or negative corrected baseline fluorescence would create artificial huge responses. Use **shared y-stripe P%** or **global percentile**, or leave local background gaps around each ROI.
 - **Baseline mode**: defaults to `baseline epoch`. Switching to `no baseline epoch` relabels the epoch selector to **First epoch** and fits a continuous span starting from that epoch.
 - **Baseline epoch**: defaults to the first epoch name containing `gray`, `grey`, or `interleave`. Falls back to epoch 1 when no name hints at a baseline.
 - **Fit mode**: `direct bounded tau`, `log-linear`, or `direct bounded tau and amplitude`. Direct bounded tau is the default.

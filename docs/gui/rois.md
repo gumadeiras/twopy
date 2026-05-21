@@ -29,7 +29,7 @@ The ROIs tab also shows a per-ROI table:
 - **Hide** a row to keep its mask but exclude it from response plots and saved analysis.
 - **Remove** drops the selected rows from the Labels layer outright.
 
-For dense grids that cover the whole crop, prefer **shared y-stripe P%** background correction (in the [Plot tab](plots.md)) over **ROI y-stripe P%** — the latter needs unlabeled local background pixels and cannot work when there are none.
+For dense grids that cover the whole crop, prefer **shared y-stripe P%** background correction (in the [Plot tab](plots.md)) over **ROI y-stripe P%** — the latter needs dim unlabeled local background pixels. It also stops before dF/F when local pixels are brighter than the ROI baseline, because that means the selected band is not valid additive background.
 
 ## Persistence
 
