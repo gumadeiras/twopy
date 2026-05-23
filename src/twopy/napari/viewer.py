@@ -8,6 +8,7 @@ This module owns viewer/layer creation only. It does not query the database,
 read source MATLAB/TIFF files, or perform analysis.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -15,7 +16,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy._version import __version__
-from twopy.converted import ConvertedMovie, load_converted_recording
+from twopy.converted import ConvertedMovie, RecordingData, load_converted_recording
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.display import (
     display_image_from_movie_image,
@@ -38,7 +39,41 @@ from twopy.spatial import SpatialCrop
 
 APPLICATION_TITLE = f"twopy {__version__}"
 
-__all__ = ["APPLICATION_TITLE", "create_viewer", "open_recording_in_napari"]
+__all__ = [
+    "APPLICATION_TITLE",
+    "PreparedNapariRecordingViewData",
+    "add_prepared_recording_to_viewer",
+    "create_viewer",
+    "open_recording_in_napari",
+    "prepare_recording_view_data",
+]
+
+
+@dataclass(frozen=True)
+class PreparedNapariRecordingViewData:
+    """Data read before Qt creates napari layers for one recording.
+
+    Args:
+        recording: Loaded converted recording metadata and lazy movie reader.
+        mean_image: Cropped mean image shown as the static image layer.
+        movie: Optional cropped movie frames for the interactive movie layer.
+        roi_labels: Optional cropped ROI labels shown in the Labels layer.
+        layer_metadata: Display metadata shared by image and Labels layers.
+        movie_contrast_limits: Optional display contrast limits for the movie.
+        movie_frame_span: Optional inclusive start and exclusive stop frame
+            used for movie-layer metadata.
+
+    The object contains arrays and plain metadata only. Worker threads can build
+    it safely, while Qt layer creation stays in ``add_prepared_recording_to_viewer``.
+    """
+
+    recording: RecordingData
+    mean_image: npt.NDArray[np.float64]
+    movie: npt.NDArray[np.float64] | None
+    roi_labels: npt.NDArray[np.int64] | None
+    layer_metadata: dict[str, object]
+    movie_contrast_limits: tuple[float, float] | None
+    movie_frame_span: tuple[int, int] | None
 
 
 class _LabelsLayerWithBrushSize(Protocol):
@@ -99,69 +134,25 @@ def open_recording_in_napari(
     Analysis code still uses chunked readers; this viewer path favors simple,
     auditable GUI behavior.
     """
-    recording = load_converted_recording(recording_data_path, movie_path=movie_path)
     resolved_viewer = create_viewer() if viewer is None else viewer
-    display_crop = recording.alignment_valid_crop
-    layer_metadata = display_metadata_for_spatial_crop(display_crop)
-    mean_image = display_crop.crop_image(recording.mean_image)
-    mean_layer = resolved_viewer.add_image(
-        display_image_from_movie_image(mean_image),
-        name=mean_image_layer_name,
-        colormap="gray",
-        opacity=0.5,
-        gamma=1.3,
-        contrast_limits=contrast_limits_from_data_range(
-            mean_image,
-            minimum_fraction=0.10,
-            maximum_fraction=1.0,
-        ),
-        metadata=layer_metadata,
+    prepared = prepare_recording_view_data(
+        recording_data_path,
+        roi_set=roi_set,
+        movie_path=movie_path,
+        movie_frame_range=movie_frame_range,
+        add_roi_labels_layer=add_roi_labels_layer,
     )
-    set_image_contrast_limits_range(mean_layer, data=mean_image)
-
-    movie_layer = None
-    if movie_frame_range is not None:
-        start_frame, end_frame = resolve_movie_frame_range(
-            start_frame=movie_frame_range[0],
-            end_frame=movie_frame_range[1],
-            frame_count=recording.movie.shape[0],
-        )
-        movie = recording.movie.read_frames(
-            start_frame,
-            exclusive_stop(end_frame),
-            spatial_crop=display_crop,
-        )
-        movie_layer = resolved_viewer.add_image(
-            display_image_from_movie_image(movie),
-            name=movie_layer_name,
-            colormap="gray",
-            blending="additive",
-            contrast_limits=sampled_movie_auto_contrast_limits(
-                recording.movie,
-                spatial_crop=display_crop,
-            ),
-            metadata=layer_metadata
-            | movie_frame_metadata(
-                start_frame=start_frame,
-                stop_frame=end_frame + 1,
-            ),
-        )
-        set_image_contrast_limits_range(movie_layer, data=movie)
-
-    roi_layer = None
-    if add_roi_labels_layer:
-        roi_layer = resolved_viewer.add_labels(
-            roi_label_image_for_display(
-                roi_set,
-                recording,
-                spatial_crop=display_crop,
-            ),
-            name=roi_layer_name,
-            opacity=0.5,
-            blending="additive",
-            metadata=layer_metadata,
-        )
-        set_labels_brush_size(roi_layer, brush_size=6)
+    view = add_prepared_recording_to_viewer(
+        prepared,
+        viewer=resolved_viewer,
+        mean_image_layer_name=mean_image_layer_name,
+        movie_layer_name=movie_layer_name,
+        roi_layer_name=roi_layer_name,
+    )
+    recording = prepared.recording
+    mean_layer = view.mean_image_layer
+    movie_layer = view.movie_layer
+    roi_layer = view.roi_labels_layer
     load_widget = None
     loaded_recordings_widget = None
     twopy_sidebar_widget = None
@@ -217,6 +208,157 @@ def open_recording_in_napari(
         response_plot_dock_widget=response_plot_dock,
         response_options_widget=response_options_widget,
         trial_timeline_controller=trial_timeline_controller,
+    )
+
+
+def prepare_recording_view_data(
+    recording_data_path: Path,
+    *,
+    roi_set: RoiSet | Path | None = None,
+    movie_path: Path | None = None,
+    movie_frame_range: tuple[int, int | None] | None = None,
+    add_roi_labels_layer: bool = True,
+) -> PreparedNapariRecordingViewData:
+    """Read recording arrays before creating napari layers.
+
+    Args:
+        recording_data_path: Path to converted ``recording_data.h5``.
+        roi_set: Optional ROI set or saved ROI HDF5 path.
+        movie_path: Optional explicit ``aligned_movie.h5`` path.
+        movie_frame_range: Optional movie-frame range to read.
+        add_roi_labels_layer: Whether ROI labels should be prepared.
+
+    Returns:
+        Prepared data ready for main-thread layer creation.
+
+    HDF5 file reads can be slow for full movies. Keeping those reads here lets
+    GUI callers run this function in a worker while preserving Qt's main-thread
+    ownership of napari layer objects.
+    """
+    recording = load_converted_recording(recording_data_path, movie_path=movie_path)
+    display_crop = recording.alignment_valid_crop
+    layer_metadata = display_metadata_for_spatial_crop(display_crop)
+    mean_image = display_crop.crop_image(recording.mean_image)
+    movie = None
+    movie_contrast_limits = None
+    movie_frame_span = None
+    if movie_frame_range is not None:
+        start_frame, end_frame = resolve_movie_frame_range(
+            start_frame=movie_frame_range[0],
+            end_frame=movie_frame_range[1],
+            frame_count=recording.movie.shape[0],
+        )
+        movie = recording.movie.read_frames(
+            start_frame,
+            exclusive_stop(end_frame),
+            spatial_crop=display_crop,
+        )
+        movie_contrast_limits = sampled_movie_auto_contrast_limits(
+            recording.movie,
+            spatial_crop=display_crop,
+        )
+        movie_frame_span = (start_frame, end_frame + 1)
+    roi_labels = (
+        roi_label_image_for_display(
+            roi_set,
+            recording,
+            spatial_crop=display_crop,
+        )
+        if add_roi_labels_layer
+        else None
+    )
+    return PreparedNapariRecordingViewData(
+        recording=recording,
+        mean_image=mean_image,
+        movie=movie,
+        roi_labels=roi_labels,
+        layer_metadata=layer_metadata,
+        movie_contrast_limits=movie_contrast_limits,
+        movie_frame_span=movie_frame_span,
+    )
+
+
+def add_prepared_recording_to_viewer(
+    prepared: PreparedNapariRecordingViewData,
+    *,
+    viewer: NapariViewer,
+    mean_image_layer_name: str = "mean image",
+    movie_layer_name: str = "aligned movie",
+    roi_layer_name: str = "rois",
+) -> NapariRecordingView:
+    """Create napari layers from prepared recording arrays.
+
+    Args:
+        prepared: Worker-safe data returned by ``prepare_recording_view_data``.
+        viewer: Napari viewer receiving new layers.
+        mean_image_layer_name: Name for the mean-image layer.
+        movie_layer_name: Name for the optional movie layer.
+        roi_layer_name: Name for the optional Labels layer.
+
+    Returns:
+        Napari view object with created layers and loaded recording metadata.
+    """
+    recording = prepared.recording
+    mean_image = prepared.mean_image
+    mean_layer = viewer.add_image(
+        display_image_from_movie_image(mean_image),
+        name=mean_image_layer_name,
+        colormap="gray",
+        opacity=0.5,
+        gamma=1.3,
+        contrast_limits=contrast_limits_from_data_range(
+            mean_image,
+            minimum_fraction=0.10,
+            maximum_fraction=1.0,
+        ),
+        metadata=prepared.layer_metadata,
+    )
+    set_image_contrast_limits_range(mean_layer, data=mean_image)
+
+    movie_layer = None
+    if prepared.movie is not None:
+        if prepared.movie_contrast_limits is None or prepared.movie_frame_span is None:
+            msg = "Prepared movie data must include contrast limits and frame span."
+            raise ValueError(msg)
+        movie_layer = viewer.add_image(
+            display_image_from_movie_image(prepared.movie),
+            name=movie_layer_name,
+            colormap="gray",
+            blending="additive",
+            contrast_limits=prepared.movie_contrast_limits,
+            metadata=prepared.layer_metadata
+            | movie_frame_metadata(
+                start_frame=prepared.movie_frame_span[0],
+                stop_frame=prepared.movie_frame_span[1],
+            ),
+        )
+        set_image_contrast_limits_range(movie_layer, data=prepared.movie)
+
+    roi_layer = None
+    if prepared.roi_labels is not None:
+        roi_layer = viewer.add_labels(
+            prepared.roi_labels,
+            name=roi_layer_name,
+            opacity=0.5,
+            blending="additive",
+            metadata=prepared.layer_metadata,
+        )
+        set_labels_brush_size(roi_layer, brush_size=6)
+
+    return NapariRecordingView(
+        viewer=viewer,
+        recording=recording,
+        mean_image_layer=mean_layer,
+        movie_layer=movie_layer,
+        roi_labels_layer=roi_layer,
+        load_widget=None,
+        loaded_recordings_widget=None,
+        twopy_sidebar_widget=None,
+        twopy_sidebar_dock_widget=None,
+        response_plot_widget=None,
+        response_plot_dock_widget=None,
+        response_options_widget=None,
+        trial_timeline_controller=None,
     )
 
 

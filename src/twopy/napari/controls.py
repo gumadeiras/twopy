@@ -30,6 +30,7 @@ from qtpy.QtWidgets import (
 from twopy.converted import RecordingData
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.group_matching import GroupMatchingPanel
+from twopy.napari.load_controller import RecordingLoadController
 from twopy.napari.load_workflow import (
     RecordingLoadFailure,
     RecordingLoadResult,
@@ -116,6 +117,7 @@ class NapariControlState:
     is_loading: bool = False
     defer_timeline_updates: bool = False
     replace_selected_on_next_load: bool = False
+    recording_load_controller: RecordingLoadController | None = None
 
 
 def add_twopy_magicgui_controls(
@@ -169,6 +171,10 @@ def add_twopy_magicgui_controls(
         recording=recording,
         response_plot_widget=response_plot_widget,
         trial_timeline_controller=trial_timeline_controller,
+    )
+    state.recording_load_controller = RecordingLoadController(
+        state,
+        on_finished=lambda result: _finish_async_recording_load(state, result),
     )
     if recording is not None and mean_image_layer is not None:
         state.loaded_recordings.append(
@@ -288,7 +294,7 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
     _configure_recording_folder_picker(
         cast(FileEdit, load_recording.recording_folder),
         state,
-        lambda path: load_recording(recording_folder=path),
+        lambda path: _load_single_recording_path_async(state, path),
     )
 
     def load_after_selection(_value: object) -> None:
@@ -305,7 +311,19 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
             state,
         ):
             return
-        load_recording()
+        replace_selected = state.replace_selected_on_next_load
+        state.replace_selected_on_next_load = False
+        try:
+            _load_single_recording_path_async(
+                state,
+                _resolve_recording_folder_value(
+                    load_recording.recording_folder.value,
+                    state,
+                ),
+                replace_selected=replace_selected,
+            )
+        finally:
+            state.replace_selected_on_next_load = False
 
     def reload_after_roi_change(_value: object) -> None:
         """Reload the current recording after the ROI file changes.
@@ -325,12 +343,18 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         ):
             return
         state.replace_selected_on_next_load = True
-        load_recording(
-            recording_folder=_current_recording_path_for_reload(
-                load_recording.recording_folder.value,
+        try:
+            _load_single_recording_path_async(
                 state,
-            ),
-        )
+                _current_recording_path_for_reload(
+                    load_recording.recording_folder.value,
+                    state,
+                ),
+                roi_file_to_load=load_recording.roi_file_to_load.value,
+                replace_selected=True,
+            )
+        finally:
+            state.replace_selected_on_next_load = False
 
     load_recording.recording_folder.changed.connect(load_after_selection)
     load_recording.roi_file_to_load.changed.connect(reload_after_roi_change)
@@ -509,8 +533,11 @@ def _load_recording_csvs_from_dialog(state: NapariControlState) -> None:
         state,
         selected_paths,
         remember_selected_folder=False,
+        after_finished=lambda: _load_adjacent_group_matching_csvs_for_recording_csvs(
+            state,
+            selected_paths,
+        ),
     )
-    _load_adjacent_group_matching_csvs_for_recording_csvs(state, selected_paths)
 
 
 def _load_selected_recording_paths(
@@ -518,6 +545,7 @@ def _load_selected_recording_paths(
     selected_paths: tuple[Path, ...],
     *,
     remember_selected_folder: bool,
+    after_finished: Callable[[], None] | None = None,
 ) -> None:
     """Expand selected folders or CSVs, then load their recordings."""
     if len(selected_paths) == 0:
@@ -527,15 +555,54 @@ def _load_selected_recording_paths(
     except Exception as error:
         _show_selection_error(selected_paths, error)
         return
-    result = load_recording_paths(
-        state,
+    result = _recording_load_controller(state).load_paths(
         recording_paths,
         remember_selected_folder=remember_selected_folder,
+        after_finished=after_finished,
     )
+    if result is not None and result.failures:
+        _show_load_errors(result)
+
+
+def _load_single_recording_path_async(
+    state: NapariControlState,
+    selected_path: Path,
+    *,
+    roi_file_to_load: PathInput = Path(DEFAULT_PATH_TEXT),
+    replace_selected: bool = False,
+) -> None:
+    """Load one picker-selected recording through the async controller."""
+    result = _recording_load_controller(state).load_paths(
+        (selected_path,),
+        roi_file_to_load=roi_file_to_load,
+        replace_selected=replace_selected,
+        remember_selected_folder=True,
+    )
+    if result is not None and result.failures:
+        _show_load_errors(result)
+
+
+def _finish_async_recording_load(
+    state: NapariControlState,
+    result: RecordingLoadResult,
+) -> None:
+    """Render final load dialogs and mirror selected recording state."""
     _show_source_unavailable_warnings(result.source_warnings)
     _sync_recording_picker_to_selected(state)
     if result.failures:
         _show_load_errors(result)
+
+
+def _recording_load_controller(state: NapariControlState) -> RecordingLoadController:
+    """Return the async load controller attached to the current state."""
+    controller = state.recording_load_controller
+    if controller is None:
+        controller = RecordingLoadController(
+            state,
+            on_finished=lambda result: _finish_async_recording_load(state, result),
+        )
+        state.recording_load_controller = controller
+    return controller
 
 
 def _choose_recording_paths(state: NapariControlState) -> tuple[Path, ...]:
@@ -741,14 +808,13 @@ def _load_recordings_from_database_search(
     paths: tuple[Path, ...],
 ) -> RecordingLoadResult:
     """Load source paths selected in database search and render warnings."""
-    result = load_recording_paths(
-        state,
+    result = _recording_load_controller(state).load_paths(
         paths,
         remember_selected_folder=False,
     )
-    _show_source_unavailable_warnings(result.source_warnings)
-    _sync_recording_picker_to_selected(state)
-    return result
+    if result is not None:
+        return result
+    return RecordingLoadResult(loaded_count=0, status_text="Loading started.")
 
 
 def _make_loaded_recordings_widget(state: NapariControlState) -> object:

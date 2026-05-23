@@ -12,6 +12,7 @@ import unittest
 import warnings
 from collections.abc import Callable
 from concurrent.futures import CancelledError, Future
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from datetime import date
 from os import chdir, environ
@@ -225,10 +226,19 @@ class _LineEditControl(Protocol):
     value: object
 
 
+class _ChangedSignal(Protocol):
+    """Small protocol for magicgui changed signals used in tests."""
+
+    def blocked(self) -> AbstractContextManager[None]:
+        """Return a context manager that suppresses change callbacks."""
+        ...
+
+
 class _RecordingFolderControl(Protocol):
     """Small protocol for the recording-folder picker used in tests."""
 
     value: object
+    changed: _ChangedSignal
     line_edit: _LineEditControl
 
 
@@ -614,6 +624,35 @@ def _wait_for_live_response_job(
             return
         sleep(0.01)
     raise AssertionError("live response worker did not finish")
+
+
+def process_qt_events_until(
+    predicate: Callable[[], bool],
+    *,
+    timeout_seconds: float = 5.0,
+) -> None:
+    """Process Qt events until an asynchronous GUI action reaches a state.
+
+    Args:
+        predicate: Condition that becomes true when the expected GUI state is
+            visible.
+        timeout_seconds: Maximum wait before failing the test.
+
+    Returns:
+        None.
+
+    Raises:
+        AssertionError: If the predicate stays false until the timeout.
+    """
+    app = QApplication.instance() or QApplication([])
+    deadline = monotonic() + timeout_seconds
+    while monotonic() < deadline:
+        app.processEvents()
+        if predicate():
+            return
+        sleep(0.01)
+    app.processEvents()
+    raise AssertionError("Qt event condition did not become true")
 
 
 def _record_loaded_paths(

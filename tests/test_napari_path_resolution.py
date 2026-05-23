@@ -22,7 +22,6 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
-
 from twopy.config import load_config, resolve_analysis_cache_dir
 
 
@@ -50,7 +49,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
 
             load_widget(recording_folder=root)
             user_text = root / "manual-entry"
-            load_widget.recording_folder.line_edit.value = str(user_text)
+            with load_widget.recording_folder.changed.blocked():
+                load_widget.recording_folder.line_edit.value = str(user_text)
             result = load_widget(
                 recording_folder=user_text,
                 roi_file_to_load=Path("default"),

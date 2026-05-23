@@ -36,6 +36,7 @@ from tests.napari_support import (
     napari_sidebar,
     np,
     patch,
+    process_qt_events_until,
     roi_label_image_from_layer,
     save_roi_set,
     temporary_directory,
@@ -992,6 +993,15 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
 
             load_widget(recording_folder=root)
             load_widget.roi_file_to_load.value = roi_path
+            process_qt_events_until(
+                lambda: (
+                    len(viewer.labels) == 1
+                    and np.array_equal(
+                        np.unique(roi_label_image_from_layer(viewer.labels[0])),
+                        np.array([0, 1]),
+                    )
+                )
+            )
 
             self.assertEqual(len(viewer.images), 2)
             np.testing.assert_array_equal(

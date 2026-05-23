@@ -37,7 +37,6 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
-
 from twopy.analysis_cache import AnalysisSyncPlan
 from twopy.custom import (
     CustomLinePlot,
@@ -573,6 +572,60 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.zeros((2, 2), dtype=np.int64),
             )
+
+    def test_can_open_recording_without_controls(self) -> None:
+        """Confirm scripts can load viewer layers without twopy docks.
+
+        Inputs: tiny converted recording and fake viewer.
+        Outputs: mean image and editable ROI layer without sidebar widgets.
+        """
+        with temporary_directory() as temp_dir:
+            recording_path = _write_converted_recording(Path(temp_dir))
+            viewer = _FakeViewer()
+
+            opened = open_recording_in_napari(
+                recording_path,
+                viewer=viewer,
+                add_controls=False,
+            )
+
+            self.assertIs(opened.viewer, viewer)
+            self.assertEqual(len(viewer.images), 1)
+            self.assertEqual(len(viewer.labels), 1)
+            self.assertEqual(viewer.window.dock_widgets, [])
+            self.assertIsNone(opened.load_widget)
+            self.assertIsNone(opened.loaded_recordings_widget)
+            self.assertIsNone(opened.twopy_sidebar_widget)
+            self.assertIsNone(opened.twopy_sidebar_dock_widget)
+            self.assertIsNone(opened.response_plot_widget)
+            self.assertIsNone(opened.response_plot_dock_widget)
+            self.assertIsNone(opened.response_options_widget)
+            self.assertIsNone(opened.trial_timeline_controller)
+
+    def test_can_open_recording_without_roi_labels_layer(self) -> None:
+        """Confirm read-only display can skip the editable ROI layer.
+
+        Inputs: tiny converted recording and fake viewer.
+        Outputs: mean image only and a coherent returned recording view.
+        """
+        with temporary_directory() as temp_dir:
+            recording_path = _write_converted_recording(Path(temp_dir))
+            viewer = _FakeViewer()
+
+            opened = open_recording_in_napari(
+                recording_path,
+                viewer=viewer,
+                add_roi_labels_layer=False,
+                add_controls=False,
+            )
+
+            self.assertIs(opened.viewer, viewer)
+            self.assertEqual(len(viewer.images), 1)
+            self.assertEqual(len(viewer.labels), 0)
+            self.assertIs(opened.mean_image_layer, viewer.images[0])
+            self.assertIsNone(opened.movie_layer)
+            self.assertIsNone(opened.roi_labels_layer)
+            self.assertEqual(viewer.window.dock_widgets, [])
 
     def test_opens_converted_recording_with_roi_labels(self) -> None:
         """Confirm the adapter sends mean image, movie preview, and ROIs.

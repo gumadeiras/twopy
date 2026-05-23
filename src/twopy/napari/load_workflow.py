@@ -9,10 +9,12 @@ accounting, and per-path failure collection. The controls module chooses paths
 and renders dialogs; this module changes the recording session.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.loading import (
@@ -22,7 +24,6 @@ from twopy.napari.loading import (
 )
 from twopy.napari.paths import (
     DEFAULT_PATH_TEXT,
-    NapariRecordingPaths,
     PathInput,
     is_default_path,
 )
@@ -33,14 +34,23 @@ from twopy.napari.session import (
     selected_loaded_recording,
 )
 from twopy.napari.state import recording_folder_for_state, write_last_recording_folder
-from twopy.napari.types import NapariRecordingView
+
+if TYPE_CHECKING:
+    from twopy.napari.viewer import PreparedNapariRecordingViewData
 
 __all__ = [
     "RecordingLoadFailure",
     "RecordingLoadResult",
+    "AppliedRecordingLoad",
+    "PreparedRecordingLoad",
+    "ResolvedRecordingLoad",
     "SourceUnavailableWarning",
+    "apply_prepared_recording_load",
     "load_recording_paths",
+    "prepare_resolved_recording_load",
     "reconvert_selected_recording",
+    "resolve_recording_load",
+    "select_duplicate_recording_load",
 ]
 
 
@@ -89,8 +99,59 @@ class RecordingLoadResult:
 
 
 @dataclass(frozen=True)
-class _SingleRecordingLoad:
-    """Internal result for one path before batch failure aggregation."""
+class ResolvedRecordingLoad:
+    """Resolved paths for one selected recording before movie reads.
+
+    Inputs: one selected source or converted path.
+    Outputs: converted twopy paths and cache warning details.
+    """
+
+    selected_path: Path
+    resolved_recording: ResolvedNapariRecording
+
+    @property
+    def source_warnings(self) -> tuple[SourceUnavailableWarning, ...]:
+        """Return cache-backed source warnings for this resolved load."""
+        if not self.resolved_recording.source_unavailable:
+            return ()
+        return (
+            SourceUnavailableWarning(
+                source_path=self.selected_path,
+                cache_path=self.resolved_recording.paths.recording_data_path,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class PreparedRecordingLoad:
+    """Worker-prepared data for one recording before Qt layer creation.
+
+    Inputs: resolved recording paths.
+    Outputs: resolved paths plus arrays that can be applied on the Qt thread.
+    """
+
+    resolved_load: ResolvedRecordingLoad
+    view_data: PreparedNapariRecordingViewData
+
+    @property
+    def selected_path(self) -> Path:
+        """Return the originally selected source or converted path."""
+        return self.resolved_load.selected_path
+
+    @property
+    def resolved_recording(self) -> ResolvedNapariRecording:
+        """Return resolved converted paths and conversion status."""
+        return self.resolved_load.resolved_recording
+
+    @property
+    def source_warnings(self) -> tuple[SourceUnavailableWarning, ...]:
+        """Return source warnings inherited from the resolved load."""
+        return self.resolved_load.source_warnings
+
+
+@dataclass(frozen=True)
+class AppliedRecordingLoad:
+    """Result for one applied recording before batch failure aggregation."""
 
     status_text: str
     source_warnings: tuple[SourceUnavailableWarning, ...] = ()
@@ -106,7 +167,7 @@ def load_recording_paths(
     resolve_recording: Callable[[PathInput], ResolvedNapariRecording] = (
         resolve_or_convert_recording
     ),
-    open_recording: Callable[..., NapariRecordingView] | None = None,
+    prepare_view_data: Callable[..., PreparedNapariRecordingViewData] | None = None,
 ) -> RecordingLoadResult:
     """Load selected source or converted recording paths into napari.
 
@@ -119,8 +180,8 @@ def load_recording_paths(
         replace_selected: Whether a single load should replace the selected row.
         resolve_recording: Recording path resolver. Tests can provide a local
             fake; production uses ``resolve_or_convert_recording``.
-        open_recording: Converted-recording opener. Tests can provide a local
-            fake; production uses ``open_recording_in_napari``.
+        prepare_view_data: Worker-safe view-data reader. Tests can provide a
+            fake; production reads converted HDF5 files.
 
     Returns:
         Structured load result with new-recording count, failures, source-cache
@@ -154,17 +215,32 @@ def load_recording_paths(
         for path in paths:
             try:
                 previous_loaded_count = len(state.loaded_recordings)
-                single = _load_one_recording_path(
-                    state,
+                resolved = resolve_recording_load(
                     path,
-                    roi_file_to_load=(
-                        roi_file_to_load if len(paths) == 1 else Path(DEFAULT_PATH_TEXT)
-                    ),
+                    resolve_recording=resolve_recording,
+                )
+                single = select_duplicate_recording_load(
+                    state,
+                    resolved,
                     replace_selected=replace_selected if len(paths) == 1 else False,
                     remember_selected_folder=remember_selected_folder,
-                    resolve_recording=resolve_recording,
-                    open_recording=open_recording,
                 )
+                if single is None:
+                    prepared = prepare_resolved_recording_load(
+                        resolved,
+                        roi_file_to_load=(
+                            roi_file_to_load
+                            if len(paths) == 1
+                            else Path(DEFAULT_PATH_TEXT)
+                        ),
+                        prepare_view_data=prepare_view_data,
+                    )
+                    single = apply_prepared_recording_load(
+                        state,
+                        prepared,
+                        replace_selected=replace_selected if len(paths) == 1 else False,
+                        remember_selected_folder=remember_selected_folder,
+                    )
             except Exception as error:
                 failures.append(
                     RecordingLoadFailure(
@@ -194,28 +270,122 @@ def load_recording_paths(
     )
 
 
-def _load_one_recording_path(
-    state: RecordingLoadState,
+def resolve_recording_load(
     selected_recording_path: Path,
     *,
-    roi_file_to_load: PathInput,
+    resolve_recording: Callable[[PathInput], ResolvedNapariRecording] = (
+        resolve_or_convert_recording
+    ),
+) -> ResolvedRecordingLoad:
+    """Resolve one selected recording path without reading movie arrays."""
+    resolved_recording = resolve_recording(selected_recording_path)
+    return ResolvedRecordingLoad(
+        selected_path=selected_recording_path,
+        resolved_recording=resolved_recording,
+    )
+
+
+def select_duplicate_recording_load(
+    state: RecordingLoadState,
+    resolved: ResolvedRecordingLoad,
+    *,
     replace_selected: bool,
     remember_selected_folder: bool,
-    resolve_recording: Callable[[PathInput], ResolvedNapariRecording],
-    open_recording: Callable[..., NapariRecordingView] | None,
-) -> _SingleRecordingLoad:
-    """Load one path and return its status plus cache warnings."""
-    resolved_recording = resolve_recording(selected_recording_path)
-    paths = resolved_recording.paths
-    source_warnings: tuple[SourceUnavailableWarning, ...] = ()
-    if resolved_recording.source_unavailable:
-        source_warnings = (
-            SourceUnavailableWarning(
-                source_path=selected_recording_path,
-                cache_path=paths.recording_data_path,
-            ),
-        )
+) -> AppliedRecordingLoad | None:
+    """Select an existing loaded recording when the resolved path is a duplicate.
 
+    Args:
+        state: Mutable napari session state.
+        resolved: Resolved recording paths.
+        replace_selected: Whether a selected duplicate should be reloaded.
+        remember_selected_folder: Whether to update manual picker memory.
+
+    Returns:
+        Applied result for a duplicate selection, or ``None`` when the caller
+        should continue preparing view data.
+    """
+    paths = resolved.resolved_recording.paths
+    duplicate_index = _loaded_recording_index_for_path(
+        state,
+        paths.recording_data_path,
+    )
+    is_selected_replacement = (
+        replace_selected and duplicate_index == state.selected_recording_index
+    )
+    if duplicate_index is None or is_selected_replacement:
+        return None
+
+    select_loaded_recording(state, duplicate_index)
+    if remember_selected_folder:
+        _remember_recording_folder(
+            resolved.selected_path,
+            paths.recording_data_path,
+        )
+    return AppliedRecordingLoad(
+        status_text=f"Already loaded {paths.recording_data_path}",
+        source_warnings=resolved.source_warnings,
+    )
+
+
+def prepare_resolved_recording_load(
+    resolved: ResolvedRecordingLoad,
+    *,
+    roi_file_to_load: PathInput = Path(DEFAULT_PATH_TEXT),
+    prepare_view_data: Callable[..., PreparedNapariRecordingViewData] | None = None,
+) -> PreparedRecordingLoad:
+    """Read recording arrays for one already-resolved recording.
+
+    Args:
+        resolved: Resolved converted paths from ``resolve_recording_load``.
+        roi_file_to_load: Optional ROI HDF5 file. ``default`` uses the resolved
+            recording's saved ROI path when it exists.
+        prepare_view_data: Worker-safe recording view data reader.
+
+    Returns:
+        Prepared load data ready for ``apply_prepared_recording_load``.
+    """
+    resolved_prepare_view_data = prepare_view_data
+    if resolved_prepare_view_data is None:
+        from twopy.napari.viewer import prepare_recording_view_data
+
+        resolved_prepare_view_data = prepare_recording_view_data
+    paths = resolved.resolved_recording.paths
+    roi_path = (
+        paths.roi_file_to_load
+        if is_default_path(roi_file_to_load)
+        else _resolve_optional_roi_path(roi_file_to_load)
+    )
+    view_data = resolved_prepare_view_data(
+        paths.recording_data_path,
+        roi_set=roi_path,
+        movie_path=paths.movie_path,
+        movie_frame_range=(0, None),
+    )
+    return PreparedRecordingLoad(
+        resolved_load=resolved,
+        view_data=view_data,
+    )
+
+
+def apply_prepared_recording_load(
+    state: RecordingLoadState,
+    prepared: PreparedRecordingLoad,
+    *,
+    replace_selected: bool,
+    remember_selected_folder: bool,
+) -> AppliedRecordingLoad:
+    """Apply prepared recording data to napari on the Qt thread.
+
+    Args:
+        state: Mutable napari session state.
+        prepared: Worker-prepared recording arrays and paths.
+        replace_selected: Whether to replace the selected loaded row.
+        remember_selected_folder: Whether to update the manual picker folder.
+
+    Returns:
+        Status text plus any source-cache warning.
+    """
+    paths = prepared.resolved_recording.paths
     duplicate_index = _loaded_recording_index_for_path(
         state,
         paths.recording_data_path,
@@ -227,70 +397,36 @@ def _load_one_recording_path(
         select_loaded_recording(state, duplicate_index)
         if remember_selected_folder:
             _remember_recording_folder(
-                selected_recording_path,
+                prepared.selected_path,
                 paths.recording_data_path,
             )
-        return _SingleRecordingLoad(
+        return AppliedRecordingLoad(
             status_text=f"Already loaded {paths.recording_data_path}",
-            source_warnings=source_warnings,
+            source_warnings=prepared.source_warnings,
         )
 
-    _open_resolved_recording(
-        state,
-        paths,
-        roi_file_to_load=roi_file_to_load,
-        replace_selected=replace_selected,
-        open_recording=open_recording,
-    )
-    if remember_selected_folder:
-        _remember_recording_folder(
-            selected_recording_path,
-            paths.recording_data_path,
-        )
-    status = "Converted and loaded" if resolved_recording.was_converted else "Loaded"
-    return _SingleRecordingLoad(
-        status_text=f"{status} {paths.recording_data_path}",
-        source_warnings=source_warnings,
-    )
+    from twopy.napari.viewer import add_prepared_recording_to_viewer
 
-
-def _open_resolved_recording(
-    state: RecordingLoadState,
-    paths: NapariRecordingPaths,
-    *,
-    roi_file_to_load: PathInput,
-    replace_selected: bool,
-    open_recording: Callable[..., NapariRecordingView] | None,
-) -> None:
-    """Open resolved converted paths and register the resulting napari layers."""
-    roi_path = (
-        paths.roi_file_to_load
-        if is_default_path(roi_file_to_load)
-        else _resolve_optional_roi_path(roi_file_to_load)
-    )
-
-    resolved_open_recording = open_recording
-    if resolved_open_recording is None:
-        # Import here to avoid a top-level cycle: viewer creates controls,
-        # while controls can load recordings into that same viewer.
-        from twopy.napari.viewer import open_recording_in_napari
-
-        resolved_open_recording = open_recording_in_napari
-
-    view = resolved_open_recording(
-        paths.recording_data_path,
-        viewer=state.viewer,
-        roi_set=roi_path,
-        roi_save_file=paths.roi_save_file,
-        movie_path=paths.movie_path,
-        movie_frame_range=(0, None),
-        add_controls=False,
-    )
+    view = add_prepared_recording_to_viewer(prepared.view_data, viewer=state.viewer)
     record_loaded_view(
         state,
         view=view,
         roi_save_file=paths.roi_save_file,
         replace_selected=replace_selected,
+    )
+    if remember_selected_folder:
+        _remember_recording_folder(
+            prepared.selected_path,
+            paths.recording_data_path,
+        )
+    status = (
+        "Converted and loaded"
+        if prepared.resolved_recording.was_converted
+        else "Loaded"
+    )
+    return AppliedRecordingLoad(
+        status_text=f"{status} {paths.recording_data_path}",
+        source_warnings=prepared.source_warnings,
     )
 
 
@@ -300,7 +436,7 @@ def reconvert_selected_recording(
     reconvert_recording: Callable[[Path, Path], ResolvedNapariRecording] = (
         reconvert_recording_to_output
     ),
-    open_recording: Callable[..., NapariRecordingView] | None = None,
+    prepare_view_data: Callable[..., PreparedNapariRecordingViewData] | None = None,
 ) -> RecordingLoadResult:
     """Reconvert the selected loaded recording and reload it in place.
 
@@ -308,8 +444,8 @@ def reconvert_selected_recording(
         state: Mutable napari session state.
         reconvert_recording: Conversion callback. Tests can provide a fake;
             production rewrites the selected output folder from source data.
-        open_recording: Converted-recording opener. Tests can provide a fake;
-            production uses ``open_recording_in_napari``.
+        prepare_view_data: Worker-safe view-data reader. Tests can provide a
+            fake; production reads converted HDF5 files.
 
     Returns:
         Structured result with status text or one failure.
@@ -342,12 +478,18 @@ def reconvert_selected_recording(
     try:
         try:
             resolved = reconvert_recording(source_dir, output_dir)
-            _open_resolved_recording(
+            prepared = prepare_resolved_recording_load(
+                ResolvedRecordingLoad(
+                    selected_path=source_dir,
+                    resolved_recording=resolved,
+                ),
+                prepare_view_data=prepare_view_data,
+            )
+            apply_prepared_recording_load(
                 state,
-                resolved.paths,
-                roi_file_to_load=Path(DEFAULT_PATH_TEXT),
+                prepared,
                 replace_selected=True,
-                open_recording=open_recording,
+                remember_selected_folder=False,
             )
         except Exception as error:
             message = exception_message_for_user(error)

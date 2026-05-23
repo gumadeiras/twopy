@@ -25,12 +25,12 @@ from tests.napari_support import (
     napari_controls,
     np,
     patch,
+    process_qt_events_until,
     roi_label_image_from_layer,
     save_manual_fov_group_rows,
     temporary_directory,
     unittest,
 )
-
 from twopy.napari.state import (
     read_last_recording_csv_folder,
     read_last_recording_folder,
@@ -61,6 +61,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget.recording_folder.value = root
+            process_qt_events_until(lambda: len(viewer.images) == 2)
 
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(len(viewer.labels), 1)
@@ -105,6 +106,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 return_value=(first, second),
             ):
                 load_buttons["Load manually"].click()
+                process_qt_events_until(lambda: loaded_list.count() == 2)
 
             assert loaded_list is not None
             self.assertEqual(loaded_list.count(), 2)
@@ -199,6 +201,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 return_value=(csv_path,),
             ):
                 load_buttons["Load CSV list"].click()
+                process_qt_events_until(lambda: fresh_loaded_list.count() == 2)
 
             assert fresh_loaded_list is not None
             self.assertEqual(fresh_loaded_list.count(), 2)
@@ -297,6 +300,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 return_value=(first_csv,),
             ):
                 load_buttons["Load CSV list"].click()
+                process_qt_events_until(lambda: Path(fov_path_edit.text()) == first_fov)
 
             self.assertEqual(Path(fov_path_edit.text()), first_fov)
             self.assertEqual(Path(roi_path_edit.text()), first_roi)
@@ -310,6 +314,9 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 return_value=(second_csv,),
             ):
                 load_buttons["Load CSV list"].click()
+                process_qt_events_until(
+                    lambda: Path(fov_path_edit.text()) == second_fov
+                )
 
             self.assertEqual(Path(fov_path_edit.text()), second_fov)
             self.assertEqual(Path(roi_path_edit.text()), second_roi)
@@ -322,6 +329,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 return_value=(first_csv,),
             ):
                 load_buttons["Load CSV list"].click()
+                process_qt_events_until(lambda: Path(fov_path_edit.text()) == first_fov)
 
             self.assertEqual(Path(fov_path_edit.text()), first_fov)
             self.assertEqual(Path(roi_path_edit.text()), first_roi)
@@ -337,6 +345,9 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 return_value=(second_csv,),
             ):
                 load_buttons["Load CSV list"].click()
+                process_qt_events_until(
+                    lambda: Path(fov_path_edit.text()) == second_fov
+                )
 
             self.assertEqual(Path(fov_path_edit.text()), second_fov)
             self.assertEqual(Path(roi_path_edit.text()), manual_roi_path)
@@ -391,6 +402,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 return_value=([str(csv_path)], ""),
             ) as choose_csv:
                 load_buttons["Load CSV list"].click()
+                process_qt_events_until(lambda: len(viewer.images) == 2)
 
             first_call_args = choose_csv.call_args.args
             self.assertEqual(first_call_args[2], "")
@@ -486,6 +498,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                     ) as convert,
                 ):
                     load_buttons["Load CSV list"].click()
+                    process_qt_events_until(lambda: loaded_list.count() == 1)
             finally:
                 chdir(original_cwd)
 
@@ -507,7 +520,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
         Inputs: source recording with converted data already in the analysis
             cache.
         Outputs: the loaded list and saved CSV use the source session path while
-            the audit column still records the cached HDF5 path.
+            the audit column records the published HDF5 path.
         """
         _ = QApplication.instance() or QApplication([])
         with temporary_directory() as temp_dir:
@@ -515,10 +528,11 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
             cache_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
+            publish_dir = root / "publish" / "fly" / "stim" / "2023" / "10_17"
             csv_path = root / "loaded_recordings.csv"
             _write_source_recording_shape(source_dir)
             cache_dir.mkdir(parents=True)
-            cached_recording_path = _write_converted_recording(
+            _write_converted_recording(
                 cache_dir,
                 source_session_dir=source_dir,
             )
@@ -529,7 +543,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {root / 'cache'}\n"
-                "analysis_output: source\n",
+                f"analysis_output: {root / 'publish'}\n",
                 encoding="utf-8",
             )
             viewer = _FakeViewer()
@@ -574,7 +588,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             self.assertEqual(rows[0]["recording_path"], str(source_dir))
             self.assertEqual(
                 Path(rows[0]["recording_data_path"]).resolve(strict=False),
-                cached_recording_path.resolve(strict=False),
+                (publish_dir / "recording_data.h5").resolve(strict=False),
             )
 
     def test_load_tab_warns_when_using_cache_for_unavailable_source(self) -> None:

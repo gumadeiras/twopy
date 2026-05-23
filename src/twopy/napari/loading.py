@@ -13,7 +13,11 @@ from pathlib import Path
 
 import h5py
 
-from twopy.analysis_cache import copy_file_atomically, refresh_cached_analysis_outputs
+from twopy.analysis_cache import (
+    copy_converted_files_to_publish,
+    copy_file_atomically,
+    refresh_cached_analysis_outputs,
+)
 from twopy.config import (
     DEFAULT_CONFIG_PATH,
     TwopyConfig,
@@ -108,6 +112,11 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
         source_dir,
         output_dir=paths.recording_data_path.parent,
     )
+    copy_converted_files_to_publish(
+        recording_data_path=converted.path,
+        movie_path=converted.movie_path,
+        source_session_dir=converted.source_session_dir,
+    )
     return ResolvedNapariRecording(
         paths=resolve_converted_paths(converted.path),
         was_converted=True,
@@ -134,6 +143,11 @@ def reconvert_recording_to_output(
     local/cache output location.
     """
     converted = convert_recording_to_twopy(source_dir, output_dir=output_dir)
+    copy_converted_files_to_publish(
+        recording_data_path=converted.path,
+        movie_path=converted.movie_path,
+        source_session_dir=converted.source_session_dir,
+    )
     return _refresh_cached_analysis_outputs(
         paths=resolve_converted_paths(converted.path),
         source_dir=source_dir,
@@ -236,6 +250,11 @@ def _convert_cached_source_recording(
         Resolved cached paths for the converted recording.
     """
     converted = convert_recording_to_twopy(source_dir, output_dir=output_dir)
+    copy_converted_files_to_publish(
+        recording_data_path=converted.path,
+        movie_path=converted.movie_path,
+        source_session_dir=converted.source_session_dir,
+    )
     return _refresh_cached_analysis_outputs(
         paths=resolve_converted_paths(converted.path),
         source_dir=source_dir,

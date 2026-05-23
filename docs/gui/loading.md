@@ -1,6 +1,6 @@
 # Loading recordings
 
-The **Load** tab is the first tab on the right `twopy` sidebar. You can also pass a path on the command line.
+The **Load** tab is the first tab on the right `twopy` sidebar. You can also pass a path on the command line. Load-tab actions prepare selected recordings in a background worker, show a modeless progress dialog, and apply napari layers on the Qt thread as each recording is ready. **Cancel pending** stops queued recordings after the current recording finishes.
 
 ## From the command line
 
@@ -41,15 +41,15 @@ Each loaded recording shows as a row below the load buttons. Click a row to make
 
 Buttons under the list (disabled until at least one recording is loaded):
 
-- **Save loaded list** — write a CSV of source paths for the currently loaded recordings.
+- **Save loaded list** — write a CSV of source paths for the currently loaded recordings, with `recording_data_path` pointing at the published `analysis_output` HDF5 when that path can be resolved.
 - **Reload saved analysis** — reread `analysis_outputs.h5` and `rois.h5` for the active recording.
-- **Reconvert selected** — confirms, reruns conversion into the same converted folder, overwrites `recording_data.h5` and `aligned_movie.h5`, then reloads the row in place. ROI and analysis output files are not touched.
+- **Reconvert selected** — confirms, reruns conversion into the same converted folder, overwrites `recording_data.h5` and `aligned_movie.h5`, syncs those converted files to `analysis_output` when cache publishing applies, then reloads the row in place. ROI and analysis output files are not touched.
 - **Open Group Matching** — opens the separate [Group Matching](group_matching.md) window.
 - **Unload selected** — remove the selected row from the viewer.
 - **Unload all** — clear every loaded recording at once.
 
 ## Caching and where files end up
 
-With `analysis_caching: true` (the default), twopy converts and reads through a local cache directory mirrored under `analysis_cache_dir`. All plotting and analysis runs against the local cache for speed. Saving publishes the changed files back to `analysis_output` in the background.
+With `analysis_caching: true` (the default), twopy converts and reads through a local cache directory mirrored under `analysis_cache_dir`. All plotting and analysis runs against the local cache for speed. Converted HDF5 files and saved outputs publish back to `analysis_output` in the background.
 
-If a source path is temporarily unavailable but its cache entry exists, twopy reopens from the cache. The **Save loaded list** CSV always records the source path so the file remains usable when the network volume is back.
+If a source path is temporarily unavailable but its cache entry exists, twopy reopens from the cache. The **Save loaded list** CSV always records the source path so the file remains usable when the network volume is back, and it keeps local cache paths out of `recording_data_path` when a published output path exists.

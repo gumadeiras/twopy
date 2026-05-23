@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import cast
 
 import numpy as np
-from tests.tempdir import temporary_directory
 
+from tests.tempdir import temporary_directory
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
 from twopy.napari.load_workflow import (
@@ -27,7 +27,7 @@ from twopy.napari.loading import ResolvedNapariRecording
 from twopy.napari.paths import NapariRecordingPaths, PathInput
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.session import LoadedNapariRecording, LoadedRecordingsPanel
-from twopy.napari.types import NapariRecordingView
+from twopy.napari.viewer import PreparedNapariRecordingViewData
 from twopy.spatial import SpatialCrop
 
 
@@ -153,7 +153,7 @@ class LoadWorkflowTest(unittest.TestCase):
             state,
             (),
             remember_selected_folder=False,
-            open_recording=_open_recording,
+            prepare_view_data=_prepare_view_data,
         )
 
         self.assertEqual(result.loaded_count, 0)
@@ -177,7 +177,7 @@ class LoadWorkflowTest(unittest.TestCase):
             (source,),
             remember_selected_folder=False,
             resolve_recording=_resolver({source: resolved}),
-            open_recording=_open_recording,
+            prepare_view_data=_prepare_view_data,
         )
 
         self.assertEqual(result.loaded_count, 1)
@@ -206,13 +206,31 @@ class LoadWorkflowTest(unittest.TestCase):
                 second: _resolved_recording(Path("/cache/second/recording_data.h5")),
             },
         )
+        prepared_paths: list[Path] = []
+
+        def prepare_view_data(
+            recording_data_path: Path,
+            *,
+            roi_set: Path | None,
+            movie_path: Path | None,
+            movie_frame_range: tuple[int, int | None],
+        ) -> PreparedNapariRecordingViewData:
+            """Record movie-preparation requests before delegating."""
+            prepared_paths.append(recording_data_path)
+            return _prepare_view_data(
+                recording_data_path,
+                roi_set=roi_set,
+                movie_path=movie_path,
+                movie_frame_range=movie_frame_range,
+            )
+
         for path in (first, second):
             load_recording_paths(
                 state,
                 (path,),
                 remember_selected_folder=False,
                 resolve_recording=resolver,
-                open_recording=_open_recording,
+                prepare_view_data=prepare_view_data,
             )
 
         result = load_recording_paths(
@@ -220,10 +238,17 @@ class LoadWorkflowTest(unittest.TestCase):
             (first,),
             remember_selected_folder=False,
             resolve_recording=resolver,
-            open_recording=_open_recording,
+            prepare_view_data=prepare_view_data,
         )
 
         self.assertEqual(result.loaded_count, 0)
+        self.assertEqual(
+            prepared_paths,
+            [
+                Path("/cache/first/recording_data.h5"),
+                Path("/cache/second/recording_data.h5"),
+            ],
+        )
         self.assertEqual(len(state.loaded_recordings), 2)
         self.assertEqual(state.selected_recording_index, 0)
         self.assertTrue(
@@ -255,7 +280,7 @@ class LoadWorkflowTest(unittest.TestCase):
             (first,),
             remember_selected_folder=False,
             resolve_recording=resolver,
-            open_recording=_open_recording,
+            prepare_view_data=_prepare_view_data,
         )
         old_layers = (
             *viewer.images,
@@ -268,7 +293,7 @@ class LoadWorkflowTest(unittest.TestCase):
             remember_selected_folder=False,
             replace_selected=True,
             resolve_recording=resolver,
-            open_recording=_open_recording,
+            prepare_view_data=_prepare_view_data,
         )
 
         self.assertEqual(result.loaded_count, 0)
@@ -299,26 +324,20 @@ class LoadWorkflowTest(unittest.TestCase):
             roi_path.touch()
             opened_roi_paths: list[Path | None] = []
 
-            def open_recording(
+            def prepare_view_data(
                 recording_data_path: Path,
                 *,
-                viewer: _Viewer,
                 roi_set: Path | None,
-                roi_save_file: Path,
                 movie_path: Path | None,
                 movie_frame_range: tuple[int, int | None],
-                add_controls: bool,
-            ) -> NapariRecordingView:
+            ) -> PreparedNapariRecordingViewData:
                 """Record the ROI path and delegate to the fake opener."""
                 opened_roi_paths.append(roi_set)
-                return _open_recording(
+                return _prepare_view_data(
                     recording_data_path,
-                    viewer=viewer,
                     roi_set=roi_set,
-                    roi_save_file=roi_save_file,
                     movie_path=movie_path,
                     movie_frame_range=movie_frame_range,
-                    add_controls=add_controls,
                 )
 
             resolver = _resolver({source: _resolved_recording(recording_path)})
@@ -327,7 +346,7 @@ class LoadWorkflowTest(unittest.TestCase):
                 (source,),
                 remember_selected_folder=False,
                 resolve_recording=resolver,
-                open_recording=open_recording,
+                prepare_view_data=prepare_view_data,
             )
 
             result = load_recording_paths(
@@ -337,7 +356,7 @@ class LoadWorkflowTest(unittest.TestCase):
                 roi_file_to_load=roi_path,
                 replace_selected=True,
                 resolve_recording=resolver,
-                open_recording=open_recording,
+                prepare_view_data=prepare_view_data,
             )
 
             self.assertEqual(result.loaded_count, 0)
@@ -362,7 +381,7 @@ class LoadWorkflowTest(unittest.TestCase):
             resolve_recording=_resolver(
                 {good: _resolved_recording(Path("/cache/good/recording_data.h5"))},
             ),
-            open_recording=_open_recording,
+            prepare_view_data=_prepare_view_data,
         )
 
         self.assertEqual(result.loaded_count, 1)
@@ -389,7 +408,7 @@ class LoadWorkflowTest(unittest.TestCase):
             resolve_recording=_resolver(
                 {source: _resolved_recording(cache, source_unavailable=True)},
             ),
-            open_recording=_open_recording,
+            prepare_view_data=_prepare_view_data,
         )
 
         self.assertEqual(result.loaded_count, 1)
@@ -414,7 +433,7 @@ class LoadWorkflowTest(unittest.TestCase):
             (source,),
             remember_selected_folder=False,
             resolve_recording=_resolver({source: _resolved_recording(recording_path)}),
-            open_recording=_open_recording,
+            prepare_view_data=_prepare_view_data,
         )
         old_layers = (*viewer.images, *viewer.labels)
         reconvert_calls: list[tuple[Path, Path]] = []
@@ -430,7 +449,7 @@ class LoadWorkflowTest(unittest.TestCase):
         result = reconvert_selected_recording(
             state,
             reconvert_recording=reconvert,
-            open_recording=_open_recording,
+            prepare_view_data=_prepare_view_data,
         )
 
         self.assertEqual(result.failures, ())
@@ -457,7 +476,10 @@ class LoadWorkflowTest(unittest.TestCase):
         """
         state = _State()
 
-        result = reconvert_selected_recording(state, open_recording=_open_recording)
+        result = reconvert_selected_recording(
+            state,
+            prepare_view_data=_prepare_view_data,
+        )
 
         self.assertEqual(result.loaded_count, 0)
         self.assertEqual(len(result.failures), 1)
@@ -516,49 +538,34 @@ def _resolved_recording(
     )
 
 
-def _open_recording(
+def _prepare_view_data(
     recording_data_path: Path,
     *,
-    viewer: _Viewer,
     roi_set: Path | None,
-    roi_save_file: Path,
     movie_path: Path | None,
     movie_frame_range: tuple[int, int | None],
-    add_controls: bool,
-) -> NapariRecordingView:
-    """Open one fake converted recording into fake viewer layers.
+) -> PreparedNapariRecordingViewData:
+    """Create prepared view data for one fake converted recording.
 
     Args:
         recording_data_path: Converted recording path to attach to the view.
-        viewer: Fake napari viewer.
         roi_set: Optional ROI set path.
-        roi_save_file: Default ROI save path.
         movie_path: Optional movie file path.
         movie_frame_range: Requested frame range.
-        add_controls: Whether controls should be added.
 
     Returns:
-        Fake napari recording view suitable for session bookkeeping.
+        Prepared recording data suitable for session bookkeeping tests.
     """
-    del roi_set, roi_save_file, movie_path, movie_frame_range, add_controls
+    del roi_set, movie_path, movie_frame_range
     recording = _recording(recording_data_path)
-    mean_image_layer = viewer.add_image(recording.mean_image, name="Mean image")
-    movie_layer = viewer.add_image(np.zeros((3, 2, 2)), name="Movie")
-    roi_labels_layer = viewer.add_labels(np.zeros((2, 2), dtype=np.uint16), name="ROIs")
-    return NapariRecordingView(
-        viewer=viewer,
+    return PreparedNapariRecordingViewData(
         recording=recording,
-        mean_image_layer=mean_image_layer,
-        movie_layer=movie_layer,
-        roi_labels_layer=roi_labels_layer,
-        load_widget=None,
-        loaded_recordings_widget=None,
-        twopy_sidebar_widget=None,
-        twopy_sidebar_dock_widget=None,
-        response_plot_widget=None,
-        response_plot_dock_widget=None,
-        response_options_widget=None,
-        trial_timeline_controller=None,
+        mean_image=recording.mean_image,
+        movie=np.zeros((3, 2, 2), dtype=np.float64),
+        roi_labels=np.zeros((2, 2), dtype=np.int64),
+        layer_metadata={},
+        movie_contrast_limits=(0.0, 1.0),
+        movie_frame_span=(0, 3),
     )
 
 
