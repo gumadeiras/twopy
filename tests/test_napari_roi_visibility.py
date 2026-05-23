@@ -26,7 +26,6 @@ from tests.napari_support import (
     unittest,
     visibility_options_widget,
 )
-
 from twopy.custom import CustomResult
 
 
@@ -87,6 +86,15 @@ class NapariRoiVisibilityTest(NapariAdapterTestCase):
         self.assertEqual(response_widget._roi_labels(), ("roi_0001", "roi_0002"))
         self.assertEqual(response_widget._visible_roi_indices(), (1,))
         self.assertEqual(response_widget._roi_visibility, {0: False, 1: True})
+        roi_checkboxes = {
+            checkbox.text(): checkbox.isChecked()
+            for checkbox in response_widget.options_widget().findChildren(QCheckBox)
+            if checkbox.text().startswith("roi_")
+        }
+        self.assertEqual(
+            roi_checkboxes,
+            {"roi_0001": False, "roi_0002": True},
+        )
 
     def test_global_value_bounds_accepts_empty_roi_selection(self) -> None:
         """Confirm empty ROI selection uses stable default y-axis bounds.

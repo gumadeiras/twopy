@@ -147,7 +147,7 @@ Roles are tied to declared `metadata`, not field names. A field named `start`, `
 - `tables=(CustomTable(name, path, highlighted_rows=(...)), ...)` — CSV/TSV tables previewed in the Custom tab. `highlighted_rows` marks zero-based data rows.
 - `plots=(CustomLinePlot(name, x, y, labels, y_label=..., colors=..., bands=(CustomLineBand(...),)), ...)` — line plots. `colors` accepts `#RRGGBB` strings; `CustomLineBand` draws filled uncertainty bands behind a series.
 - `rois=RoiSet(...)` — replace the current Labels layer ROI set.
-- `visible_roi_indices=(...)` — change the Plot-tab visibility without replacing the plot data.
+- `visible_roi_indices=(...)` — change the Plot-tab and ROIs-tab visibility without replacing the plot data.
 - `response_plot_data=ctx.response_plot_data(...)` — replacement response plot data.
 
 All file and table outputs must live below `ctx.output_dir`; using `ctx.output_path("name.csv")` enforces this.

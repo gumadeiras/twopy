@@ -29,7 +29,7 @@ Computes a direction-selectivity index (DSI) for every current ROI.
 - **Window start (s)** / **Window end (s)** — epoch-relative metric window. Capped to the shorter of the preferred and null epoch durations.
 - **Rectify** option zeroes negative responses before computing DSI.
 
-The result is a three-decimal per-ROI DSI table. Rows above the **absolute DSI threshold** are highlighted, and only the passing ROIs stay selected in the response plot — without replacing the plot data.
+The result is a three-decimal per-ROI DSI table. Rows above the **absolute DSI threshold** are highlighted, and only the passing ROIs stay selected in the response plot and ROIs tab — without replacing the plot data.
 
 ### Response kernels
 

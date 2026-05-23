@@ -38,6 +38,7 @@ from tests.napari_support import (
     unittest,
     visibility_options_widget,
 )
+from twopy.napari.roi import merge_roi_label_values_on_layer
 
 
 class NapariRoiGenerationTest(NapariAdapterTestCase):
@@ -84,6 +85,30 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
             np.array([[0, 2], [0, 2]], dtype=np.int64),
         )
 
+    def test_merge_roi_label_values_on_layer_combines_selected_rois(self) -> None:
+        """Confirm ROI merging keeps the first selected Labels value.
+
+        Inputs: Labels layer with three ROI values and two selected values.
+        Outputs: selected ROI pixels share the first selected value while the
+        other ROI remains unchanged.
+        """
+        layer = _FakeLayer(
+            name="rois",
+            data=np.array([[1, 2], [3, 2]], dtype=np.int64),
+            options={},
+        )
+
+        result = merge_roi_label_values_on_layer(layer, (1, 3))
+
+        if result is None:
+            self.fail("Expected selected ROI labels to merge.")
+        self.assertEqual(result.target_label_value, 1)
+        self.assertEqual(result.merged_label_values, (1, 3))
+        np.testing.assert_array_equal(
+            layer.data,
+            np.array([[1, 2], [1, 2]], dtype=np.int64),
+        )
+
     def test_roi_tab_remove_selected_deletes_checked_rois(self) -> None:
         """Confirm the ROI tab can delete selected Labels values.
 
@@ -123,6 +148,54 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
         }
         self.assertNotIn("roi_0001", checkbox_texts)
         self.assertIn("roi_0002", checkbox_texts)
+
+    def test_roi_tab_merge_selected_combines_checked_rois(self) -> None:
+        """Confirm the ROI tab can merge selected Labels values.
+
+        Inputs: response plot widget with two plotted ROIs.
+        Outputs: Merge Selected combines ROI 2 into ROI 1, removes ROI 2 from
+        the option table, and requests a live response recompute.
+        """
+        _ = QApplication.instance() or QApplication([])
+        layer = _FakeLayer(
+            name="rois",
+            data=np.array([[1, 2], [0, 2]], dtype=np.int64),
+            options={},
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_roi_labels_layer(layer)
+        update_requests: list[str] = []
+        response_widget._live_controller.request_update = lambda: (
+            update_requests.append("update")
+        )
+        response_widget.set_response_plot_data(
+            _two_roi_response_plot_data(),
+            reset_axes=True,
+        )
+        buttons = response_widget.options_widget().findChildren(QPushButton)
+        button_texts = [button.text() for button in buttons]
+        self.assertLess(
+            button_texts.index("Merge Selected"),
+            button_texts.index("Remove Selected"),
+        )
+        merge_button = next(
+            button for button in buttons if button.text() == "Merge Selected"
+        )
+
+        merge_button.click()
+
+        np.testing.assert_array_equal(
+            layer.data,
+            np.array([[1, 1], [0, 1]], dtype=np.int64),
+        )
+        self.assertEqual(response_widget._roi_labels(), ("roi_0001",))
+        checkbox_texts = {
+            checkbox.text()
+            for checkbox in response_widget.options_widget().findChildren(QCheckBox)
+        }
+        self.assertIn("roi_0001", checkbox_texts)
+        self.assertNotIn("roi_0002", checkbox_texts)
+        self.assertEqual(update_requests, ["update"])
 
     def test_roi_tab_create_grid_replaces_labels_layer(self) -> None:
         """Confirm the ROIs tab can create editable grid ROI labels.

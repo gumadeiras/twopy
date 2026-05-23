@@ -9,6 +9,7 @@ This module is the only napari-facing layer that translates between editable
 Labels data and core ROI masks.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -34,6 +35,8 @@ from twopy.spatial import SpatialCrop, full_frame_crop
 
 __all__ = [
     "load_roi_file_on_layer",
+    "MergedRoiLabels",
+    "merge_roi_label_values_on_layer",
     "remove_roi_label_values_from_layer",
     "roi_label_image_from_layer",
     "roi_label_image_from_layer_for_recording",
@@ -41,6 +44,27 @@ __all__ = [
     "set_roi_label_image_on_layer",
     "validate_roi_layer_matches_recording_crop",
 ]
+
+
+@dataclass(frozen=True)
+class MergedRoiLabels:
+    """Labels-layer values changed by one ROI merge.
+
+    Args:
+        target_label_value: Positive Labels value that remains after the merge.
+        merged_label_values: Positive Labels values found in the layer and
+            combined into ``target_label_value``.
+
+    Returns:
+        Immutable record of one successful ROI merge.
+
+    The ROIs tab uses this result to keep its row list readable immediately
+    after the label pixels change. The later live response update recomputes
+    the scientific traces from the merged mask.
+    """
+
+    target_label_value: int
+    merged_label_values: tuple[int, ...]
 
 
 def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
@@ -61,6 +85,55 @@ def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
         return movie_labels_from_display_layer(layer)
     data = cast(NapariLayerWithData, layer).data
     return np.asarray(data, dtype=np.int64)
+
+
+def merge_roi_label_values_on_layer(
+    layer: object | None,
+    label_values: tuple[int, ...],
+) -> MergedRoiLabels | None:
+    """Merge selected ROI label values in a napari Labels layer.
+
+    Args:
+        layer: Active napari Labels layer, or a test object with settable
+            ``data``.
+        label_values: Positive integer Labels values to combine. The first
+            value is kept as the merged ROI label.
+
+    Returns:
+        Merge details when at least two selected labels were found, otherwise
+        ``None``.
+
+    A merge is a direct label-image edit. Pixels from the selected ROIs become
+    the first selected ROI value, so the mask remains inspectable as one Labels
+    object before response traces are recomputed.
+    """
+    if layer is None:
+        return None
+    values = tuple(dict.fromkeys(value for value in label_values if value > 0))
+    if len(values) < 2:
+        return None
+
+    labels_layer = cast(NapariLayerWithData, layer)
+    label_image = np.asarray(labels_layer.data)
+    target_value = values[0]
+    selected_mask = np.isin(label_image, values)
+    if not np.any(selected_mask):
+        return None
+    present_values = {int(value) for value in np.unique(label_image[selected_mask])}
+    found_values = tuple(value for value in values if value in present_values)
+    if len(found_values) < 2 or found_values[0] != target_value:
+        return None
+
+    updated = np.array(label_image, copy=True)
+    updated[selected_mask] = target_value
+    labels_layer.data = updated
+    refresh = getattr(layer, "refresh", None)
+    if callable(refresh):
+        refresh()
+    return MergedRoiLabels(
+        target_label_value=target_value,
+        merged_label_values=found_values,
+    )
 
 
 def remove_roi_label_values_from_layer(

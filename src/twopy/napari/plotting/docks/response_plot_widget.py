@@ -74,6 +74,7 @@ from twopy.napari.plotting.docks.dynamic_options import (
     add_plot_display_options_group,
     clear_dynamic_option_tabs,
     render_dynamic_options,
+    render_roi_options,
 )
 from twopy.napari.plotting.docks.options_panel import create_response_options_panel
 from twopy.napari.plotting.docks.paths import (
@@ -113,6 +114,7 @@ from twopy.napari.responses import (
 )
 from twopy.napari.roi import (
     load_roi_file_on_layer,
+    merge_roi_label_values_on_layer,
     remove_roi_label_values_from_layer,
     set_roi_label_image_on_layer,
 )
@@ -750,6 +752,7 @@ class _ResponsePlotWidget(QWidget):
         self._set_roi_visibility_batch(
             {index: index in visible_rows for index in range(roi_count)},
         )
+        self._render_roi_options()
 
     def _start_sync(self, sync_plan: AnalysisSyncPlan) -> None:
         """Start background sync for just-saved analysis outputs.
@@ -1042,10 +1045,53 @@ class _ResponsePlotWidget(QWidget):
             on_axis_change=self._set_manual_axis_bounds,
             on_roi_visibility_change=self._set_roi_visibility,
             on_roi_visibility_batch=self._set_roi_visibility_batch,
+            on_merge_selected_rois=self.merge_selected_rois,
             on_remove_selected_rois=self.remove_selected_rois,
             on_epoch_visibility_change=self._set_epoch_visibility,
             on_epoch_visibility_batch=self._set_epoch_visibility_batch,
         )
+
+    def _render_roi_options(self) -> None:
+        render_roi_options(
+            roi_options_layout=self._roi_options_layout,
+            roi_labels=self._roi_labels(),
+            roi_visibility=self._roi_visibility,
+            roi_colors=self._roi_colors,
+            on_roi_visibility_change=self._set_roi_visibility,
+            on_roi_visibility_batch=self._set_roi_visibility_batch,
+            on_merge_selected_rois=self.merge_selected_rois,
+            on_remove_selected_rois=self.remove_selected_rois,
+        )
+
+    def merge_selected_rois(self) -> None:
+        """Combine checked ROI labels in the active Labels layer.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        The first checked ROI label stays as the merged label. This keeps the
+        Labels layer simple and auditable, while the live controller recomputes
+        response traces from the combined mask.
+        """
+        merge_result = merge_roi_label_values_on_layer(
+            self._roi_labels_layer,
+            self._selected_roi_label_values(),
+        )
+        if merge_result is None:
+            self._update_status_label.setText("Select at least two ROIs to merge.")
+            return
+        merged_away_values = tuple(
+            value
+            for value in merge_result.merged_label_values
+            if value != merge_result.target_label_value
+        )
+        self._remove_rois_from_current_plot_data(merged_away_values)
+        merged_count = len(merge_result.merged_label_values)
+        self._update_status_label.setText(f"Merged {merged_count} selected ROIs.")
+        self._live_controller.request_update()
 
     def remove_selected_rois(self) -> None:
         """Delete checked ROI labels from the active Labels layer.
@@ -1060,12 +1106,7 @@ class _ResponsePlotWidget(QWidget):
         This action reuses that state and edits only the Labels layer; response
         recomputation remains owned by the live controller.
         """
-        label_values = self._roi_label_values()
-        selected_label_values = tuple(
-            label_values[index]
-            for index in self._visible_roi_indices()
-            if index < len(label_values)
-        )
+        selected_label_values = self._selected_roi_label_values()
         removed_count = remove_roi_label_values_from_layer(
             self._roi_labels_layer,
             selected_label_values,
@@ -1077,6 +1118,22 @@ class _ResponsePlotWidget(QWidget):
         noun = "ROI" if removed_count == 1 else "ROIs"
         self._update_status_label.setText(f"Removed {removed_count} selected {noun}.")
         self._live_controller.request_update()
+
+    def _selected_roi_label_values(self) -> tuple[int, ...]:
+        """Return Labels values for checked ROI rows.
+
+        Args:
+            None.
+
+        Returns:
+            Napari Labels values selected by the ROIs-tab checkboxes.
+        """
+        label_values = self._roi_label_values()
+        return tuple(
+            label_values[index]
+            for index in self._visible_roi_indices()
+            if index < len(label_values)
+        )
 
     def _set_roi_generation_status(self, text: str) -> None:
         """Show ROI-generation status in the ROIs tab.

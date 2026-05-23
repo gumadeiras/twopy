@@ -69,6 +69,7 @@ def render_dynamic_options(
     on_axis_change: Callable[..., None],
     on_roi_visibility_change: Callable[[object, bool], None],
     on_roi_visibility_batch: Callable[[dict[object, bool]], None],
+    on_merge_selected_rois: Callable[[], None],
     on_remove_selected_rois: Callable[[], None],
     on_epoch_visibility_change: Callable[[object, bool], None],
     on_epoch_visibility_batch: Callable[[dict[object, bool]], None],
@@ -97,6 +98,8 @@ def render_dynamic_options(
         on_axis_change: Callback for manual axis-bound edits.
         on_roi_visibility_change: Callback for one ROI checkbox.
         on_roi_visibility_batch: Callback for ROI batch buttons.
+        on_merge_selected_rois: Callback that combines checked ROI labels in
+            the active Labels layer.
         on_remove_selected_rois: Callback that deletes checked ROI labels from
             the active Labels layer.
         on_epoch_visibility_change: Callback for one epoch checkbox.
@@ -131,21 +134,16 @@ def render_dynamic_options(
         on_plot_size_change=on_plot_size_change,
         on_axis_change=on_axis_change,
     )
-    roi_options_layout.addWidget(
-        visibility_options_widget(
-            title="ROIs",
-            labels=roi_labels,
-            visibility=roi_visibility,
-            on_change=on_roi_visibility_change,
-            on_change_batch=on_roi_visibility_batch,
-            keys=tuple(range(len(roi_labels))),
-            colors=roi_colors,
-        ),
+    render_roi_options(
+        roi_options_layout=roi_options_layout,
+        roi_labels=roi_labels,
+        roi_visibility=roi_visibility,
+        roi_colors=roi_colors,
+        on_roi_visibility_change=on_roi_visibility_change,
+        on_roi_visibility_batch=on_roi_visibility_batch,
+        on_merge_selected_rois=on_merge_selected_rois,
+        on_remove_selected_rois=on_remove_selected_rois,
     )
-    remove_button = QPushButton("Remove Selected")
-    remove_button.clicked.connect(on_remove_selected_rois)
-    roi_options_layout.addWidget(remove_button)
-    roi_options_layout.addStretch(1)
     epoch_options_layout.addWidget(
         visibility_options_widget(
             title="Epochs",
@@ -160,6 +158,54 @@ def render_dynamic_options(
         ),
     )
     epoch_options_layout.addStretch(1)
+
+
+def render_roi_options(
+    *,
+    roi_options_layout: QVBoxLayout,
+    roi_labels: tuple[str, ...],
+    roi_visibility: dict[int, bool],
+    roi_colors: tuple[QColor, ...],
+    on_roi_visibility_change: Callable[[object, bool], None],
+    on_roi_visibility_batch: Callable[[dict[object, bool]], None],
+    on_merge_selected_rois: Callable[[], None],
+    on_remove_selected_rois: Callable[[], None],
+) -> None:
+    """Render the ROIs tab controls from current visibility state.
+
+    Args:
+        roi_options_layout: Layout containing ROI visibility controls.
+        roi_labels: ROI labels in plot order.
+        roi_visibility: Current ROI visibility state.
+        roi_colors: ROI colors in plot order.
+        on_roi_visibility_change: Callback for one ROI checkbox.
+        on_roi_visibility_batch: Callback for ROI batch buttons.
+        on_merge_selected_rois: Callback that combines checked ROI labels in
+            the active Labels layer.
+        on_remove_selected_rois: Callback that deletes checked ROI labels from
+            the active Labels layer.
+
+    Returns:
+        None.
+    """
+    clear_layout(roi_options_layout)
+    roi_widget = visibility_options_widget(
+        title="ROIs",
+        labels=roi_labels,
+        visibility=roi_visibility,
+        on_change=on_roi_visibility_change,
+        on_change_batch=on_roi_visibility_batch,
+        keys=tuple(range(len(roi_labels))),
+        colors=roi_colors,
+    )
+    roi_options_layout.addWidget(roi_widget)
+    merge_button = QPushButton("Merge Selected")
+    merge_button.clicked.connect(on_merge_selected_rois)
+    roi_options_layout.addWidget(merge_button)
+    remove_button = QPushButton("Remove Selected")
+    remove_button.clicked.connect(on_remove_selected_rois)
+    roi_options_layout.addWidget(remove_button)
+    roi_options_layout.addStretch(1)
 
 
 def add_plot_display_options_group(
