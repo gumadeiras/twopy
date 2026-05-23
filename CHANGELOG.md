@@ -6,6 +6,18 @@
 
 ## Unreleased
 
+### Changes
+
+- Added a ROIs-tab Merge Selected action that combines checked ROI labels before live response plots recompute from the merged mask.
+- Made napari Load-tab recording loads prepare recordings in a background worker with a modeless progress dialog, while applying napari layers on the Qt thread.
+- Published converted `recording_data.h5` and `aligned_movie.h5` files to the configured `analysis_output` location whenever cached conversion or save/export sync runs.
+- Made Load-tab saved recording CSVs write `recording_data_path` as the published `analysis_output` HDF5 path instead of the local analysis-cache file when publish routing applies.
+- Tightened the developer function-inventory direct-test attribution so calls through `twopy` package exports and local test helper re-exports count toward the defining function.
+
+### Fixes
+
+- Kept ROIs-tab checkboxes in sync when a Custom-tab workflow such as Direction selectivity changes visible ROI selection.
+
 ## 0.2.1 - 2026-05-21
 
 ### Features
