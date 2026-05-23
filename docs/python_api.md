@@ -228,6 +228,39 @@ A few invariants you can rely on:
 - Use `finite_mean_and_sem(values, axis=...)` for the same finite-sample mean / sample-SEM convention used by twopy's response plots and CSV exports.
 - Call `validate_grouped_roi_responses(...)` when you build grouped response objects by hand — processing, persistence, and CSV exports all run the same validator before trusting the time / frame / ROI axes.
 
+## Run a custom workflow from Python
+
+Use the same custom workflows from scripts when you want the analysis from the **Custom** tab without opening napari. Custom workflow APIs live under `twopy.custom` because workflow files use that package too.
+
+```python
+from pathlib import Path
+
+from twopy import load_converted_recording, load_roi_set
+from twopy.custom import discover_custom_workflows, run_custom_workflow
+
+recording = load_converted_recording(Path("/path/to/recording_data.h5"))
+rois = load_roi_set(Path("/path/to/rois.h5"))
+workflow = next(
+    workflow
+    for workflow in discover_custom_workflows((Path("/path/to/workflows"),)).workflows
+    if workflow.id == "direction-selectivity"
+)
+run = run_custom_workflow(
+    workflow,
+    recording,
+    roi_set=rois,
+    params={
+        "preferred_epoch": "2: Right",
+        "null_epoch": "3: Left",
+        "metric": "peak",
+    },
+)
+print(run.result.message)
+print(run.output_dir)
+```
+
+The runner builds the same `CustomRunContext` used by the GUI, fills omitted parameters from the workflow defaults, validates the returned `CustomResult`, writes workflow provenance for returned files, and returns tables, plots, ROI updates, and response-plot data for your script to handle.
+
 ## Movie-level response heatmaps
 
 Heatmaps do not require ROIs. They compute one response image per epoch:

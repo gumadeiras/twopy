@@ -8,9 +8,9 @@ from typing import cast
 
 import numpy as np
 import yaml
+
 from tests.converted_files import write_converted_recording_files
 from tests.tempdir import temporary_directory
-
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.converted import load_converted_recording
@@ -26,6 +26,7 @@ from twopy.custom import (
     native_custom_workflow_paths,
     parameter_specs,
     provenance_sidecar_path,
+    run_custom_workflow,
     validate_custom_result,
     write_result_provenance,
 )
@@ -446,6 +447,160 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
     def test_custom_api_exposes_recording_metadata(self) -> None:
         """Confirm workflow files can import the recording metadata object."""
         self.assertEqual(CustomRecordingMetadata.__name__, "CustomRecordingMetadata")
+
+
+class CustomWorkflowRunnerTest(unittest.TestCase):
+    """Tests the shared programmatic and napari custom workflow runner."""
+
+    def test_runs_workflow_with_default_params_and_provenance(self) -> None:
+        """Confirm the shared runner handles context, validation, and metadata."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            workflow_path = root / "summary.py"
+            workflow_path.write_text(
+                "from dataclasses import dataclass\n"
+                "import numpy as np\n"
+                "from twopy.custom import (\n"
+                "    CustomLinePlot,\n"
+                "    CustomResult,\n"
+                "    CustomRunContext,\n"
+                "    CustomTable,\n"
+                "    workflow,\n"
+                ")\n"
+                "\n"
+                "@dataclass(frozen=True)\n"
+                "class Params:\n"
+                "    scale: float = 2.0\n"
+                "\n"
+                "@workflow(\n"
+                "    id='summary',\n"
+                "    name='Summary',\n"
+                "    version='1.0',\n"
+                "    description='Writes one ROI summary table.',\n"
+                "    params=Params,\n"
+                ")\n"
+                "def run(ctx: CustomRunContext, params: Params) -> CustomResult:\n"
+                "    rois = ctx.current_rois()\n"
+                "    table_path = ctx.output_path('summary.csv')\n"
+                "    ctx.write_roi_table(\n"
+                "        table_path,\n"
+                "        {'scale': [params.scale] * len(rois.labels)},\n"
+                "    )\n"
+                "    plot = CustomLinePlot(\n"
+                "        'ROI traces',\n"
+                "        np.array([0.0, 1.0], dtype=np.float64),\n"
+                "        np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64),\n"
+                "        labels=rois.labels,\n"
+                "    )\n"
+                "    return CustomResult(\n"
+                "        message=f'ran {params.scale}',\n"
+                "        tables=(CustomTable('Summary', table_path),),\n"
+                "        plots=(plot,),\n"
+                "    )\n",
+                encoding="utf-8",
+            )
+            recording_path = write_converted_recording_files(root)
+            recording = load_converted_recording(recording_path)
+            rois = make_roi_set(
+                np.array(
+                    [
+                        [[True, False], [False, False]],
+                        [[False, True], [False, False]],
+                    ],
+                    dtype=bool,
+                ),
+                labels=("roi_0001", "roi_0002"),
+            )
+            workflow = discover_custom_workflows((workflow_path,)).workflows[0]
+
+            run = run_custom_workflow(
+                workflow,
+                recording,
+                roi_set=rois,
+                roi_colors=("#111111", "#222222"),
+            )
+
+            table_path = run.output_dir / "summary.csv"
+            self.assertEqual(
+                run.output_dir,
+                recording.path.parent / "custom_outputs" / "summary" / "1.0",
+            )
+            self.assertEqual(run.result.message, "ran 2.0")
+            self.assertEqual(run.result.tables[0].path, table_path)
+            self.assertEqual(run.result.plots[0].colors, ("#111111", "#222222"))
+            self.assertEqual(run.provenance.parameters, {"scale": 2.0})
+            self.assertEqual(
+                run.provenance_paths,
+                (provenance_sidecar_path(table_path),),
+            )
+            self.assertTrue(table_path.exists())
+            self.assertTrue(provenance_sidecar_path(table_path).exists())
+
+    def test_requires_rois_before_running(self) -> None:
+        """Confirm ROI-dependent workflows fail before user code runs."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            workflow_path = root / "needs_rois.py"
+            workflow_path.write_text(
+                "from twopy.custom import CustomResult, CustomRunContext, workflow\n"
+                "\n"
+                "@workflow(\n"
+                "    id='needs-rois',\n"
+                "    name='Needs ROIs',\n"
+                "    version='1.0',\n"
+                "    description='Should not run without ROIs.',\n"
+                ")\n"
+                "def run(ctx: CustomRunContext) -> CustomResult:\n"
+                "    raise AssertionError('runner should reject missing ROIs')\n",
+                encoding="utf-8",
+            )
+            recording_path = write_converted_recording_files(root)
+            recording = load_converted_recording(recording_path)
+            workflow = discover_custom_workflows((workflow_path,)).workflows[0]
+
+            with self.assertRaisesRegex(ValueError, "needs ROIs"):
+                run_custom_workflow(workflow, recording)
+
+    def test_accepts_parameter_mapping_with_defaults(self) -> None:
+        """Confirm scripts can pass only changed parameter values."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            workflow_path = root / "params.py"
+            workflow_path.write_text(
+                "from dataclasses import dataclass\n"
+                "from pathlib import Path\n"
+                "from twopy.custom import CustomResult, CustomRunContext, workflow\n"
+                "\n"
+                "@dataclass(frozen=True)\n"
+                "class Params:\n"
+                "    scale: float = 1.0\n"
+                "    output_name: Path = Path('default.csv')\n"
+                "\n"
+                "@workflow(\n"
+                "    id='params',\n"
+                "    name='Params',\n"
+                "    version='1.0',\n"
+                "    description='Records parameters.',\n"
+                "    params=Params,\n"
+                "    requires_rois=False,\n"
+                ")\n"
+                "def run(ctx: CustomRunContext, params: Params) -> CustomResult:\n"
+                "    return CustomResult(\n"
+                "        message=f'{params.scale}:{params.output_name}',\n"
+                "    )\n",
+                encoding="utf-8",
+            )
+            recording_path = write_converted_recording_files(root)
+            recording = load_converted_recording(recording_path)
+            workflow = discover_custom_workflows((workflow_path,)).workflows[0]
+
+            run = run_custom_workflow(workflow, recording, params={"scale": "2.5"})
+
+            self.assertEqual(run.result.message, "2.5:default.csv")
+            self.assertEqual(
+                run.provenance.parameters,
+                {"scale": 2.5, "output_name": "default.csv"},
+            )
 
 
 class CustomRunContextApiTest(unittest.TestCase):

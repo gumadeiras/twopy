@@ -39,10 +39,8 @@ from tests.napari_support import (
 )
 from twopy.analysis_cache import AnalysisSyncPlan
 from twopy.custom import (
-    CustomLinePlot,
     CustomParameterSpec,
     CustomResult,
-    CustomRunContext,
     CustomTable,
     CustomWorkflow,
     WorkflowDiscoveryResult,
@@ -50,7 +48,6 @@ from twopy.custom import (
 from twopy.napari.custom_tab import CustomWorkflowPanel, _parameter_widget
 from twopy.napari.plotting.docks.response_plot_widget import (
     _custom_workflow_display_result,
-    _custom_workflow_result_with_roi_colors,
 )
 
 
@@ -206,24 +203,6 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
                 / "1.0"
                 / "dsi.csv",
             )
-
-    def test_custom_workflow_result_auto_colors_roi_labeled_plots(self) -> None:
-        """Confirm custom ROI plots inherit current ROI colors by label."""
-        plot = CustomLinePlot(
-            "ROI kernels",
-            np.array([0.0, 1.0], dtype=np.float64),
-            np.array([[1.0, 2.0], [2.0, 3.0]], dtype=np.float64),
-            labels=("roi_0002", "roi_0001"),
-        )
-        result = CustomResult(message="ok", plots=(plot,))
-        context = cast(
-            CustomRunContext,
-            _FakeColorContext({"roi_0001": "#111111", "roi_0002": "#222222"}),
-        )
-
-        colored = _custom_workflow_result_with_roi_colors(result, context)
-
-        self.assertEqual(colored.plots[0].colors, ("#222222", "#111111"))
 
     def test_custom_workflow_panel_previews_returned_tables(self) -> None:
         """Confirm custom workflow tables render in the Custom tab."""
@@ -703,24 +682,6 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
 def _unused_custom_run(*args: object) -> CustomResult:
     """Raise if a custom workflow panel test unexpectedly runs a workflow."""
     raise AssertionError(args)
-
-
-class _FakeColorContext:
-    """Small context double for custom plot color routing tests."""
-
-    def __init__(self, colors: dict[str, str]) -> None:
-        """Store ROI colors keyed by label."""
-        self._colors = colors
-
-    def roi_colors_for_labels(self, labels: tuple[str, ...]) -> tuple[str, ...]:
-        """Return colors only when every label is known."""
-        colors: list[str] = []
-        for label in labels:
-            color = self._colors.get(label)
-            if color is None:
-                return ()
-            colors.append(color)
-        return tuple(colors)
 
 
 if __name__ == "__main__":

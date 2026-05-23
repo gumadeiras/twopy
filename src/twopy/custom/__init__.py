@@ -27,6 +27,10 @@ from twopy.custom.provenance import (
     write_workflow_provenance_for_path,
 )
 from twopy.custom.registry import workflow
+from twopy.custom.runner import (
+    CustomWorkflowRun,
+    run_custom_workflow,
+)
 from twopy.custom.types import (
     CustomEpoch,
     CustomLineBand,
@@ -52,6 +56,7 @@ __all__ = [
     "CustomWorkflow",
     "CustomWorkflowError",
     "CustomWorkflowProvenance",
+    "CustomWorkflowRun",
     "ParameterRole",
     "WorkflowDiscoveryResult",
     "build_parameter_object",
@@ -62,6 +67,7 @@ __all__ = [
     "parameter_specs",
     "parameter_values",
     "provenance_sidecar_path",
+    "run_custom_workflow",
     "validate_custom_result",
     "validate_parameter_type",
     "workflow",

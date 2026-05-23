@@ -43,19 +43,14 @@ from twopy.analysis_cache import (
 from twopy.config import load_config
 from twopy.converted import RecordingData
 from twopy.custom import (
-    CustomLinePlot,
     CustomParameterSpec,
     CustomRecordingMetadata,
     CustomResult,
-    CustomRunContext,
     CustomWorkflow,
     custom_result_artifact_paths,
     native_custom_workflow_paths,
     parameter_specs,
-    parameter_values,
-    validate_custom_result,
-    workflow_provenance,
-    write_result_provenance,
+    run_custom_workflow,
 )
 from twopy.filenames import EXPORTS_DIRNAME
 from twopy.napari.custom_tab import CustomWorkflowPanel
@@ -583,42 +578,25 @@ class _ResponsePlotWidget(QWidget):
                 self._response_window_options,
             )
         )
-        parameters = parameter_values(params)
-        provenance = workflow_provenance(
+        run = run_custom_workflow(
             workflow,
-            parameters=parameters,
-            recording=self._recording,
-        )
-        output_dir = _custom_workflow_output_dir(self._recording, workflow)
-        context = CustomRunContext(
             recording=self._recording,
             roi_set=roi_set,
-            output_dir=output_dir,
+            params=params,
             delta_f_over_f_options=self._delta_f_over_f_options,
             response_processing_options=self._response_processing_options,
             response_pre_window_seconds=pre_window_seconds,
             response_post_window_seconds=post_window_seconds,
-            provenance=provenance,
             visible_roi_indices=self._custom_workflow_visible_roi_indices(roi_set),
             visible_epoch_numbers=self._custom_workflow_visible_epoch_numbers(),
             roi_colors=self._custom_workflow_roi_colors(roi_set),
         )
-        if params is None:
-            raw_result = workflow.function(context)
-        else:
-            raw_result = workflow.function(context, params)
-        result = validate_custom_result(
-            raw_result,
-            output_dir=output_dir,
-            expected_roi_shape=self._recording.movie.shape[1:],
-        )
-        result = _custom_workflow_result_with_roi_colors(result, context)
-        provenance_paths = write_result_provenance(result, provenance)
+        result = run.result
         sync_plan = build_analysis_sync_plan(
             recording=self._recording,
             local_paths=(
                 *custom_result_artifact_paths(result),
-                *provenance_paths,
+                *run.provenance_paths,
             ),
         )
         if sync_plan is not None:
@@ -1638,27 +1616,6 @@ def _load_custom_workflow_paths_for_ui() -> tuple[Path, ...]:
     return (*native_custom_workflow_paths(), *configured_paths)
 
 
-def _custom_workflow_output_dir(
-    recording: RecordingData,
-    workflow: CustomWorkflow,
-) -> Path:
-    """Return the output folder for one workflow run.
-
-    Args:
-        recording: Active converted recording.
-        workflow: Workflow being run.
-
-    Returns:
-        Folder for custom output files.
-    """
-    return (
-        recording.path.parent
-        / "custom_outputs"
-        / workflow.output_prefix
-        / workflow.version
-    )
-
-
 def _custom_workflow_display_result(
     result: CustomResult,
     sync_plan: AnalysisSyncPlan | None,
@@ -1687,36 +1644,6 @@ def _custom_workflow_display_path(
 ) -> Path:
     """Return the publish path for display, or the local path if not synced."""
     return _custom_workflow_publish_path(path, sync_plan) or path
-
-
-def _custom_workflow_result_with_roi_colors(
-    result: CustomResult,
-    context: CustomRunContext,
-) -> CustomResult:
-    """Apply current ROI colors to ROI-labeled custom line plots."""
-    updated_plots: list[CustomLinePlot] = []
-    changed = False
-    for plot in result.plots:
-        updated = _custom_line_plot_with_roi_colors(plot, context)
-        updated_plots.append(updated)
-        if updated is not plot:
-            changed = True
-    if not changed:
-        return result
-    return replace(result, plots=tuple(updated_plots))
-
-
-def _custom_line_plot_with_roi_colors(
-    plot: CustomLinePlot,
-    context: CustomRunContext,
-) -> CustomLinePlot:
-    """Return one plot with ROI colors when labels identify current ROIs."""
-    if len(plot.colors) > 0 or len(plot.labels) == 0:
-        return plot
-    colors = context.roi_colors_for_labels(plot.labels)
-    if len(colors) != len(plot.labels):
-        return plot
-    return replace(plot, colors=colors)
 
 
 def _custom_workflow_publish_path(

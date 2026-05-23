@@ -8,6 +8,7 @@
 
 ### Changes
 
+- Added a shared programmatic custom-workflow runner so scripts and the napari Custom tab use the same execution, validation, and provenance path.
 - Added a ROIs-tab Merge Selected action that combines checked ROI labels before live response plots recompute from the merged mask.
 - Made napari Load-tab recording loads prepare recordings in a background worker with a modeless progress dialog, while applying napari layers on the Qt thread.
 - Published converted `recording_data.h5` and `aligned_movie.h5` files to the configured `analysis_output` location whenever cached conversion or save/export sync runs.

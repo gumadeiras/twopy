@@ -165,11 +165,12 @@ def build_parameter_object(
     params_type: type[object] | None,
     values: Mapping[str, object],
 ) -> object | None:
-    """Build a workflow parameter object from GUI values.
+    """Build a workflow parameter object from supplied values.
 
     Args:
         params_type: Optional frozen dataclass type.
-        values: Field values keyed by dataclass field name.
+        values: Field values keyed by dataclass field name. Missing fields use
+            the dataclass defaults.
 
     Returns:
         Dataclass instance or ``None``.
@@ -179,7 +180,7 @@ def build_parameter_object(
     specs = parameter_specs(params_type)
     coerced: dict[str, object] = {}
     for spec in specs:
-        value = values[spec.name]
+        value = values.get(spec.name, spec.default)
         coerced[spec.name] = _coerce_parameter_value(spec, value)
     return params_type(**coerced)
 

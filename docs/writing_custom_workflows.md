@@ -2,7 +2,7 @@
 
 A custom workflow is a Python file twopy can load into the **Custom** tab. It runs against the active recording's converted data and current ROIs, and it can write files, return tables, draw line plots, replace the ROI set, or update the response-plot visibility.
 
-If you only want to *use* the Custom tab, see [Running custom workflows](gui/custom_tab.md).
+If you only want to *use* the Custom tab, see [Running custom workflows](gui/custom_tab.md). If you want to run the same workflows from a script, see [Run a custom workflow from Python](python_api.md#run-a-custom-workflow-from-python).
 
 A reference example showing every supported parameter type and result type lives at `examples/custom_workflows/reference_showcase.py`.
 
