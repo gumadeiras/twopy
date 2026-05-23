@@ -9,12 +9,13 @@ mapping.
 import json
 import unittest
 from pathlib import Path
+from typing import Literal, cast
 from unittest.mock import patch
 
 import numpy as np
+
 from tests.converted_files import write_converted_recording_files
 from tests.tempdir import temporary_directory
-
 from twopy.analysis import (
     AnalysisResponseComputation,
     BackgroundCorrectedRoiTraces,
@@ -332,6 +333,129 @@ class StimulusKernelFitTest(unittest.TestCase):
             self.assertEqual(result.epoch_names, ("noise",))
             self.assertEqual(result.selected_epoch_numbers_by_name, ((2, 3),))
             self.assertEqual(result.response_sample_counts.tolist(), [[4]])
+
+    def test_recording_kernel_rejects_empty_selected_epoch_list(self) -> None:
+        """Confirm option validation rejects empty explicit epoch selections."""
+        with temporary_directory() as temp_dir:
+            recording_path = _write_olfactory_kernel_recording(temp_dir)
+            computation = _kernel_computation(recording_path=recording_path)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "selected_epoch_numbers must not be empty",
+            ):
+                fit_recording_stimulus_kernels(
+                    computation,
+                    StimulusKernelOptions(selected_epoch_numbers=()),
+                )
+
+    def test_recording_kernel_rejects_negative_lag_window(self) -> None:
+        """Confirm option validation rejects impossible kernel windows."""
+        with temporary_directory() as temp_dir:
+            recording_path = _write_olfactory_kernel_recording(temp_dir)
+            computation = _kernel_computation(recording_path=recording_path)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "num_stim_past and num_stim_future must be nonnegative",
+            ):
+                fit_recording_stimulus_kernels(
+                    computation,
+                    StimulusKernelOptions(num_stim_past=-1),
+                )
+
+    def test_recording_kernel_rejects_unknown_modality_and_method(self) -> None:
+        """Confirm public API validation fails before data assembly."""
+        with temporary_directory() as temp_dir:
+            recording_path = _write_olfactory_kernel_recording(temp_dir)
+            computation = _kernel_computation(recording_path=recording_path)
+
+            with self.assertRaisesRegex(ValueError, "Unknown kernel stimulus modality"):
+                fit_recording_stimulus_kernels(
+                    computation,
+                    StimulusKernelOptions(
+                        stimulus_modality=cast(
+                            Literal["olfaction", "vision"],
+                            "touch",
+                        ),
+                    ),
+                )
+            with self.assertRaisesRegex(ValueError, "Unknown kernel fit method"):
+                fit_recording_stimulus_kernels(
+                    computation,
+                    StimulusKernelOptions(
+                        method=cast(Literal["ols", "xcorr"], "ridge"),
+                    ),
+                )
+
+    def test_recording_kernel_requires_hemisphere_for_olfaction(self) -> None:
+        """Confirm olfactory fitting fails loudly without hemisphere metadata."""
+        with temporary_directory() as temp_dir:
+            recording_path = write_converted_recording_files(
+                temp_dir,
+                movie_values=np.ones((8, 2, 2), dtype=np.float64),
+                stimulus_data=np.array(
+                    [
+                        [0.0, 1.0, 2.0],
+                        [0.1, 1.0, 0.0],
+                        [0.2, 2.0, 2.0],
+                        [0.3, 2.0, 0.0],
+                        [0.4, 2.0, 2.0],
+                        [0.5, 2.0, 0.0],
+                    ],
+                    dtype=np.float64,
+                ),
+                stimulus_data_column_names=(
+                    "time_seconds",
+                    "epoch_number",
+                    "stimulus_specific_05",
+                ),
+                stimulus_parameters_json=json.dumps(
+                    [{"epochName": "gray"}, {"epochName": "noise"}],
+                ),
+            )
+            computation = _kernel_computation(
+                recording_path=recording_path,
+                frame_count=4,
+                epoch_windows=(
+                    EpochFrameWindow(FrameWindow(0, 0, 4, "epoch_2"), 2, "noise"),
+                ),
+            )
+
+            with (
+                patch(
+                    "twopy.analysis.kernels._stimulus.recording_hemisphere",
+                    side_effect=ValueError("does not include hemisphere"),
+                ),
+                self.assertRaisesRegex(ValueError, "does not include hemisphere"),
+            ):
+                fit_recording_stimulus_kernels(
+                    computation,
+                    StimulusKernelOptions(
+                        baseline_epoch_number=1,
+                        discard_first_stimulus_epoch=False,
+                        num_stim_past=1,
+                        num_stim_future=0,
+                    ),
+                )
+
+    def test_recording_kernel_fails_when_requested_epochs_are_unavailable(self) -> None:
+        """Confirm selected epoch filters fail loudly when nothing remains."""
+        with temporary_directory() as temp_dir:
+            recording_path = _write_olfactory_kernel_recording(temp_dir)
+            computation = _kernel_computation(recording_path=recording_path)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "No requested non-baseline stimulus epochs remain",
+            ):
+                fit_recording_stimulus_kernels(
+                    computation,
+                    StimulusKernelOptions(
+                        selected_epoch_numbers=(99,),
+                        hemisphere="right",
+                    ),
+                )
 
     def test_recording_hemisphere_reads_converted_metadata(self) -> None:
         """Confirm the public helper exposes the recording hemisphere."""

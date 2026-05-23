@@ -5,14 +5,15 @@ Outputs: raw, background, and corrected ROI traces with known expected values.
 """
 
 import unittest
+from concurrent.futures import CancelledError
 from pathlib import Path
 from typing import cast
 
 import numpy as np
 import numpy.typing as npt
+
 from tests.converted_files import write_aligned_movie_file
 from tests.tempdir import temporary_directory
-
 from twopy import extract_background_corrected_roi_traces, make_roi_set
 from twopy.analysis.background_subtraction import BackgroundCorrectionMethod
 from twopy.conversion.types import FrameCountAudit
@@ -415,6 +416,26 @@ class BackgroundSubtractionTest(unittest.TestCase):
                     roi_set,
                     start_frame=1,
                     stop_frame=1,
+                )
+
+    def test_cancellation_callback_stops_before_trace_extraction(self) -> None:
+        """Confirm interactive cancellation propagates before movie streaming.
+
+        Inputs: a converted movie, one ROI, and a callback that raises.
+        Outputs: the callback error reaches the caller unchanged.
+        """
+        with temporary_directory() as temp_dir:
+            recording = self._write_recording(Path(temp_dir))
+            roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
+
+            def raise_cancelled() -> None:
+                raise CancelledError()
+
+            with self.assertRaises(CancelledError):
+                extract_background_corrected_roi_traces(
+                    recording,
+                    roi_set,
+                    check_cancelled=raise_cancelled,
                 )
 
     def test_extracts_roi_y_stripe_corrected_traces(self) -> None:
