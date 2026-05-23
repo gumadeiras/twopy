@@ -9,6 +9,14 @@ import csv
 from collections.abc import Sequence
 from pathlib import Path
 
+from twopy.config import (
+    DEFAULT_CONFIG_PATH,
+    TwopyConfig,
+    load_config,
+    resolve_analysis_output_dir,
+)
+from twopy.converted import RecordingData
+from twopy.filenames import RECORDING_DATA_FILENAME
 from twopy.napari.session import LoadedNapariRecording
 
 __all__ = [
@@ -41,12 +49,17 @@ def write_loaded_recordings_csv(
         None.
 
     The primary ``recording_path`` column stores the path shown in the loaded
-    list because that is the scientist-facing session list. The converted
-    ``recording_data.h5`` path is included as an audit column and as a fallback
-    for manually edited CSVs.
+    list because that is the scientist-facing session list. The
+    ``recording_data_path`` column stores the durable published HDF5 path when
+    config routing can resolve one, so local cache paths stay an implementation
+    detail.
     """
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        config = load_config(DEFAULT_CONFIG_PATH)
+    except FileNotFoundError:
+        config = None
     with output_path.open("w", encoding="utf-8", newline="") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=LOADED_RECORDINGS_CSV_COLUMNS)
         writer.writeheader()
@@ -56,7 +69,9 @@ def write_loaded_recordings_csv(
                     "recording_path": str(
                         recording.recording.source_session_dir.expanduser(),
                     ),
-                    "recording_data_path": str(recording.recording.path),
+                    "recording_data_path": str(
+                        _recording_data_csv_path(recording.recording, config),
+                    ),
                 },
             )
 
@@ -108,3 +123,19 @@ def _path_column_index(header: Sequence[str]) -> int | None:
         if column_name in normalized_header:
             return normalized_header.index(column_name)
     return None
+
+
+def _recording_data_csv_path(
+    recording: RecordingData,
+    config: TwopyConfig | None,
+) -> Path:
+    """Return the durable ``recording_data.h5`` path for one CSV row."""
+    if config is None:
+        return recording.path.expanduser()
+    try:
+        return (
+            resolve_analysis_output_dir(config, recording.source_session_dir)
+            / RECORDING_DATA_FILENAME
+        )
+    except ValueError:
+        return recording.path.expanduser()

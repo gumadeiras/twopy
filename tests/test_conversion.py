@@ -14,8 +14,9 @@ from zipfile import ZipFile
 import h5py
 import numpy as np
 import scipy.io
-from tests.tempdir import temporary_directory
 
+from tests.tempdir import temporary_directory
+from twopy.analysis_cache import copy_converted_files_to_publish
 from twopy.conversion import convert_recording_to_twopy, load_source_conversion_inputs
 
 
@@ -539,7 +540,7 @@ class ConversionTest(unittest.TestCase):
         """Confirm conversion uses local cache by default when enabled.
 
         Inputs: a temporary config with cache and publish roots.
-        Outputs: converted files under the cache root, not publish output.
+        Outputs: converted files under the cache root and mirrored publish root.
         """
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
@@ -565,10 +566,48 @@ class ConversionTest(unittest.TestCase):
             )
 
             expected_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
+            published_dir = output_root / "fly" / "stim" / "2023" / "10_17"
             self.assertEqual(converted.path, expected_dir / "recording_data.h5")
             self.assertEqual(converted.movie_path, expected_dir / "aligned_movie.h5")
             self.assertTrue(converted.path.is_file())
-            self.assertFalse((output_root / "fly").exists())
+            self.assertTrue((published_dir / "recording_data.h5").is_file())
+            self.assertTrue((published_dir / "aligned_movie.h5").is_file())
+
+    def test_converted_file_publish_does_not_require_analysis_caching(self) -> None:
+        """Confirm converted HDF5 publish copies are not tied to cache policy.
+
+        Inputs: explicit local conversion output plus a config with caching off.
+        Outputs: converted files are copied to the configured publish root.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            session_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            local_output = root / "local"
+            output_root = root / "publish"
+            config_path = root / "config.yml"
+            self._write_session(session_dir)
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                f"data_paths:\n  - {data_root}\n"
+                "database_access: copy\n"
+                "analysis_caching: false\n"
+                f"analysis_output: {output_root}\n",
+                encoding="utf-8",
+            )
+            converted = convert_recording_to_twopy(session_dir, output_dir=local_output)
+
+            result = copy_converted_files_to_publish(
+                recording_data_path=converted.path,
+                movie_path=converted.movie_path,
+                source_session_dir=converted.source_session_dir,
+                config_path=config_path,
+            )
+
+            published_dir = output_root / "fly" / "stim" / "2023" / "10_17"
+            self.assertIsNotNone(result)
+            self.assertTrue((published_dir / "recording_data.h5").is_file())
+            self.assertTrue((published_dir / "aligned_movie.h5").is_file())
 
     def test_allows_observed_one_frame_acquisition_metadata_offset(self) -> None:
         """Confirm sampled ScanImage frame-count offset is audited, not hidden.

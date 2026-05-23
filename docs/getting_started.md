@@ -30,7 +30,7 @@ The main keys you usually edit:
 - `database_path` — folder holding the lab SQLite database files.
 - `data_paths` — list of folders that contain microscope recording folders. twopy checks them in order; the first one that has the recording wins.
 - `analysis_output` — where saved analyses end up. Use `source` to write into each recording's own `twopy/` folder, or a folder path to mirror the recording tree under it.
-- `analysis_caching` — keep `true` for normal use. twopy converts and writes locally first, then publishes the saved files to `analysis_output` in the background.
+- `analysis_caching` — keep `true` for normal use. twopy converts and writes locally first, then publishes converted HDF5 files and saved analysis files to `analysis_output`.
 
 `config.yml` is private to your machine and is never committed.
 
@@ -77,7 +77,7 @@ Switch to the **Export** tab and click **Save ROIs + analysis**. twopy writes:
 - `response_heatmaps.h5` — movie-level response heatmaps.
 - `exports/csvs/response_summary_trials.csv` and `response_summary_grouped.csv` — flat per-trial and per-epoch tables.
 
-With `analysis_caching: true`, the same files sync to `analysis_output` in the background. The **Metadata** tab shows whether the sync succeeded.
+With `analysis_caching: true`, these files and the converted HDF5 files sync to `analysis_output` in the background. The **Metadata** tab shows whether the sync succeeded.
 
 ## Where to go next
 

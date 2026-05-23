@@ -48,8 +48,8 @@ analysis_cache_dir: ~/.cache/twopy/recordings
 #   - ~/git/twopy-workflows
 #   - /Volumes/magic/clarklab/shared/twopy_workflows
 
-# Where twopy should write converted data and analysis outputs.
-# With analysis_caching enabled, this is the publish location used after saving.
+# Where twopy should publish converted data and analysis outputs.
+# With analysis_caching enabled, twopy writes locally first, then syncs here.
 # Use "source" to publish into a twopy folder inside each recording folder.
 # Example: /path/to/recording/twopy
 #

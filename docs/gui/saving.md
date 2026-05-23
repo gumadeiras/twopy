@@ -16,7 +16,7 @@ The save uses the same response window, smoothing, and normalization values you 
 
 ### Cache sync
 
-With `analysis_caching: true` (the default), twopy saves locally first and then syncs the changed files to `analysis_output` in a background worker. The **Metadata** tab shows whether the sync succeeded or failed. When the sync publishes export PDFs and PNGs, twopy deletes the local cache copies after the destination copy succeeds.
+With `analysis_caching: true` (the default), twopy saves locally first and then syncs the converted HDF5 files and changed analysis files to `analysis_output` in a background worker. The **Metadata** tab shows whether the sync succeeded or failed. When the sync publishes export PDFs and PNGs, twopy deletes the local cache copies after the destination copy succeeds.
 
 ## Image and plot exports
 

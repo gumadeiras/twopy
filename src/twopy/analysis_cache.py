@@ -4,10 +4,10 @@ Inputs: configured recording roots, local cache folders, and saved analysis file
 Outputs: cache refreshes and publish-sync plans for twopy-owned outputs.
 
 The cache keeps interactive reads and writes on local storage. The publish sync
-copies only user-visible analysis outputs back to the configured output folder;
-converted movies remain derived local working files by default. Exported figure
-files are removed from the local cache after they copy successfully because the
-publish destination is their durable location.
+copies twopy-owned converted files and user-visible analysis outputs back to the
+configured output folder. Exported figure files are removed from the local cache
+after they copy successfully because the publish destination is their durable
+location.
 """
 
 import os
@@ -25,7 +25,9 @@ from twopy.config import (
 )
 from twopy.converted import RecordingData
 from twopy.filenames import (
+    ALIGNED_MOVIE_FILENAME,
     ANALYSIS_OUTPUT_FILENAME,
+    RECORDING_DATA_FILENAME,
     RESPONSE_HEATMAPS_FILENAME,
     ROI_FILENAME,
 )
@@ -36,11 +38,14 @@ __all__ = [
     "build_analysis_sync_plan",
     "copy_file_atomically",
     "copy_analysis_sync_plan",
+    "copy_converted_files_to_publish",
     "refresh_cached_analysis_outputs",
     "start_analysis_sync",
 ]
 
 _CACHE_REFRESH_FILENAMES = (
+    RECORDING_DATA_FILENAME,
+    ALIGNED_MOVIE_FILENAME,
     ROI_FILENAME,
     ANALYSIS_OUTPUT_FILENAME,
     RESPONSE_HEATMAPS_FILENAME,
@@ -91,8 +96,8 @@ def refresh_cached_analysis_outputs(
         Local paths refreshed from published outputs.
 
     Missing config or disabled caching means there is no cache refresh to do.
-    Only the HDF5 files needed by the GUI reload path are pulled down; CSV and
-    image exports are regenerated from saved analysis when needed.
+    HDF5 files needed by the GUI are pulled down; CSV and image exports are
+    regenerated from saved analysis when needed.
     """
     try:
         config = load_config(config_path)
@@ -137,21 +142,60 @@ def build_analysis_sync_plan(
         config_path: YAML config file with cache and publish settings.
 
     Returns:
-        A sync plan, or ``None`` when caching is disabled, config is missing,
-        the publish root is the local root, or no syncable files were written.
+        A sync plan, or ``None`` when config is missing, the publish root is the
+        local root, or no syncable files were written.
     """
     try:
         config = load_config(config_path)
     except FileNotFoundError:
         return None
     try:
-        return _build_analysis_sync_plan_from_config(
-            recording=recording,
-            local_paths=local_paths,
+        plan = _build_sync_plan_from_config(
+            source_session_dir=recording.source_session_dir,
+            local_root=recording.path.expanduser().parent,
+            local_paths=(*_converted_recording_paths(recording), *local_paths),
             config=config,
         )
     except ValueError:
         return None
+    if len(plan.local_paths) == 0:
+        return None
+    return plan
+
+
+def copy_converted_files_to_publish(
+    *,
+    recording_data_path: Path,
+    movie_path: Path,
+    source_session_dir: Path,
+    config_path: Path = DEFAULT_CONFIG_PATH,
+) -> AnalysisSyncResult | None:
+    """Copy converted recording files to the configured publish folder.
+
+    Args:
+        recording_data_path: Local ``recording_data.h5`` file.
+        movie_path: Local ``aligned_movie.h5`` file.
+        source_session_dir: Source microscope recording folder that defines the
+            configured publish location.
+        config_path: YAML config file with cache and publish settings.
+
+    Returns:
+        Sync result, or ``None`` when config is missing, the publish root is the
+        local root, or publish routing does not apply.
+    """
+    try:
+        config = load_config(config_path)
+        plan = _build_sync_plan_from_config(
+            source_session_dir=source_session_dir,
+            local_root=recording_data_path.expanduser().parent,
+            local_paths=(recording_data_path, movie_path),
+            config=config,
+        )
+    except (FileNotFoundError, ValueError):
+        return None
+    if len(plan.local_paths) == 0:
+        return None
+    return copy_analysis_sync_plan(plan)
 
 
 def start_analysis_sync(
@@ -194,6 +238,8 @@ def copy_analysis_sync_plan(plan: AnalysisSyncPlan) -> AnalysisSyncResult:
         publish_path = plan.publish_root / relative
         if _same_path(local_path, publish_path):
             continue
+        if _copy_is_current(local_path, publish_path):
+            continue
         copy_file_atomically(local_path, publish_path)
         copied.append(publish_path)
         if _should_remove_after_sync(local_path):
@@ -206,20 +252,21 @@ def copy_analysis_sync_plan(plan: AnalysisSyncPlan) -> AnalysisSyncResult:
     )
 
 
-def _build_analysis_sync_plan_from_config(
+def _build_sync_plan_from_config(
     *,
-    recording: RecordingData,
+    source_session_dir: Path,
+    local_root: Path,
     local_paths: tuple[Path | None, ...],
     config: TwopyConfig,
-) -> AnalysisSyncPlan | None:
+) -> AnalysisSyncPlan:
     """Return a sync plan from an already-loaded config."""
-    if not config.analysis_caching:
-        return None
-
-    local_root = recording.path.expanduser().parent
-    publish_root = resolve_analysis_output_dir(config, recording.source_session_dir)
+    publish_root = resolve_analysis_output_dir(config, source_session_dir)
     if _same_path(local_root, publish_root):
-        return None
+        return AnalysisSyncPlan(
+            local_root=local_root,
+            publish_root=publish_root,
+            local_paths=(),
+        )
 
     syncable: list[Path] = []
     seen: set[Path] = set()
@@ -236,8 +283,6 @@ def _build_analysis_sync_plan_from_config(
         seen.add(local_path)
         syncable.append(local_path)
 
-    if len(syncable) == 0:
-        return None
     return AnalysisSyncPlan(
         local_root=local_root,
         publish_root=publish_root,
@@ -285,6 +330,23 @@ def _same_path(left: Path, right: Path) -> bool:
     return left.expanduser().resolve(strict=False) == right.expanduser().resolve(
         strict=False,
     )
+
+
+def _copy_is_current(source: Path, target: Path) -> bool:
+    """Return whether the published file already matches this source version."""
+    if not target.is_file():
+        return False
+    source_stat = source.stat()
+    target_stat = target.stat()
+    return (
+        target_stat.st_size == source_stat.st_size
+        and target_stat.st_mtime_ns >= source_stat.st_mtime_ns
+    )
+
+
+def _converted_recording_paths(recording: RecordingData) -> tuple[Path, Path]:
+    """Return the converted HDF5 files that travel with every publish sync."""
+    return (recording.path, recording.movie.path)
 
 
 def _should_remove_after_sync(path: Path) -> bool:

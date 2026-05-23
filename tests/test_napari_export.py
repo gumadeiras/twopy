@@ -238,8 +238,8 @@ class NapariExportTest(NapariAdapterTestCase):
 
         Inputs: cached converted recording, source publish destination, and the
         recording-view export button.
-        Outputs: local export figures are copied to the source ``twopy`` folder
-        and deleted from the cache.
+        Outputs: converted files and local export figures are copied to the
+            source ``twopy`` folder, then export cache copies are deleted.
         """
         _ = QApplication.instance() or QApplication([])
         with temporary_directory() as temp_dir:
@@ -297,6 +297,8 @@ class NapariExportTest(NapariAdapterTestCase):
             local_png = local_dir / "exports" / "recording_view" / "recording_view.png"
             self.assertFalse(local_pdf.exists())
             self.assertFalse(local_png.exists())
+            self.assertTrue((publish_dir / "recording_data.h5").is_file())
+            self.assertTrue((publish_dir / "aligned_movie.h5").is_file())
             self.assertTrue(
                 (
                     publish_dir / "exports" / "recording_view" / "recording_view.pdf"

@@ -44,7 +44,6 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
-
 from twopy.napari.plotting.docks.save_actions import save_current_roi_analysis
 
 
@@ -545,7 +544,8 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
         """Confirm cached saves publish changed outputs without blocking save.
 
         Inputs: local cached recording with a source publish destination.
-        Outputs: background sync copies ROI and analysis files to publish path.
+        Outputs: background sync copies converted, ROI, and analysis files to
+            publish path.
         """
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
@@ -608,6 +608,8 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                     response_widget.shutdown()
 
             self.assertTrue((publish_dir / "rois.h5").is_file())
+            self.assertTrue((publish_dir / "recording_data.h5").is_file())
+            self.assertTrue((publish_dir / "aligned_movie.h5").is_file())
             self.assertEqual(
                 (publish_dir / "analysis_outputs.h5").read_text(encoding="utf-8"),
                 "analysis",
