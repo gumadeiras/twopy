@@ -53,6 +53,6 @@ micromamba run -n twopy python scripts/function_inventory.py --format csv > buil
 micromamba run -n twopy python scripts/function_inventory.py --format markdown --limit 25
 ```
 
-The inventory reports action-oriented columns only: code lines, docstring lines, direct static call sites, direct test functions, lightweight complexity, API-surface classification, domain bucket, git file churn, current-body blame span, and a risk score.
+The inventory reports action-oriented columns only: code lines, docstring lines, direct static call sites, direct test functions, lightweight complexity, API-surface classification, domain bucket, git file churn, current-body blame span, and a risk score. Direct test attribution follows normal `twopy` imports plus local `tests.*` helper re-exports when the called function name resolves uniquely, so shared test fixtures do not hide existing coverage.
 
 The risk score is a review-prioritization heuristic: `(code_lines + 5 * complexity) * api_weight * test_gap_weight * churn_weight`. Exported API is weighted above public internal code, functions without direct static tests are doubled, and file commit count raises the score up to a capped churn multiplier. Complexity is a lightweight cyclomatic estimate (one base path plus branches, loops, exception handlers, boolean decision operands, match cases, and ternary expressions).

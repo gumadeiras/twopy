@@ -55,7 +55,18 @@ class FunctionInventoryTest(unittest.TestCase):
             test_dir = root / "tests"
             source_dir.mkdir(parents=True)
             test_dir.mkdir()
-            (source_dir / "__init__.py").write_text("", encoding="utf-8")
+            (source_dir / "__init__.py").write_text(
+                textwrap.dedent(
+                    '''
+                    """Sample public package."""
+
+                    from twopy.sample import add_one
+
+                    __all__ = ["add_one"]
+                    '''
+                ),
+                encoding="utf-8",
+            )
             (source_dir / "sample.py").write_text(
                 textwrap.dedent(
                     '''
@@ -99,7 +110,7 @@ class FunctionInventoryTest(unittest.TestCase):
 
                     import unittest
 
-                    from twopy.sample import add_one
+                    from twopy import add_one
                     from twopy.sample import Counter
 
 
@@ -113,6 +124,36 @@ class FunctionInventoryTest(unittest.TestCase):
                         def test_counter(self) -> None:
                             """Check direct method use."""
                             self.assertEqual(Counter().twice(1), 3)
+                    '''
+                ),
+                encoding="utf-8",
+            )
+            (test_dir / "helpers.py").write_text(
+                textwrap.dedent(
+                    '''
+                    """Shared test helper re-exports."""
+
+                    from twopy import add_one
+                    '''
+                ),
+                encoding="utf-8",
+            )
+            (test_dir / "test_reexport.py").write_text(
+                textwrap.dedent(
+                    '''
+                    """Tests that call a public function through test helpers."""
+
+                    import unittest
+
+                    from tests.helpers import add_one
+
+
+                    class ReexportTest(unittest.TestCase):
+                        """Tests helper-mediated function calls."""
+
+                        def test_helper_reexport(self) -> None:
+                            """Check direct use through test support."""
+                            self.assertEqual(add_one(2), 3)
                     '''
                 ),
                 encoding="utf-8",
@@ -133,8 +174,8 @@ class FunctionInventoryTest(unittest.TestCase):
         add_one = rows["twopy.sample.add_one"]
         self.assertEqual(add_one["code_lines"], "2")
         self.assertEqual(add_one["docstring_lines"], "2")
-        self.assertEqual(add_one["direct_call_site_count"], "2")
-        self.assertEqual(add_one["direct_test_function_count"], "1")
+        self.assertEqual(add_one["direct_call_site_count"], "3")
+        self.assertEqual(add_one["direct_test_function_count"], "2")
         self.assertEqual(add_one["api_surface"], "exported_api")
         self.assertEqual(add_one["domain"], "core")
 

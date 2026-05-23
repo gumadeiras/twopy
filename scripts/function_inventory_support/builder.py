@@ -488,12 +488,17 @@ class _UseCollector(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module is None:
             return
-        if not (node.module == "twopy" or node.module.startswith("twopy.")):
+        if not self._tracks_imports_from(node.module):
             return
         for alias in node.names:
             if alias.name == "*":
                 continue
             self.imports[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+
+    def _tracks_imports_from(self, module: str) -> bool:
+        if module == "twopy" or module.startswith("twopy."):
+            return True
+        return self.is_test_file and module.startswith("tests.")
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.scope_names.append(node.name)
@@ -578,9 +583,15 @@ class _UseCollector(ast.NodeVisitor):
             key = self.resolver.exact(candidate)
             if key is not None:
                 return key
+            key = self.resolver.unique_name(chain[-1])
+            if key is not None:
+                return key
 
         if first == "twopy":
             key = self.resolver.exact(".".join(chain))
+            if key is not None:
+                return key
+            key = self.resolver.unique_name(chain[-1])
             if key is not None:
                 return key
 
