@@ -27,6 +27,7 @@ from twopy.hdf5_utils import (
     read_string_dataset as _read_string_dataset,
 )
 from twopy.spatial import SpatialCrop, full_frame_crop
+from twopy.spatial_orientation import require_twopy_spatial_orientation
 from twopy.typing_guards import (
     require_bool_array,
     require_float64_array,
@@ -78,7 +79,7 @@ class ConvertedMovie:
             spatial_crop: Optional crop to read from each frame.
 
         Returns:
-            Movie block with shape ``(frames, axis0, axis1)``.
+            Movie block with shape ``(frames, y, x)`` in Python image order.
 
         This is the direct escape hatch for previews, tests, and small frame
         ranges. Trace extraction should prefer ``iter_frame_batches``.
@@ -217,6 +218,17 @@ def load_converted_recording(
             explicit_movie_path=movie_path,
         )
         movie_dataset = _read_str_attr(h5_file["movie"], "aligned_movie_dataset")
+        require_twopy_spatial_orientation(
+            h5_file["movie"],
+            path=data_path,
+            label="movie",
+        )
+        mean_image_dataset = h5_file["movie/mean_image"]
+        require_twopy_spatial_orientation(
+            mean_image_dataset,
+            path=data_path,
+            label="movie/mean_image",
+        )
         movie_shape = _read_int_tuple_attr(h5_file["movie"], "aligned_movie_shape")
         movie_dtype = _read_str_attr(h5_file["movie"], "aligned_movie_dtype")
         if len(movie_shape) != 3:
@@ -261,7 +273,7 @@ def load_converted_recording(
                 ndim=1,
             ),
             mean_image=require_float64_array(
-                h5_file["movie/mean_image"][()],
+                mean_image_dataset[()],
                 name="movie/mean_image",
                 ndim=2,
             ),
@@ -321,7 +333,7 @@ def recording_hemisphere(recording: RecordingData) -> Hemisphere:
 def _recording_hemisphere_from_default_database(
     recording: RecordingData,
 ) -> Hemisphere | None:
-    """Read fly-eye metadata for old converted files that predate persistence."""
+    """Read fly-eye metadata when converted metadata lacks hemisphere."""
     from twopy.config import DEFAULT_CONFIG_PATH, load_config
     from twopy.database import database_hemisphere_for_recording_path
 
@@ -389,6 +401,11 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
             )
             raise ValueError(msg)
         dataset = h5_file[recording.movie.dataset_name]
+        require_twopy_spatial_orientation(
+            dataset,
+            path=recording.movie.path,
+            label=recording.movie.dataset_name,
+        )
         if tuple(dataset.shape) != recording.movie.shape:
             msg = (
                 f"Movie shape mismatch: manifest has {recording.movie.shape}, "
@@ -408,6 +425,12 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
             "stimulus data column names must match data width; "
             f"got {len(recording.stimulus_data_column_names)} names for "
             f"{recording.stimulus_data.shape[1]} columns"
+        )
+        raise ValueError(msg)
+    if recording.mean_image.shape != recording.movie.shape[1:]:
+        msg = (
+            "movie/mean_image shape must match movie spatial shape; "
+            f"got {recording.mean_image.shape} and {recording.movie.shape[1:]}"
         )
         raise ValueError(msg)
     if recording.alignment_valid_crop.original_shape != recording.movie.shape[1:]:

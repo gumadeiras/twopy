@@ -86,7 +86,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Napari response options now include a Plot-size control and an Export tab that saves recording views, ROI views, recording/ROI overlays, per-epoch response plots, response heatmaps, and two-column ROI-overlay/response figures as PDF and PNG with Illustrator-editable PDF text and vector ROI/trace paths where possible. Each export action writes into its own subfolder under `exports/`. ROI image exports use pixel-edge ROI outlines and the same cropped display area as the recording view, including when an older full-frame Labels layer is still present in napari.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so ROI masks remain visible over the mean image and movie.
 - Napari image layers set initial display contrast without narrowing the full contrast slider range. Mean images open at 50 percent opacity with gamma 1.3, and movie previews open with additive blending.
-- Napari displays the alignment-valid crop with explicit movie-axis to display-axis transposition, then converts drawn Labels ROIs back to full-frame movie coordinates before saving or analysis. This keeps the viewer orientation natural while preserving the analysis spatial contract.
+- Conversion stores aligned movies and mean images in Python image order matching MATLAB display, with source `alignedMovie.mat` spatial axes mapped once at the source boundary. Napari displays stored arrays directly, and y-stripe background subtraction operates along stored rows.
 - Napari ROI editing is crop-native end to end. Response updates and saved analysis require the active Labels layer to match the displayed alignment-valid crop, then persist or analyze full-frame ROI masks with zeros outside that crop.
 - Napari ROI and epoch visibility controls operate on already-computed response data. ROI checkbox changes repaint already visible plot widgets without rebuilding the plot layout, epoch checkbox changes explicitly hide/show cached epoch panels, and bulk select-all/select-none actions redraw once instead of once per checkbox.
 - Napari epoch visibility controls use displayed row indices instead of display text, so selecting and deselecting epochs is idempotent even if labels repeat or gray interleave epochs start hidden by default.
@@ -114,8 +114,8 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Parity-only psycho5 ROI extraction helpers preserve grid label ordering and watershed border-fill behavior for comparing native twopy ROI discovery against historical MATLAB outputs.
 - Parity dF/F comparator runs the normal twopy analysis path over converted data, using saved ROI masks and saved interleave windows, then reports numeric error against saved trace matrices.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw TIFF shape `(8334, 127, 256)`.
-- Real example recording converted successfully to `twopy/recording_data.h5` and `twopy/aligned_movie.h5`; aligned movie shape `(4168, 256, 127)`, mean image shape `(256, 127)`, stimulus data shape `(18021, 35)`.
-- Real example conversion produced alignment-valid crop `axis0=[6, 250)`, `axis1=[9, 118)`, shape `(244, 109)`.
+- Real example recording converted successfully to `twopy/recording_data.h5` and `twopy/aligned_movie.h5`; current converted files store movie and mean-image spatial axes in Python image order matching MATLAB display.
+- Real example conversion produced an alignment-valid crop from source alignment offsets. Current crop bounds are stored in Python image axes, with axis 0 as displayed y/rows and axis 1 as displayed x/columns.
 - Real example converted recording loaded successfully with current schema; ROI trace smoke test produced shape `(5, 1)`, photodiode detection found 101 high-resolution and 101 imaging-resolution events, and event pairing produced 100 frame windows.
 - Real example shared photodiode timing used threshold `6.54609375`, found 101 high-resolution events, and interpolated stimulus epochs onto frames `[54, 3963)` with 100 epoch windows.
 - Real example converted motion artifact mask contains 0 high-motion frames under the current threshold.
@@ -161,7 +161,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Default photodiode event thresholding uses the lab convention `min + 0.3 * (max - min)`. Explicit thresholds remain available for audits.
 - More than two long photodiode flashes is ambiguous and should fail loudly rather than silently choosing one.
 - Initial conversion generates a mean image. The default is the full aligned movie, with optional frame-range selection.
-- The converted aligned movie and ROI masks stay full-frame. Crop-domain analysis uses saved crop metadata instead of duplicating cropped movie or mean image datasets.
+- The converted aligned movie and ROI masks stay full-frame in Python image order matching MATLAB display. Crop-domain analysis uses saved crop metadata instead of duplicating cropped movie or mean image datasets.
 - Background correction must be explicit and auditable. Store raw traces, background estimates, corrected traces, and method metadata rather than only the final corrected values.
 - MATLAB-parity background subtraction requires the same spatial crop/mask contract as the source analysis path, not only the same percentile rule.
 - dF/F defaults to the robust exponential fit mode. It keeps the shared tau bound but does not use the source log-amplitude upper bound because that bound depends on the first baseline sample and can become invalid or overly restrictive when that sample is small, nonpositive, or noisy. Use `source_bounds` only for audit comparisons.

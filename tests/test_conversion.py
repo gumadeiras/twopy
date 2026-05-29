@@ -18,6 +18,11 @@ import scipy.io
 from tests.tempdir import temporary_directory
 from twopy.analysis_cache import copy_converted_files_to_publish
 from twopy.conversion import convert_recording_to_twopy, load_source_conversion_inputs
+from twopy.conversion.orientation import orient_source_array_to_twopy
+from twopy.spatial_orientation import (
+    SPATIAL_ORIENTATION_ATTR,
+    TWOPY_SPATIAL_ORIENTATION,
+)
 
 
 class ConversionTest(unittest.TestCase):
@@ -215,10 +220,10 @@ class ConversionTest(unittest.TestCase):
 
             loaded = load_source_conversion_inputs(session_dir)
 
-            self.assertEqual(loaded.alignment_crop.crop.axis0_start, 1)
-            self.assertEqual(loaded.alignment_crop.crop.axis0_stop, 3)
-            self.assertEqual(loaded.alignment_crop.crop.axis1_start, 0)
-            self.assertEqual(loaded.alignment_crop.crop.axis1_stop, 4)
+            self.assertEqual(loaded.alignment_crop.crop.axis0_start, 0)
+            self.assertEqual(loaded.alignment_crop.crop.axis0_stop, 4)
+            self.assertEqual(loaded.alignment_crop.crop.axis1_start, 1)
+            self.assertEqual(loaded.alignment_crop.crop.axis1_stop, 3)
             self.assertEqual(loaded.alignment_crop.x_cutoff_pixels, 2)
             self.assertEqual(loaded.alignment_crop.y_cutoff_pixels, 1)
 
@@ -257,7 +262,15 @@ class ConversionTest(unittest.TestCase):
                 )
                 np.testing.assert_array_equal(
                     h5_file["movie/mean_image"][()],
-                    np.array([[4.0, 5.0], [6.0, 7.0]]),
+                    np.array([[4.0, 6.0], [5.0, 7.0]]),
+                )
+                self.assertEqual(
+                    h5_file["movie"].attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
+                self.assertEqual(
+                    h5_file["movie/mean_image"].attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
                 )
                 self.assertIsNone(h5_file["movie/mean_image"].compression)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["start_frame"], 0)
@@ -364,9 +377,54 @@ class ConversionTest(unittest.TestCase):
 
             with h5py.File(converted.movie_path, "r") as h5_file:
                 self.assertEqual(h5_file.attrs["twopy_format"], "aligned-movie")
+                self.assertEqual(
+                    h5_file["movie/aligned"].attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
                 np.testing.assert_array_equal(
                     h5_file["movie/aligned"][()],
-                    np.arange(12, dtype=np.float64).reshape(3, 2, 2),
+                    orient_source_array_to_twopy(
+                        np.arange(12, dtype=np.float64).reshape(3, 2, 2),
+                    ),
+                )
+
+    def test_conversion_stores_movie_in_python_image_order(self) -> None:
+        """Confirm conversion orients non-square source movies once at write time.
+
+        Inputs: a non-square source movie whose axes make transposition visible.
+        Outputs: converted movie and mean image in Python image order matching
+        MATLAB display.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            session_dir = root / "recording"
+            output_dir = root / "output"
+            source_movie = np.array(
+                [
+                    [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+                    [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]],
+                    [[13.0, 14.0, 15.0], [16.0, 17.0, 18.0]],
+                ],
+            )
+            self._write_session(session_dir, movie_values=source_movie)
+
+            converted = convert_recording_to_twopy(session_dir, output_dir)
+
+            expected_movie = orient_source_array_to_twopy(source_movie)
+            self.assertEqual(converted.movie_shape, expected_movie.shape)
+            with h5py.File(converted.path, "r") as recording_file:
+                np.testing.assert_array_equal(
+                    recording_file["movie"].attrs["aligned_movie_shape"],
+                    np.array(expected_movie.shape),
+                )
+                np.testing.assert_array_equal(
+                    recording_file["movie/mean_image"][()],
+                    expected_movie.mean(axis=0),
+                )
+            with h5py.File(converted.movie_path, "r") as movie_file:
+                np.testing.assert_array_equal(
+                    movie_file["movie/aligned"][()],
+                    expected_movie,
                 )
 
     def test_conversion_persists_database_hemisphere_metadata(self) -> None:
@@ -475,7 +533,7 @@ class ConversionTest(unittest.TestCase):
             with h5py.File(converted.path, "r") as h5_file:
                 np.testing.assert_array_equal(
                     h5_file["movie/mean_image"][()],
-                    np.array([[6.0, 7.0], [8.0, 9.0]]),
+                    np.array([[6.0, 8.0], [7.0, 9.0]]),
                 )
                 self.assertEqual(h5_file["movie/mean_image"].attrs["start_frame"], 1)
                 self.assertEqual(h5_file["movie/mean_image"].attrs["stop_frame"], 3)

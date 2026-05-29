@@ -20,6 +20,10 @@ from twopy.conversion.hdf5_writing import (
     write_aligned_movie_file,
     write_recording_data_file,
 )
+from twopy.conversion.orientation import (
+    orient_source_array_to_twopy,
+    twopy_shape_from_source_movie_shape,
+)
 from twopy.conversion.source_loading import load_source_conversion_inputs
 from twopy.conversion.types import (
     ConvertedRecording,
@@ -71,9 +75,11 @@ def convert_recording_to_twopy(
         stop_frame=mean_stop_frame,
         context="frame range for mean image",
     )
-    mean_image = inputs.aligned_movie.mean_image(
-        start_frame=start_frame,
-        stop_frame=stop_frame,
+    mean_image = orient_source_array_to_twopy(
+        inputs.aligned_movie.mean_image(
+            start_frame=start_frame,
+            stop_frame=stop_frame,
+        ),
     )
 
     destination_dir = _resolve_conversion_output_dir(
@@ -98,7 +104,7 @@ def convert_recording_to_twopy(
         path=recording_data_path,
         movie_path=movie_path,
         source_session_dir=inputs.session_files.session_dir,
-        movie_shape=inputs.aligned_movie.shape,
+        movie_shape=twopy_shape_from_source_movie_shape(inputs.aligned_movie.shape),
         mean_image_start_frame=start_frame,
         mean_image_stop_frame=stop_frame,
     )

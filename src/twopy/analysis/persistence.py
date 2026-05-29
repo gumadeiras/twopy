@@ -48,6 +48,10 @@ from twopy.hdf5_utils import (
     write_string_dataset as _write_string_dataset,
 )
 from twopy.roi import RoiSet, TraceStatistic, make_roi_set
+from twopy.spatial_orientation import (
+    require_twopy_spatial_orientation,
+    write_twopy_spatial_orientation,
+)
 from twopy.typing_guards import (
     require_bool_array,
     require_float64_array,
@@ -238,7 +242,9 @@ def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
         return LoadedAnalysisOutputs(
             path=input_path,
             roi_set=(
-                _read_roi_set(h5_file["roi_set"]) if "roi_set" in h5_file else None
+                _read_roi_set(h5_file["roi_set"], path=input_path)
+                if "roi_set" in h5_file
+                else None
             ),
             traces=(
                 _read_background_traces(h5_file["traces"])
@@ -347,19 +353,28 @@ def _write_roi_set(group: h5py.Group, roi_set: RoiSet) -> None:
     Returns:
         None.
     """
-    group.create_dataset("masks", data=roi_set.masks, compression="gzip")
+    write_twopy_spatial_orientation(group)
+    masks = group.create_dataset("masks", data=roi_set.masks, compression="gzip")
+    write_twopy_spatial_orientation(masks)
     _write_string_dataset(group, "labels", roi_set.labels)
 
 
-def _read_roi_set(group: h5py.Group) -> RoiSet:
+def _read_roi_set(group: h5py.Group, *, path: Path) -> RoiSet:
     """Read a persisted ROI set.
 
     Args:
         group: HDF5 ``roi_set`` group.
+        path: Analysis output path used in validation errors.
 
     Returns:
         ``RoiSet`` with validated masks and labels.
     """
+    require_twopy_spatial_orientation(group, path=path, label="roi_set")
+    require_twopy_spatial_orientation(
+        group["masks"],
+        path=path,
+        label="roi_set/masks",
+    )
     return make_roi_set(
         require_bool_array(group["masks"][()], name="roi_set/masks", ndim=3),
         labels=_read_string_dataset(group, "labels"),

@@ -22,7 +22,6 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.analysis.response_maps import EpochResponseMap, ResponseMapData
-from twopy.napari.display import display_image_from_movie_image
 from twopy.napari.plotting.response_map_colors import RESPONSE_HEATMAP_COLORMAP
 from twopy.napari.plotting.response_map_display import (
     display_response_limit,
@@ -357,13 +356,11 @@ def _rgba_qimage(
     response overlay is blended over it. Background or masked response pixels
     are treated as zero response for display so the mean image stays visible.
     """
-    background = _grayscale_rgba(display_image_from_movie_image(map_data.mean_image))
-    response = display_image_from_movie_image(
-        display_response_values(
-            map_data,
-            epoch,
-            shared_limits=shared_limits,
-        )
+    background = _grayscale_rgba(map_data.mean_image)
+    response = display_response_values(
+        map_data,
+        epoch,
+        shared_limits=shared_limits,
     )
     response_limit = display_response_limit(
         map_data,

@@ -337,8 +337,9 @@ def _localize_converted_paths_for_cache(
         source_session_dir=source_dir,
         local_output_dir=output_dir,
     )
+    localized_paths = resolve_converted_paths(local_recording_path)
     return ResolvedNapariRecording(
-        paths=resolve_converted_paths(local_recording_path),
+        paths=localized_paths,
         was_converted=False,
     )
 

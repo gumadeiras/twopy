@@ -431,8 +431,8 @@ This load set is smaller than the full required top-level folder list. The raw `
 The converted `recording_data.h5` file contains:
 
 - `movie`: attributes pointing to the separate aligned movie file and dataset.
-- `movie/mean_image`: uncompressed mean image generated during conversion. This is one image, so compression is unnecessary complexity.
-- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from stimulus-bounded alignment offsets. The converted aligned movie stays full-frame; analysis code uses this crop when it should ignore invalid motion-border pixels.
+- `movie/mean_image`: uncompressed mean image generated during conversion in Python image order matching MATLAB display, with `spatial_orientation=matlab_display`. This is one image, so compression is unnecessary complexity.
+- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from stimulus-bounded alignment offsets and mapped into the converted Python image axes. The converted aligned movie stays full-frame; analysis code uses this crop when it should ignore invalid motion-border pixels.
 - `metadata`: selected acquisition fields as HDF5 attributes.
 - `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case twopy field names such as `rig_name`, `run_number`, `fly_id`, and `rig_temperature`.
 - `stimulus/data`: numeric stimulus data.
@@ -446,12 +446,24 @@ The converted `recording_data.h5` file contains:
 
 The converted `aligned_movie.h5` file contains:
 
-- `movie/aligned`: copied aligned movie.
+- `movie/aligned`: copied aligned movie in Python image order matching MATLAB display, with the source `alignedMovie.mat` spatial axes mapped during conversion.
 
 The twopy ROI HDF5 file contains:
 
-- `masks`: boolean ROI masks with shape `(rois, x, y)` in aligned movie coordinates.
+- root attribute `spatial_orientation`: `matlab_display`, meaning the array uses Python image order matching MATLAB display.
+- `masks`: boolean ROI masks with shape `(rois, y, x)` in converted aligned-movie coordinates. The dataset also carries `spatial_orientation=matlab_display` so extracted masks remain auditable when inspected outside twopy.
 - `labels`: one human-readable label per ROI.
+
+When `analysis_outputs.h5` includes `roi_set`, that group and its `roi_set/masks` dataset carry the same `spatial_orientation=matlab_display` marker. The marker means those masks use Python image order matching MATLAB display. The other arrays in `analysis_outputs.h5` are trace, response, timing, and settings arrays indexed by frame, timepoint, ROI, or epoch rather than spatial image pixels.
+
+The twopy response heatmap HDF5 file contains:
+
+- root attribute `spatial_orientation`: `matlab_display`, meaning the array uses Python image order matching MATLAB display.
+- `mean_image`: the crop mean image used as the heatmap background, with `spatial_orientation=matlab_display`.
+- `epochs/*/response_values`: one normalized signed response image per epoch, with `spatial_orientation=matlab_display`.
+- `options`: heatmap computation settings.
+- `spatial_crop`: half-open crop bounds represented by `mean_image` and `response_values`.
+- root attribute `response_scale`: original absolute dF/F value represented by a persisted heatmap value of 1.
 
 Trace extraction uses these rules:
 

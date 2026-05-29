@@ -1,7 +1,7 @@
-"""Pure tests for napari display-coordinate helpers.
+"""Pure tests for napari display-crop metadata helpers.
 
-Inputs: movie-coordinate images, Labels data, and spatial crop metadata.
-Outputs: display arrays and restored movie-coordinate labels without Qt.
+Inputs: Labels data and spatial crop metadata.
+Outputs: restored full-frame label images without Qt.
 """
 
 import unittest
@@ -11,10 +11,7 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.napari.display import (
-    display_image_from_movie_image,
-    display_labels_from_movie_labels,
     display_metadata_for_spatial_crop,
-    movie_labels_from_display_layer,
 )
 from twopy.napari.roi import roi_label_image_from_layer
 from twopy.spatial import SpatialCrop
@@ -22,7 +19,7 @@ from twopy.spatial import SpatialCrop
 
 @dataclass
 class _FakeLayer:
-    """Small layer double for display-coordinate tests.
+    """Small layer double for display-crop tests.
 
     Args:
         data: Integer Labels data in napari display coordinates.
@@ -37,26 +34,14 @@ class _FakeLayer:
 
 
 class NapariDisplayTest(unittest.TestCase):
-    """Tests pure display-coordinate conversion helpers."""
-
-    def test_display_helpers_transpose_movie_axes_for_napari(self) -> None:
-        """Confirm movie axes are transposed only at the napari boundary.
-
-        Inputs: non-square movie-coordinate image.
-        Outputs: display image with swapped spatial axes.
-        """
-        movie_image = np.arange(6, dtype=np.float64).reshape(2, 3)
-
-        display_image = display_image_from_movie_image(movie_image)
-
-        np.testing.assert_array_equal(display_image, movie_image.T)
+    """Tests pure display-crop metadata helpers."""
 
     def test_display_labels_round_trip_through_alignment_crop(self) -> None:
-        """Confirm napari labels return to full-frame movie coordinates.
+        """Confirm cropped napari labels return to full-frame coordinates.
 
         Inputs: full-frame labels plus an alignment-valid crop.
-        Outputs: cropped/transposed display labels and restored full-frame
-        labels with zeros outside the displayed crop.
+        Outputs: cropped labels and restored full-frame labels with zeros
+        outside the displayed crop.
         """
         crop = SpatialCrop(
             axis0_start=1,
@@ -75,23 +60,19 @@ class NapariDisplayTest(unittest.TestCase):
             dtype=np.int64,
         )
 
-        display_labels = display_labels_from_movie_labels(movie_labels, crop)
+        display_labels = crop.crop_image(movie_labels)
         layer = _FakeLayer(
             data=display_labels,
             metadata=display_metadata_for_spatial_crop(crop),
         )
 
-        self.assertEqual(display_labels.shape, (3, 2))
+        self.assertEqual(display_labels.shape, (2, 3))
         np.testing.assert_array_equal(roi_label_image_from_layer(layer), movie_labels)
-        np.testing.assert_array_equal(
-            movie_labels_from_display_layer(layer),
-            movie_labels,
-        )
 
     def test_malformed_display_crop_metadata_is_ignored(self) -> None:
         """Confirm bad crop metadata does not crash label extraction.
 
-        Inputs: display-coordinate labels with incomplete or invalid crop
+        Inputs: cropped labels with incomplete or invalid crop
         metadata.
         Outputs: labels treated as uncropped display data.
         """
@@ -123,7 +104,7 @@ class NapariDisplayTest(unittest.TestCase):
                 layer = _FakeLayer(data=display_labels, metadata=metadata)
 
                 np.testing.assert_array_equal(
-                    movie_labels_from_display_layer(layer),
+                    roi_label_image_from_layer(layer),
                     display_labels,
                 )
 

@@ -381,7 +381,7 @@ class NapariExportTest(NapariAdapterTestCase):
             )
             full_frame_display_labels = np.zeros((3, 3), dtype=np.int64)
             full_frame_display_labels[0, 0] = 1
-            full_frame_display_labels[1, 2] = 2
+            full_frame_display_labels[1, 1] = 2
 
             labels = labels_for_recording_image(
                 full_frame_display_labels,

@@ -55,9 +55,9 @@ Analysis runs on twopy-owned converted HDF5 files, not directly on source MAT / 
 
 Conversion writes:
 
-- `recording_data.h5` — acquisition metadata, frame-count audit data, run metadata, stimulus data and labels, stimulus parameters, stimulus-function lookup data, stimulus-specific column metadata, photodiode signals, synchronization metadata, mean image, and alignment-valid crop bounds.
-- `aligned_movie.h5` — the aligned movie in `movie/aligned`, kept separate because the movie dominates file size.
-- ROI HDF5 files — twopy-owned ROI masks and labels, independent from napari.
+- `recording_data.h5` — acquisition metadata, frame-count audit data, run metadata, stimulus data and labels, stimulus parameters, stimulus-function lookup data, stimulus-specific column metadata, photodiode signals, synchronization metadata, mean image in Python image order matching MATLAB display, and alignment-valid crop bounds.
+- `aligned_movie.h5` — the aligned movie in `movie/aligned`, stored in Python image order matching MATLAB display and kept separate because the movie dominates file size.
+- ROI HDF5 files — twopy-owned ROI masks and labels in the same Python image order as the converted movie, independent from napari.
 
 Large compressible arrays use gzip compression. Small direct-access datasets, such as the mean image, stay uncompressed. The mean image defaults to the full aligned movie and can be computed over a requested frame range.
 

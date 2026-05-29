@@ -16,6 +16,7 @@ import numpy.typing as npt
 
 from twopy.conversion.types import FrameCountAudit
 from twopy.spatial import SpatialCrop
+from twopy.spatial_orientation import write_twopy_spatial_orientation
 
 
 def write_aligned_movie_file(
@@ -36,11 +37,12 @@ def write_aligned_movie_file(
     """
     with h5py.File(path, "w") as h5_file:
         h5_file.attrs["twopy_format"] = "aligned-movie"
-        h5_file.create_dataset(
+        dataset = h5_file.create_dataset(
             "movie/aligned",
             data=movie_values,
             compression=compression,
         )
+        write_twopy_spatial_orientation(dataset)
 
 
 def write_converted_recording_files(
@@ -133,7 +135,12 @@ def write_converted_recording_files(
         movie_group.attrs["aligned_movie_dataset"] = "movie/aligned"
         movie_group.attrs["aligned_movie_shape"] = resolved_movie.shape
         movie_group.attrs["aligned_movie_dtype"] = "float64"
-        movie_group.create_dataset("mean_image", data=resolved_movie.mean(axis=0))
+        write_twopy_spatial_orientation(movie_group)
+        mean_image = movie_group.create_dataset(
+            "mean_image",
+            data=resolved_movie.mean(axis=0),
+        )
+        write_twopy_spatial_orientation(mean_image)
 
         crop_group = movie_group.create_group("alignment_valid_crop")
         crop_group.attrs["source"] = resolved_crop.source

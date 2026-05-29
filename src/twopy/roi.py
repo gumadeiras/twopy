@@ -18,6 +18,10 @@ import numpy.typing as npt
 from twopy.converted import RecordingData
 from twopy.frame_ranges import normalize_frame_range
 from twopy.hdf5_utils import read_string_dataset, write_string_dataset
+from twopy.spatial_orientation import (
+    require_twopy_spatial_orientation,
+    write_twopy_spatial_orientation,
+)
 from twopy.typing_guards import require_bool_array
 
 __all__ = [
@@ -42,7 +46,7 @@ TraceStatistic = Literal["mean"]
 class RoiSet:
     """A named set of spatial ROI masks.
 
-    Inputs: boolean masks with shape ``(rois, x, y)`` and one label per ROI.
+    Inputs: boolean masks with shape ``(rois, y, x)`` and one label per ROI.
     Outputs: validated ROI masks that can be saved or used for trace extraction.
 
     Masks are stored in movie coordinates so the same object works for scripts,
@@ -80,7 +84,7 @@ def make_roi_set(
     """Create a validated ROI set from mask data.
 
     Args:
-        masks: Array shaped ``(rois, x, y)``. Nonzero values are treated as
+        masks: Array shaped ``(rois, y, x)``. Nonzero values are treated as
             inside the ROI.
         labels: Optional ROI labels. When omitted, labels are ``roi_0001``,
             ``roi_0002``, and so on.
@@ -94,7 +98,7 @@ def make_roi_set(
     """
     bool_masks = np.asarray(masks, dtype=np.bool_)
     if bool_masks.ndim != 3:
-        msg = f"ROI masks must have shape (rois, x, y); got {bool_masks.shape}"
+        msg = f"ROI masks must have shape (rois, y, x); got {bool_masks.shape}"
         raise ValueError(msg)
     if bool_masks.shape[0] == 0:
         msg = "ROI masks must contain at least one ROI"
@@ -244,7 +248,13 @@ def save_roi_set(roi_set: RoiSet, path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(output_path, "w") as h5_file:
         h5_file.attrs["twopy_format"] = ROI_FILE_FORMAT
-        h5_file.create_dataset("masks", data=roi_set.masks, compression="gzip")
+        write_twopy_spatial_orientation(h5_file)
+        masks = h5_file.create_dataset(
+            "masks",
+            data=roi_set.masks,
+            compression="gzip",
+        )
+        write_twopy_spatial_orientation(masks)
         write_string_dataset(h5_file, "labels", roi_set.labels)
 
 
@@ -266,7 +276,18 @@ def load_roi_set(path: Path) -> RoiSet:
         if actual_format != ROI_FILE_FORMAT:
             msg = f"Expected {ROI_FILE_FORMAT!r} file at {input_path}"
             raise ValueError(msg)
-        masks = require_bool_array(h5_file["masks"][()], name="masks", ndim=3)
+        require_twopy_spatial_orientation(
+            h5_file,
+            path=input_path,
+            label="roi file",
+        )
+        mask_dataset = h5_file["masks"]
+        require_twopy_spatial_orientation(
+            mask_dataset,
+            path=input_path,
+            label="masks",
+        )
+        masks = require_bool_array(mask_dataset[()], name="masks", ndim=3)
         labels = read_string_dataset(h5_file, "labels")
     return make_roi_set(masks, labels=labels)
 

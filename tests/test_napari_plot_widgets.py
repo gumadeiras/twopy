@@ -1328,8 +1328,8 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             original_shape=(4, 6),
             source="alignment_valid_crop",
         )
-        display_labels = np.zeros((crop.shape[1], crop.shape[0]), dtype=np.int64)
-        display_labels[1, 0] = 7
+        display_labels = np.zeros(crop.shape, dtype=np.int64)
+        display_labels[0, 1] = 7
         with temporary_directory() as temp_dir:
             recording = load_converted_recording(
                 _write_converted_recording(

@@ -10,16 +10,20 @@ from typing import cast
 
 import h5py
 import numpy as np
+
 from tests.converted_files import (
     write_aligned_movie_file,
     write_converted_recording_files,
 )
 from tests.tempdir import temporary_directory
-
 from twopy import load_converted_recording, recording_frame_rate_hz
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import RecordingData
 from twopy.spatial import SpatialCrop
+from twopy.spatial_orientation import (
+    SPATIAL_ORIENTATION_ATTR,
+    write_twopy_spatial_orientation,
+)
 
 
 class ConvertedRecordingTest(unittest.TestCase):
@@ -109,6 +113,37 @@ class ConvertedRecordingTest(unittest.TestCase):
             (root / "aligned_movie.h5").unlink()
 
             with self.assertRaisesRegex(ValueError, "Missing converted aligned movie"):
+                load_converted_recording(root / "recording_data.h5")
+
+    def test_rejects_converted_files_without_current_spatial_orientation(self) -> None:
+        """Confirm unmarked converted files fail loudly instead of being guessed.
+
+        Inputs: converted files with the required orientation marker removed.
+        Outputs: clear regeneration guidance.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            self._write_converted_recording(root)
+            with h5py.File(root / "recording_data.h5", "r+") as h5_file:
+                del h5_file["movie"].attrs[SPATIAL_ORIENTATION_ATTR]
+
+            with self.assertRaisesRegex(ValueError, "Regenerate the file"):
+                load_converted_recording(root / "recording_data.h5")
+
+    def test_rejects_mean_image_without_current_spatial_orientation(self) -> None:
+        """Confirm unmarked converted mean images fail before analysis.
+
+        Inputs: converted recording with the mean-image orientation marker
+        removed.
+        Outputs: clear regeneration guidance.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            self._write_converted_recording(root)
+            with h5py.File(root / "recording_data.h5", "r+") as h5_file:
+                del h5_file["movie/mean_image"].attrs[SPATIAL_ORIENTATION_ATTR]
+
+            with self.assertRaisesRegex(ValueError, "movie/mean_image"):
                 load_converted_recording(root / "recording_data.h5")
 
     def test_converted_movie_rejects_invalid_frame_ranges(self) -> None:
@@ -226,12 +261,39 @@ class ConvertedRecordingTest(unittest.TestCase):
             self._write_recording_data_file(root / "recording_data.h5")
             with h5py.File(root / "recording_data.h5", "r+") as h5_file:
                 del h5_file["movie/mean_image"]
-                h5_file["movie"].create_dataset(
+                mean_image = h5_file["movie"].create_dataset(
                     "mean_image",
                     data=np.zeros(4, dtype=np.float64),
                 )
+                write_twopy_spatial_orientation(mean_image)
 
             with self.assertRaisesRegex(ValueError, "movie/mean_image must have 2"):
+                load_converted_recording(root / "recording_data.h5")
+
+    def test_rejects_mean_image_shape_mismatch(self) -> None:
+        """Confirm mean image and aligned movie use one spatial contract.
+
+        Inputs: Converted recording where ``mean_image`` has swapped dimensions.
+        Outputs: clear validation error before analysis starts.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            write_converted_recording_files(
+                root,
+                movie_values=np.zeros((3, 2, 3), dtype=np.float64),
+            )
+            with h5py.File(root / "recording_data.h5", "r+") as h5_file:
+                del h5_file["movie/mean_image"]
+                mean_image = h5_file["movie"].create_dataset(
+                    "mean_image",
+                    data=np.zeros((3, 2), dtype=np.float64),
+                )
+                write_twopy_spatial_orientation(mean_image)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "movie/mean_image shape must match movie spatial shape",
+            ):
                 load_converted_recording(root / "recording_data.h5")
 
     def _write_converted_recording(self, root: Path) -> None:

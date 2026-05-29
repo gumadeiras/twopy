@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
+from twopy.conversion.orientation import twopy_spatial_shape_from_source_spatial_shape
 from twopy.conversion.types import (
     AcquisitionMetadata,
     AlignedMovieSource,
@@ -69,9 +70,13 @@ def load_alignment_valid_crop(
 
     alignment_window = alignment[frame_start:frame_stop, :]
     line_scan = _is_line_scan(acquisition)
+    source_spatial_shape = _source_movie_spatial_shape(aligned_movie)
+    twopy_spatial_shape = twopy_spatial_shape_from_source_spatial_shape(
+        source_spatial_shape,
+    )
     motion_threshold_pixels = _motion_threshold_pixels(
         acquisition=acquisition,
-        spatial_shape=_movie_spatial_shape(aligned_movie),
+        source_x_pixel_count=source_spatial_shape[0],
         line_scan=line_scan,
     )
     alignment_shift_pixels = _alignment_shift_pixels(
@@ -86,7 +91,7 @@ def load_alignment_valid_crop(
     )
     crop, x_cutoff, y_cutoff = _alignment_crop_from_offsets(
         kept_alignment,
-        spatial_shape=_movie_spatial_shape(aligned_movie),
+        spatial_shape=twopy_spatial_shape,
         line_scan=line_scan,
     )
 
@@ -132,14 +137,14 @@ def _stimulus_alignment_frame_range(
 def _motion_threshold_pixels(
     *,
     acquisition: AcquisitionMetadata,
-    spatial_shape: tuple[int, int],
+    source_x_pixel_count: int,
     line_scan: bool,
 ) -> float:
     """Convert the motion rejection threshold from microns to pixels.
 
     Args:
         acquisition: Acquisition metadata with zoom.
-        spatial_shape: Full movie spatial shape in twopy array axes.
+        source_x_pixel_count: Number of source pixels along the physical x axis.
         line_scan: Whether this recording is a line scan.
 
     Returns:
@@ -151,7 +156,7 @@ def _motion_threshold_pixels(
         else DEFAULT_PLANE_MOTION_LIMIT_MICRONS
     )
     zoom = _required_float_field(acquisition, "acq.zoomFactor")
-    x_axis_conversion = 256.0 / float(spatial_shape[0])
+    x_axis_conversion = 256.0 / float(source_x_pixel_count)
     return micron_limit * ONE_X_PIXELS_PER_MICRON_AT_256_X * zoom * x_axis_conversion
 
 
@@ -223,19 +228,19 @@ def _alignment_crop_from_offsets(
     Returns:
         Spatial crop plus x/y cutoff values.
 
-    Source alignment columns are x/y motion offsets. twopy arrays store x along
-    spatial axis 0 and y along spatial axis 1, so the crop is mapped directly to
-    those axes.
+    Source alignment columns are x/y motion offsets. Converted twopy arrays use
+    Python image axis order matching MATLAB display of the source data: spatial
+    axis 0 is displayed y/rows, and spatial axis 1 is displayed x/columns.
     """
     x_cutoff = _ceil_abs_offset(alignment[:, 0])
     y_cutoff = 1 if line_scan else _ceil_abs_offset(alignment[:, 1])
     axis0_start, axis0_stop = _crop_bounds_from_cutoff(
         length=spatial_shape[0],
-        cutoff=x_cutoff,
+        cutoff=y_cutoff,
     )
     axis1_start, axis1_stop = _crop_bounds_from_cutoff(
         length=spatial_shape[1],
-        cutoff=y_cutoff,
+        cutoff=x_cutoff,
     )
     return (
         SpatialCrop(
@@ -283,14 +288,14 @@ def _crop_bounds_from_cutoff(*, length: int, cutoff: int) -> tuple[int, int]:
     return start, stop
 
 
-def _movie_spatial_shape(aligned_movie: AlignedMovieSource) -> tuple[int, int]:
-    """Return the two spatial dimensions of the aligned source movie.
+def _source_movie_spatial_shape(aligned_movie: AlignedMovieSource) -> tuple[int, int]:
+    """Return the source spatial dimensions of the aligned source movie.
 
     Args:
         aligned_movie: Source movie metadata.
 
     Returns:
-        ``(axis0, axis1)`` spatial shape.
+        ``(source_x, source_y)`` spatial shape.
     """
     if len(aligned_movie.shape) != 3:
         msg = f"Aligned movie must be 3D; got {aligned_movie.shape}"

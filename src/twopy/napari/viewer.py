@@ -18,10 +18,7 @@ import numpy.typing as npt
 from twopy._version import __version__
 from twopy.converted import ConvertedMovie, RecordingData, load_converted_recording
 from twopy.napari.controls import add_twopy_magicgui_controls
-from twopy.napari.display import (
-    display_image_from_movie_image,
-    display_metadata_for_spatial_crop,
-)
+from twopy.napari.display import display_metadata_for_spatial_crop
 from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
 from twopy.napari.plotting import (
     add_twopy_response_plot_widget,
@@ -301,7 +298,7 @@ def add_prepared_recording_to_viewer(
     recording = prepared.recording
     mean_image = prepared.mean_image
     mean_layer = viewer.add_image(
-        display_image_from_movie_image(mean_image),
+        mean_image,
         name=mean_image_layer_name,
         colormap="gray",
         opacity=0.5,
@@ -321,7 +318,7 @@ def add_prepared_recording_to_viewer(
             msg = "Prepared movie data must include contrast limits and frame span."
             raise ValueError(msg)
         movie_layer = viewer.add_image(
-            display_image_from_movie_image(prepared.movie),
+            prepared.movie,
             name=movie_layer_name,
             colormap="gray",
             blending="additive",

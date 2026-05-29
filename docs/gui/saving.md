@@ -7,7 +7,7 @@ The **Export** tab on the right `twopy` sidebar holds every save and export acti
 Click **Save ROIs + analysis** to save the active recording's ROIs and the full response analysis. twopy writes the following files beside the current local converted recording:
 
 - `rois.h5` — the ROI masks.
-- `analysis_outputs.h5` — dF/F traces, grouped responses, the response window / dF/F / smoothing / normalization / QC settings, per-ROI scale factors, and QC scores.
+- `analysis_outputs.h5` — the ROI masks used for the analysis, dF/F traces, grouped responses, the response window / dF/F / smoothing / normalization / QC settings, per-ROI scale factors, and QC scores.
 - `response_heatmaps.h5` — the heatmap data shown in the Heatmaps tab.
 - `exports/csvs/response_summary_trials.csv` — per-trial flat table.
 - `exports/csvs/response_summary_grouped.csv` — per-epoch grouped table.

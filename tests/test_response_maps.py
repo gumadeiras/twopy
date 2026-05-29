@@ -8,14 +8,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import h5py
 import numpy as np
+
 from tests.converted_files import write_aligned_movie_file
 from tests.recording_data import minimal_recording_data
 from tests.tempdir import temporary_directory
-
 from twopy import (
     EpochFrameWindow,
     FrameWindow,
+    ResponseMapData,
     ResponseMapOptions,
     compute_recording_response_maps,
     load_response_map_data,
@@ -23,6 +25,10 @@ from twopy import (
 )
 from twopy.converted import ConvertedMovie, RecordingData
 from twopy.spatial import SpatialCrop, full_frame_crop
+from twopy.spatial_orientation import (
+    SPATIAL_ORIENTATION_ATTR,
+    TWOPY_SPATIAL_ORIENTATION,
+)
 
 
 class ResponseMapsTest(unittest.TestCase):
@@ -235,18 +241,24 @@ class ResponseMapsTest(unittest.TestCase):
 
         with temporary_directory() as directory:
             root = Path(directory)
-            maps = compute_recording_response_maps(
-                _recording(root, movie),
-                epoch_windows=windows,
-                options=ResponseMapOptions(
-                    mode="window",
-                    window_size_pixels=3,
-                    window_stride_pixels=1,
-                    foreground_percentile=0.0,
-                ),
-            )
+            maps = _response_map_data(root, movie, windows)
             path = root / "response_heatmaps.h5"
             save_response_map_data(path, maps)
+            with h5py.File(path, "r") as h5_file:
+                self.assertEqual(
+                    h5_file.attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
+                self.assertEqual(
+                    h5_file["mean_image"].attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
+                self.assertEqual(
+                    h5_file["epochs/0000/response_values"].attrs[
+                        SPATIAL_ORIENTATION_ATTR
+                    ],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
             loaded = load_response_map_data(path)
 
         self.assertEqual(loaded.options, maps.options)
@@ -260,6 +272,70 @@ class ResponseMapsTest(unittest.TestCase):
             loaded.epochs[0].response_values,
             maps.epochs[0].response_values,
         )
+
+    def test_response_map_data_rejects_missing_file_orientation(self) -> None:
+        """Confirm response heatmap files must carry current orientation."""
+        with temporary_directory() as directory:
+            path = _write_response_map_file(Path(directory))
+            with h5py.File(path, "r+") as h5_file:
+                del h5_file.attrs[SPATIAL_ORIENTATION_ATTR]
+
+            with self.assertRaisesRegex(ValueError, "spatial orientation"):
+                load_response_map_data(path)
+
+    def test_response_map_data_rejects_missing_mean_image_orientation(self) -> None:
+        """Confirm persisted heatmap mean images must carry orientation."""
+        with temporary_directory() as directory:
+            path = _write_response_map_file(Path(directory))
+            with h5py.File(path, "r+") as h5_file:
+                del h5_file["mean_image"].attrs[SPATIAL_ORIENTATION_ATTR]
+
+            with self.assertRaisesRegex(ValueError, "mean_image"):
+                load_response_map_data(path)
+
+    def test_response_map_data_rejects_missing_epoch_orientation(self) -> None:
+        """Confirm persisted epoch response arrays must carry orientation."""
+        with temporary_directory() as directory:
+            path = _write_response_map_file(Path(directory))
+            with h5py.File(path, "r+") as h5_file:
+                del h5_file["epochs/0000/response_values"].attrs[
+                    SPATIAL_ORIENTATION_ATTR
+                ]
+
+            with self.assertRaisesRegex(ValueError, "response_values"):
+                load_response_map_data(path)
+
+    def test_response_map_data_rejects_mean_image_shape_mismatch(self) -> None:
+        """Confirm persisted heatmap backgrounds match the recorded crop."""
+        with temporary_directory() as directory:
+            path = _write_response_map_file(Path(directory))
+            with h5py.File(path, "r+") as h5_file:
+                del h5_file["mean_image"]
+                mean_image = h5_file.create_dataset(
+                    "mean_image",
+                    data=np.zeros((5, 4), dtype=np.float64),
+                )
+                mean_image.attrs[SPATIAL_ORIENTATION_ATTR] = TWOPY_SPATIAL_ORIENTATION
+
+            with self.assertRaisesRegex(ValueError, "mean_image shape"):
+                load_response_map_data(path)
+
+    def test_response_map_data_rejects_epoch_shape_mismatch(self) -> None:
+        """Confirm persisted epoch response arrays match the mean image."""
+        with temporary_directory() as directory:
+            path = _write_response_map_file(Path(directory))
+            with h5py.File(path, "r+") as h5_file:
+                del h5_file["epochs/0000/response_values"]
+                response_values = h5_file["epochs/0000"].create_dataset(
+                    "response_values",
+                    data=np.zeros((5, 4), dtype=np.float64),
+                )
+                response_values.attrs[SPATIAL_ORIENTATION_ATTR] = (
+                    TWOPY_SPATIAL_ORIENTATION
+                )
+
+            with self.assertRaisesRegex(ValueError, "response_values shape"):
+                load_response_map_data(path)
 
 
 def _recording(
@@ -279,6 +355,34 @@ def _recording(
         mean_image=movie_values.mean(axis=0),
         alignment_valid_crop=spatial_crop,
     )
+
+
+def _response_map_data(
+    root: Path,
+    movie: np.ndarray,
+    windows: tuple[EpochFrameWindow, ...],
+) -> ResponseMapData:
+    """Create one response-map object with non-default persisted settings."""
+    return compute_recording_response_maps(
+        _recording(root, movie),
+        epoch_windows=windows,
+        options=ResponseMapOptions(
+            mode="window",
+            window_size_pixels=3,
+            window_stride_pixels=1,
+            foreground_percentile=0.0,
+        ),
+    )
+
+
+def _write_response_map_file(root: Path) -> Path:
+    """Write a small response heatmap file and return its path."""
+    movie = np.full((4, 5, 5), 10.0, dtype=np.float64)
+    movie[1:3, 2:4, 2:4] = 15.0
+    windows = (EpochFrameWindow(FrameWindow(0, 1, 3, "epoch_1:Odor"), 1, "Odor"),)
+    path = root / "response_heatmaps.h5"
+    save_response_map_data(path, _response_map_data(root, movie, windows))
+    return path
 
 
 if __name__ == "__main__":

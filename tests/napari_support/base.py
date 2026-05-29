@@ -111,10 +111,8 @@ from twopy.napari.database_search import (
     RecordingLoadErrorDialog,
 )
 from twopy.napari.display import (
-    display_image_from_movie_image,
-    display_labels_from_movie_labels,
     display_metadata_for_spatial_crop,
-    movie_labels_from_display_layer,
+    spatial_crop_from_layer_metadata,
 )
 from twopy.napari.display_paths import (
     format_output_folder,

@@ -10,9 +10,9 @@ from typing import cast
 
 import h5py
 import numpy as np
+
 from tests.converted_files import write_aligned_movie_file
 from tests.tempdir import temporary_directory
-
 from twopy import (
     extract_roi_traces,
     load_roi_set,
@@ -29,6 +29,11 @@ from twopy.roi import (
     roi_label_values_from_labels,
 )
 from twopy.spatial import full_frame_crop
+from twopy.spatial_orientation import (
+    SPATIAL_ORIENTATION_ATTR,
+    TWOPY_SPATIAL_ORIENTATION,
+    write_twopy_spatial_orientation,
+)
 
 
 class RoiTest(unittest.TestCase):
@@ -55,6 +60,30 @@ class RoiTest(unittest.TestCase):
 
             self.assertEqual(loaded.labels, ("top", "corner"))
             np.testing.assert_array_equal(loaded.masks, masks)
+            with h5py.File(roi_path, "r") as h5_file:
+                self.assertEqual(
+                    h5_file.attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
+                self.assertEqual(
+                    h5_file["masks"].attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
+
+    def test_rejects_saved_roi_file_without_current_spatial_orientation(self) -> None:
+        """Confirm unmarked square ROI files fail instead of being guessed.
+
+        Inputs: square ROI masks with the current orientation marker removed.
+        Outputs: regeneration guidance.
+        """
+        with temporary_directory() as temp_dir:
+            roi_path = Path(temp_dir) / "rois.h5"
+            save_roi_set(make_roi_set(np.ones((1, 2, 2), dtype=bool)), roi_path)
+            with h5py.File(roi_path, "r+") as h5_file:
+                del h5_file["masks"].attrs[SPATIAL_ORIENTATION_ATTR]
+
+            with self.assertRaisesRegex(ValueError, "Regenerate the file"):
+                load_roi_set(roi_path)
 
     def test_rejects_saved_roi_masks_with_wrong_dtype(self) -> None:
         """Confirm ROI files store masks as boolean arrays.
@@ -72,6 +101,7 @@ class RoiTest(unittest.TestCase):
                     "masks",
                     data=np.ones((1, 2, 2), dtype=np.int64),
                 )
+                write_twopy_spatial_orientation(h5_file["masks"])
 
             with self.assertRaisesRegex(ValueError, "masks must have dtype"):
                 load_roi_set(roi_path)

@@ -28,9 +28,9 @@ class SpatialCrop:
     full-frame shape.
     Outputs: validated crop metadata and array slicing helpers.
 
-    ``axis0`` and ``axis1`` name NumPy movie axes directly. twopy avoids
-    top/left/x/y here because source files and display tools can disagree about
-    image orientation, while the array axes are unambiguous.
+    ``axis0`` and ``axis1`` name NumPy movie axes directly. Converted movies
+    use Python image order matching MATLAB display of the source data, so axis
+    0 is displayed y/rows and axis 1 is displayed x/columns.
     """
 
     axis0_start: int

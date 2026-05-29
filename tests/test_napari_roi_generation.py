@@ -201,8 +201,8 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
         """Confirm the ROIs tab can create editable grid ROI labels.
 
         Inputs: a loaded recording, empty Labels layer, and one-pixel grid size.
-        Outputs: the Labels layer becomes a deterministic display-coordinate
-        grid and live response recomputation is requested.
+        Outputs: the Labels layer becomes a deterministic grid in stored display
+        orientation and live response recomputation is requested.
         """
         _ = QApplication.instance() or QApplication([])
         with temporary_directory() as temp_dir:
@@ -227,7 +227,7 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
 
         np.testing.assert_array_equal(
             layer.data,
-            np.array([[1, 3], [2, 4]], dtype=np.int64),
+            np.array([[1, 2], [3, 4]], dtype=np.int64),
         )
         self.assertEqual(requests, ["update"])
         self.assertIn(

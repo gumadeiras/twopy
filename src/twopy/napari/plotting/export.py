@@ -32,7 +32,6 @@ from twopy.filenames import (
     ROI_VIEW_EXPORT_STEM,
 )
 from twopy.napari.dims import current_step_index
-from twopy.napari.display import display_image_from_movie_image
 from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.response_map_colors import RESPONSE_HEATMAP_COLORMAP
 from twopy.napari.plotting.response_map_display import (
@@ -360,7 +359,7 @@ def export_response_heatmaps(
     """
     written: list[Path] = []
     for epoch in _visible_map_epochs(map_data, epoch_indices):
-        fig, ax = image_figure(map_data.mean_image.T.shape)
+        fig, ax = image_figure(map_data.mean_image.shape)
         draw_response_heatmap(
             ax,
             map_data=map_data,
@@ -404,7 +403,7 @@ def current_recording_image(
             return cast(npt.NDArray[np.float64], data)
 
     mean_image = recording.alignment_valid_crop.crop_image(recording.mean_image)
-    return cast(npt.NDArray[np.float64], display_image_from_movie_image(mean_image))
+    return cast(npt.NDArray[np.float64], mean_image)
 
 
 def current_roi_labels(
@@ -423,7 +422,7 @@ def current_roi_labels(
     """
     if roi_labels_layer is None:
         crop = recording.alignment_valid_crop
-        return np.zeros((crop.shape[1], crop.shape[0]), dtype=np.int64)
+        return np.zeros(crop.shape, dtype=np.int64)
     return np.asarray(cast(_LayerWithData, roi_labels_layer).data, dtype=np.int64)
 
 
@@ -447,18 +446,13 @@ def labels_for_recording_image(
     cannot expand the figure beyond the recording image.
     """
     crop = recording.alignment_valid_crop
-    expected_shape = (crop.shape[1], crop.shape[0])
+    expected_shape = crop.shape
     if labels.shape == expected_shape:
         return labels
 
-    full_frame_display_shape = (
-        recording.movie.shape[2],
-        recording.movie.shape[1],
-    )
+    full_frame_display_shape = recording.movie.shape[1:]
     if labels.shape == full_frame_display_shape:
-        movie_labels = display_image_from_movie_image(labels)
-        cropped = crop.crop_image(movie_labels)
-        return cast(npt.NDArray[np.int64], display_image_from_movie_image(cropped))
+        return cast(npt.NDArray[np.int64], crop.crop_image(labels))
 
     msg = (
         f"ROI label image shape {labels.shape} does not match displayed recording "
@@ -585,13 +579,11 @@ def draw_response_heatmap(
     values are clipped to a robust signed 95th-percentile limit, then drawn with
     the shared blue-black-orange colormap over a robust grayscale mean image.
     """
-    mean_image = display_image_from_movie_image(map_data.mean_image)
-    response = display_image_from_movie_image(
-        display_response_values(
-            map_data,
-            epoch,
-            shared_limits=shared_limits,
-        )
+    mean_image = map_data.mean_image
+    response = display_response_values(
+        map_data,
+        epoch,
+        shared_limits=shared_limits,
     )
     response_limit = display_response_limit(
         map_data,

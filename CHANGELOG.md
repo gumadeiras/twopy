@@ -14,10 +14,14 @@
 - Published converted `recording_data.h5` and `aligned_movie.h5` files to the configured `analysis_output` location whenever cached conversion or save/export sync runs.
 - Made Load-tab saved recording CSVs write `recording_data_path` as the published `analysis_output` HDF5 path instead of the local analysis-cache file when publish routing applies.
 - Tightened the developer function-inventory direct-test attribution so calls through `twopy` package exports and local test helper re-exports count toward the defining function.
+- Changed converted movie and ROI storage to Python image order matching MATLAB display at conversion time and removed napari display-axis transposition.
+- Made response heatmap files record the Python-image-order spatial marker on saved spatial arrays and reject heatmap files missing that marker.
+- Made analysis output files record the Python-image-order spatial marker on embedded ROI masks and reject files missing that marker.
 
 ### Fixes
 
 - Kept ROIs-tab checkboxes in sync when a Custom-tab workflow such as Direction selectivity changes visible ROI selection.
+- Kept y-stripe background subtraction aligned with displayed rows by storing converted movies and mean images in Python image order.
 
 ## 0.2.1 - 2026-05-21
 
@@ -111,7 +115,7 @@
 - Made response-kernel CSV columns encode lag seconds, kept per-epoch filenames collision-proof, and reported fitted sample counts after kernel-window filtering.
 - Made response-kernel fitting skip irregular stimulus-clock segments and report fitted/skipped segment counts instead of failing the whole workflow.
 - Kept pooled response-kernel epoch groups from using lag samples across stimulus-segment boundaries, and kept invalid database hemisphere metadata from being hidden as missing metadata.
-- Kept malformed `config.yml` errors visible during explicit-output conversion and old converted-file hemisphere lookup, while still allowing missing config when explicit conversion output is provided.
+- Kept malformed `config.yml` errors visible during explicit-output conversion and converted-file hemisphere lookup, while still allowing missing config when explicit conversion output is provided.
 - Kept Epochs-tab visibility toggles from rebuilding cached response heatmap images.
 - Persisted database `fly.eye` metadata as converted recording `hemisphere`/`eye` run fields during conversion, with database lookup for older converted files that predate the field.
 - Made the Export-tab Save ROIs + analysis button show the same save and sync status message as the Metadata tab.

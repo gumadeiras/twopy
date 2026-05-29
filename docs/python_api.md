@@ -104,7 +104,7 @@ mask_array[0, :10, :10] = True
 rois = make_roi_set(mask_array)
 ```
 
-`mask_array` is shaped `(n_rois, height, width)` with `True` where each ROI's pixels are.
+`mask_array` is shaped `(n_rois, height, width)` in the same Python image order as the converted movie, with `True` where each ROI's pixels are.
 
 ### From a saved file
 
@@ -191,7 +191,7 @@ dff = compute_roi_delta_f_over_f(
 A few details worth knowing:
 
 - Trace extraction streams the movie in chunks and uses the saved alignment-valid crop by default. Pass `spatial_domain="full_frame"` only when you need explicit full-frame extraction; `extract_roi_traces` is the lower-level full-frame raw primitive.
-- For dense axon / dendrite fields, `method="movie_y_stripe_percentile"` estimates a low-percentile background per frame and y-stripe and subtracts by position. `method="roi_y_stripe_percentile"` builds a per-ROI background from rows near each ROI center, excluding ROI pixels — it needs dim unlabeled local background pixels. If nearby unlabeled pixels are bright cells, processes, or stimulus bleedthrough instead of additive background, ROI y-stripe can subtract more than the ROI baseline; twopy then stops before dF/F because dividing by a zero or negative corrected baseline would create artificial huge responses. Use `movie_y_stripe_percentile` or `movie_global_percentile`, or redraw ROIs so each ROI has dim local background gaps.
+- For dense axon / dendrite fields, `method="movie_y_stripe_percentile"` estimates a low-percentile background per frame and y-stripe along the displayed y axis, then subtracts by position. `method="roi_y_stripe_percentile"` builds a per-ROI background from displayed rows near each ROI center, excluding ROI pixels — it needs dim unlabeled local background pixels. If nearby unlabeled pixels are bright cells, processes, or stimulus bleedthrough instead of additive background, ROI y-stripe can subtract more than the ROI baseline; twopy then stops before dF/F because dividing by a zero or negative corrected baseline would create artificial huge responses. Use `movie_y_stripe_percentile` or `movie_global_percentile`, or redraw ROIs so each ROI has dim local background gaps.
 - The dF/F fit defaults to `direct_bounded_tau`. Use `log_linear` for a log-space linear fit, or `direct_bounded_tau_and_log_amplitude` when both tau and log-amplitude should be bounded.
 - When you do not pass `baseline_windows`, twopy picks the first epoch name containing `gray`, `grey`, or `interleave`, falling back to epoch 1. For stimuli with no distinct baseline epoch, pass `baseline_mode="no_baseline_epoch"` plus the first epoch number to include and twopy fits one continuous span.
 
@@ -296,6 +296,7 @@ How the data is built:
 - **Window mode** averages baseline and response intensity inside each square window before dF/F, paints that value back over the covered pixels, and averages overlapping windows.
 - The mean-image foreground percentile both masks dim background and sets the dF/F denominator floor, so near-zero baseline pixels cannot create artificial hot spots.
 - Saved epoch maps are scaled by the largest absolute finite response across all epochs. Multiply `epoch.response_values` by `map_data.response_scale` to recover original dF/F units.
+- Saved heatmap images use the same Python image order as converted movies and ROI masks.
 - Display (napari and exports) uses a separate robust 95th-percentile color limit, optionally shared across epochs, without changing the saved values.
 
 ## Random-noise temporal kernels

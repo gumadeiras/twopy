@@ -15,6 +15,10 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.conversion.matlab_values import json_ready
+from twopy.conversion.orientation import (
+    orient_source_array_to_twopy,
+    twopy_shape_from_source_movie_shape,
+)
 from twopy.conversion.types import (
     AlignedMovieSource,
     AlignmentCropAudit,
@@ -26,6 +30,10 @@ from twopy.conversion.types import (
 )
 from twopy.filenames import ALIGNED_MOVIE_FILENAME
 from twopy.hdf5_utils import write_string_dataset
+from twopy.spatial_orientation import (
+    SOURCE_SPATIAL_ORIENTATION,
+    write_twopy_spatial_orientation,
+)
 
 __all__ = [
     "ALIGNED_MOVIE_DATASET",
@@ -146,13 +154,18 @@ def _write_movie_reference_group(
     movie_group = h5_file.create_group("movie")
     movie_group.attrs["aligned_movie_file"] = ALIGNED_MOVIE_FILENAME
     movie_group.attrs["aligned_movie_dataset"] = ALIGNED_MOVIE_DATASET
-    movie_group.attrs["aligned_movie_shape"] = movie.shape
+    movie_group.attrs["aligned_movie_shape"] = twopy_shape_from_source_movie_shape(
+        movie.shape,
+    )
     movie_group.attrs["aligned_movie_dtype"] = movie.dtype
+    write_twopy_spatial_orientation(movie_group)
+    movie_group.attrs["source_spatial_orientation"] = SOURCE_SPATIAL_ORIENTATION
 
     mean_dataset = movie_group.create_dataset(
         "mean_image",
         data=mean_image,
     )
+    write_twopy_spatial_orientation(mean_dataset)
     mean_dataset.attrs["start_frame"] = mean_start_frame
     mean_dataset.attrs["stop_frame"] = mean_stop_frame
     _write_alignment_crop_group(movie_group, alignment_crop)
@@ -326,21 +339,31 @@ def _copy_aligned_movie(source: AlignedMovieSource, movie_group: h5py.Group) -> 
         None. The function writes ``movie/aligned``.
     """
     chunk_frames = source.chunks[0] if source.chunks is not None else 64
+    destination_shape = twopy_shape_from_source_movie_shape(source.shape)
+    destination_chunks = (
+        (source.chunks[0], source.chunks[2], source.chunks[1])
+        if source.chunks is not None
+        else None
+    )
     with h5py.File(source.path, "r") as source_file:
         source_dataset = source_file[source.dataset_name]
         aligned = movie_group.create_dataset(
             "aligned",
-            shape=source.shape,
+            shape=destination_shape,
             dtype=source_dataset.dtype,
-            chunks=source.chunks,
+            chunks=destination_chunks,
             compression="gzip",
         )
         aligned.attrs["source_path"] = str(source.path)
         aligned.attrs["source_dataset"] = source.dataset_name
+        write_twopy_spatial_orientation(aligned)
+        aligned.attrs["source_spatial_orientation"] = SOURCE_SPATIAL_ORIENTATION
 
         for start in range(0, source.shape[0], chunk_frames):
             stop = min(start + chunk_frames, source.shape[0])
-            aligned[start:stop, :, :] = source_dataset[start:stop, :, :]
+            aligned[start:stop, :, :] = orient_source_array_to_twopy(
+                source_dataset[start:stop, :, :],
+            )
 
 
 def _write_attrs(group: h5py.Group, values: dict[str, object]) -> None:

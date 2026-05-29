@@ -18,11 +18,7 @@ import numpy.typing as npt
 
 from twopy.converted import RecordingData
 from twopy.filenames import ROI_FILENAME
-from twopy.napari.display import (
-    display_image_from_movie_image,
-    display_labels_from_movie_labels,
-    movie_labels_from_display_layer,
-)
+from twopy.napari.display import spatial_crop_from_layer_metadata
 from twopy.napari.protocols import NapariLayerWithData
 from twopy.roi import (
     RoiSet,
@@ -78,13 +74,20 @@ def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
 
     This small helper keeps scripts from reaching into napari layer internals
     in several different ways. The label image can be passed directly to
-    ``save_napari_label_rois``. When twopy opened a cropped/transposed display
-    layer, crop metadata on the layer is used to restore movie coordinates.
+    ``save_napari_label_rois``. When twopy opened a cropped layer, crop metadata
+    on the layer is used to restore full-frame coordinates.
     """
-    if hasattr(layer, "metadata") or hasattr(layer, "options"):
-        return movie_labels_from_display_layer(layer)
     data = cast(NapariLayerWithData, layer).data
-    return np.asarray(data, dtype=np.int64)
+    labels = np.asarray(data, dtype=np.int64)
+    crop = spatial_crop_from_layer_metadata(layer)
+    if crop is None:
+        return labels
+    full_frame = np.zeros(crop.original_shape, dtype=np.int64)
+    full_frame[
+        crop.axis0_start : crop.axis0_stop,
+        crop.axis1_start : crop.axis1_stop,
+    ] = labels
+    return full_frame
 
 
 def merge_roi_label_values_on_layer(
@@ -191,10 +194,7 @@ def set_roi_label_image_on_layer(
     Returns:
         None.
     """
-    display_labels = display_labels_from_movie_labels(
-        label_image,
-        recording.alignment_valid_crop,
-    )
+    display_labels = recording.alignment_valid_crop.crop_image(label_image)
     cast(NapariLayerWithData, layer).data = display_labels
     refresh = getattr(layer, "refresh", None)
     if callable(refresh):
@@ -254,12 +254,11 @@ def roi_label_image_from_layer_for_recording(
     validate_roi_layer_matches_recording_crop(layer, recording)
     display_labels = np.asarray(cast(NapariLayerWithData, layer).data, dtype=np.int64)
     crop = recording.alignment_valid_crop
-    movie_crop_labels = display_image_from_movie_image(display_labels)
     full_frame = np.zeros(crop.original_shape, dtype=np.int64)
     full_frame[
         crop.axis0_start : crop.axis0_stop,
         crop.axis1_start : crop.axis1_stop,
-    ] = movie_crop_labels
+    ] = display_labels
     return full_frame
 
 
@@ -282,7 +281,7 @@ def validate_roi_layer_matches_recording_crop(
     """
     display_labels = np.asarray(cast(NapariLayerWithData, layer).data)
     crop = recording.alignment_valid_crop
-    expected_shape = (crop.shape[1], crop.shape[0])
+    expected_shape = crop.shape
     if display_labels.shape != expected_shape:
         msg = (
             "ROI Labels layer must use the cropped recording view. "
@@ -345,13 +344,10 @@ def roi_label_image_for_display(
     if crop is None:
         crop = full_frame_crop(recording.movie.shape[1:])
     if roi_set is None:
-        return np.zeros((crop.shape[1], crop.shape[0]), dtype=np.int64)
+        return np.zeros(crop.shape, dtype=np.int64)
     loaded_roi_set = resolve_roi_set(roi_set)
     validate_roi_shape(loaded_roi_set, recording)
-    return display_labels_from_movie_labels(
-        roi_set_to_label_image(loaded_roi_set),
-        crop,
-    )
+    return crop.crop_image(roi_set_to_label_image(loaded_roi_set))
 
 
 def resolve_roi_save_file(

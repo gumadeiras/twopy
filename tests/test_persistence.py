@@ -10,8 +10,8 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-from tests.tempdir import temporary_directory
 
+from tests.tempdir import temporary_directory
 from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.persistence import (
@@ -32,6 +32,10 @@ from twopy.analysis.response_processing import (
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.roi import make_roi_set
+from twopy.spatial_orientation import (
+    SPATIAL_ORIENTATION_ATTR,
+    TWOPY_SPATIAL_ORIENTATION,
+)
 
 
 class PersistenceTest(unittest.TestCase):
@@ -122,6 +126,14 @@ class PersistenceTest(unittest.TestCase):
                     ANALYSIS_OUTPUT_FILE_FORMAT,
                 )
                 self.assertEqual(h5_file["roi_set/masks"].shape, (2, 2, 2))
+                self.assertEqual(
+                    h5_file["roi_set"].attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
+                self.assertEqual(
+                    h5_file["roi_set/masks"].attrs[SPATIAL_ORIENTATION_ATTR],
+                    TWOPY_SPATIAL_ORIENTATION,
+                )
                 self.assertEqual(h5_file["traces/raw_values"].shape, (3, 2))
                 self.assertEqual(h5_file["dff/values"].shape, (3, 2))
                 self.assertEqual(h5_file["epoch_windows/start_frame"][0], 0)
@@ -278,6 +290,28 @@ class PersistenceTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "time_seconds"):
                 load_analysis_outputs(h5_path)
+
+    def test_rejects_roi_set_without_current_spatial_orientation(self) -> None:
+        """Confirm embedded ROI masks carry the converted movie orientation.
+
+        Inputs: Analysis HDF5 where the ROI orientation marker is missing.
+        Outputs: clear validation error before returning ROI masks.
+        """
+        for object_path in ("roi_set", "roi_set/masks"):
+            with (
+                self.subTest(object_path=object_path),
+                temporary_directory() as temp_dir,
+            ):
+                h5_path = Path(temp_dir) / "analysis_outputs.h5"
+                save_analysis_outputs(
+                    h5_path,
+                    roi_set=make_roi_set(np.ones((1, 2, 2), dtype=bool)),
+                )
+                with h5py.File(h5_path, "r+") as h5_file:
+                    del h5_file[object_path].attrs[SPATIAL_ORIENTATION_ATTR]
+
+                with self.assertRaisesRegex(ValueError, object_path):
+                    load_analysis_outputs(h5_path)
 
     def test_grouped_response_csv_keeps_time_series_statistics(self) -> None:
         """Confirm grouped CSV rows contain mean, SEM, and count traces.

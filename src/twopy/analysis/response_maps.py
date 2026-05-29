@@ -43,6 +43,10 @@ from twopy.analysis.timing import resolve_recording_timing
 from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData, recording_frame_rate_hz
 from twopy.spatial import SpatialCrop
+from twopy.spatial_orientation import (
+    require_twopy_spatial_orientation,
+    write_twopy_spatial_orientation,
+)
 
 __all__ = [
     "EpochResponseMap",
@@ -247,29 +251,33 @@ def save_response_map_data(path: Path, map_data: ResponseMapData) -> None:
     recording-level movie products. Values are stored as normalized signed maps
     with the original dF/F scale in ``response_scale`` for audit.
     """
+    _require_response_map_shapes(map_data)
     output_path = path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(output_path, "w") as h5_file:
         h5_file.attrs["twopy_format"] = RESPONSE_MAP_FILE_FORMAT
         h5_file.attrs["response_scale"] = map_data.response_scale
+        write_twopy_spatial_orientation(h5_file)
         _write_response_map_options(h5_file.create_group("options"), map_data.options)
         _write_spatial_crop(h5_file.create_group("spatial_crop"), map_data.spatial_crop)
-        h5_file.create_dataset(
+        mean_image = h5_file.create_dataset(
             "mean_image",
             data=map_data.mean_image,
             compression="gzip",
         )
+        write_twopy_spatial_orientation(mean_image)
         epochs_group = h5_file.create_group("epochs")
         for index, epoch in enumerate(map_data.epochs):
             epoch_group = epochs_group.create_group(f"{index:04d}")
             epoch_group.attrs["epoch_name"] = epoch.epoch_name
             epoch_group.attrs["epoch_number"] = epoch.epoch_number
             epoch_group.attrs["trial_count"] = epoch.trial_count
-            epoch_group.create_dataset(
+            response_values = epoch_group.create_dataset(
                 "response_values",
                 data=epoch.response_values,
                 compression="gzip",
             )
+            write_twopy_spatial_orientation(response_values)
 
 
 def load_response_map_data(path: Path) -> ResponseMapData:
@@ -287,21 +295,34 @@ def load_response_map_data(path: Path) -> ResponseMapData:
     input_path = path.expanduser()
     with h5py.File(input_path, "r") as h5_file:
         _require_response_map_format(h5_file, input_path)
+        require_twopy_spatial_orientation(
+            h5_file,
+            path=input_path,
+            label="response heatmap file",
+        )
         options = _read_response_map_options(h5_file["options"])
         spatial_crop = _read_spatial_crop(h5_file["spatial_crop"])
-        mean_image = np.asarray(h5_file["mean_image"], dtype=np.float64)
+        mean_image_dataset = h5_file["mean_image"]
+        require_twopy_spatial_orientation(
+            mean_image_dataset,
+            path=input_path,
+            label="mean_image",
+        )
+        mean_image = np.asarray(mean_image_dataset, dtype=np.float64)
         epochs_group = h5_file["epochs"]
         epochs = tuple(
-            _read_epoch_response_map(epochs_group[name])
+            _read_epoch_response_map(epochs_group[name], path=input_path)
             for name in sorted(epochs_group.keys())
         )
-        return ResponseMapData(
+        map_data = ResponseMapData(
             mean_image=mean_image,
             epochs=epochs,
             options=options,
             spatial_crop=spatial_crop,
             response_scale=float(h5_file.attrs["response_scale"]),
         )
+        _require_response_map_shapes(map_data)
+        return map_data
 
 
 def _write_response_map_options(
@@ -357,14 +378,43 @@ def _read_spatial_crop(group: h5py.Group) -> SpatialCrop:
     )
 
 
-def _read_epoch_response_map(group: h5py.Group) -> EpochResponseMap:
+def _read_epoch_response_map(group: h5py.Group, *, path: Path) -> EpochResponseMap:
     """Read one persisted epoch response map."""
+    response_values = group["response_values"]
+    require_twopy_spatial_orientation(
+        response_values,
+        path=path,
+        label=f"{group.name}/response_values",
+    )
     return EpochResponseMap(
         epoch_name=_string_attr(group, "epoch_name"),
         epoch_number=int(group.attrs["epoch_number"]),
-        response_values=np.asarray(group["response_values"], dtype=np.float64),
+        response_values=np.asarray(response_values, dtype=np.float64),
         trial_count=int(group.attrs["trial_count"]),
     )
+
+
+def _require_response_map_shapes(map_data: ResponseMapData) -> None:
+    """Require heatmap spatial arrays to match their recorded crop."""
+    if map_data.mean_image.ndim != 2:
+        msg = (
+            f"response heatmap mean_image must be 2-D; got {map_data.mean_image.shape}"
+        )
+        raise ValueError(msg)
+    if map_data.mean_image.shape != map_data.spatial_crop.shape:
+        msg = (
+            "response heatmap mean_image shape must match spatial_crop shape; "
+            f"got {map_data.mean_image.shape} and {map_data.spatial_crop.shape}"
+        )
+        raise ValueError(msg)
+    for epoch in map_data.epochs:
+        if epoch.response_values.shape != map_data.mean_image.shape:
+            msg = (
+                "response heatmap response_values shape must match mean_image "
+                f"shape; got {epoch.response_values.shape} for "
+                f"{epoch.epoch_name!r} and {map_data.mean_image.shape}"
+            )
+            raise ValueError(msg)
 
 
 def _require_response_map_format(h5_file: h5py.File, path: Path) -> None:

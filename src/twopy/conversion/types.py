@@ -78,7 +78,7 @@ class AlignedMovieSource:
             chunk_frames: Number of frames read per chunk.
 
         Returns:
-            Float64 mean image with shape ``(x, y)``.
+            Float64 mean image in source ``alignedMovie.mat`` spatial axes.
 
         The computation streams the movie in chunks, keeping memory use bounded
         by ``chunk_frames`` rather than the full movie length.
