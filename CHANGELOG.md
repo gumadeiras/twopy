@@ -115,7 +115,7 @@
 - Made response-kernel CSV columns encode lag seconds, kept per-epoch filenames collision-proof, and reported fitted sample counts after kernel-window filtering.
 - Made response-kernel fitting skip irregular stimulus-clock segments and report fitted/skipped segment counts instead of failing the whole workflow.
 - Kept pooled response-kernel epoch groups from using lag samples across stimulus-segment boundaries, and kept invalid database hemisphere metadata from being hidden as missing metadata.
-- Kept malformed `config.yml` errors visible during explicit-output conversion and converted-file hemisphere lookup, while still allowing missing config when explicit conversion output is provided.
+- Kept malformed `config.yml` errors visible during explicit-output conversion and old converted-file hemisphere lookup, while still allowing missing config when explicit conversion output is provided.
 - Kept Epochs-tab visibility toggles from rebuilding cached response heatmap images.
 - Persisted database `fly.eye` metadata as converted recording `hemisphere`/`eye` run fields during conversion, with database lookup for older converted files that predate the field.
 - Made the Export-tab Save ROIs + analysis button show the same save and sync status message as the Metadata tab.

@@ -421,6 +421,12 @@ class ConversionTest(unittest.TestCase):
                     recording_file["movie/mean_image"][()],
                     expected_movie.mean(axis=0),
                 )
+                np.testing.assert_array_equal(
+                    recording_file["movie/alignment_valid_crop"].attrs[
+                        "original_shape"
+                    ],
+                    np.array(expected_movie.shape[1:]),
+                )
             with h5py.File(converted.movie_path, "r") as movie_file:
                 np.testing.assert_array_equal(
                     movie_file["movie/aligned"][()],
