@@ -17,14 +17,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import get_type_hints
 
+from twopy.custom.context import CustomRunContext
 from twopy.custom.parameters import CustomParameterError, validate_parameter_type
 from twopy.custom.registry import declared_workflow
-from twopy.custom.types import (
-    CustomResult,
-    CustomRunContext,
-    CustomWorkflow,
-    WorkflowDeclaration,
-)
+from twopy.custom.results import CustomResult
+from twopy.custom.workflows import CustomWorkflow, WorkflowDeclaration
 
 __all__ = [
     "CustomWorkflowError",

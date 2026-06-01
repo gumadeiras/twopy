@@ -18,16 +18,19 @@ from twopy.analysis.response_window_options import (
     DEFAULT_RESPONSE_PRE_WINDOW_SECONDS,
 )
 from twopy.converted import RecordingData
+from twopy.custom.context import CustomRunContext
 from twopy.custom.parameters import build_parameter_object, parameter_values
-from twopy.custom.provenance import validate_custom_result, write_result_provenance
-from twopy.custom.types import (
+from twopy.custom.provenance import (
+    CustomWorkflowProvenance,
+    validate_custom_result,
+    workflow_provenance,
+    write_result_provenance,
+)
+from twopy.custom.results import (
     CustomLinePlot,
     CustomResult,
-    CustomRunContext,
-    CustomWorkflow,
-    CustomWorkflowProvenance,
-    workflow_provenance,
 )
+from twopy.custom.workflows import CustomWorkflow
 from twopy.roi import RoiSet
 
 __all__ = [

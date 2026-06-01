@@ -1,25 +1,21 @@
-"""Public objects used by twopy custom workflows.
+"""Runtime context helpers passed to custom workflow functions.
 
-Workflow files import these plain Python objects from ``twopy.custom``. The
-objects stay independent of napari so the same workflow can run from the GUI or
-from tests.
+Inputs: the active converted recording, optional ROI masks, plot settings, and
+workflow output folder.
+Outputs: a public workflow API for reading metadata, selecting ROIs and epochs,
+running standard response analysis, and writing provenance-tagged CSV files.
 """
 
 from __future__ import annotations
 
-import builtins
 import csv
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
 from pathlib import Path
-from types import MappingProxyType
-from typing import Protocol
 
 import numpy as np
 import numpy.typing as npt
 
-from twopy._version import __version__
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_plotting import (
     ResponsePlotData,
@@ -33,108 +29,12 @@ from twopy.analysis.workflow import (
     compute_recording_responses,
 )
 from twopy.converted import RecordingData
+from twopy.custom.metadata import CustomRecordingMetadata
+from twopy.custom.provenance import CustomWorkflowProvenance
 from twopy.roi import RoiSet, make_roi_set
 from twopy.stimulus import stimulus_epoch_names_by_number
 
-__all__ = [
-    "CustomEpoch",
-    "CustomLineBand",
-    "CustomLinePlot",
-    "CustomParameterValue",
-    "CustomRecordingMetadata",
-    "CustomResult",
-    "CustomRunContext",
-    "CustomTable",
-    "CustomWorkflow",
-    "CustomWorkflowFunction",
-    "CustomWorkflowProvenance",
-    "WorkflowDeclaration",
-]
-
-CustomParameterValue = str | int | float | bool | None
-
-
-class CustomWorkflowFunction(Protocol):
-    """Function shape accepted by custom workflow discovery."""
-
-    def __call__(self, *args: object) -> CustomResult:
-        """Run the workflow.
-
-        Args:
-            *args: Validated workflow call arguments.
-
-        Returns:
-            Workflow result.
-        """
-        ...
-
-
-@dataclass(frozen=True)
-class CustomTable:
-    """CSV or TSV table shown in the Custom tab.
-
-    Args:
-        title: Short title shown above the table.
-        path: CSV or TSV file written by the workflow.
-        highlighted_rows: Zero-based data rows to highlight.
-        display_path: Optional path shown to the user when preview reads from a
-            local cache path.
-
-    Returns:
-        Immutable table descriptor.
-    """
-
-    title: str
-    path: Path
-    highlighted_rows: tuple[int, ...] = ()
-    display_path: Path | None = None
-
-
-@dataclass(frozen=True)
-class CustomLineBand:
-    """Filled uncertainty band shown behind one custom line-plot series.
-
-    Args:
-        series_index: Zero-based line series that owns the band color.
-        lower: One-dimensional lower bound values.
-        upper: One-dimensional upper bound values.
-        label: Optional legend label for the band.
-
-    Returns:
-        Immutable band descriptor.
-    """
-
-    series_index: int
-    lower: npt.NDArray[np.float64]
-    upper: npt.NDArray[np.float64]
-    label: str = ""
-
-
-@dataclass(frozen=True)
-class CustomLinePlot:
-    """Line plot shown in the Custom tab.
-
-    Args:
-        title: Short display title for the GUI.
-        x: One-dimensional x-axis values.
-        y: One-dimensional values or two-dimensional ``(series, samples)``
-            values.
-        labels: Optional series labels.
-        y_label: Y-axis label shown beside the plot.
-        bands: Optional filled uncertainty bands that share the x-axis.
-        colors: Optional ``#RRGGBB`` line colors matching the plotted series.
-
-    Returns:
-        Immutable plot descriptor.
-    """
-
-    title: str
-    x: npt.NDArray[np.float64]
-    y: npt.NDArray[np.float64]
-    labels: tuple[str, ...] = ()
-    y_label: str = "Value"
-    bands: tuple[CustomLineBand, ...] = ()
-    colors: tuple[str, ...] = ()
+__all__ = ["CustomEpoch", "CustomRunContext"]
 
 
 @dataclass(frozen=True)
@@ -166,313 +66,6 @@ class CustomEpoch:
     def selector(self) -> int:
         """Return the epoch number accepted by ``epoch_metric``."""
         return self.number
-
-
-@dataclass(frozen=True)
-class CustomResult:
-    """Outputs returned by one custom workflow run.
-
-    Args:
-        message: Status text shown after the workflow finishes.
-        files: Files written by the workflow.
-        tables: Tables to preview in the Custom tab.
-        plots: Line plots to show in the Custom tab.
-        roi_set: Optional ROIs to replace the active Labels layer.
-        response_plot_data: Optional responses to show in the response dock.
-        visible_roi_indices: Optional ROI rows to select in the existing
-            response dock without replacing its plot data.
-
-    Returns:
-        Immutable workflow result.
-    """
-
-    message: str
-    files: tuple[Path, ...] = ()
-    tables: tuple[CustomTable, ...] = ()
-    plots: tuple[CustomLinePlot, ...] = ()
-    roi_set: RoiSet | None = None
-    response_plot_data: ResponsePlotData | None = None
-    visible_roi_indices: tuple[int, ...] | None = None
-
-
-@dataclass(frozen=True)
-class CustomRecordingMetadata:
-    """Converted recording metadata exposed to custom workflows.
-
-    Args:
-        recording_path: Converted ``recording_data.h5`` file used by the run.
-        source_session_dir: Source microscope session directory.
-        run: Run-level metadata such as rig name, genotype, and hemisphere.
-        acquisition: Microscope acquisition metadata such as frame rate and zoom.
-        synchronization: Photodiode and clock-alignment metadata.
-        stimulus_parameters: Per-epoch stimulus parameter dictionaries.
-        stimulus_function_lookup: Mapping from stimulus ids to source function names.
-        stimulus_specific_columns: Metadata for converted stimulus-specific columns.
-
-    Returns:
-        Immutable metadata snapshot with typed read helpers.
-
-    Workflows use this object to inspect converted metadata without depending on
-    the internal ``RecordingData`` object or mutating the loaded recording.
-    """
-
-    recording_path: Path
-    source_session_dir: Path
-    run: Mapping[str, object]
-    acquisition: Mapping[str, object]
-    synchronization: Mapping[str, str]
-    stimulus_parameters: tuple[Mapping[str, object], ...]
-    stimulus_function_lookup: Mapping[str, str]
-    stimulus_specific_columns: Mapping[str, Mapping[str, object]]
-
-    def value(self, section: str, key: str, default: object = None) -> object:
-        """Return one raw metadata value from a named section.
-
-        Args:
-            section: Metadata section name, such as ``"run"`` or
-                ``"acquisition"``.
-            key: Metadata key inside that section.
-            default: Value returned when the key is absent.
-
-        Returns:
-            Raw metadata value or ``default``.
-        """
-        return self._section(section).get(key, default)
-
-    def text(
-        self,
-        section: str,
-        key: str,
-        default: str | None = None,
-    ) -> str | None:
-        """Return one metadata value as text.
-
-        Args:
-            section: Metadata section name.
-            key: Metadata key inside that section.
-            default: Value returned when the key is absent.
-
-        Returns:
-            Text value, or ``default`` when absent.
-        """
-        value = self.value(section, key, default)
-        if value is None:
-            return None
-        if isinstance(value, bytes):
-            return value.decode("utf-8")
-        return str(value)
-
-    def float(
-        self,
-        section: str,
-        key: str,
-        default: builtins.float | None = None,
-    ) -> builtins.float | None:
-        """Return one metadata value as a float.
-
-        Args:
-            section: Metadata section name.
-            key: Metadata key inside that section.
-            default: Value returned when the key is absent.
-
-        Returns:
-            Floating-point value, or ``default`` when absent.
-        """
-        value = self.value(section, key, default)
-        if value is None:
-            return None
-        if isinstance(value, bool):
-            msg = f"Metadata field {section}.{key} is boolean, not numeric."
-            raise ValueError(msg)
-        if not isinstance(value, str | bytes | int | builtins.float):
-            msg = f"Metadata field {section}.{key} cannot be read as a float."
-            raise ValueError(msg)
-        try:
-            return builtins.float(value)
-        except (TypeError, ValueError) as error:
-            msg = f"Metadata field {section}.{key} cannot be read as a float."
-            raise ValueError(msg) from error
-
-    def int(
-        self,
-        section: str,
-        key: str,
-        default: builtins.int | None = None,
-    ) -> builtins.int | None:
-        """Return one metadata value as an integer.
-
-        Args:
-            section: Metadata section name.
-            key: Metadata key inside that section.
-            default: Value returned when the key is absent.
-
-        Returns:
-            Integer value, or ``default`` when absent.
-        """
-        value = self.value(section, key, default)
-        if value is None:
-            return None
-        if isinstance(value, bool):
-            msg = f"Metadata field {section}.{key} is boolean, not integer."
-            raise ValueError(msg)
-        if not isinstance(value, str | bytes | int | builtins.float):
-            msg = f"Metadata field {section}.{key} cannot be read as an integer."
-            raise ValueError(msg)
-        try:
-            as_float = builtins.float(value)
-        except (TypeError, ValueError) as error:
-            msg = f"Metadata field {section}.{key} cannot be read as an integer."
-            raise ValueError(msg) from error
-        if not as_float.is_integer():
-            msg = f"Metadata field {section}.{key} is not an integer."
-            raise ValueError(msg)
-        return builtins.int(as_float)
-
-    def _section(self, section: str) -> Mapping[str, object]:
-        """Return a key-value metadata section by name."""
-        if section == "run":
-            return self.run
-        if section == "acquisition":
-            return self.acquisition
-        if section == "synchronization":
-            return self.synchronization
-        if section == "stimulus_function_lookup":
-            return self.stimulus_function_lookup
-        if section == "stimulus_specific_columns":
-            return self.stimulus_specific_columns
-        msg = f"Unknown recording metadata section {section!r}."
-        raise ValueError(msg)
-
-    @classmethod
-    def _from_recording(cls, recording: RecordingData) -> CustomRecordingMetadata:
-        """Return a public metadata snapshot for an internal recording object."""
-        return cls(
-            recording_path=recording.path,
-            source_session_dir=recording.source_session_dir,
-            run=_readonly_mapping(recording.run_metadata),
-            acquisition=_readonly_mapping(recording.acquisition_metadata),
-            synchronization=_readonly_string_mapping(
-                recording.synchronization_metadata
-            ),
-            stimulus_parameters=tuple(
-                _readonly_mapping(parameters)
-                for parameters in recording.stimulus_parameters
-            ),
-            stimulus_function_lookup=_readonly_string_mapping(
-                recording.stimulus_function_lookup,
-            ),
-            stimulus_specific_columns=_readonly_nested_mapping(
-                recording.stimulus_specific_columns,
-            ),
-        )
-
-
-@dataclass(frozen=True)
-class WorkflowDeclaration:
-    """Raw metadata attached by the ``@workflow`` decorator.
-
-    Args:
-        id: Stable workflow id.
-        name: GUI label.
-        version: Workflow version.
-        description: One-sentence description.
-        params_type: Optional frozen dataclass for GUI controls.
-        author: Optional workflow author string.
-        requires_rois: Whether ROIs must exist before running.
-        output_prefix: Optional output subfolder name.
-        function: Workflow function.
-
-    Returns:
-        Declaration attached to a workflow function.
-    """
-
-    id: str
-    name: str
-    version: str
-    description: str
-    params_type: type[object] | None
-    author: str | None
-    requires_rois: bool
-    output_prefix: str | None
-    function: CustomWorkflowFunction
-
-
-@dataclass(frozen=True)
-class CustomWorkflow:
-    """One workflow that passed discovery checks.
-
-    Args:
-        id: Stable workflow id.
-        name: GUI label.
-        version: Workflow version.
-        description: One-sentence description.
-        params_type: Optional frozen dataclass for GUI controls.
-        author: Optional workflow author string.
-        requires_rois: Whether ROIs must exist before running.
-        output_prefix: Safe output subfolder name.
-        function: Workflow function.
-        source_path: Python file that defines the workflow.
-        source_hash: SHA-256 hash of the source file at discovery time.
-
-    Returns:
-        Workflow definition shown in the Custom tab.
-    """
-
-    id: str
-    name: str
-    version: str
-    description: str
-    params_type: type[object] | None
-    author: str | None
-    requires_rois: bool
-    output_prefix: str
-    function: CustomWorkflowFunction
-    source_path: Path
-    source_hash: str
-
-
-@dataclass(frozen=True)
-class CustomWorkflowProvenance:
-    """Workflow run metadata saved beside custom outputs.
-
-    Args:
-        workflow_id: Stable workflow id.
-        workflow_name: Workflow name.
-        workflow_version: Workflow version supplied by the author.
-        workflow_source_path: Python source file used for this run.
-        workflow_source_hash: SHA-256 hash of the workflow source file.
-        twopy_version: twopy package version used for the run.
-        run_started_at: UTC timestamp for the start of the run.
-        parameters: Parameter values used for the run.
-        recording_path: Converted recording path analyzed by the workflow.
-
-    Returns:
-        Provenance record saved as YAML or HDF5 metadata.
-    """
-
-    workflow_id: str
-    workflow_name: str
-    workflow_version: str
-    workflow_source_path: Path
-    workflow_source_hash: str
-    twopy_version: str
-    run_started_at: str
-    parameters: Mapping[str, CustomParameterValue]
-    recording_path: Path
-
-    def as_mapping(self) -> dict[str, object]:
-        """Return workflow, package, parameter, and recording metadata."""
-        return {
-            "workflow_id": self.workflow_id,
-            "workflow_name": self.workflow_name,
-            "workflow_version": self.workflow_version,
-            "workflow_source_path": str(self.workflow_source_path),
-            "workflow_source_hash": self.workflow_source_hash,
-            "twopy_version": self.twopy_version,
-            "run_started_at": self.run_started_at,
-            "parameters": dict(self.parameters),
-            "recording_path": str(self.recording_path),
-        }
 
 
 @dataclass(frozen=True)
@@ -963,35 +556,6 @@ class CustomRunContext:
         return np.nanmean(np.stack(trial_metrics, axis=0), axis=0)
 
 
-def workflow_provenance(
-    workflow: CustomWorkflow,
-    *,
-    parameters: Mapping[str, CustomParameterValue],
-    recording: RecordingData,
-) -> CustomWorkflowProvenance:
-    """Create metadata for one custom workflow run.
-
-    Args:
-        workflow: Validated workflow definition.
-        parameters: Parameter values used for the run.
-        recording: Active converted recording.
-
-    Returns:
-        Run metadata with current twopy version and UTC timestamp.
-    """
-    return CustomWorkflowProvenance(
-        workflow_id=workflow.id,
-        workflow_name=workflow.name,
-        workflow_version=workflow.version,
-        workflow_source_path=workflow.source_path,
-        workflow_source_hash=workflow.source_hash,
-        twopy_version=__version__,
-        run_started_at=datetime.now(UTC).isoformat(),
-        parameters=dict(parameters),
-        recording_path=recording.path,
-    )
-
-
 def _validate_column_lengths(
     columns: Mapping[str, Sequence[object]],
     *,
@@ -1002,41 +566,6 @@ def _validate_column_lengths(
         if len(values) != row_count:
             msg = f"Column {name!r} has {len(values)} rows; expected {row_count} rows"
             raise ValueError(msg)
-
-
-def _readonly_mapping(values: Mapping[str, object]) -> Mapping[str, object]:
-    """Return a read-only recursive copy of one metadata mapping."""
-    return MappingProxyType(
-        {key: _readonly_metadata_value(value) for key, value in values.items()},
-    )
-
-
-def _readonly_string_mapping(values: Mapping[str, str]) -> Mapping[str, str]:
-    """Return a read-only shallow copy of one string metadata mapping."""
-    return MappingProxyType(dict(values))
-
-
-def _readonly_nested_mapping(
-    values: Mapping[str, Mapping[str, object]],
-) -> Mapping[str, Mapping[str, object]]:
-    """Return a read-only copy of nested stimulus metadata mappings."""
-    return MappingProxyType(
-        {key: _readonly_mapping(nested) for key, nested in values.items()},
-    )
-
-
-def _readonly_metadata_value(value: object) -> object:
-    """Return one metadata value with mutable containers frozen."""
-    if isinstance(value, Mapping):
-        return MappingProxyType(
-            {
-                str(key): _readonly_metadata_value(nested)
-                for key, nested in value.items()
-            },
-        )
-    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
-        return tuple(_readonly_metadata_value(item) for item in value)
-    return value
 
 
 def _matrix_column_labels(

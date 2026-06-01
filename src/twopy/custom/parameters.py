@@ -13,9 +13,8 @@ from pathlib import Path
 from types import UnionType
 from typing import Literal, Union, get_args, get_origin, get_type_hints
 
-from twopy.custom.types import CustomParameterValue
-
 __all__ = [
+    "CustomParameterValue",
     "CustomParameterSpec",
     "ParameterRole",
     "build_parameter_object",
@@ -24,6 +23,7 @@ __all__ = [
     "validate_parameter_type",
 ]
 
+CustomParameterValue = str | int | float | bool | None
 ParameterKind = Literal["bool", "int", "float", "str", "path", "choice"]
 ParameterRole = Literal[
     "baseline_epoch",

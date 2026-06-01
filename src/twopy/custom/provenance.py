@@ -5,29 +5,106 @@ result file and let twopy record the workflow id, version, source hash,
 parameters, and recording path.
 """
 
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import h5py
 import numpy as np
 import yaml
 
+from twopy._version import __version__
 from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
-from twopy.custom.types import (
-    CustomLineBand,
-    CustomLinePlot,
-    CustomResult,
-    CustomWorkflowProvenance,
-)
+from twopy.converted import RecordingData
+from twopy.custom.parameters import CustomParameterValue
+from twopy.custom.results import CustomLineBand, CustomLinePlot, CustomResult
+from twopy.custom.workflows import CustomWorkflow
 
 __all__ = [
+    "CustomWorkflowProvenance",
     "custom_result_artifact_paths",
     "provenance_sidecar_path",
     "validate_custom_result",
     "write_result_provenance",
     "write_workflow_provenance_for_path",
+    "workflow_provenance",
 ]
 
 _HDF5_SUFFIXES = frozenset((".h5", ".hdf5"))
+
+
+@dataclass(frozen=True)
+class CustomWorkflowProvenance:
+    """Workflow run metadata saved beside custom outputs.
+
+    Args:
+        workflow_id: Stable workflow id.
+        workflow_name: Workflow name.
+        workflow_version: Workflow version supplied by the author.
+        workflow_source_path: Python source file used for this run.
+        workflow_source_hash: SHA-256 hash of the workflow source file.
+        twopy_version: twopy package version used for the run.
+        run_started_at: UTC timestamp for the start of the run.
+        parameters: Parameter values used for the run.
+        recording_path: Converted recording path analyzed by the workflow.
+
+    Returns:
+        Provenance record saved as YAML or HDF5 metadata.
+    """
+
+    workflow_id: str
+    workflow_name: str
+    workflow_version: str
+    workflow_source_path: Path
+    workflow_source_hash: str
+    twopy_version: str
+    run_started_at: str
+    parameters: Mapping[str, CustomParameterValue]
+    recording_path: Path
+
+    def as_mapping(self) -> dict[str, object]:
+        """Return workflow, package, parameter, and recording metadata."""
+        return {
+            "workflow_id": self.workflow_id,
+            "workflow_name": self.workflow_name,
+            "workflow_version": self.workflow_version,
+            "workflow_source_path": str(self.workflow_source_path),
+            "workflow_source_hash": self.workflow_source_hash,
+            "twopy_version": self.twopy_version,
+            "run_started_at": self.run_started_at,
+            "parameters": dict(self.parameters),
+            "recording_path": str(self.recording_path),
+        }
+
+
+def workflow_provenance(
+    workflow: CustomWorkflow,
+    *,
+    parameters: Mapping[str, CustomParameterValue],
+    recording: RecordingData,
+) -> CustomWorkflowProvenance:
+    """Create metadata for one custom workflow run.
+
+    Args:
+        workflow: Validated workflow definition.
+        parameters: Parameter values used for the run.
+        recording: Active converted recording.
+
+    Returns:
+        Run metadata with current twopy version and UTC timestamp.
+    """
+    return CustomWorkflowProvenance(
+        workflow_id=workflow.id,
+        workflow_name=workflow.name,
+        workflow_version=workflow.version,
+        workflow_source_path=workflow.source_path,
+        workflow_source_hash=workflow.source_hash,
+        twopy_version=__version__,
+        run_started_at=datetime.now(UTC).isoformat(),
+        parameters=dict(parameters),
+        recording_path=recording.path,
+    )
 
 
 def provenance_sidecar_path(path: Path) -> Path:

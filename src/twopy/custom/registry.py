@@ -6,7 +6,8 @@ and reads that metadata, so reloads do not depend on global registration state.
 
 from collections.abc import Callable
 
-from twopy.custom.types import CustomResult, WorkflowDeclaration
+from twopy.custom.results import CustomResult
+from twopy.custom.workflows import WorkflowDeclaration
 
 __all__ = [
     "WORKFLOW_DECLARATION_ATTRIBUTE",
