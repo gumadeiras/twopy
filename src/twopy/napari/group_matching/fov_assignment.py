@@ -10,7 +10,6 @@ moving into ROI matching.
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
 
 from qtpy.QtCore import QEvent, QObject, Qt
 from qtpy.QtWidgets import (
@@ -48,12 +47,12 @@ from twopy.napari.group_matching.fov_cards import (
     FovRecordingCard,
     mean_image_thumbnail_pixmap,
 )
+from twopy.napari.group_matching.protocols import GroupMatchingState
 from twopy.napari.group_matching.style import (
     group_matching_button,
     group_matching_section,
 )
 from twopy.napari.group_matching.tables import ToggleSelectionTable
-from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.text import configure_placeholder
 
 __all__ = [
@@ -67,12 +66,6 @@ FOV_GROUP_TABLE_FILENAME = "fov_groups.csv"
 _FOV_TABLE_VISIBLE_ROWS = 4
 _FOV_TABLE_ROW_HEIGHT = 24
 _FOV_ID_STEP_BUTTON_SIZE = 26
-
-
-class GroupMatchingState(Protocol):
-    """Napari control-state fields needed by the FOV assignment view."""
-
-    loaded_recordings: list[LoadedNapariRecording]
 
 
 class FovAssignmentView(QWidget):

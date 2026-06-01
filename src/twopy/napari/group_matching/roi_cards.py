@@ -9,7 +9,7 @@ view owns saved groups, response previews, and CSV persistence.
 """
 
 from collections.abc import Callable
-from typing import Protocol, cast
+from typing import cast
 
 import numpy as np
 from qtpy.QtCore import Qt
@@ -29,6 +29,7 @@ from twopy.napari.group_matching.images import (
     THUMBNAIL_SIZE,
     mean_image_roi_overlay_pixmap,
 )
+from twopy.napari.protocols import NapariLayerWithData
 from twopy.napari.session import LoadedNapariRecording
 
 __all__ = [
@@ -44,12 +45,6 @@ __all__ = [
 ROI_CARD_WIDTH = THUMBNAIL_SIZE + 24
 ROI_CARD_HEIGHT = THUMBNAIL_SIZE + 58
 ROI_CONTROL_HEIGHT = 28
-
-
-class _LayerWithData(Protocol):
-    """Small protocol for napari layers whose label data can be inspected."""
-
-    data: object
 
 
 class _RoiPreviewLabel(QLabel):
@@ -230,7 +225,7 @@ def roi_labels_from_layer_data(layer: object | None) -> tuple[str, ...]:
     """
     if layer is None or not hasattr(layer, "data"):
         return ()
-    labels_layer = cast(_LayerWithData, layer)
+    labels_layer = cast(NapariLayerWithData, layer)
     label_image = np.asarray(labels_layer.data)
     if label_image.size == 0:
         return ()
@@ -300,7 +295,7 @@ def _label_image(layer: object | None) -> np.ndarray | None:
     """Return a two-dimensional Labels image from a napari-shaped layer."""
     if layer is None or not hasattr(layer, "data"):
         return None
-    label_image = np.asarray(cast(_LayerWithData, layer).data)
+    label_image = np.asarray(cast(NapariLayerWithData, layer).data)
     if label_image.ndim != 2 or 0 in label_image.shape:
         return None
     return label_image

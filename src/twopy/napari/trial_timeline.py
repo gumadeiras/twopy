@@ -10,6 +10,7 @@ recording stack.
 """
 
 from bisect import bisect_right
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +25,11 @@ from twopy.analysis.timing import resolve_recording_timing
 from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
 from twopy.converted import RecordingData
 from twopy.napari.dims import current_step_index, set_current_step_index
-from twopy.napari.protocols import NapariViewer
+from twopy.napari.protocols import (
+    NapariEventEmitter,
+    NapariViewer,
+    NapariViewerWithDims,
+)
 from twopy.typing_guards import int_or_none, string_key_mapping_or_none
 
 __all__ = [
@@ -51,18 +56,6 @@ _MINIMUM_TIMELINE_WIDTH = 360
 _BASELINE_EPOCH_COLOR = QColor(145, 150, 160)
 
 
-class _EventEmitter(Protocol):
-    """Small protocol for napari event emitters."""
-
-    def connect(self, callback: object) -> object:
-        """Connect one callback."""
-        ...
-
-    def disconnect(self, callback: object) -> object:
-        """Disconnect one callback."""
-        ...
-
-
 class _LayerWithDataAndMetadata(Protocol):
     """Small shape of the movie layer needed by the timeline."""
 
@@ -74,12 +67,6 @@ class _ViewerWithTextOverlay(Protocol):
     """Small viewer shape for napari text overlay updates."""
 
     text_overlay: object
-
-
-class _ViewerWithDims(Protocol):
-    """Small viewer shape for napari dimension events."""
-
-    dims: object
 
 
 class _TextOverlay(Protocol):
@@ -443,7 +430,7 @@ class TrialTimelineController:
         self._movie_layer: object | None = None
         self._timeline_cache: dict[tuple[Path, Path], TrialTimelineData | None] = {}
         self._overlay_state: _OverlayState | None = None
-        self._dims_event: _EventEmitter | None = _connect_dims_event(
+        self._dims_event: NapariEventEmitter | None = _connect_dims_event(
             viewer,
             self.update_current_frame,
         )
@@ -704,16 +691,16 @@ def _text_overlay(viewer: object) -> _TextOverlay | None:
 
 def _connect_dims_event(
     viewer: object,
-    callback: object,
-) -> _EventEmitter | None:
+    callback: Callable[..., None],
+) -> NapariEventEmitter | None:
     """Connect to napari current-step changes when the event exists."""
     if not hasattr(viewer, "dims"):
         return None
-    dims = cast(_ViewerWithDims, viewer).dims
+    dims = cast(NapariViewerWithDims, viewer).dims
     events = getattr(dims, "events", None)
     emitter = getattr(events, "current_step", None)
     if emitter is None or not hasattr(emitter, "connect"):
         return None
-    event_emitter = cast(_EventEmitter, emitter)
+    event_emitter = cast(NapariEventEmitter, emitter)
     event_emitter.connect(callback)
     return event_emitter

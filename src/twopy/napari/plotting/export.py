@@ -38,6 +38,7 @@ from twopy.napari.plotting.response_map_display import (
     display_response_limit,
     display_response_values,
 )
+from twopy.napari.protocols import NapariLayerWithData
 
 __all__ = [
     "export_epoch_plots",
@@ -53,12 +54,6 @@ MM_TO_INCH = 1.0 / 25.4
 DEFAULT_FORMATS = ("pdf", "png")
 RESPONSE_HEATMAP_OVERLAY_ALPHA = 0.42
 type BoundarySegment = tuple[tuple[float, float], tuple[float, float]]
-
-
-class _LayerWithData(Protocol):
-    """Small protocol for napari layers that expose array data."""
-
-    data: object
 
 
 class _LayerList(Protocol):
@@ -395,7 +390,7 @@ def current_recording_image(
     """
     movie_layer = _layer_by_name(viewer, "aligned movie")
     if movie_layer is not None:
-        data = np.asarray(cast(_LayerWithData, movie_layer).data)
+        data = np.asarray(cast(NapariLayerWithData, movie_layer).data)
         if data.ndim == 3:
             index = current_step_index(viewer, step_count=data.shape[0])
             return cast(npt.NDArray[np.float64], data[index, :, :])
@@ -423,7 +418,7 @@ def current_roi_labels(
     if roi_labels_layer is None:
         crop = recording.alignment_valid_crop
         return np.zeros(crop.shape, dtype=np.int64)
-    return np.asarray(cast(_LayerWithData, roi_labels_layer).data, dtype=np.int64)
+    return np.asarray(cast(NapariLayerWithData, roi_labels_layer).data, dtype=np.int64)
 
 
 def labels_for_recording_image(

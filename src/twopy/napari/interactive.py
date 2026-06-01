@@ -9,7 +9,6 @@ thread, then runs the heavier response calculation through the same in-memory
 analysis helper used by the manual update button.
 """
 
-from collections.abc import Callable
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
@@ -25,6 +24,7 @@ from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.converted import RecordingData
 from twopy.napari.live_analysis import LiveResponseAnalysisCache
 from twopy.napari.plotting.data import ResponsePlotData
+from twopy.napari.protocols import NapariEventEmitter
 from twopy.napari.responses import (
     compute_response_preview,
     response_analysis_request_from_label_image,
@@ -64,18 +64,6 @@ class ResponsePlotReceiver(Protocol):
         Returns:
             None.
         """
-        ...
-
-
-class _EventEmitter(Protocol):
-    """Small protocol for psygnal event emitters exposed by napari layers."""
-
-    def connect(self, callback: Callable[..., None]) -> object:
-        """Connect one callback to the event emitter."""
-        ...
-
-    def disconnect(self, callback: Callable[..., None]) -> object:
-        """Disconnect one callback from the event emitter."""
         ...
 
 
@@ -129,7 +117,7 @@ class LiveResponseController:
         self._delta_f_over_f_options = DeltaFOverFOptions()
         self._response_window_options = ResponseWindowOptions()
         self._response_processing_options = ResponseProcessingOptions()
-        self._connections: list[_EventEmitter] = []
+        self._connections: list[NapariEventEmitter] = []
         self._is_shutdown = False
         self._version = 0
         self._active_version: int | None = None
@@ -422,7 +410,7 @@ class LiveResponseController:
             emitter = getattr(events, event_name, None)
             if emitter is None:
                 continue
-            connected = cast(_EventEmitter, emitter)
+            connected = cast(NapariEventEmitter, emitter)
             connected.connect(self.request_update)
             self._connections.append(connected)
 

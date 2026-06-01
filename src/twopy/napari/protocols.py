@@ -7,6 +7,7 @@ These protocols keep the adapter testable without importing or starting napari
 in unit tests.
 """
 
+from collections.abc import Callable
 from typing import Protocol
 
 
@@ -88,3 +89,46 @@ class NapariLayerWithData(Protocol):
     """
 
     data: object
+
+
+class NapariEventEmitter(Protocol):
+    """Small protocol for psygnal event emitters exposed by napari objects.
+
+    Inputs: callback functions owned by GUI controllers.
+    Outputs: connection or disconnection side effects on the napari emitter.
+
+    This lets controllers subscribe to napari events without importing napari
+    or psygnal during unit tests.
+    """
+
+    def connect(self, callback: Callable[..., None]) -> object:
+        """Connect one callback to the event emitter.
+
+        Args:
+            callback: Function called by the event emitter.
+
+        Returns:
+            Emitter-specific connection result.
+        """
+        ...
+
+    def disconnect(self, callback: Callable[..., None]) -> object:
+        """Disconnect one callback from the event emitter.
+
+        Args:
+            callback: Function previously connected to the event emitter.
+
+        Returns:
+            Emitter-specific disconnection result.
+        """
+        ...
+
+
+class NapariViewerWithDims(Protocol):
+    """Small protocol for napari viewers that expose dimension state.
+
+    Inputs: napari viewer-like object.
+    Outputs: access to the ``dims`` state used for frame-aware tools.
+    """
+
+    dims: object

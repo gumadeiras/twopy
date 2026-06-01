@@ -11,7 +11,6 @@ matching across fields of view should not be the default path.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 
 from qtpy.QtCore import QEvent
 from qtpy.QtWidgets import (
@@ -27,6 +26,7 @@ from twopy.napari.group_matching.fov_assignment import (
     FovRecordingCard,
     mean_image_thumbnail_pixmap,
 )
+from twopy.napari.group_matching.protocols import GroupMatchingState
 from twopy.napari.group_matching.roi_assignment import (
     MATCH_TABLE_FILENAME,
     RoiAssignmentView,
@@ -36,7 +36,6 @@ from twopy.napari.group_matching.style import (
     GROUP_MATCHING_OUTER_MARGIN,
     style_group_matching_panel,
 )
-from twopy.napari.session import LoadedNapariRecording
 
 __all__ = [
     "FovAssignmentView",
@@ -96,12 +95,6 @@ class GroupMatchingCsvPaths:
         """Move the ROI CSV path only while it is still auto-managed."""
         if self.roi_path_is_auto:
             self.roi_path = self.fov_path.parent / MATCH_TABLE_FILENAME
-
-
-class GroupMatchingState(Protocol):
-    """Napari control-state fields needed by the group-matching widget."""
-
-    loaded_recordings: list[LoadedNapariRecording]
 
 
 class GroupMatchingPanel(QWidget):

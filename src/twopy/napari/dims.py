@@ -8,15 +8,11 @@ frame. Keeping that small boundary here avoids each feature learning napari's
 ``current_step`` and ``point`` variants independently.
 """
 
-from typing import Protocol, cast
+from typing import cast
+
+from twopy.napari.protocols import NapariViewerWithDims
 
 __all__ = ["current_step_index", "set_current_step_index"]
-
-
-class _ViewerWithDims(Protocol):
-    """Small protocol for napari viewers that expose dimension state."""
-
-    dims: object
 
 
 def current_step_index(
@@ -39,7 +35,7 @@ def current_step_index(
     """
     if viewer is None or not hasattr(viewer, "dims"):
         return 0
-    dims = cast(_ViewerWithDims, viewer).dims
+    dims = cast(NapariViewerWithDims, viewer).dims
     value = _step_value_from_dims(dims, axis=axis)
     if step_count is None:
         return max(0, value)
@@ -66,7 +62,7 @@ def set_current_step_index(viewer: object | None, *, axis: int, step: int) -> No
     """
     if viewer is None or not hasattr(viewer, "dims"):
         return
-    dims = cast(_ViewerWithDims, viewer).dims
+    dims = cast(NapariViewerWithDims, viewer).dims
     bounded_step = max(0, int(step))
     setter = getattr(dims, "set_current_step", None)
     if callable(setter):

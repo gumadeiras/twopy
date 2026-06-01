@@ -13,7 +13,6 @@ the main napari viewer.
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
 
 import numpy as np
 from qtpy.QtCore import QEvent, QObject, QSignalBlocker, Qt
@@ -67,6 +66,7 @@ from twopy.napari.group_matching.cards import (
 from twopy.napari.group_matching.images import (
     THUMBNAIL_SIZE as GROUP_MATCHING_THUMBNAIL_SIZE,
 )
+from twopy.napari.group_matching.protocols import GroupMatchingState
 from twopy.napari.group_matching.responses import SelectedRoiResponseCache
 from twopy.napari.group_matching.roi_cards import (
     ROI_CARD_HEIGHT,
@@ -108,12 +108,6 @@ _ROI_CONTROL_HEIGHT = ROI_CONTROL_HEIGHT
 _FOV_FILTER_POPUP_MIN_WIDTH = 128
 _ROI_TABLE_VISIBLE_ROWS = 5
 _ROI_TABLE_ROW_HEIGHT = 24
-
-
-class GroupMatchingState(Protocol):
-    """Napari control-state fields needed by the ROI assignment view."""
-
-    loaded_recordings: list[LoadedNapariRecording]
 
 
 class RoiAssignmentView(QWidget):

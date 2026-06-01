@@ -7,11 +7,13 @@ This module owns display-only image normalization. It does not read recordings,
 write group tables, or make ROI matching decisions.
 """
 
-from typing import Protocol, cast
+from typing import cast
 
 import numpy as np
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QColor, QFont, QImage, QPainter, QPixmap
+
+from twopy.napari.protocols import NapariLayerWithData
 
 __all__ = [
     "mean_image_roi_overlay_pixmap",
@@ -20,12 +22,6 @@ __all__ = [
 
 THUMBNAIL_SIZE = 220
 ROI_PREVIEW_SIZE = THUMBNAIL_SIZE
-
-
-class _LayerWithData(Protocol):
-    """Small protocol for napari layers whose image data can be previewed."""
-
-    data: object
 
 
 def mean_image_thumbnail_pixmap(
@@ -102,7 +98,7 @@ def _layer_image(layer: object | None) -> np.ndarray | None:
     """Return a 2D array from a napari-shaped layer."""
     if layer is None or not hasattr(layer, "data"):
         return None
-    image = np.asarray(cast(_LayerWithData, layer).data)
+    image = np.asarray(cast(NapariLayerWithData, layer).data)
     return image if image.ndim == 2 else None
 
 
