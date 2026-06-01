@@ -6,7 +6,9 @@ Outputs: inspectable HDF5 files and response time-series CSV files.
 
 import csv
 import unittest
+from collections.abc import Iterator
 from pathlib import Path
+from unittest.mock import patch
 
 import h5py
 import numpy as np
@@ -262,6 +264,94 @@ class PersistenceTest(unittest.TestCase):
                     response_summary_trials_csv=Path(temp_dir) / "summary.csv",
                 )
             self.assertFalse(h5_path.exists())
+
+    def test_failed_hdf5_save_preserves_existing_analysis_file(self) -> None:
+        """Confirm a failed HDF5 rewrite leaves the previous complete file.
+
+        Inputs: An existing analysis HDF5 file and a later save whose writer
+            fails after opening its temporary file.
+        Outputs: The original HDF5 file remains loadable and no temp file is left.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            h5_path = root / "analysis_outputs.h5"
+            save_analysis_outputs(h5_path, traces=self._traces())
+
+            with (
+                patch(
+                    "twopy.analysis.persistence._write_dff",
+                    side_effect=RuntimeError("forced write failure"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "forced write failure"),
+            ):
+                save_analysis_outputs(h5_path, dff=self._dff())
+
+            loaded = load_analysis_outputs(h5_path)
+            self.assertIsNotNone(loaded.traces)
+            self.assertIsNone(loaded.dff)
+            self.assertEqual(tuple(root.glob(".analysis_outputs.h5.*.tmp")), ())
+
+    def test_atomic_hdf5_save_preserves_existing_file_mode(self) -> None:
+        """Confirm atomic replacement keeps permissions from the old file.
+
+        Inputs: An existing analysis file with an explicit read mode.
+        Outputs: The rewritten analysis file keeps the same permission bits.
+        """
+        with temporary_directory() as temp_dir:
+            h5_path = Path(temp_dir) / "analysis_outputs.h5"
+            save_analysis_outputs(h5_path, traces=self._traces())
+            h5_path.chmod(0o640)
+
+            save_analysis_outputs(h5_path, dff=self._dff())
+
+            self.assertEqual(h5_path.stat().st_mode & 0o777, 0o640)
+
+    def test_failed_grouped_csv_write_preserves_existing_file(self) -> None:
+        """Confirm a failed grouped CSV rewrite leaves the previous complete file.
+
+        Inputs: An existing CSV file and a later grouped-response writer that
+            fails while streaming rows.
+        Outputs: The original CSV text remains unchanged and no temp file is left.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            output_path = root / "response_summary_grouped.csv"
+            previous_text = "previous,content\n1,2\n"
+            output_path.write_text(previous_text, encoding="utf-8")
+            grouped = group_delta_f_over_f_by_epoch(
+                self._dff(),
+                (EpochFrameWindow(FrameWindow(0, 0, 2, "gray"), 1, "Gray"),),
+                data_rate_hz=2.0,
+            )
+
+            def failing_rows(
+                *_args: object,
+                **_kwargs: object,
+            ) -> Iterator[dict[str, str | int | float]]:
+                yield {
+                    "epoch_number": 1,
+                    "epoch_name": "Gray",
+                    "roi_label": "roi_1",
+                    "statistic": "mean",
+                    "time_s_0.000000": 0.0,
+                    "time_s_0.500000": 2.0,
+                }
+                raise RuntimeError("forced csv failure")
+
+            with (
+                patch(
+                    "twopy.analysis.persistence._iter_grouped_response_rows",
+                    side_effect=failing_rows,
+                ),
+                self.assertRaisesRegex(RuntimeError, "forced csv failure"),
+            ):
+                write_response_summary_grouped_csv(grouped, output_path)
+
+            self.assertEqual(output_path.read_text(encoding="utf-8"), previous_text)
+            self.assertEqual(
+                tuple(root.glob(".response_summary_grouped.csv.*.tmp")),
+                (),
+            )
 
     def test_rejects_persisted_grouped_response_with_misaligned_time_axis(
         self,

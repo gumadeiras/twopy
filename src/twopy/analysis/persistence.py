@@ -10,7 +10,9 @@ MATLAB/TIFF files or decide analysis parameters.
 
 import csv
 import json
-from collections.abc import Mapping, Sequence
+import os
+import tempfile
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -159,6 +161,8 @@ def save_analysis_outputs(
     The HDF5 file stores arrays with gzip compression where arrays can be large.
     The HDF5 file is the complete audit trail. CSV files duplicate response
     time series in a spreadsheet-friendly layout for quick plotting and checks.
+    Each output file is written through a temporary sibling path so a failed
+    write leaves the previous complete file in place.
     """
     summary_outputs = (
         response_summary_trials_csv,
@@ -175,35 +179,40 @@ def save_analysis_outputs(
     if grouped_responses is not None:
         validate_grouped_roi_responses(grouped_responses)
 
-    output_path = path.expanduser()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with h5py.File(output_path, "w") as h5_file:
-        h5_file.attrs["twopy_format"] = ANALYSIS_OUTPUT_FILE_FORMAT
-        if roi_set is not None:
-            _write_roi_set(h5_file.create_group("roi_set"), roi_set)
-        if traces is not None:
-            _write_background_traces(h5_file.create_group("traces"), traces)
-        if dff is not None:
-            _write_dff(h5_file.create_group("dff"), dff)
-        if len(epoch_windows) > 0:
-            _write_epoch_windows(h5_file.create_group("epoch_windows"), epoch_windows)
-        if len(baseline_windows) > 0:
-            _write_frame_windows(
-                h5_file.create_group("baseline_windows"),
-                baseline_windows,
-            )
-        if grouped_responses is not None:
-            _write_grouped_responses(
-                h5_file.create_group("responses"),
-                grouped_responses,
-            )
-        if response_processing_options is not None:
-            write_response_processing_group(
-                h5_file.create_group("response_processing"),
-                options=response_processing_options,
-                normalization_factors=normalization_factors,
-                correlation_scores=correlation_scores,
-            )
+    def write_hdf5(output_path: Path) -> None:
+        """Write the analysis HDF5 contents to one already-created path."""
+        with h5py.File(output_path, "w") as h5_file:
+            h5_file.attrs["twopy_format"] = ANALYSIS_OUTPUT_FILE_FORMAT
+            if roi_set is not None:
+                _write_roi_set(h5_file.create_group("roi_set"), roi_set)
+            if traces is not None:
+                _write_background_traces(h5_file.create_group("traces"), traces)
+            if dff is not None:
+                _write_dff(h5_file.create_group("dff"), dff)
+            if len(epoch_windows) > 0:
+                _write_epoch_windows(
+                    h5_file.create_group("epoch_windows"),
+                    epoch_windows,
+                )
+            if len(baseline_windows) > 0:
+                _write_frame_windows(
+                    h5_file.create_group("baseline_windows"),
+                    baseline_windows,
+                )
+            if grouped_responses is not None:
+                _write_grouped_responses(
+                    h5_file.create_group("responses"),
+                    grouped_responses,
+                )
+            if response_processing_options is not None:
+                write_response_processing_group(
+                    h5_file.create_group("response_processing"),
+                    options=response_processing_options,
+                    normalization_factors=normalization_factors,
+                    correlation_scores=correlation_scores,
+                )
+
+    _write_file_atomically(path, write_hdf5)
 
     if grouped_responses is not None:
         if response_summary_trials_csv is not None:
@@ -216,6 +225,58 @@ def save_analysis_outputs(
                 grouped_responses,
                 response_summary_grouped_csv,
             )
+
+
+def _write_file_atomically(
+    path: Path,
+    write_file: Callable[[Path], None],
+) -> None:
+    """Write a file beside its final path, then replace the old file.
+
+    Args:
+        path: Final destination path.
+        write_file: Callback that writes a complete file at the provided
+            temporary path.
+
+    Returns:
+        None.
+
+    Existing analysis files are useful audit records. Writing through a sibling
+    temporary path keeps a failed save from replacing the last complete output.
+    """
+    output_path = path.expanduser()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_descriptor, temp_name = tempfile.mkstemp(
+        prefix=f".{output_path.name}.",
+        suffix=".tmp",
+        dir=output_path.parent,
+    )
+    os.close(temp_descriptor)
+    temp_path = Path(temp_name)
+    try:
+        write_file(temp_path)
+        temp_path.chmod(_replacement_file_mode(output_path))
+        temp_path.replace(output_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+
+
+def _replacement_file_mode(path: Path) -> int:
+    """Return the file mode an atomic replacement should keep.
+
+    Args:
+        path: Final destination path.
+
+    Returns:
+        Existing file permissions, or normal new-file permissions after the
+        process umask.
+    """
+    if path.exists():
+        return path.stat().st_mode & 0o777
+    current_umask = os.umask(0)
+    os.umask(current_umask)
+    return 0o666 & ~current_umask
 
 
 def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
@@ -297,25 +358,31 @@ def write_response_summary_trials_csv(
 
     Returns:
         None.
+
+    The CSV is written through a temporary sibling path so a failed write leaves
+    the previous complete file in place.
     """
-    output_path = path.expanduser()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     validate_grouped_roi_responses(grouped_responses)
     time_columns = _time_columns(grouped_responses.trials)
     fieldnames = (*_TRIAL_RESPONSE_CSV_BASE_COLUMNS, *time_columns)
-    with output_path.open("w", encoding="utf-8", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        writer.writeheader()
-        for trial in grouped_responses.trials:
-            for roi_index, roi_label in enumerate(grouped_responses.roi_labels):
-                writer.writerow(
-                    _trial_response_row(
-                        trial,
-                        roi_index=roi_index,
-                        roi_label=roi_label,
-                        time_columns=time_columns,
-                    ),
-                )
+
+    def write_csv(output_path: Path) -> None:
+        """Write trial-level rows to one complete CSV file."""
+        with output_path.open("w", encoding="utf-8", newline="") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writeheader()
+            for trial in grouped_responses.trials:
+                for roi_index, roi_label in enumerate(grouped_responses.roi_labels):
+                    writer.writerow(
+                        _trial_response_row(
+                            trial,
+                            roi_index=roi_index,
+                            roi_label=roi_label,
+                            time_columns=time_columns,
+                        ),
+                    )
+
+    _write_file_atomically(path, write_csv)
 
 
 def write_response_summary_grouped_csv(
@@ -330,17 +397,23 @@ def write_response_summary_grouped_csv(
 
     Returns:
         None.
+
+    The CSV is written through a temporary sibling path so a failed write leaves
+    the previous complete file in place.
     """
-    output_path = path.expanduser()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     validate_grouped_roi_responses(grouped_responses)
     time_columns = _time_columns(grouped_responses.trials)
     fieldnames = (*_GROUPED_RESPONSE_CSV_BASE_COLUMNS, *time_columns)
-    with output_path.open("w", encoding="utf-8", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in _grouped_response_rows(grouped_responses, time_columns):
-            writer.writerow(row)
+
+    def write_csv(output_path: Path) -> None:
+        """Write grouped rows to one complete CSV file."""
+        with output_path.open("w", encoding="utf-8", newline="") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in _iter_grouped_response_rows(grouped_responses, time_columns):
+                writer.writerow(row)
+
+    _write_file_atomically(path, write_csv)
 
 
 def _write_roi_set(group: h5py.Group, roi_set: RoiSet) -> None:
@@ -894,10 +967,10 @@ def _trial_response_row(
     return row
 
 
-def _grouped_response_rows(
+def _iter_grouped_response_rows(
     grouped: GroupedRoiResponses,
     time_columns: tuple[str, ...],
-) -> tuple[dict[str, str | int | float], ...]:
+) -> Iterator[dict[str, str | int | float]]:
     """Convert grouped trial responses to mean, SEM, and count CSV rows.
 
     Args:
@@ -905,12 +978,12 @@ def _grouped_response_rows(
         time_columns: Complete CSV time-column union.
 
     Returns:
-        Rows keyed by epoch, ROI, statistic, and relative timepoint.
+        Iterator over rows keyed by epoch, ROI, statistic, and relative
+        timepoint.
 
     Counts are per timepoint rather than one scalar because pre/post context or
     clipped recording edges can make some trials shorter than others.
     """
-    rows: list[dict[str, str | int | float]] = []
     for epoch_number, epoch_name, trials in _trials_by_epoch(grouped.trials):
         for roi_index, roi_label in enumerate(grouped.roi_labels):
             values_by_time = _values_by_time_column(
@@ -918,16 +991,13 @@ def _grouped_response_rows(
                 roi_index=roi_index,
                 time_columns=time_columns,
             )
-            rows.extend(
-                _epoch_roi_statistic_rows(
-                    epoch_number=epoch_number,
-                    epoch_name=epoch_name,
-                    roi_label=roi_label,
-                    values_by_time=values_by_time,
-                    time_columns=time_columns,
-                ),
+            yield from _epoch_roi_statistic_rows(
+                epoch_number=epoch_number,
+                epoch_name=epoch_name,
+                roi_label=roi_label,
+                values_by_time=values_by_time,
+                time_columns=time_columns,
             )
-    return tuple(rows)
 
 
 def _trials_by_epoch(
