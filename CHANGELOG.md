@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-06-01
+
 ### Changes
 
 - Added a shared programmatic custom-workflow runner so scripts and the napari Custom tab use the same execution, validation, and provenance path.
