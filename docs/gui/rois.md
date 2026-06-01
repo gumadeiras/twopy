@@ -26,6 +26,7 @@ Click **Create ROIs** to replace the contents of the `rois` Labels layer with th
 
 The ROIs tab also shows a per-ROI table:
 
+- **area (px)** shows how many displayed crop pixels belong to each ROI.
 - **Hide** a row to keep its mask but exclude it from response plots and saved analysis.
 - **Merge Selected** combines the checked rows into the first checked ROI label, then updates response plots from the combined mask.
 - **Remove Selected** drops the checked rows from the Labels layer outright.

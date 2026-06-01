@@ -63,6 +63,7 @@ def render_dynamic_options(
     roi_labels: tuple[str, ...],
     roi_visibility: dict[int, bool],
     roi_colors: tuple[QColor, ...],
+    roi_area_pixel_details: tuple[str, ...] | None,
     epoch_visibility: dict[int, bool],
     on_show_sem_change: Callable[[int], None],
     on_plot_size_change: Callable[[int], None],
@@ -92,6 +93,8 @@ def render_dynamic_options(
         roi_labels: ROI labels in plot order.
         roi_visibility: Current ROI visibility state.
         roi_colors: ROI colors in plot order.
+        roi_area_pixel_details: Area text shown beside each ROI row, or
+            ``None`` when no editable Labels layer is available.
         epoch_visibility: Current epoch visibility state.
         on_show_sem_change: Callback for the SEM checkbox.
         on_plot_size_change: Callback for the plot-size spinbox.
@@ -139,6 +142,7 @@ def render_dynamic_options(
         roi_labels=roi_labels,
         roi_visibility=roi_visibility,
         roi_colors=roi_colors,
+        roi_area_pixel_details=roi_area_pixel_details,
         on_roi_visibility_change=on_roi_visibility_change,
         on_roi_visibility_batch=on_roi_visibility_batch,
         on_merge_selected_rois=on_merge_selected_rois,
@@ -170,6 +174,7 @@ def render_roi_options(
     on_roi_visibility_batch: Callable[[dict[object, bool]], None],
     on_merge_selected_rois: Callable[[], None],
     on_remove_selected_rois: Callable[[], None],
+    roi_area_pixel_details: tuple[str, ...] | None = None,
 ) -> None:
     """Render the ROIs tab controls from current visibility state.
 
@@ -184,6 +189,8 @@ def render_roi_options(
             the active Labels layer.
         on_remove_selected_rois: Callback that deletes checked ROI labels from
             the active Labels layer.
+        roi_area_pixel_details: Area text shown beside each ROI row, or
+            ``None`` when no editable Labels layer is available.
 
     Returns:
         None.
@@ -197,6 +204,8 @@ def render_roi_options(
         on_change_batch=on_roi_visibility_batch,
         keys=tuple(range(len(roi_labels))),
         colors=roi_colors,
+        details=roi_area_pixel_details,
+        detail_header="area (px)" if roi_area_pixel_details is not None else None,
     )
     roi_options_layout.addWidget(roi_widget)
     merge_button = QPushButton("Merge Selected")

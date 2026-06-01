@@ -15,6 +15,7 @@ from tests.napari_support import (
     QApplication,
     QCheckBox,
     QColor,
+    QLabel,
     QPushButton,
     QWidget,
     RoiGenerationControls,
@@ -62,6 +63,35 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
         styles = "\n".join(child.styleSheet() for child in widget.findChildren(QWidget))
         self.assertIn("#ff0000", styles)
         self.assertIn("#0000ff", styles)
+
+    def test_roi_tab_shows_area_pixels_for_current_labels(self) -> None:
+        """Confirm the ROIs tab reports displayed Labels-layer area.
+
+        Inputs: response plot widget with two plotted ROIs and current Labels
+            pixels.
+        Outputs: ROI row details show pixel counts in plot order.
+        """
+        _ = QApplication.instance() or QApplication([])
+        layer = _FakeLayer(
+            name="rois",
+            data=np.array([[1, 2], [0, 2]], dtype=np.int64),
+            options={},
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_roi_labels_layer(layer)
+
+        response_widget.set_response_plot_data(
+            _two_roi_response_plot_data(),
+            reset_axes=True,
+        )
+
+        label_texts = {
+            label.text()
+            for label in response_widget.options_widget().findChildren(QLabel)
+        }
+        self.assertIn("area (px)", label_texts)
+        self.assertIn("1 px", label_texts)
+        self.assertIn("2 px", label_texts)
 
     def test_remove_roi_label_values_from_layer_clears_only_selected_rois(
         self,

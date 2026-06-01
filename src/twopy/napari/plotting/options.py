@@ -11,7 +11,7 @@ load analysis files, or compute responses.
 from collections.abc import Callable, Hashable, Mapping
 from typing import cast
 
-from qtpy.QtCore import QSignalBlocker
+from qtpy.QtCore import QSignalBlocker, Qt
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -108,6 +108,8 @@ def visibility_options_widget(
     on_change_batch: object | None = None,
     keys: tuple[VisibilityKey, ...] | None = None,
     colors: tuple[QColor, ...] | None = None,
+    details: tuple[str, ...] | None = None,
+    detail_header: str | None = None,
 ) -> QWidget:
     """Create select-all/select-none checkboxes for plot visibility.
 
@@ -124,6 +126,8 @@ def visibility_options_widget(
             human-readable; keys prevent duplicate display names from toggling
             the wrong underlying item.
         colors: Optional swatch colors matching ``labels`` by position.
+        details: Optional right-aligned text matching ``labels`` by position.
+        detail_header: Optional header shown over the details column.
 
     Returns:
         Qt widget containing controls.
@@ -137,7 +141,16 @@ def visibility_options_widget(
     widget = QWidget()
     visibility_lookup = dict(visibility.items())
     layout = QVBoxLayout()
-    layout.addWidget(QLabel(title))
+    title_row = QHBoxLayout()
+    title_row.addWidget(QLabel(title))
+    title_row.addStretch(1)
+    if details is not None and detail_header is not None:
+        detail_header_label = QLabel(detail_header)
+        detail_header_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        title_row.addWidget(detail_header_label)
+    layout.addLayout(title_row)
     button_row = QHBoxLayout()
     all_button = QPushButton("Select all")
     none_button = QPushButton("None")
@@ -159,7 +172,13 @@ def visibility_options_widget(
         )
         checkboxes.append(checkbox)
         checkbox_keys.append(key)
-        list_layout.addWidget(_visibility_row(checkbox, _color_at(colors, index)))
+        list_layout.addWidget(
+            _visibility_row(
+                checkbox,
+                _color_at(colors, index),
+                _detail_at(details, index),
+            )
+        )
     list_widget.setLayout(list_layout)
 
     layout.addWidget(list_widget)
@@ -200,12 +219,17 @@ def _axis_spin_box(value: float) -> QDoubleSpinBox:
     return spin_box
 
 
-def _visibility_row(checkbox: QCheckBox, color: QColor | None) -> QWidget:
+def _visibility_row(
+    checkbox: QCheckBox,
+    color: QColor | None,
+    detail: str | None,
+) -> QWidget:
     """Create one compact checkbox row, with an optional color swatch.
 
     Args:
         checkbox: Visibility checkbox.
         color: Optional ROI color.
+        detail: Optional right-aligned row detail text.
 
     Returns:
         Row widget for the visibility list.
@@ -217,6 +241,12 @@ def _visibility_row(checkbox: QCheckBox, color: QColor | None) -> QWidget:
         layout.addWidget(_color_swatch(color))
     layout.addWidget(checkbox)
     layout.addStretch(1)
+    if detail is not None:
+        detail_label = QLabel(detail)
+        detail_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        layout.addWidget(detail_label)
     row.setLayout(layout)
     return row
 
@@ -251,3 +281,18 @@ def _color_at(colors: tuple[QColor, ...] | None, index: int) -> QColor | None:
     if colors is None or index >= len(colors):
         return None
     return colors[index]
+
+
+def _detail_at(details: tuple[str, ...] | None, index: int) -> str | None:
+    """Return one optional row detail.
+
+    Args:
+        details: Optional row detail texts.
+        index: Requested label index.
+
+    Returns:
+        Matching detail, or ``None``.
+    """
+    if details is None or index >= len(details):
+        return None
+    return details[index]

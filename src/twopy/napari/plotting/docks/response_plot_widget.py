@@ -10,7 +10,9 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
+import numpy.typing as npt
 from qtpy.QtCore import QTimer
 from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
@@ -103,6 +105,7 @@ from twopy.napari.plotting.widgets import (
     resolved_value_bounds,
     roi_colors_from_label_values,
 )
+from twopy.napari.protocols import NapariLayerWithData
 from twopy.napari.responses import (
     ResponseAnalysisRequest,
     response_analysis_request_from_labels,
@@ -123,7 +126,12 @@ from twopy.pixel_calibration_profiles import (
     PixelCalibrationProfileMapping,
     load_pixel_calibration_profile_mappings,
 )
-from twopy.roi import RoiSet, roi_label_values_from_labels, roi_set_to_label_image
+from twopy.roi import (
+    RoiSet,
+    roi_area_pixels_from_label_image,
+    roi_label_values_from_labels,
+    roi_set_to_label_image,
+)
 from twopy.stimulus import stimulus_epoch_names_by_number
 
 _CUSTOM_EPOCH_WINDOW_MIN_SECONDS = 0.0
@@ -1017,6 +1025,7 @@ class _ResponsePlotWidget(QWidget):
             roi_labels=self._roi_labels(),
             roi_visibility=self._roi_visibility,
             roi_colors=self._roi_colors,
+            roi_area_pixel_details=self._roi_area_pixel_details(),
             epoch_visibility=self._epoch_visibility,
             on_show_sem_change=self._set_show_sem,
             on_plot_size_change=self._set_plot_size,
@@ -1035,6 +1044,7 @@ class _ResponsePlotWidget(QWidget):
             roi_labels=self._roi_labels(),
             roi_visibility=self._roi_visibility,
             roi_colors=self._roi_colors,
+            roi_area_pixel_details=self._roi_area_pixel_details(),
             on_roi_visibility_change=self._set_roi_visibility,
             on_roi_visibility_batch=self._set_roi_visibility_batch,
             on_merge_selected_rois=self.merge_selected_rois,
@@ -1220,6 +1230,32 @@ class _ResponsePlotWidget(QWidget):
 
     def _roi_label_values(self) -> tuple[int, ...]:
         return roi_label_values(self._plot_data)
+
+    def _roi_area_pixel_details(self) -> tuple[str, ...] | None:
+        """Return displayed ROI area text for the ROIs tab.
+
+        Args:
+            None.
+
+        Returns:
+            Per-ROI ``"<count> px"`` text in plot order, or ``None`` when no
+            editable Labels layer is available.
+
+        The ROIs tab describes the mask the user can currently see and edit, so
+        this reads the displayed Labels layer data and leaves the counting
+        rules in the GUI-independent ROI helper.
+        """
+        if self._roi_labels_layer is None:
+            return None
+        label_image = cast(
+            npt.ArrayLike,
+            cast(NapariLayerWithData, self._roi_labels_layer).data,
+        )
+        areas_by_label_value = roi_area_pixels_from_label_image(label_image)
+        return tuple(
+            f"{areas_by_label_value.get(label_value, 0)} px"
+            for label_value in self._roi_label_values()
+        )
 
     def _set_roi_visibility(self, index: object, visible: bool) -> None:
         set_row_visibility(

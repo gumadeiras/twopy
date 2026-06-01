@@ -11,6 +11,7 @@ from tests.napari_support import (
     QApplication,
     QCheckBox,
     QColor,
+    QLabel,
     QPushButton,
     QScrollArea,
     _two_roi_response_plot_data,
@@ -176,6 +177,28 @@ class NapariRoiVisibilityTest(NapariAdapterTestCase):
 
         self.assertTrue(checkboxes[0].isChecked())
         self.assertFalse(checkboxes[1].isChecked())
+
+    def test_visibility_options_show_row_details(self) -> None:
+        """Confirm optional row details render beside visibility checkboxes.
+
+        Inputs: two ROI labels with area text and a detail header.
+        Outputs: labels for the header and each row detail.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = visibility_options_widget(
+            title="ROIs",
+            labels=("roi_1", "roi_2"),
+            visibility={"roi_1": True, "roi_2": True},
+            on_change=lambda _key, _visible: None,
+            details=("2 px", "1 px"),
+            detail_header="area (px)",
+        )
+
+        label_texts = {label.text() for label in widget.findChildren(QLabel)}
+
+        self.assertIn("area (px)", label_texts)
+        self.assertIn("2 px", label_texts)
+        self.assertIn("1 px", label_texts)
 
     def test_visibility_options_do_not_add_inner_scroll_area(self) -> None:
         """Confirm ROI/Epoch rows rely on the tab scrollbar.

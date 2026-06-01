@@ -32,6 +32,7 @@ __all__ = [
     "load_roi_set",
     "make_roi_set_from_label_image",
     "make_roi_set",
+    "roi_area_pixels_from_label_image",
     "roi_label_value_from_label",
     "roi_label_values_from_labels",
     "roi_set_to_label_image",
@@ -188,6 +189,33 @@ def roi_set_to_label_image(roi_set: RoiSet) -> npt.NDArray[np.int64]:
     for label_value, mask in zip(label_values, roi_set.masks, strict=True):
         label_image[mask] = label_value
     return label_image
+
+
+def roi_area_pixels_from_label_image(label_image: npt.ArrayLike) -> dict[int, int]:
+    """Count pixels for each positive ROI label in one label image.
+
+    Args:
+        label_image: Two-dimensional image where ``0`` is background and each
+            positive integer is one ROI.
+
+    Returns:
+        Mapping from positive ROI label value to pixel count.
+
+    Raises:
+        ValueError: If the label image is not two-dimensional, contains
+            negative labels, or contains non-integer values.
+
+    The napari ROIs tab uses this to show area beside each editable ROI row.
+    Keeping the count here makes the displayed value match the same label-image
+    convention used for saving and trace extraction.
+    """
+    integer_labels = _integer_label_image(label_image)
+    positive_labels = integer_labels[integer_labels > 0]
+    if positive_labels.size == 0:
+        return {}
+
+    values, counts = np.unique(positive_labels, return_counts=True)
+    return {int(value): int(count) for value, count in zip(values, counts, strict=True)}
 
 
 def roi_label_value_from_label(label: str, *, fallback: int) -> int:

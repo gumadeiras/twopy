@@ -25,6 +25,7 @@ from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
 from twopy.roi import (
     TraceStatistic,
+    roi_area_pixels_from_label_image,
     roi_label_value_from_label,
     roi_label_values_from_labels,
 )
@@ -149,6 +150,34 @@ class RoiTest(unittest.TestCase):
         """
         with self.assertRaisesRegex(ValueError, "cannot be empty"):
             make_roi_set(np.zeros((1, 2, 2), dtype=bool))
+
+    def test_counts_area_pixels_from_label_image(self) -> None:
+        """Confirm ROI areas come from positive label pixels.
+
+        Inputs: one label image with background and non-contiguous ROI labels.
+        Outputs: area counts keyed by the original positive Labels values.
+        """
+        areas = roi_area_pixels_from_label_image(
+            np.array(
+                [
+                    [0, 1, 1],
+                    [4, 0, 4],
+                    [4, 0, 0],
+                ],
+            ),
+        )
+
+        self.assertEqual(areas, {1: 2, 4: 3})
+
+    def test_empty_label_image_has_no_roi_area_pixels(self) -> None:
+        """Confirm background-only label images have no ROI areas.
+
+        Inputs: one all-background label image.
+        Outputs: empty area mapping.
+        """
+        areas = roi_area_pixels_from_label_image(np.zeros((2, 3), dtype=np.int64))
+
+        self.assertEqual(areas, {})
 
     def test_rejects_roi_shape_that_does_not_match_movie(self) -> None:
         """Confirm ROI masks must use aligned movie spatial coordinates.

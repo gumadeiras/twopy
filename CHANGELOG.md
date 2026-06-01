@@ -6,6 +6,10 @@
 
 ## Unreleased
 
+### Changes
+
+- Added an `area (px)` column to the napari ROIs tab so editable ROI rows show their current mask size.
+
 ## 0.3.0 - 2026-06-01
 
 ### Changes
