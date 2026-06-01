@@ -375,7 +375,7 @@ Rows sharing a `group_cell_id` with `status="matched"` are the same visually ass
 ```python
 from pathlib import Path
 
-from twopy import (
+from twopy.napari import (
     launch_napari,
     open_recording_in_napari,
     roi_label_image_from_layer,

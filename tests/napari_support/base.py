@@ -62,17 +62,13 @@ import twopy.napari.sidebar as napari_sidebar
 import twopy.napari.trial_timeline as trial_timeline
 from tests.tempdir import temporary_directory
 from twopy import (
-    add_twopy_magicgui_controls,
     load_manual_fov_group_rows,
     load_manual_roi_match_rows,
     load_roi_set,
     make_manual_fov_group_rows,
     make_roi_set,
-    open_recording_in_napari,
-    roi_label_image_from_layer,
     roi_set_to_label_image,
     save_manual_fov_group_rows,
-    save_napari_label_rois,
     save_roi_set,
 )
 from twopy._version import __version__
@@ -98,6 +94,12 @@ from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import ConvertedRecording
 from twopy.converted import load_converted_recording
 from twopy.database.search import ExperimentSearchFilters
+from twopy.napari import (
+    add_twopy_magicgui_controls,
+    open_recording_in_napari,
+    roi_label_image_from_layer,
+    save_napari_label_rois,
+)
 from twopy.napari.database_favorites import (
     ExperimentSearchFavorite,
     load_database_search_favorites,
