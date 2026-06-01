@@ -392,6 +392,7 @@ class _FakeViewer:
 
     images: list[_FakeLayer]
     labels: list[_FakeLayer]
+    layers: SimpleNamespace
     window: _FakeWindow
 
     def __init__(self) -> None:
@@ -402,6 +403,7 @@ class _FakeViewer:
         """
         self.images: list[_FakeLayer] = []
         self.labels: list[_FakeLayer] = []
+        self.layers = SimpleNamespace(selection=SimpleNamespace(active=None))
         self.window = _FakeWindow()
         self.dims = _FakeDims()
         self.text_overlay = _FakeTextOverlay()

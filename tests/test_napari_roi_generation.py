@@ -39,7 +39,11 @@ from tests.napari_support import (
     unittest,
     visibility_options_widget,
 )
-from twopy.napari.roi import merge_roi_label_values_on_layer
+from twopy.napari.roi import (
+    merge_roi_label_values_on_layer,
+    next_roi_label_value,
+    select_next_roi_label_value,
+)
 
 
 class NapariRoiGenerationTest(NapariAdapterTestCase):
@@ -114,6 +118,29 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
             layer.data,
             np.array([[0, 2], [0, 2]], dtype=np.int64),
         )
+
+    def test_select_next_roi_label_value_uses_first_available_label(self) -> None:
+        """Confirm napari paints new ROIs with the first unused label value.
+
+        Inputs: Labels layer with values 1, 2, and 4.
+        Outputs: selected paint label moves to 3 instead of overwriting an ROI.
+        """
+        layer = _FakeLayer(
+            name="rois",
+            data=np.array([[1, 2], [4, 0]], dtype=np.int64),
+            options={},
+            selected_label=1,
+        )
+
+        self.assertEqual(next_roi_label_value(layer), 3)
+
+        select_next_roi_label_value(layer)
+
+        self.assertEqual(layer.selected_label, 3)
+
+        layer.data = np.array([[1, 2, 3], [4, 5, 0]], dtype=np.int64)
+
+        self.assertEqual(next_roi_label_value(layer), 6)
 
     def test_merge_roi_label_values_on_layer_combines_selected_rois(self) -> None:
         """Confirm ROI merging keeps the first selected Labels value.

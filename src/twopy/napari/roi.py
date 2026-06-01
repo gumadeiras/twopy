@@ -11,7 +11,7 @@ Labels data and core ROI masks.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -33,13 +33,21 @@ __all__ = [
     "load_roi_file_on_layer",
     "MergedRoiLabels",
     "merge_roi_label_values_on_layer",
+    "next_roi_label_value",
     "remove_roi_label_values_from_layer",
     "roi_label_image_from_layer",
     "roi_label_image_from_layer_for_recording",
     "save_napari_label_rois",
+    "select_next_roi_label_value",
     "set_roi_label_image_on_layer",
     "validate_roi_layer_matches_recording_crop",
 ]
+
+
+class _LabelsLayerWithSelectedLabel(Protocol):
+    """Small protocol for napari Labels layers with an active paint label."""
+
+    selected_label: int
 
 
 @dataclass(frozen=True)
@@ -88,6 +96,51 @@ def roi_label_image_from_layer(layer: object) -> npt.NDArray[np.int64]:
         crop.axis1_start : crop.axis1_stop,
     ] = labels
     return full_frame
+
+
+def next_roi_label_value(layer: object | None) -> int:
+    """Return the first unused positive ROI label value in a Labels layer.
+
+    Args:
+        layer: Napari Labels layer, or a test object with a ``data`` attribute.
+
+    Returns:
+        Smallest positive integer not present in the layer data.
+
+    The napari paint tool uses ``selected_label`` as the value for new pixels.
+    Picking the first unused value keeps hand-drawn ROIs from overwriting an
+    existing cell when a recording is loaded or selected.
+    """
+    if layer is None or not hasattr(layer, "data"):
+        return 1
+    label_image = np.asarray(cast(NapariLayerWithData, layer).data)
+    used_values = {
+        int(label_value) for label_value in np.unique(label_image) if label_value > 0
+    }
+    label_value = 1
+    while label_value in used_values:
+        label_value += 1
+    return label_value
+
+
+def select_next_roi_label_value(layer: object | None) -> None:
+    """Set a napari Labels layer to paint the next unused ROI value.
+
+    Args:
+        layer: Napari Labels layer, or a test object exposing ``data`` and
+            ``selected_label``.
+
+    Returns:
+        None.
+
+    Real napari Labels layers expose ``selected_label``. Some tests and
+    script-level callers only pass array-like layer doubles, so the helper
+    leaves objects without that attribute unchanged.
+    """
+    if layer is None or not hasattr(layer, "selected_label"):
+        return
+    labels_layer = cast(_LabelsLayerWithSelectedLabel, layer)
+    labels_layer.selected_label = next_roi_label_value(layer)
 
 
 def merge_roi_label_values_on_layer(

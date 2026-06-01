@@ -26,6 +26,7 @@ from qtpy.QtWidgets import (
 from twopy.converted import RecordingData
 from twopy.napari.plotting import refresh_response_plot_widget
 from twopy.napari.protocols import NapariViewer
+from twopy.napari.roi import select_next_roi_label_value
 from twopy.napari.types import NapariRecordingView
 
 __all__ = [
@@ -63,6 +64,12 @@ class _LayerWithVisibility(Protocol):
     """Small protocol for napari layers whose visibility can be toggled."""
 
     visible: bool
+
+
+class _LayerSelection(Protocol):
+    """Small protocol for napari's active layer selection."""
+
+    active: object | None
 
 
 class _TrialTimelineController(Protocol):
@@ -302,6 +309,8 @@ def select_loaded_recording(
     state.roi_labels_layer = selected.roi_labels_layer
     state.roi_save_file = selected.roi_save_file
     set_loaded_recording_visibility(state.loaded_recordings, selected_index=index)
+    select_active_layer(state.viewer, selected.roi_labels_layer)
+    select_next_roi_label_value(selected.roi_labels_layer)
     refresh_response_plot_widget(
         state.response_plot_widget,
         recording=selected.recording,
@@ -433,6 +442,33 @@ def render_loaded_recordings_panel(state: NapariSessionState) -> None:
         set_enabled = getattr(widget, "setEnabled", None)
         if callable(set_enabled):
             set_enabled(has_recordings)
+
+
+def select_active_layer(viewer: object, layer: object | None) -> None:
+    """Make a recording's editable Labels layer active in napari when possible.
+
+    Args:
+        viewer: Napari viewer that owns the loaded recording layers.
+        layer: Selected recording's ROI Labels layer, or ``None`` when the
+            recording has no editable ROI layer.
+
+    Returns:
+        None.
+
+    Napari stores the active layer on ``viewer.layers.selection.active``. Tests
+    and non-napari callers may not expose that object, so this helper quietly
+    skips viewers without the selection API.
+    """
+    if layer is None:
+        return
+    layer_collection = getattr(viewer, "layers", None)
+    selection = getattr(layer_collection, "selection", None)
+    if selection is None or not hasattr(selection, "active"):
+        return
+    try:
+        cast(_LayerSelection, selection).active = layer
+    except (AttributeError, TypeError):
+        return
 
 
 def set_loaded_recording_visibility(

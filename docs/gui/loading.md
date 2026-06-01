@@ -37,7 +37,7 @@ Reopens a session list you previously wrote with **Save loaded list**. If a `fov
 
 ## The Loaded Recordings pane
 
-Each loaded recording shows as a row below the load buttons. Click a row to make it the active recording (the one the plot dock and ROIs tab read from).
+Each loaded recording shows as a row below the load buttons. Click a row to make it the active recording (the one the plot dock and ROIs tab read from); twopy also selects that recording's `rois` Labels layer in napari and sets the paint label to the first unused ROI number so hand edits go to a new ROI on the same recording.
 
 Buttons under the list (disabled until at least one recording is loaded):
 
