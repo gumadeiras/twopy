@@ -9,12 +9,13 @@ Qt widget implementation so import callers see a small, stable API.
 """
 
 from pathlib import Path
-
-from qtpy.QtWidgets import QApplication
+from typing import TYPE_CHECKING
 
 from twopy.converted import RecordingData
-from twopy.napari.plotting.docks.response_plot_widget import _ResponsePlotWidget
 from twopy.napari.protocols import NapariViewer
+
+if TYPE_CHECKING:
+    from twopy.napari.plotting.docks.response_plot_widget import _ResponsePlotWidget
 
 _QT_APPLICATION: object | None = None
 DEFAULT_RESPONSE_DOCK_HEIGHT = 345
@@ -114,7 +115,9 @@ def create_twopy_response_options_widget(
     The options widget is not docked here. The app prepends the Load tab to it
     and docks that single twopy tab stack on the right side.
     """
-    if not isinstance(response_plot_widget, _ResponsePlotWidget):
+    if response_plot_widget is None:
+        return None
+    if not isinstance(response_plot_widget, _response_plot_widget_type()):
         return None
     return response_plot_widget.options_widget()
 
@@ -139,7 +142,7 @@ def create_response_plot_widget(
         Qt widget as a plain object for napari docking.
     """
     _ensure_qapplication()
-    widget = _ResponsePlotWidget(viewer=viewer)
+    widget = _response_plot_widget_type()(viewer=viewer)
     refresh_response_plot_widget(
         widget,
         recording=recording,
@@ -167,7 +170,9 @@ def refresh_response_plot_widget(
     Returns:
         None.
     """
-    if not isinstance(widget, _ResponsePlotWidget):
+    if widget is None:
+        return
+    if not isinstance(widget, _response_plot_widget_type()):
         return
     widget.set_roi_labels_layer(roi_labels_layer)
     widget.set_roi_save_file(roi_save_file)
@@ -180,5 +185,14 @@ def refresh_response_plot_widget(
 def _ensure_qapplication() -> None:
     """Create a Qt application when tests instantiate widgets without napari."""
     global _QT_APPLICATION
+    from qtpy.QtWidgets import QApplication
+
     if QApplication.instance() is None:
         _QT_APPLICATION = QApplication([])
+
+
+def _response_plot_widget_type() -> type["_ResponsePlotWidget"]:
+    """Return the concrete response plot widget class on demand."""
+    from twopy.napari.plotting.docks.response_plot_widget import _ResponsePlotWidget
+
+    return _ResponsePlotWidget

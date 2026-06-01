@@ -47,6 +47,75 @@ class ImportTest(unittest.TestCase):
 
         self.assertEqual(result.stdout, "")
 
+    def test_plotting_package_import_leaves_dock_widget_lazy(self) -> None:
+        """Confirm plotting package import does not import heavy dock modules.
+
+        Inputs: a fresh Python process that imports ``twopy.napari.plotting``.
+        Outputs: a passing assertion when figure export, Qt, and dock widget
+        modules are still absent.
+        """
+        script = (
+            "import sys; import twopy.napari.plotting; "
+            "blocked = [name for name in sys.modules "
+            "if name == 'twopy.napari.plotting.docks.response_plot_widget' "
+            "or name.startswith('matplotlib') "
+            "or name == 'qtpy' or name.startswith('qtpy.')]; "
+            "sys.stdout.write('\\n'.join(blocked))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.stdout, "")
+
+    def test_plotting_barrel_exports_are_available_without_widget_import(self) -> None:
+        """Confirm plotting dock helpers remain importable from package barrels.
+
+        Inputs: a fresh Python process that imports response dock helper names.
+        Outputs: a passing assertion when helper imports succeed without loading
+        the concrete response widget.
+        """
+        script = (
+            "import sys; "
+            "from twopy.napari.plotting import add_twopy_response_plot_widget; "
+            "from twopy.napari.plotting.docks import create_response_plot_widget; "
+            "assert callable(add_twopy_response_plot_widget); "
+            "assert callable(create_response_plot_widget); "
+            "blocked = [name for name in sys.modules "
+            "if name == 'twopy.napari.plotting.docks.response_plot_widget' "
+            "or name.startswith('matplotlib') "
+            "or name == 'qtpy' or name.startswith('qtpy.')]; "
+            "sys.stdout.write('\\n'.join(blocked))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.stdout, "")
+
+    def test_napari_barrel_exports_remain_available(self) -> None:
+        """Confirm napari package exports still resolve through lazy access.
+
+        Inputs: a fresh Python process that imports public napari helpers.
+        Outputs: a passing assertion when the exported helper is callable.
+        """
+        script = (
+            "from twopy.napari import open_recording_in_napari; "
+            "assert callable(open_recording_in_napari)"
+        )
+        subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
