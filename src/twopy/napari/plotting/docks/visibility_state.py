@@ -11,8 +11,8 @@ ROI and epoch controls.
 from collections.abc import Sequence
 from typing import Protocol
 
+from twopy.analysis.response_plotting import ResponsePlotData
 from twopy.analysis.trials import is_baseline_epoch_name
-from twopy.napari.plotting.data import ResponsePlotData
 from twopy.roi import roi_label_values_from_labels
 
 

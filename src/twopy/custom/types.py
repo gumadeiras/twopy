@@ -21,6 +21,10 @@ import numpy.typing as npt
 
 from twopy._version import __version__
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.response_plotting import (
+    ResponsePlotData,
+    response_plot_data_from_grouped,
+)
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.responses import GroupedRoiResponses
 from twopy.analysis.timing import resolve_recording_timing
@@ -29,7 +33,6 @@ from twopy.analysis.workflow import (
     compute_recording_responses,
 )
 from twopy.converted import RecordingData
-from twopy.napari.plotting.data import ResponsePlotData
 from twopy.roi import RoiSet, make_roi_set
 from twopy.stimulus import stimulus_epoch_names_by_number
 
@@ -715,10 +718,6 @@ class CustomRunContext:
         Returns:
             Plot data for ``CustomResult.response_plot_data``.
         """
-        from twopy.napari.plotting.data import (
-            response_plot_data_from_grouped,
-        )
-
         plot_data = response_plot_data_from_grouped(
             grouped,
             source_path=source_path,

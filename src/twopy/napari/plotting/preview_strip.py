@@ -14,7 +14,7 @@ from qtpy.QtCore import Qt
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
+from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.widgets import (
     EpochPlotWidget,
     global_time_bounds,

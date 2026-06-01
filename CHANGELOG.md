@@ -10,6 +10,7 @@
 
 - Added an `area (px)` column to the napari ROIs tab so editable ROI rows show their current mask size.
 - Made top-level `import twopy` leave napari, Qt, and matplotlib unloaded; import GUI helpers from `twopy.napari` instead.
+- Moved response plot data objects and builders into `twopy.analysis.response_plotting`; scripts and custom workflows should import them from analysis instead of `twopy.napari.plotting.data`.
 - Made napari select a loaded recording's editable `rois` Labels layer when you select that recording in the Loaded Recordings pane.
 - Made napari set the selected `rois` paint label to the first unused ROI number when a loaded recording is selected.
 

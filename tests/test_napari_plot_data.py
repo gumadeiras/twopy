@@ -10,25 +10,27 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+
 from tests.napari_plot_data_helpers import (
     tiny_dff,
     tiny_grouped_responses,
     two_roi_response_plot_data_with_correlation_scores,
 )
 from tests.tempdir import temporary_directory
-
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.persistence import save_analysis_outputs
+from twopy.analysis.response_plotting import (
+    ResponsePlotData,
+    filter_response_plot_data_rois,
+    response_plot_data_from_grouped,
+)
 from twopy.analysis.response_processing import RoiCorrelationScores
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.responses import group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.napari.plotting.data import (
-    ResponsePlotData,
-    filter_response_plot_data_rois,
     load_response_plot_data,
-    response_plot_data_from_grouped,
 )
 
 

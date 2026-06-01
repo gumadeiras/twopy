@@ -1,23 +1,21 @@
-"""Build plot-ready response data for the twopy napari adapter.
+"""Load response plot data for the twopy napari adapter.
 
-This module has no Qt imports. It keeps response-data preparation testable and
-separate from the napari widgets that draw and control the plots.
+This module keeps saved-analysis loading and Plot-tab defaults near the napari
+adapter. GUI-neutral response plot data objects live in
+``twopy.analysis.response_plotting``.
 """
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import numpy.typing as npt
 
+from twopy.analysis import response_plotting
 from twopy.analysis.background_subtraction import BackgroundCorrectedRoiTraces
 from twopy.analysis.dff import DeltaFOverFFitMode, RoiDeltaFOverF
 from twopy.analysis.dff_options import DeltaFOverFBaselineMode, DeltaFOverFOptions
 from twopy.analysis.persistence import LoadedAnalysisOutputs, load_analysis_outputs
 from twopy.analysis.response_processing import (
-    ResponseProcessingOptions,
-    RoiCorrelationScores,
     mask_grouped_roi_responses_by_included_rois,
 )
 from twopy.analysis.response_window_options import (
@@ -28,9 +26,7 @@ from twopy.analysis.response_window_options import (
 )
 from twopy.analysis.responses import (
     GroupedRoiResponses,
-    RoiResponseTrial,
     group_delta_f_over_f_by_epoch,
-    summarize_roi_response_trials,
 )
 from twopy.analysis.timing import resolve_recording_timing
 from twopy.analysis.trials import EpochFrameWindow, is_baseline_epoch_name
@@ -40,10 +36,7 @@ from twopy.stimulus import stimulus_epoch_names_by_number
 from twopy.typing_guards import require_string_choice
 
 __all__ = [
-    "EpochResponsePlotData",
-    "ResponsePlotData",
     "default_analysis_output_path",
-    "filter_response_plot_data_rois",
     "load_response_plot_data",
     "response_plot_baseline_window_limit_for_recording",
     "response_plot_min_epoch_duration_for_recording",
@@ -51,202 +44,7 @@ __all__ = [
     "response_plot_post_window_seconds_for_recording",
     "response_plot_post_window_seconds",
     "response_plot_window_seconds_for_recording",
-    "response_plot_data_from_grouped",
 ]
-
-
-@dataclass(frozen=True)
-class EpochResponsePlotData:
-    """Mean and SEM traces for one stimulus epoch type.
-
-    Each ROI gets one mean trace and one SEM trace on a shared time axis. Epoch
-    time spans are optional markers for the plot.
-    """
-
-    epoch_name: str
-    epoch_number: int
-    roi_labels: tuple[str, ...]
-    time_seconds: npt.NDArray[np.float64]
-    mean_values: npt.NDArray[np.float64]
-    sem_values: npt.NDArray[np.float64]
-    epoch_time_spans: tuple[tuple[float, float], ...] = ()
-
-
-@dataclass(frozen=True)
-class ResponsePlotData:
-    """Plot-ready ROI responses grouped by stimulus epoch.
-
-    Each epoch carries its own ``time_seconds`` vector, so plots do not infer
-    time from array position. ``visible_roi_indices`` can preselect rows without
-    removing hidden ROIs from the ROIs tab.
-    """
-
-    source_path: Path | None
-    epochs: tuple[EpochResponsePlotData, ...]
-    delta_f_over_f_options: DeltaFOverFOptions | None = None
-    response_window_options: ResponseWindowOptions | None = None
-    response_processing_options: ResponseProcessingOptions | None = None
-    correlation_scores: RoiCorrelationScores | None = None
-    correlation_window_stop_default_seconds: float | None = None
-    visible_roi_indices: tuple[int, ...] | None = None
-
-
-def response_plot_data_from_grouped(
-    grouped: GroupedRoiResponses,
-    *,
-    source_path: Path | None = None,
-    epoch_windows: Sequence[EpochFrameWindow] = (),
-    delta_f_over_f_options: DeltaFOverFOptions | None = None,
-    response_window_options: ResponseWindowOptions | None = None,
-    response_processing_options: ResponseProcessingOptions | None = None,
-    correlation_scores: RoiCorrelationScores | None = None,
-    correlation_window_stop_default_seconds: float | None = None,
-) -> ResponsePlotData:
-    """Summarize grouped responses into mean and SEM traces for plotting.
-
-    Args:
-        grouped: Grouped response object from analysis.
-        source_path: Optional analysis output path used for display.
-        epoch_windows: Optional stimulus windows used to compute the grouped
-            responses. When supplied, plots mark the epoch span.
-        delta_f_over_f_options: Optional dF/F settings used to produce the
-            grouped responses.
-        response_window_options: Optional response-window settings used to
-            produce the grouped responses.
-        response_processing_options: Optional processing settings used to
-            produce the grouped responses.
-        correlation_scores: Optional ROI-level correlation QC scores used to
-            hide excluded ROIs in the napari ROI controls.
-        correlation_window_stop_default_seconds: Optional default stop time
-            for enabling Plot-tab correlation QC.
-
-    Returns:
-        Plot-ready data with one item per stimulus epoch type.
-    """
-    epoch_keys: list[tuple[int, str]] = []
-    trials_by_epoch: dict[tuple[int, str], list[RoiResponseTrial]] = {}
-    for trial in grouped.trials:
-        key = (trial.epoch_number, trial.epoch_name)
-        if key not in trials_by_epoch:
-            epoch_keys.append(key)
-            trials_by_epoch[key] = []
-        trials_by_epoch[key].append(trial)
-
-    epoch_spans_by_epoch = _epoch_time_spans_by_epoch(
-        epoch_windows,
-        data_rate_hz=grouped.data_rate_hz,
-    )
-    epochs = tuple(
-        _epoch_plot_data(
-            epoch_number=epoch_number,
-            epoch_name=epoch_name,
-            trials=tuple(trials_by_epoch[(epoch_number, epoch_name)]),
-            roi_labels=grouped.roi_labels,
-            data_rate_hz=grouped.data_rate_hz,
-            epoch_time_spans=epoch_spans_by_epoch.get((epoch_number, epoch_name), ()),
-        )
-        for epoch_number, epoch_name in sorted(epoch_keys)
-    )
-    return ResponsePlotData(
-        source_path=source_path,
-        epochs=epochs,
-        delta_f_over_f_options=delta_f_over_f_options,
-        response_window_options=(
-            response_window_options
-            if response_window_options is not None
-            else _response_window_options_from_grouped(grouped)
-        ),
-        response_processing_options=response_processing_options,
-        correlation_scores=correlation_scores,
-        correlation_window_stop_default_seconds=correlation_window_stop_default_seconds,
-    )
-
-
-def filter_response_plot_data_rois(
-    plot_data: ResponsePlotData,
-    roi_indices: Sequence[int],
-) -> ResponsePlotData:
-    """Return plot data with only the requested ROI rows.
-
-    Args:
-        plot_data: Current plot data shown in the response dock.
-        roi_indices: Zero-based ROI row indices to keep, in display order.
-
-    Returns:
-        Plot data with ROI labels, means, and SEMs filtered consistently for
-        every epoch.
-
-    This helper lets the GUI update ROI option rows immediately after users
-    delete Labels pixels, while the heavier response recomputation still runs
-    through the normal analysis path.
-    """
-    if len(plot_data.epochs) == 0:
-        return plot_data
-    roi_count = len(plot_data.epochs[0].roi_labels)
-    keep_indices = tuple(index for index in roi_indices if 0 <= index < roi_count)
-    keep_rows = list(keep_indices)
-    return ResponsePlotData(
-        source_path=plot_data.source_path,
-        epochs=tuple(
-            EpochResponsePlotData(
-                epoch_name=epoch.epoch_name,
-                epoch_number=epoch.epoch_number,
-                roi_labels=tuple(epoch.roi_labels[index] for index in keep_indices),
-                time_seconds=epoch.time_seconds,
-                mean_values=epoch.mean_values[keep_rows, :],
-                sem_values=epoch.sem_values[keep_rows, :],
-                epoch_time_spans=epoch.epoch_time_spans,
-            )
-            for epoch in plot_data.epochs
-        ),
-        delta_f_over_f_options=plot_data.delta_f_over_f_options,
-        response_window_options=plot_data.response_window_options,
-        response_processing_options=plot_data.response_processing_options,
-        correlation_scores=_filter_correlation_scores(
-            plot_data.correlation_scores,
-            keep_indices,
-        ),
-        correlation_window_stop_default_seconds=(
-            plot_data.correlation_window_stop_default_seconds
-        ),
-        visible_roi_indices=_filter_visible_roi_indices(
-            plot_data.visible_roi_indices,
-            keep_indices,
-        ),
-    )
-
-
-def _filter_visible_roi_indices(
-    visible_indices: tuple[int, ...] | None,
-    keep_indices: tuple[int, ...],
-) -> tuple[int, ...] | None:
-    """Return visible ROI rows remapped after row filtering."""
-    if visible_indices is None:
-        return None
-    visible_set = set(visible_indices)
-    return tuple(
-        new_index
-        for new_index, old_index in enumerate(keep_indices)
-        if old_index in visible_set
-    )
-
-
-def _filter_correlation_scores(
-    scores: RoiCorrelationScores | None,
-    keep_indices: tuple[int, ...],
-) -> RoiCorrelationScores | None:
-    """Return correlation scores filtered to the kept ROI rows."""
-    if scores is None:
-        return None
-    keep_rows = list(keep_indices)
-    return RoiCorrelationScores(
-        roi_labels=tuple(scores.roi_labels[index] for index in keep_indices),
-        scores=scores.scores[keep_rows],
-        included_mask=scores.included_mask[keep_rows],
-        minimum_correlation=scores.minimum_correlation,
-        reference=scores.reference,
-        window_seconds=scores.window_seconds,
-    )
 
 
 def default_analysis_output_path(recording: RecordingData) -> Path:
@@ -414,7 +212,7 @@ def response_plot_window_seconds_for_recording(
     )
 
 
-def load_response_plot_data(path: Path) -> ResponsePlotData | str:
+def load_response_plot_data(path: Path) -> response_plotting.ResponsePlotData | str:
     """Load response plot data from an analysis output file.
 
     Args:
@@ -427,8 +225,10 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
         return f"No analysis output found: {path}"
     outputs = load_analysis_outputs(path)
     if outputs.grouped_responses is not None:
-        saved_window_options = _response_window_options_from_grouped(
-            outputs.grouped_responses,
+        saved_window_options = (
+            response_plotting.response_plot_window_options_from_grouped(
+                outputs.grouped_responses,
+            )
         )
     else:
         saved_window_options = None
@@ -460,14 +260,16 @@ def load_response_plot_data(path: Path) -> ResponsePlotData | str:
             return _response_plot_data_from_outputs(
                 outputs,
                 grouped,
-                response_window_options=_response_window_options_from_grouped(grouped),
+                response_window_options=response_plotting.response_plot_window_options_from_grouped(
+                    grouped,
+                ),
             )
     if outputs.grouped_responses is None:
         return f"No grouped responses in: {path}"
     return _response_plot_data_from_outputs(
         outputs,
         outputs.grouped_responses,
-        response_window_options=_response_window_options_from_grouped(
+        response_window_options=response_plotting.response_plot_window_options_from_grouped(
             outputs.grouped_responses,
         ),
     )
@@ -478,9 +280,9 @@ def _response_plot_data_from_outputs(
     grouped: GroupedRoiResponses,
     *,
     response_window_options: ResponseWindowOptions | None,
-) -> ResponsePlotData:
+) -> response_plotting.ResponsePlotData:
     """Return plot data with shared saved-output metadata attached."""
-    return response_plot_data_from_grouped(
+    return response_plotting.response_plot_data_from_grouped(
         grouped,
         source_path=outputs.path,
         epoch_windows=outputs.epoch_windows,
@@ -494,23 +296,6 @@ def _response_plot_data_from_outputs(
         correlation_window_stop_default_seconds=_correlation_stop_default_from_outputs(
             outputs,
         ),
-    )
-
-
-def _response_window_options_from_grouped(
-    grouped: GroupedRoiResponses,
-) -> ResponseWindowOptions | None:
-    """Return saved response-window options from grouped metadata."""
-    pre_window_seconds = grouped.pre_window_seconds
-    post_window_seconds = grouped.post_window_seconds
-    if pre_window_seconds is None or post_window_seconds is None:
-        return None
-    return ResponseWindowOptions(
-        auto=bool(grouped.response_window_auto)
-        if grouped.response_window_auto is not None
-        else False,
-        pre_window_seconds=float(pre_window_seconds),
-        post_window_seconds=float(post_window_seconds),
     )
 
 
@@ -622,64 +407,6 @@ def _saved_fit_mode(dff: RoiDeltaFOverF) -> DeltaFOverFFitMode:
             ),
         )
     return DeltaFOverFOptions().fit_mode
-
-
-def _epoch_plot_data(
-    *,
-    epoch_number: int,
-    epoch_name: str,
-    trials: tuple[RoiResponseTrial, ...],
-    roi_labels: tuple[str, ...],
-    data_rate_hz: float,
-    epoch_time_spans: tuple[tuple[float, float], ...],
-) -> EpochResponsePlotData:
-    """Build plot data for one epoch type.
-
-    Args:
-        epoch_number: Stimulus epoch number.
-        epoch_name: Stimulus epoch name.
-        trials: Trial responses for this epoch type.
-        roi_labels: ROI labels in column order.
-        data_rate_hz: Imaging frame rate in hertz.
-        epoch_time_spans: Epoch intervals in epoch-relative seconds.
-
-    Returns:
-        Mean and SEM traces with shape ``(rois, frames)``.
-    """
-    summary = summarize_roi_response_trials(
-        trials,
-        roi_labels=roi_labels,
-        data_rate_hz=data_rate_hz,
-    )
-    return EpochResponsePlotData(
-        epoch_name=epoch_name,
-        epoch_number=epoch_number,
-        roi_labels=roi_labels,
-        time_seconds=summary.time_seconds,
-        mean_values=summary.mean_values,
-        sem_values=summary.sem_values,
-        epoch_time_spans=epoch_time_spans,
-    )
-
-
-def _epoch_time_spans_by_epoch(
-    epoch_windows: Sequence[EpochFrameWindow],
-    *,
-    data_rate_hz: float,
-) -> dict[tuple[int, str], tuple[tuple[float, float], ...]]:
-    """Return coarse epoch spans for each plotted epoch type."""
-    if not np.isfinite(data_rate_hz) or data_rate_hz <= 0.0:
-        return {}
-    duration_by_epoch: dict[tuple[int, str], float] = {}
-    for epoch_window in epoch_windows:
-        duration = (
-            epoch_window.window.stop_frame - epoch_window.window.start_frame
-        ) / data_rate_hz
-        if not np.isfinite(duration) or duration <= 0.0:
-            continue
-        key = (epoch_window.epoch_number, epoch_window.epoch_name)
-        duration_by_epoch[key] = max(duration_by_epoch.get(key, 0.0), float(duration))
-    return {key: ((0.0, duration),) for key, duration in duration_by_epoch.items()}
 
 
 def _correlation_stop_default_from_outputs(

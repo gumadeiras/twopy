@@ -82,6 +82,12 @@ from twopy.analysis.response_maps import (
     ResponseMapOptions,
     load_response_map_data,
 )
+from twopy.analysis.response_plotting import (
+    EpochResponsePlotData,
+    ResponsePlotData,
+    filter_response_plot_data_rois,
+    response_plot_data_from_grouped,
+)
 from twopy.analysis.response_processing import (
     NormalizationOptions,
     ResponseProcessingOptions,
@@ -129,11 +135,7 @@ from twopy.napari.loading import resolve_or_convert_recording
 from twopy.napari.movie import resolve_movie_frame_range
 from twopy.napari.paths import resolve_launch_recording_path, resolve_recording_paths
 from twopy.napari.plotting.data import (
-    EpochResponsePlotData,
-    ResponsePlotData,
-    filter_response_plot_data_rois,
     load_response_plot_data,
-    response_plot_data_from_grouped,
     response_plot_min_epoch_duration_seconds,
 )
 from twopy.napari.plotting.dff_options import DeltaFOverFOptionsWidget

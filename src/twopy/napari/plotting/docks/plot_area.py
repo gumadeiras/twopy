@@ -12,7 +12,7 @@ from qtpy.QtCore import QTimer
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget
 
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
+from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.panels import epoch_plot_panel
 from twopy.napari.plotting.widgets import EpochPlotWidget, clear_layout
 

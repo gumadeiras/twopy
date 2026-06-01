@@ -1,5 +1,7 @@
 """Tests for custom workflow discovery, validation, and saved metadata."""
 
+import subprocess
+import sys
 import unittest
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -12,6 +14,7 @@ import yaml
 from tests.converted_files import write_converted_recording_files
 from tests.tempdir import temporary_directory
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.converted import load_converted_recording
 from twopy.custom import (
@@ -42,12 +45,26 @@ from twopy.custom.native_workflows.response_kernels import (
     _lag_column_labels,
     _mean_sem_plot_series,
 )
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.roi import RoiSet, make_roi_set
 
 
 class CustomWorkflowDiscoveryTest(unittest.TestCase):
     """Tests strict custom workflow discovery."""
+
+    def test_custom_api_does_not_import_napari_plot_data(self) -> None:
+        """Confirm custom workflow types stay independent from napari plotting."""
+        code = (
+            "import sys\n"
+            "import twopy.custom\n"
+            "raise SystemExit('twopy.napari.plotting.data' in sys.modules)\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_discovers_valid_versioned_workflow(self) -> None:
         """Confirm discovery loads a complete versioned workflow."""

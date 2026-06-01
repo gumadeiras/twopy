@@ -13,7 +13,7 @@ from collections.abc import Callable
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QCheckBox, QPushButton, QSpinBox, QVBoxLayout
 
-from twopy.napari.plotting.data import ResponsePlotData
+from twopy.analysis.response_plotting import ResponsePlotData
 from twopy.napari.plotting.options import (
     plot_display_options_group,
     visibility_options_widget,

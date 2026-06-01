@@ -15,6 +15,7 @@ from pathlib import Path
 from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 from twopy.analysis.response_maps import ResponseMapData
+from twopy.analysis.response_plotting import ResponsePlotData
 from twopy.analysis_cache import (
     AnalysisSyncResult,
     build_analysis_sync_plan,
@@ -22,7 +23,6 @@ from twopy.analysis_cache import (
 )
 from twopy.converted import RecordingData
 from twopy.napari.display_paths import format_output_folder
-from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.plotting.export import (
     export_epoch_plots,
     export_epoch_roi_overlay_plots,

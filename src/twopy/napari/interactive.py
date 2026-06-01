@@ -19,11 +19,11 @@ import numpy as np
 from qtpy.QtCore import QTimer
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.response_plotting import ResponsePlotData
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.converted import RecordingData
 from twopy.napari.live_analysis import LiveResponseAnalysisCache
-from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.protocols import NapariEventEmitter
 from twopy.napari.responses import (
     compute_response_preview,

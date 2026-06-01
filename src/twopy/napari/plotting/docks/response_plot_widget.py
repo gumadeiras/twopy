@@ -1,8 +1,14 @@
-"""Response plotting widgets for the twopy napari adapter.
+"""Coordinate the napari response dock.
 
-The plotting code only owns GUI state and drawing. When the user asks to update
-responses from the current Labels layer, this module converts labels to a
-``RoiSet`` and calls the normal analysis workflow.
+Inputs: a loaded converted recording, editable ROI Labels layer, response-display
+settings, and optional custom workflow outputs.
+Outputs: response plots, response heatmaps, ROI editing actions, saved analysis
+outputs, and export state for the Plot dock.
+
+This module owns dock-level GUI orchestration. It delegates response computation,
+ROI persistence, heatmap rendering, custom workflow execution, and export drawing
+to focused helpers, while keeping the current recording, ROI layer, visibility,
+and options in sync.
 """
 
 from collections.abc import Mapping
@@ -28,6 +34,10 @@ from twopy.analysis.response_maps import (
     ResponseMapData,
     ResponseMapOptions,
     compute_recording_response_maps,
+)
+from twopy.analysis.response_plotting import (
+    ResponsePlotData,
+    filter_response_plot_data_rois,
 )
 from twopy.analysis.response_processing import (
     NormalizationOptions,
@@ -60,8 +70,6 @@ from twopy.napari.interactive import LiveResponseController
 from twopy.napari.latest_worker import LatestWorker
 from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import (
-    ResponsePlotData,
-    filter_response_plot_data_rois,
     load_response_plot_data,
     response_plot_baseline_window_limit_for_recording,
     response_plot_min_epoch_duration_for_recording,

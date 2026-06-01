@@ -22,6 +22,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 
 from twopy.analysis.response_maps import EpochResponseMap, ResponseMapData
+from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
 from twopy.converted import RecordingData
 from twopy.filenames import (
     PLOT_EXPORTS_DIRNAME,
@@ -32,7 +33,6 @@ from twopy.filenames import (
     ROI_VIEW_EXPORT_STEM,
 )
 from twopy.napari.dims import current_step_index
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.response_map_colors import RESPONSE_HEATMAP_COLORMAP
 from twopy.napari.plotting.response_map_display import (
     display_response_limit,

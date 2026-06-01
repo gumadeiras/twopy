@@ -18,6 +18,7 @@ from qtpy.QtCore import Qt
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QGridLayout, QHBoxLayout, QPushButton, QSizePolicy, QWidget
 
+from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
 from twopy.analysis.response_processing import (
     NormalizationOptions,
     ResponseProcessingOptions,
@@ -31,7 +32,6 @@ from twopy.napari.group_matching.roi_cards import (
     roi_label_display_id,
     roi_label_value,
 )
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.roi import roi_label_image_from_layer_for_recording
 from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.text import counted_noun

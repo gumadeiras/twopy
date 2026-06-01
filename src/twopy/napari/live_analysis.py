@@ -24,11 +24,11 @@ from twopy.analysis.response_context import (
     ResponseAnalysisContext,
     resolve_response_analysis_context,
 )
+from twopy.analysis.response_plotting import ResponsePlotData
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.workflow import compute_recording_responses_from_traces
 from twopy.converted import RecordingData
-from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.responses import (
     ResponseAnalysisRequest,
     response_plot_data_from_computation,

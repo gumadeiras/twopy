@@ -66,6 +66,13 @@ from twopy.analysis.response_maps import (
     load_response_map_data,
     save_response_map_data,
 )
+from twopy.analysis.response_plotting import (
+    EpochResponsePlotData,
+    ResponsePlotData,
+    filter_response_plot_data_rois,
+    response_plot_data_from_grouped,
+    response_plot_window_options_from_grouped,
+)
 from twopy.analysis.response_processing import (
     CorrelationFilterOptions,
     LowPassFilterOptions,
@@ -130,6 +137,7 @@ __all__ = [
     "DeltaFOverFOptions",
     "DeltaFOverFFitMode",
     "EpochResponseMap",
+    "EpochResponsePlotData",
     "EpochFrameWindow",
     "extract_background_corrected_roi_traces",
     "fit_recording_stimulus_kernels",
@@ -163,6 +171,7 @@ __all__ = [
     "ResponseMapData",
     "ResponseMapMode",
     "ResponseMapOptions",
+    "ResponsePlotData",
     "ResponseProcessingOptions",
     "RoiCorrelationScores",
     "RoiResponseSummary",
@@ -181,9 +190,12 @@ __all__ = [
     "save_manual_roi_match_rows",
     "select_baseline_frame_windows",
     "finite_mean_and_sem",
+    "filter_response_plot_data_rois",
     "split_traces_by_frame_windows",
     "StimulusKernelOptions",
     "SmoothingOptions",
+    "response_plot_data_from_grouped",
+    "response_plot_window_options_from_grouped",
     "summarize_epoch_roi_responses",
     "summarize_grouped_responses",
     "TimingSource",

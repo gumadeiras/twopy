@@ -11,13 +11,13 @@ import h5py
 import numpy as np
 import yaml
 
+from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
 from twopy.custom.types import (
     CustomLineBand,
     CustomLinePlot,
     CustomResult,
     CustomWorkflowProvenance,
 )
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 
 __all__ = [
     "custom_result_artifact_paths",

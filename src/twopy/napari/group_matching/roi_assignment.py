@@ -49,6 +49,7 @@ from twopy.analysis.group_matching import (
     replace_manual_roi_match_group,
     save_manual_roi_match_rows,
 )
+from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
 from twopy.analysis.response_processing import (
     NormalizationOptions,
     SmoothingOptions,
@@ -80,7 +81,6 @@ from twopy.napari.group_matching.style import (
     group_matching_section,
 )
 from twopy.napari.group_matching.tables import ToggleSelectionTable
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
 from twopy.napari.plotting.form_controls import plot_form_layout, set_plot_control_width
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
 from twopy.napari.plotting.preview_strip import ResponsePreviewStrip

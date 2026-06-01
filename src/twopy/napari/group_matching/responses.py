@@ -15,9 +15,9 @@ from typing import Protocol
 import numpy as np
 import numpy.typing as npt
 
+from twopy.analysis.response_plotting import ResponsePlotData
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.converted import RecordingData
-from twopy.napari.plotting.data import ResponsePlotData
 from twopy.napari.responses import (
     ResponseAnalysisRequest,
     response_analysis_request_from_selected_label_image,

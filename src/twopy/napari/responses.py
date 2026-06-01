@@ -17,6 +17,10 @@ import numpy as np
 import numpy.typing as npt
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
+from twopy.analysis.response_plotting import (
+    ResponsePlotData,
+    response_plot_data_from_grouped,
+)
 from twopy.analysis.response_processing import ResponseProcessingOptions
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.workflow import (
@@ -25,8 +29,6 @@ from twopy.analysis.workflow import (
 )
 from twopy.converted import RecordingData
 from twopy.napari.plotting.data import (
-    ResponsePlotData,
-    response_plot_data_from_grouped,
     response_plot_min_epoch_duration_seconds,
     response_plot_window_seconds_for_recording,
 )

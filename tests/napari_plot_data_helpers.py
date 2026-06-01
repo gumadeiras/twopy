@@ -7,10 +7,13 @@ Outputs: grouped responses and plot-ready objects without importing Qt.
 import numpy as np
 
 from twopy.analysis.dff import RoiDeltaFOverF
+from twopy.analysis.response_plotting import (
+    ResponsePlotData,
+    response_plot_data_from_grouped,
+)
 from twopy.analysis.response_processing import RoiCorrelationScores
 from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
-from twopy.napari.plotting.data import ResponsePlotData, response_plot_data_from_grouped
 
 
 def tiny_response_plot_data() -> ResponsePlotData:

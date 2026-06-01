@@ -16,7 +16,7 @@ from qtpy.QtCore import QPointF, QRectF, QSize, Qt
 from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
 from qtpy.QtWidgets import QLayout, QSizePolicy, QWidget
 
-from twopy.napari.plotting.data import EpochResponsePlotData, ResponsePlotData
+from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
 
 DEFAULT_VALUE_BOUNDS = (-1.0, 1.0)
 _LEFT_MARGIN = 56.0
