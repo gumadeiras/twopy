@@ -159,10 +159,11 @@ def save_analysis_outputs(
         None.
 
     The HDF5 file stores arrays with gzip compression where arrays can be large.
-    The HDF5 file is the complete audit trail. CSV files duplicate response
-    time series in a spreadsheet-friendly layout for quick plotting and checks.
+    The HDF5 file is the complete audit trail. CSV files are derived exports for
+    quick spreadsheet plotting and checks, and are written after the HDF5 file.
     Each output file is written through a temporary sibling path so a failed
-    write leaves the previous complete file in place.
+    write leaves the previous complete file in place; the HDF5 and CSV files are
+    not replaced as one multi-file transaction.
     """
     summary_outputs = (
         response_summary_trials_csv,
