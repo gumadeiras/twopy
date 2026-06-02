@@ -26,13 +26,7 @@ __all__ = [
 ]
 
 LOADED_RECORDINGS_CSV_COLUMNS = ("recording_path", "recording_data_path")
-_SUPPORTED_PATH_COLUMNS = (
-    "recording_path",
-    "path",
-    "recording",
-    "folder",
-    "recording_data_path",
-)
+_SOURCE_PATH_COLUMNS = ("recording_path", "path", "recording", "folder")
 
 
 def write_loaded_recordings_csv(
@@ -80,13 +74,15 @@ def load_recording_paths_csv(path: Path) -> tuple[Path, ...]:
     """Read recording paths from a CSV selected in the Load tab.
 
     Args:
-        path: CSV file with a ``recording_path`` column or one path per row.
+        path: CSV file with recording path columns or one path per row.
 
     Returns:
         Tuple of recording paths in file order.
 
     The loader accepts both twopy's exported headered CSV and simple hand-made
     one-column path lists so batch loading remains easy to inspect and edit.
+    Twopy-exported CSVs reopen valid ``recording_data_path`` files directly and
+    fall back to source-style path columns when that file is missing or invalid.
     """
     csv_path = path.expanduser()
     with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
@@ -94,35 +90,49 @@ def load_recording_paths_csv(path: Path) -> tuple[Path, ...]:
     if len(rows) == 0:
         return ()
 
-    path_column_index = _path_column_index(rows[0])
-    if path_column_index is None:
-        path_column_index = 0
+    normalized_header = tuple(column.strip().lower() for column in rows[0])
+    column_indexes = {
+        column: normalized_header.index(column)
+        for column in (*_SOURCE_PATH_COLUMNS, "recording_data_path")
+        if column in normalized_header
+    }
+    if len(column_indexes) == 0:
         data_rows = rows
         first_data_line = 1
     else:
         data_rows = rows[1:]
         first_data_line = 2
 
+    fallback_index = 0 if len(column_indexes) == 0 else -1
     paths: list[Path] = []
     for line_number, row in enumerate(data_rows, start=first_data_line):
         if len(row) == 0 or all(cell.strip() == "" for cell in row):
             continue
-        if path_column_index >= len(row) or row[path_column_index].strip() == "":
+        recording_data_index = column_indexes.get("recording_data_path")
+        if recording_data_index is not None and recording_data_index < len(row):
+            recording_data_path = Path(row[recording_data_index].strip()).expanduser()
+            if (
+                recording_data_path.name == RECORDING_DATA_FILENAME
+                and recording_data_path.is_file()
+            ):
+                paths.append(recording_data_path)
+                continue
+
+        for column in _SOURCE_PATH_COLUMNS:
+            column_index = column_indexes.get(column, fallback_index)
+            if (
+                column_index >= 0
+                and column_index < len(row)
+                and row[column_index].strip()
+            ):
+                paths.append(Path(row[column_index].strip()).expanduser())
+                break
+        else:
             msg = (
                 f"Recording CSV {csv_path} has no recording path on line {line_number}."
             )
             raise ValueError(msg)
-        paths.append(Path(row[path_column_index].strip()).expanduser())
     return tuple(paths)
-
-
-def _path_column_index(header: Sequence[str]) -> int | None:
-    """Return the first supported recording-path column index."""
-    normalized_header = tuple(column.strip().lower() for column in header)
-    for column_name in _SUPPORTED_PATH_COLUMNS:
-        if column_name in normalized_header:
-            return normalized_header.index(column_name)
-    return None
 
 
 def _recording_data_csv_path(

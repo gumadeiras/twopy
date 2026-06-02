@@ -31,6 +31,7 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
+from twopy.napari.loaded_recordings_csv import load_recording_paths_csv
 from twopy.napari.state import (
     read_last_recording_csv_folder,
     read_last_recording_folder,
@@ -419,13 +420,45 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             second_call_args = choose_csv_again.call_args.args
             self.assertEqual(second_call_args[2], str(csv_folder.resolve()))
 
+    def test_loaded_recording_csv_prefers_valid_recording_data_path(self) -> None:
+        """Confirm saved CSVs reload valid converted files directly.
+
+        Inputs: a CSV row with both the source recording path and an existing
+            ``recording_data_path`` file.
+        Outputs: CSV expansion returns the converted file path so batch reloads
+            skip slower source-path resolution.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = root / "source"
+            converted_dir = root / "published"
+            converted_path = _write_converted_recording(
+                converted_dir,
+                source_session_dir=source_dir,
+            )
+            csv_path = root / "loaded_recordings.csv"
+            with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
+                writer = csv.DictWriter(
+                    csv_file,
+                    fieldnames=("recording_path", "recording_data_path"),
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "recording_path": str(source_dir),
+                        "recording_data_path": str(converted_path),
+                    },
+                )
+
+            self.assertEqual(load_recording_paths_csv(csv_path), (converted_path,))
+
     def test_load_tab_csv_converts_from_recording_path_when_h5_missing(
         self,
     ) -> None:
-        """Confirm CSV loading treats ``recording_path`` as the load contract.
+        """Confirm CSV loading falls back when the HDF5 file is missing.
 
         Inputs: a CSV row with a valid source recording path and a missing
-            ``recording_data_path`` audit value.
+            ``recording_data_path`` value.
         Outputs: loading runs conversion from the source path and opens the new
             converted files.
         """

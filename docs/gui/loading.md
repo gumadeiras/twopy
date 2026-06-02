@@ -33,7 +33,7 @@ Pick one or more source folders, converted folders, or `recording_data.h5` files
 
 ## Load CSV list
 
-Reopens a session list you previously wrote with **Save loaded list**. If a `fov_groups.csv` sits next to the CSV file, twopy automatically loads it into [Group Matching](group_matching.md). The picker remembers the last folder you used here independently from **Load manually**, because source recordings and saved CSV lists usually live in different places.
+Reopens a session list you previously wrote with **Save loaded list**. When the CSV has a valid `recording_data_path`, twopy opens that converted HDF5 file directly; if that file is missing or invalid, twopy falls back to the source path in `recording_path`. If a `fov_groups.csv` sits next to the CSV file, twopy automatically loads it into [Group Matching](group_matching.md). The picker remembers the last folder you used here independently from **Load manually**, because source recordings and saved CSV lists usually live in different places.
 
 ## The Loaded Recordings pane
 
@@ -52,4 +52,4 @@ Buttons under the list (disabled until at least one recording is loaded):
 
 With `analysis_caching: true` (the default), twopy converts and reads through a local cache directory mirrored under `analysis_cache_dir`. All plotting and analysis runs against the local cache for speed. Converted HDF5 files and saved outputs publish back to `analysis_output` in the background.
 
-If a source path is temporarily unavailable but its cache entry exists, twopy reopens from the cache. The **Save loaded list** CSV always records the source path so the file remains usable when the network volume is back, and it keeps local cache paths out of `recording_data_path` when a published output path exists.
+If a source path is temporarily unavailable but its cache entry exists, twopy reopens from the cache. The **Save loaded list** CSV always records the source path so the file remains usable when the network volume is back, and it keeps local cache paths out of `recording_data_path` when a published output path exists. Reloading that CSV uses a valid `recording_data_path` first so published converted files reopen without another source-path lookup.

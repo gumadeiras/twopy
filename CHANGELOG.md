@@ -13,6 +13,7 @@
 - Moved response plot data objects and builders into `twopy.analysis.response_plotting`; scripts and custom workflows should import them from analysis instead of `twopy.napari.plotting.data`.
 - Made napari select a loaded recording's editable `rois` Labels layer when you select that recording in the Loaded Recordings pane.
 - Made napari set the selected `rois` paint label to the first unused ROI number when a loaded recording is selected.
+- Made Load-tab saved recording CSVs reload valid `recording_data_path` HDF5 files directly before falling back to source recording paths.
 
 ## 0.3.0 - 2026-06-01
 
