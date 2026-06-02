@@ -35,7 +35,6 @@ from twopy.napari.load_workflow import (
     RecordingLoadFailure,
     RecordingLoadResult,
     SourceUnavailableWarning,
-    load_recording_paths,
     reconvert_selected_recording,
 )
 from twopy.napari.loaded_recordings_csv import (
@@ -264,23 +263,14 @@ def _make_twopy_load_widget(state: NapariControlState) -> object:
         """
         replace_selected = state.replace_selected_on_next_load
         state.replace_selected_on_next_load = False
-        selected_recording_path = _resolve_recording_folder_value(
-            recording_folder,
-            state,
-        )
         try:
-            result = load_recording_paths(
+            _load_single_recording_path_async(
                 state,
-                (selected_recording_path,),
+                _resolve_recording_folder_value(recording_folder, state),
                 roi_file_to_load=roi_file_to_load,
                 replace_selected=replace_selected,
-                remember_selected_folder=True,
             )
-            if result.failures:
-                return result.failures[0].message
-            _show_source_unavailable_warnings(result.source_warnings)
-            _sync_recording_picker_to_selected(state)
-            return result.status_text
+            return "Loading started."
         finally:
             state.replace_selected_on_next_load = False
 
@@ -588,7 +578,8 @@ def _finish_async_recording_load(
 ) -> None:
     """Render final load dialogs and mirror selected recording state."""
     _show_source_unavailable_warnings(result.source_warnings)
-    _sync_recording_picker_to_selected(state)
+    if result.loaded_count > 0 or not result.failures:
+        _sync_recording_picker_to_selected(state)
     if result.failures:
         _show_load_errors(result)
 

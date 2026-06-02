@@ -15,7 +15,9 @@ from tests.napari_support import (
     _write_source_recording_shape,
     add_twopy_magicgui_controls,
     chdir,
+    napari_controls,
     patch,
+    process_qt_events_until,
     resolve_launch_recording_path,
     resolve_or_convert_recording,
     resolve_recording_paths,
@@ -48,15 +50,27 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget(recording_folder=root)
+            process_qt_events_until(lambda: len(viewer.images) == 2)
             user_text = root / "manual-entry"
             with load_widget.recording_folder.changed.blocked():
                 load_widget.recording_folder.line_edit.value = str(user_text)
-            result = load_widget(
-                recording_folder=user_text,
-                roi_file_to_load=Path("default"),
-            )
+            shown_errors = []
+            with patch.object(
+                napari_controls,
+                "_show_load_errors",
+                side_effect=shown_errors.append,
+            ):
+                result = load_widget(
+                    recording_folder=user_text,
+                    roi_file_to_load=Path("default"),
+                )
+                process_qt_events_until(lambda: len(shown_errors) == 1)
 
-            self.assertIn("Could not find recording_data.h5", str(result))
+            self.assertEqual(result, "Loading started.")
+            self.assertIn(
+                "Could not find recording_data.h5",
+                shown_errors[0].failures[0].message,
+            )
             self.assertEqual(
                 load_widget.recording_folder.line_edit.value,
                 str(user_text),

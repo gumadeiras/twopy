@@ -140,7 +140,9 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             )
             load_widget = _load_recording_widget(control_docks.load_widget)
             load_widget(recording_folder=first)
+            process_qt_events_until(lambda: len(viewer.images) == 2)
             load_widget(recording_folder=second)
+            process_qt_events_until(lambda: len(viewer.images) == 4)
             sidebar_buttons = {
                 button.text(): button
                 for button in cast(QWidget, control_docks.sidebar_widget).findChildren(
@@ -590,6 +592,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 )
                 load_widget = _load_recording_widget(control_docks.load_widget)
                 load_widget(recording_folder=source_dir)
+                process_qt_events_until(lambda: len(viewer.images) == 2)
                 picker_text = str(load_widget.recording_folder.line_edit.value)
                 panel = cast(QWidget, control_docks.loaded_recordings_widget)
                 loaded_list = panel.findChild(QListWidget)
@@ -665,10 +668,11 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 load_widget = _load_recording_widget(control_docks.load_widget)
                 with patch.object(napari_controls.QMessageBox, "warning") as warning:
                     result = load_widget(recording_folder=source_dir)
+                    process_qt_events_until(lambda: warning.called)
             finally:
                 chdir(original_cwd)
 
-            self.assertIn(str(cached_recording_path.resolve()), str(result))
+            self.assertEqual(result, "Loading started.")
             warning.assert_called_once()
             _parent, title, message = warning.call_args.args
             self.assertEqual(title, "Source path unavailable")

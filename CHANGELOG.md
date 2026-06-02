@@ -15,6 +15,10 @@
 - Made napari set the selected `rois` paint label to the first unused ROI number when a loaded recording is selected.
 - Made Load-tab saved recording CSVs reload valid `recording_data_path` HDF5 files directly before falling back to source recording paths.
 
+### Fixes
+
+- Kept direct Load-tab recording calls on the asynchronous progress-dialog path and preserved failed manual path text for correction.
+
 ## 0.3.0 - 2026-06-01
 
 ### Changes

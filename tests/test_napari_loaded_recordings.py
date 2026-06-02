@@ -94,7 +94,13 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             self.assertFalse(sidebar_buttons["Save loaded list"].isEnabled())
 
             load_widget(recording_folder=first)
+            process_qt_events_until(
+                lambda: loaded_list is not None and loaded_list.count() == 1
+            )
             load_widget(recording_folder=second)
+            process_qt_events_until(
+                lambda: loaded_list is not None and loaded_list.count() == 2
+            )
             viewer.labels[0].data = np.array([[1, 0], [0, 0]], dtype=np.int64)
             viewer.labels[1].data = np.array([[2, 0], [0, 0]], dtype=np.int64)
 
@@ -833,6 +839,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             )
 
             load_widget(recording_folder=first)
+            process_qt_events_until(lambda: loaded_list.count() == 2)
             self.assertEqual(loaded_list.count(), 2)
             self.assertEqual(len(viewer.images), 4)
             self.assertEqual(len(viewer.labels), 2)
@@ -859,7 +866,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             second = root / "second"
             first.mkdir()
             second.mkdir()
-            recording_path = _write_converted_recording(first)
+            _write_converted_recording(first)
             _write_converted_recording(second)
             viewer = _FakeViewer()
             control_docks = add_twopy_magicgui_controls(
@@ -872,11 +879,20 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             loaded_list = panel.findChild(QListWidget)
 
             load_widget(recording_folder=first)
+            process_qt_events_until(
+                lambda: loaded_list is not None and loaded_list.count() == 1
+            )
             load_widget(recording_folder=second)
+            process_qt_events_until(
+                lambda: loaded_list is not None and loaded_list.count() == 2
+            )
             result = load_widget(recording_folder=first)
+            process_qt_events_until(
+                lambda: loaded_list is not None and loaded_list.currentRow() == 0
+            )
 
             assert loaded_list is not None
-            self.assertIn(f"Already loaded {recording_path.resolve()}", str(result))
+            self.assertEqual(result, "Loading started.")
             self.assertEqual(loaded_list.count(), 2)
             self.assertEqual(loaded_list.currentRow(), 0)
             self.assertEqual(len(viewer.images), 4)
@@ -917,7 +933,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
         """
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
-            recording_path = _write_converted_recording(root)
+            _write_converted_recording(root)
             roi_path = root / "rois.h5"
             save_roi_set(
                 make_roi_set(np.array([[[True, False], [False, False]]])),
@@ -932,8 +948,9 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             load_widget = _load_recording_widget(control_docks.load_widget)
 
             result = load_widget(recording_folder=root)
+            process_qt_events_until(lambda: len(viewer.images) == 2)
 
-            self.assertIn(str(recording_path), str(result))
+            self.assertEqual(result, "Loading started.")
             self.assertEqual(len(viewer.images), 2)
             self.assertIn(root.name, str(load_widget.recording_folder.line_edit.value))
             np.testing.assert_array_equal(
@@ -969,6 +986,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget(recording_folder=root)
+            process_qt_events_until(lambda: len(viewer.images) == 2)
 
             display_text = str(load_widget.recording_folder.line_edit.value)
             self.assertTrue(display_text.startswith("..."))
@@ -1000,6 +1018,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             load_widget = _load_recording_widget(control_docks.load_widget)
 
             load_widget(recording_folder=root)
+            process_qt_events_until(lambda: len(viewer.images) == 2)
             load_widget.roi_file_to_load.value = roi_path
             process_qt_events_until(
                 lambda: (
