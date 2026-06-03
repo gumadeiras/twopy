@@ -523,7 +523,7 @@ def _load_recording_csvs_from_dialog(state: NapariControlState) -> None:
         state,
         selected_paths,
         remember_selected_folder=False,
-        after_finished=lambda: _load_adjacent_group_matching_csvs_for_recording_csvs(
+        after_finished=lambda: _set_group_matching_defaults_from_recording_csvs(
             state,
             selected_paths,
         ),
@@ -656,19 +656,19 @@ def _recording_paths_from_manual_selections(
     return tuple(recording_paths)
 
 
-def _load_adjacent_group_matching_csvs_for_recording_csvs(
+def _set_group_matching_defaults_from_recording_csvs(
     state: NapariControlState,
     csv_paths: tuple[Path, ...],
 ) -> None:
-    """Load group-matching CSV defaults beside a loaded-recordings CSV."""
+    """Set group-matching CSV defaults from a loaded-recordings CSV folder."""
     panel = state.group_matching_panel
     if not isinstance(panel, GroupMatchingPanel):
         return
     for csv_path in csv_paths:
         if csv_path.suffix.lower() != ".csv":
             continue
-        if panel.load_csv_folder_defaults(csv_path.expanduser().parent):
-            return
+        panel.set_recording_csv_folder_defaults(csv_path.expanduser().parent)
+        return
 
 
 def _save_loaded_recordings_from_dialog(state: NapariControlState) -> None:

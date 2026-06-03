@@ -5,10 +5,12 @@ Outputs: assertions for one napari workflow area.
 """
 
 from tests.napari_support import (
+    Any,
     ConvertedRecording,
     NapariAdapterTestCase,
     Path,
     QApplication,
+    QLabel,
     QLineEdit,
     QListWidget,
     QPushButton,
@@ -354,6 +356,90 @@ class NapariLoadTabTest(NapariAdapterTestCase):
 
             self.assertEqual(Path(fov_path_edit.text()), second_fov)
             self.assertEqual(Path(roi_path_edit.text()), manual_roi_path)
+
+    def test_load_csv_list_targets_group_matching_paths_when_files_are_missing(
+        self,
+    ) -> None:
+        """Confirm missing group-matching files still become default save paths.
+
+        Inputs: a loaded-recordings CSV in a folder without FOV or ROI match
+            CSV files.
+        Outputs: Group Matching points its FOV and ROI path fields at that
+            folder so the first save writes beside the recording-list CSV.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording = root / "recording"
+            recording.mkdir()
+            _write_converted_recording(recording, source_session_dir=recording)
+            csv_path = root / "loaded_recordings.csv"
+            expected_fov_path = root / "fov_groups.csv"
+            expected_roi_path = root / "roi_matches.csv"
+            with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
+                writer = csv.DictWriter(
+                    csv_file,
+                    fieldnames=("recording_path", "recording_data_path"),
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "recording_path": str(recording),
+                        "recording_data_path": str(
+                            recording / "twopy" / "recording_data.h5"
+                        ),
+                    },
+                )
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            load_panel = cast(QWidget, control_docks.load_widget)
+            loaded_panel = cast(QWidget, control_docks.loaded_recordings_widget)
+            loaded_list = loaded_panel.findChild(QListWidget)
+            group_matching_widget = cast(QWidget, control_docks.group_matching_widget)
+            fov_view = cast(Any, group_matching_widget)._fov_view
+            load_buttons = {
+                button.text(): button for button in load_panel.findChildren(QPushButton)
+            }
+            status_label = fov_view.findChild(
+                QLabel,
+                "group_matching_caption",
+            )
+            fov_path_edit = group_matching_widget.findChild(
+                QLineEdit,
+                "fov_group_path",
+            )
+            roi_path_edit = group_matching_widget.findChild(
+                QLineEdit,
+                "roi_match_path",
+            )
+            assert loaded_list is not None
+            assert status_label is not None
+            assert fov_path_edit is not None
+            assert roi_path_edit is not None
+
+            with patch.object(
+                napari_controls,
+                "_choose_recording_csv_paths",
+                return_value=(csv_path,),
+            ):
+                load_buttons["Load CSV list"].click()
+                process_qt_events_until(
+                    lambda: Path(fov_path_edit.text()) == expected_fov_path
+                )
+
+            self.assertEqual(loaded_list.count(), 1)
+            self.assertEqual(Path(fov_path_edit.text()), expected_fov_path)
+            self.assertEqual(Path(roi_path_edit.text()), expected_roi_path)
+            self.assertIn(
+                f"FOV CSV will be saved to {expected_fov_path}",
+                status_label.text(),
+            )
+            self.assertFalse(expected_fov_path.exists())
+            self.assertFalse(expected_roi_path.exists())
 
     def test_load_csv_list_uses_separate_remembered_folder(self) -> None:
         """Confirm CSV-list dialogs do not overwrite manual-load memory.

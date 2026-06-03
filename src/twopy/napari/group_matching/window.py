@@ -181,23 +181,23 @@ class GroupMatchingPanel(QWidget):
         self._stack.setCurrentWidget(self._fov_view)
         self._fov_view.refresh()
 
-    def load_csv_folder_defaults(self, folder: Path) -> bool:
-        """Load group-matching CSV defaults from a recording-list folder.
+    def set_recording_csv_folder_defaults(self, folder: Path) -> None:
+        """Point group-matching CSV defaults at a recording-list folder.
 
         Args:
-            folder: Folder that may contain manual group-matching CSVs.
+            folder: Folder that owns a loaded-recordings CSV.
 
         Returns:
-            ``True`` when an adjacent FOV CSV was found and loaded.
+            None.
+
+        Loading a recording-list CSV establishes the working folder for manual
+        group matching. Existing FOV and ROI CSVs in that folder are loaded when
+        present, but missing files still become the default save targets.
         """
-        candidate = folder.expanduser() / FOV_GROUP_TABLE_FILENAME
-        if not candidate.exists():
-            return False
         self._csv_paths.retarget_folder(folder)
         self._sync_csv_paths_to_views(load_roi_rows=True)
         self._fov_view.load_fov_groups_from_path()
         self._roi_view.refresh_fov_filter()
-        return True
 
     def clear_loaded_recording_state(self) -> None:
         """Clear matching decisions that belong to unloaded recordings."""

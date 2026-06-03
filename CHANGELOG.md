@@ -19,6 +19,7 @@
 ### Fixes
 
 - Kept direct Load-tab recording calls on the asynchronous progress-dialog path and preserved failed manual path text for correction.
+- Kept Group Matching FOV and ROI CSV save targets beside a loaded recording-list CSV even when those matching CSVs do not exist yet.
 
 ## 0.3.0 - 2026-06-01
 
