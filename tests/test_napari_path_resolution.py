@@ -171,6 +171,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 resolved.paths.movie_path,
                 (expected_dir / "aligned_movie.h5").resolve(),
             )
+            self.assertTrue((source_dir / "twopy" / "recording_data.h5").is_file())
+            self.assertTrue((source_dir / "twopy" / "aligned_movie.h5").is_file())
 
     def test_recording_path_resolution_uses_local_analysis_cache(self) -> None:
         """Confirm source loading converts into local cache when enabled.
@@ -218,6 +220,50 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 resolved.paths.movie_path,
                 (expected_dir / "aligned_movie.h5").resolve(),
             )
+
+    def test_recording_path_resolution_publishes_cache_to_output_root(self) -> None:
+        """Confirm cached source conversion syncs to mirrored output storage.
+
+        Inputs: a source-shaped recording under ``data_paths`` with caching
+            enabled and ``analysis_output`` set to a separate folder.
+        Outputs: converted files under cache and mirrored publish roots.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            cache_root = root / "cache"
+            publish_root = root / "publish"
+            _write_source_recording_shape(source_dir)
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                f"analysis_output: {publish_root}\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with patch(
+                    "twopy.napari.loading.convert_recording_to_twopy",
+                    side_effect=_fake_convert_recording,
+                ):
+                    resolved = resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
+
+            expected_cache_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
+            expected_publish_dir = publish_root / "fly" / "stim" / "2023" / "10_17"
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (expected_cache_dir / "recording_data.h5").resolve(),
+            )
+            self.assertTrue((expected_publish_dir / "recording_data.h5").is_file())
+            self.assertTrue((expected_publish_dir / "aligned_movie.h5").is_file())
 
     def test_recording_path_resolution_uses_existing_cache_for_unavailable_source(
         self,

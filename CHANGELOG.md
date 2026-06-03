@@ -8,6 +8,7 @@
 
 ### Changes
 
+- Made `convert_recording_to_twopy(...)` only write converted HDF5 files to its resolved output directory; napari loading now owns publishing cached converted files to `analysis_output`.
 - Added an `area (px)` column to the napari ROIs tab so editable ROI rows show their current mask size.
 - Made top-level `import twopy` leave napari, Qt, and matplotlib unloaded; import GUI helpers from `twopy.napari` instead.
 - Moved response plot data objects and builders into `twopy.analysis.response_plotting`; scripts and custom workflows should import them from analysis instead of `twopy.napari.plotting.data`.

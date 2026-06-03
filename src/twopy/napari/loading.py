@@ -26,7 +26,7 @@ from twopy.config import (
     load_config,
     resolve_analysis_work_dir,
 )
-from twopy.conversion import convert_recording_to_twopy
+from twopy.conversion import ConvertedRecording, convert_recording_to_twopy
 from twopy.filenames import ALIGNED_MOVIE_FILENAME, RECORDING_DATA_FILENAME
 from twopy.napari.paths import NapariRecordingPaths, PathInput, is_default_path
 from twopy.napari.paths import resolve_recording_paths as resolve_converted_paths
@@ -89,6 +89,7 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
         if source_dir is None:
             raise _configured_data_path_error(selected, error) from error
         converted = convert_recording_to_twopy(source_dir)
+        _publish_converted_recording(converted)
         return ResolvedNapariRecording(
             paths=resolve_converted_paths(converted.path),
             was_converted=True,
@@ -112,11 +113,7 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
         source_dir,
         output_dir=paths.recording_data_path.parent,
     )
-    copy_converted_files_to_publish(
-        recording_data_path=converted.path,
-        movie_path=converted.movie_path,
-        source_session_dir=converted.source_session_dir,
-    )
+    _publish_converted_recording(converted)
     return ResolvedNapariRecording(
         paths=resolve_converted_paths(converted.path),
         was_converted=True,
@@ -143,11 +140,7 @@ def reconvert_recording_to_output(
     local/cache output location.
     """
     converted = convert_recording_to_twopy(source_dir, output_dir=output_dir)
-    copy_converted_files_to_publish(
-        recording_data_path=converted.path,
-        movie_path=converted.movie_path,
-        source_session_dir=converted.source_session_dir,
-    )
+    _publish_converted_recording(converted)
     return _refresh_cached_analysis_outputs(
         paths=resolve_converted_paths(converted.path),
         source_dir=source_dir,
@@ -250,15 +243,20 @@ def _convert_cached_source_recording(
         Resolved cached paths for the converted recording.
     """
     converted = convert_recording_to_twopy(source_dir, output_dir=output_dir)
-    copy_converted_files_to_publish(
-        recording_data_path=converted.path,
-        movie_path=converted.movie_path,
-        source_session_dir=converted.source_session_dir,
-    )
+    _publish_converted_recording(converted)
     return _refresh_cached_analysis_outputs(
         paths=resolve_converted_paths(converted.path),
         source_dir=source_dir,
         was_converted=True,
+    )
+
+
+def _publish_converted_recording(converted: ConvertedRecording) -> None:
+    """Copy converted HDF5 files from napari's work path to publish storage."""
+    copy_converted_files_to_publish(
+        recording_data_path=converted.path,
+        movie_path=converted.movie_path,
+        source_session_dir=converted.source_session_dir,
     )
 
 

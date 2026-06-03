@@ -100,7 +100,7 @@ def convert_recording_to_twopy(
         mean_stop_frame=stop_frame,
     )
 
-    converted = ConvertedRecording(
+    return ConvertedRecording(
         path=recording_data_path,
         movie_path=movie_path,
         source_session_dir=inputs.session_files.session_dir,
@@ -108,16 +108,6 @@ def convert_recording_to_twopy(
         mean_image_start_frame=start_frame,
         mean_image_stop_frame=stop_frame,
     )
-    if output_dir is None:
-        from twopy.analysis_cache import copy_converted_files_to_publish
-
-        copy_converted_files_to_publish(
-            recording_data_path=converted.path,
-            movie_path=converted.movie_path,
-            source_session_dir=converted.source_session_dir,
-            config_path=config_path,
-        )
-    return converted
 
 
 def _resolve_conversion_output_dir(

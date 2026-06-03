@@ -601,10 +601,10 @@ class ConversionTest(unittest.TestCase):
     def test_conversion_uses_cached_work_dir_when_analysis_caching_enabled(
         self,
     ) -> None:
-        """Confirm conversion uses local cache by default when enabled.
+        """Confirm conversion writes only to the local cache when enabled.
 
         Inputs: a temporary config with cache and publish roots.
-        Outputs: converted files under the cache root and mirrored publish root.
+        Outputs: converted files under the cache root only.
         """
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
@@ -634,8 +634,8 @@ class ConversionTest(unittest.TestCase):
             self.assertEqual(converted.path, expected_dir / "recording_data.h5")
             self.assertEqual(converted.movie_path, expected_dir / "aligned_movie.h5")
             self.assertTrue(converted.path.is_file())
-            self.assertTrue((published_dir / "recording_data.h5").is_file())
-            self.assertTrue((published_dir / "aligned_movie.h5").is_file())
+            self.assertFalse((published_dir / "recording_data.h5").exists())
+            self.assertFalse((published_dir / "aligned_movie.h5").exists())
 
     def test_converted_file_publish_does_not_require_analysis_caching(self) -> None:
         """Confirm converted HDF5 publish copies are not tied to cache policy.
