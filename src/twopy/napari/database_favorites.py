@@ -30,6 +30,7 @@ __all__ = [
     "normalized_database_search_filters",
     "replace_database_search_favorite",
     "save_database_search_favorites",
+    "update_database_search_favorite",
 ]
 
 DEFAULT_DATABASE_FAVORITES_PATH = (
@@ -284,16 +285,12 @@ def replace_database_search_favorite(
     own deduplication rules.
     """
     normalized = normalized_database_search_favorite(favorite)
-    new_key = _filter_key(normalized.filters)
-    new_name_key = normalized.name.casefold()
 
     replaced = False
     output: list[ExperimentSearchFavorite] = []
     for existing in favorites:
         existing_normalized = normalized_database_search_favorite(existing)
-        same_filters = _filter_key(existing_normalized.filters) == new_key
-        same_name = existing_normalized.name.casefold() == new_name_key
-        if same_filters or same_name:
+        if _favorites_have_same_identity(existing_normalized, normalized):
             if not replaced:
                 output.append(normalized)
                 replaced = True
@@ -302,6 +299,49 @@ def replace_database_search_favorite(
 
     if not replaced:
         output.append(normalized)
+    return tuple(output)
+
+
+def update_database_search_favorite(
+    favorites: tuple[ExperimentSearchFavorite, ...],
+    index: int,
+    favorite: ExperimentSearchFavorite,
+) -> tuple[ExperimentSearchFavorite, ...]:
+    """Return favorites with one selected row edited.
+
+    Args:
+        favorites: Existing favorite records.
+        index: Row the user selected for editing.
+        favorite: Edited favorite values from the dialog.
+
+    Returns:
+        Favorites with the selected row replaced by the normalized edited
+        favorite and any duplicate name or filter row removed.
+
+    Raises:
+        IndexError: If ``index`` does not point at an existing favorite.
+        ValueError: If the edited favorite is invalid.
+
+    Editing targets the selected row. If the edited favorite matches another
+    row by name or filters, the edited row wins and the duplicate is removed so
+    the persisted list remains unique.
+    """
+    if index < 0 or index >= len(favorites):
+        msg = f"Database search favorite index is out of range: {index}"
+        raise IndexError(msg)
+
+    normalized = normalized_database_search_favorite(favorite)
+    output: list[ExperimentSearchFavorite] = []
+    for existing_index, existing in enumerate(favorites):
+        if existing_index == index:
+            continue
+        existing_normalized = normalized_database_search_favorite(existing)
+        if _favorites_have_same_identity(existing_normalized, normalized):
+            continue
+        output.append(existing_normalized)
+
+    replacement_index = min(index, len(output))
+    output.insert(replacement_index, normalized)
     return tuple(output)
 
 
@@ -383,6 +423,17 @@ def _filter_key(filters: ExperimentSearchFilters) -> tuple[str | None, ...]:
     """Return a stable duplicate-detection key for filters."""
     normalized = normalized_database_search_filters(filters)
     return tuple(_filter_value(normalized, field) for field in _FAVORITE_FIELDS)
+
+
+def _favorites_have_same_identity(
+    left: ExperimentSearchFavorite,
+    right: ExperimentSearchFavorite,
+) -> bool:
+    """Return whether two normalized favorites should occupy one row."""
+    return (
+        _filter_key(left.filters) == _filter_key(right.filters)
+        or left.name.casefold() == right.name.casefold()
+    )
 
 
 def _filter_value(filters: ExperimentSearchFilters, field: str) -> str | None:

@@ -4,10 +4,11 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
-from qtpy.QtCore import QEvent, Qt
+from qtpy.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt
 from qtpy.QtGui import QKeyEvent
 
 from tests.napari_support import (
+    ExperimentFavoriteEditDialog,
     ExperimentFavoriteErrorDialog,
     ExperimentSearchDialog,
     ExperimentSearchErrorDialog,
@@ -35,6 +36,7 @@ from tests.napari_support import (
     sqlite3,
     temporary_directory,
     unittest,
+    update_database_search_favorite,
 )
 
 
@@ -158,14 +160,14 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             search_buttons = {
                 button.text(): button
                 for button in dialog.findChildren(QPushButton)
-                if button.text() in {"Search", "Save favorite..."}
+                if button.text() in {"Search", "Save as favorite..."}
             }
             self.assertIn(
                 "background-color: #f2f2f2", search_buttons["Search"].styleSheet()
             )
             self.assertIn(
                 "background-color: #2d7dd2",
-                search_buttons["Save favorite..."].styleSheet(),
+                search_buttons["Save as favorite..."].styleSheet(),
             )
 
             result = dialog._tree.topLevelItem(0)
@@ -218,6 +220,69 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             self.assertEqual(loaded[0].filters.stimulus, "bars")
             self.assertEqual(loaded[0].filters.date, "2023-10-17")
 
+    def test_database_search_favorite_edit_keeps_edited_row_unique(self) -> None:
+        """Confirm editing one favorite removes duplicates outside that row.
+
+        Inputs: three favorites and an edit that gives the last row the first
+        row's display name.
+        Outputs: the edited row remains while the duplicate name row is removed.
+        """
+        first, second, third = _sample_ordered_favorites()
+        edited = ExperimentSearchFavorite(
+            name="first",
+            filters=ExperimentSearchFilters(sensor="g8"),
+        )
+
+        updated = update_database_search_favorite((first, second, third), 2, edited)
+
+        self.assertEqual(
+            [favorite.name for favorite in updated],
+            ["second", "first"],
+        )
+        self.assertEqual(updated[1].filters.sensor, "g8")
+
+    def test_database_search_favorite_editor_routes_fields(self) -> None:
+        """Confirm the favorite editor maps widgets to favorite data.
+
+        Inputs: one favorite with every editable filter field populated.
+        Outputs: the editor shows normalized starting text and returns the
+        edited raw text in the matching favorite fields.
+        """
+        _ = QApplication.instance() or QApplication([])
+        original = ExperimentSearchFavorite(
+            name=" original ",
+            filters=ExperimentSearchFilters(
+                user=" Gus ",
+                cell_type=" ALPN ",
+                sensor=" g6f ",
+                stimulus=" bars ",
+                date="2024/01/02",
+            ),
+        )
+        dialog = ExperimentFavoriteEditDialog(original)
+
+        self.assertEqual(dialog._name.text(), "original")
+        self.assertEqual(dialog._user.text(), "Gus")
+        self.assertEqual(dialog._cell_type.text(), "ALPN")
+        self.assertEqual(dialog._sensor.text(), "g6f")
+        self.assertEqual(dialog._stimulus.text(), "bars")
+        self.assertEqual(dialog._date.text(), "2024-01-02")
+
+        dialog._name.setText(" edited ")
+        dialog._user.setText(" user ")
+        dialog._cell_type.setText(" cell ")
+        dialog._sensor.setText(" sensor ")
+        dialog._stimulus.setText(" stimulus ")
+        dialog._date.setText(" 2025/03/04 ")
+
+        favorite = dialog.favorite()
+        self.assertEqual(favorite.name, " edited ")
+        self.assertEqual(favorite.filters.user, " user ")
+        self.assertEqual(favorite.filters.cell_type, " cell ")
+        self.assertEqual(favorite.filters.sensor, " sensor ")
+        self.assertEqual(favorite.filters.stimulus, " stimulus ")
+        self.assertEqual(favorite.filters.date, " 2025/03/04 ")
+
     def test_database_search_dialog_saves_uses_and_removes_favorites(self) -> None:
         """Confirm favorite buttons manage reusable search filters.
 
@@ -253,6 +318,7 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
 
             self.assertFalse(dialog._save_favorite_button.isEnabled())
             self.assertFalse(dialog._use_favorite_button.isEnabled())
+            self.assertFalse(dialog._edit_favorite_button.isEnabled())
             self.assertFalse(dialog._remove_favorite_button.isEnabled())
 
             dialog._user_filter.setText("Gus")
@@ -267,6 +333,7 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
 
             self.assertEqual(dialog._favorites_list.count(), 1)
             self.assertTrue(dialog._use_favorite_button.isEnabled())
+            self.assertTrue(dialog._edit_favorite_button.isEnabled())
             self.assertTrue(dialog._remove_favorite_button.isEnabled())
             loaded = load_database_search_favorites(favorites_path)
             self.assertEqual(len(loaded), 1)
@@ -292,8 +359,169 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
 
             self.assertEqual(dialog._favorites_list.count(), 0)
             self.assertFalse(dialog._use_favorite_button.isEnabled())
+            self.assertFalse(dialog._edit_favorite_button.isEnabled())
             self.assertFalse(dialog._remove_favorite_button.isEnabled())
             self.assertEqual(load_database_search_favorites(favorites_path), ())
+
+    def test_database_search_dialog_edits_selected_favorite(self) -> None:
+        """Confirm Edit updates the selected favorite name and filters.
+
+        Inputs: two saved favorites and an accepted edit dialog.
+        Outputs: the selected row is replaced, filters are normalized, and the
+        YAML file reloads the edited favorite.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            favorites_path = Path(temp_dir) / "favorites.yml"
+            first, second, _third = _sample_ordered_favorites()
+            save_database_search_favorites((first, second), favorites_path)
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
+                    loaded_count=len(paths),
+                ),
+                favorites_path=favorites_path,
+            )
+            dialog._favorites_list.setCurrentRow(1)
+            edited = ExperimentSearchFavorite(
+                name="renamed",
+                filters=ExperimentSearchFilters(
+                    user="  Gustavo ",
+                    sensor=" g8 ",
+                    date="2024/01/02",
+                ),
+            )
+
+            with (
+                patch.object(
+                    ExperimentFavoriteEditDialog,
+                    "exec",
+                    return_value=QDialog.DialogCode.Accepted,
+                ),
+                patch.object(
+                    ExperimentFavoriteEditDialog,
+                    "favorite",
+                    return_value=edited,
+                ),
+            ):
+                dialog.edit_selected_favorite()
+
+            self.assertEqual(
+                [favorite.name for favorite in dialog._favorites],
+                ["first", "renamed"],
+            )
+            self.assertEqual(dialog._favorites[1].filters.user, "Gustavo")
+            self.assertEqual(dialog._favorites[1].filters.sensor, "g8")
+            self.assertEqual(dialog._favorites[1].filters.date, "2024-01-02")
+            self.assertEqual(_favorite_list_names(dialog), ["first", "renamed"])
+            self.assertEqual(dialog._favorites_list.currentRow(), 1)
+            loaded = load_database_search_favorites(favorites_path)
+            self.assertEqual(loaded, dialog._favorites)
+
+    def test_database_search_dialog_reorders_favorites_by_dragged_rows(
+        self,
+    ) -> None:
+        """Confirm dragged favorite rows become the persisted order.
+
+        Inputs: three saved favorites and the Search database favorites list.
+        Outputs: moving the visible bottom row to the top updates memory, YAML,
+        and the next dialog instance in that same visible order.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            favorites_path = Path(temp_dir) / "favorites.yml"
+            first, second, third = _sample_ordered_favorites()
+            save_database_search_favorites((first, second, third), favorites_path)
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
+                    loaded_count=len(paths),
+                ),
+                favorites_path=favorites_path,
+            )
+
+            self.assertEqual(
+                dialog._favorites_list.dragDropMode(),
+                QAbstractItemView.DragDropMode.InternalMove,
+            )
+            moved = _favorite_list_model(dialog).moveRows(
+                QModelIndex(),
+                2,
+                1,
+                QModelIndex(),
+                0,
+            )
+
+            self.assertTrue(moved)
+            self.assertEqual(
+                [favorite.name for favorite in dialog._favorites],
+                ["third", "first", "second"],
+            )
+            reloaded_names = [
+                favorite.name
+                for favorite in load_database_search_favorites(favorites_path)
+            ]
+            self.assertEqual(reloaded_names, ["third", "first", "second"])
+            self.assertEqual(dialog._favorites_list.currentRow(), 0)
+
+            fresh_dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
+                    loaded_count=len(paths),
+                ),
+                favorites_path=favorites_path,
+            )
+            self.assertEqual(
+                _favorite_list_names(fresh_dialog),
+                ["third", "first", "second"],
+            )
+
+    def test_database_search_dialog_reverts_reorder_when_save_fails(self) -> None:
+        """Confirm failed favorite reorder writes do not change dialog state.
+
+        Inputs: three saved favorites and a simulated YAML write failure.
+        Outputs: the dialog re-renders the previous order and leaves the local
+        favorites file unchanged.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            favorites_path = Path(temp_dir) / "favorites.yml"
+            first, second, third = _sample_ordered_favorites()
+            save_database_search_favorites((first, second, third), favorites_path)
+            original_text = favorites_path.read_text(encoding="utf-8")
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
+                    loaded_count=len(paths),
+                ),
+                favorites_path=favorites_path,
+            )
+
+            errors: list[Exception] = []
+            with (
+                patch(
+                    "twopy.napari.database_search.save_database_search_favorites",
+                    side_effect=OSError("disk full"),
+                ),
+                patch.object(
+                    dialog,
+                    "_show_favorite_error",
+                    side_effect=lambda error: errors.append(error),
+                ),
+            ):
+                moved = _favorite_list_model(dialog).moveRows(
+                    QModelIndex(),
+                    2,
+                    1,
+                    QModelIndex(),
+                    0,
+                )
+
+            self.assertTrue(moved)
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(dialog._favorites, (first, second, third))
+            self.assertEqual(
+                _favorite_list_names(dialog),
+                ["first", "second", "third"],
+            )
+            self.assertEqual(dialog._favorites_list.currentRow(), 2)
+            self.assertEqual(favorites_path.read_text(encoding="utf-8"), original_text)
 
     def test_database_search_dialog_keeps_memory_when_favorite_save_fails(
         self,
@@ -388,7 +616,66 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             self.assertEqual(dialog._favorites, (saved,))
             self.assertEqual(dialog._favorites_list.count(), 1)
             self.assertTrue(dialog._use_favorite_button.isEnabled())
+            self.assertTrue(dialog._edit_favorite_button.isEnabled())
             self.assertTrue(dialog._remove_favorite_button.isEnabled())
+
+    def test_database_search_dialog_keeps_memory_when_favorite_edit_fails(
+        self,
+    ) -> None:
+        """Confirm failed favorite edits do not update in-memory state.
+
+        Inputs: one selected favorite and a simulated disk-write failure.
+        Outputs: the selected favorite remains visible, usable, and unchanged.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            favorites_path = Path(temp_dir) / "favorites.yml"
+            saved = ExperimentSearchFavorite(
+                name="saved",
+                filters=ExperimentSearchFilters(user="Gus"),
+            )
+            save_database_search_favorites((saved,), favorites_path)
+            original_text = favorites_path.read_text(encoding="utf-8")
+            dialog = ExperimentSearchDialog(
+                on_load_recording_paths=lambda paths: RecordingLoadResult(
+                    loaded_count=len(paths),
+                ),
+                favorites_path=favorites_path,
+            )
+            dialog._favorites_list.setCurrentRow(0)
+            edited = ExperimentSearchFavorite(
+                name="edited",
+                filters=ExperimentSearchFilters(sensor="g8"),
+            )
+
+            errors: list[Exception] = []
+            with (
+                patch(
+                    "twopy.napari.database_search.save_database_search_favorites",
+                    side_effect=OSError("disk full"),
+                ),
+                patch.object(
+                    ExperimentFavoriteEditDialog,
+                    "exec",
+                    return_value=QDialog.DialogCode.Accepted,
+                ),
+                patch.object(
+                    ExperimentFavoriteEditDialog,
+                    "favorite",
+                    return_value=edited,
+                ),
+                patch.object(
+                    dialog,
+                    "_show_favorite_error",
+                    side_effect=lambda error: errors.append(error),
+                ),
+            ):
+                dialog.edit_selected_favorite()
+
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(dialog._favorites, (saved,))
+            self.assertEqual(_favorite_list_names(dialog), ["saved"])
+            self.assertEqual(favorites_path.read_text(encoding="utf-8"), original_text)
 
     def test_database_search_dialog_blocks_favorite_writes_after_load_failure(
         self,
@@ -691,6 +978,45 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             self.assertEqual(shown_results[0].loaded_count, 1)
             self.assertEqual(len(shown_results[0].failures), 1)
             self.assertIn("relativeDataPath", shown_results[0].failures[0].message)
+
+
+def _sample_ordered_favorites() -> tuple[
+    ExperimentSearchFavorite,
+    ExperimentSearchFavorite,
+    ExperimentSearchFavorite,
+]:
+    """Return three distinct favorites for order-sensitive dialog tests."""
+    return (
+        ExperimentSearchFavorite(
+            name="first",
+            filters=ExperimentSearchFilters(user="Gus"),
+        ),
+        ExperimentSearchFavorite(
+            name="second",
+            filters=ExperimentSearchFilters(cell_type="ALPN"),
+        ),
+        ExperimentSearchFavorite(
+            name="third",
+            filters=ExperimentSearchFilters(stimulus="combo"),
+        ),
+    )
+
+
+def _favorite_list_names(dialog: ExperimentSearchDialog) -> list[str]:
+    """Return the visible favorite row labels from a search dialog."""
+    names: list[str] = []
+    for row in range(dialog._favorites_list.count()):
+        item = dialog._favorites_list.item(row)
+        assert item is not None
+        names.append(item.text())
+    return names
+
+
+def _favorite_list_model(dialog: ExperimentSearchDialog) -> QAbstractItemModel:
+    """Return the Qt model backing the favorites list."""
+    model = dialog._favorites_list.model()
+    assert model is not None
+    return model
 
 
 if __name__ == "__main__":

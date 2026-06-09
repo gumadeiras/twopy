@@ -15,6 +15,8 @@
 - Made napari select a loaded recording's editable `rois` Labels layer when you select that recording in the Loaded Recordings pane.
 - Made napari set the selected `rois` paint label to the first unused ROI number when a loaded recording is selected.
 - Made Load-tab saved recording CSVs reload valid `recording_data_path` HDF5 files directly before falling back to source recording paths.
+- Made Search database favorites reorderable by dragging rows in the favorites list.
+- Renamed Search database's `Save favorite...` action to `Save as favorite...` and added favorite editing for saved names and filters.
 
 ### Fixes
 

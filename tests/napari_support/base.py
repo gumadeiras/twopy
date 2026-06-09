@@ -106,11 +106,13 @@ from twopy.napari import (
     roi_label_image_from_layer,
     save_napari_label_rois,
 )
+from twopy.napari.database_favorite_editor import ExperimentFavoriteEditDialog
 from twopy.napari.database_favorites import (
     ExperimentSearchFavorite,
     load_database_search_favorites,
     replace_database_search_favorite,
     save_database_search_favorites,
+    update_database_search_favorite,
 )
 from twopy.napari.database_search import (
     ExperimentFavoriteErrorDialog,

@@ -46,6 +46,7 @@ from twopy.database.search import (
     recording_path_for_database_experiment,
 )
 from twopy.database.types import DatabaseExperiment
+from twopy.napari.database_favorite_editor import ExperimentFavoriteEditDialog
 from twopy.napari.database_favorites import (
     DEFAULT_DATABASE_FAVORITES_PATH,
     ExperimentSearchFavorite,
@@ -57,6 +58,7 @@ from twopy.napari.database_favorites import (
     normalized_database_search_filters,
     replace_database_search_favorite,
     save_database_search_favorites,
+    update_database_search_favorite,
 )
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.load_workflow import RecordingLoadFailure, RecordingLoadResult
@@ -156,6 +158,7 @@ class ExperimentSearchDialog(QDialog):
         self._stimulus_filter = self._filter_line_edit(FILTER_HINTS["stimulus"])
         self._date_filter = self._filter_line_edit(FILTER_HINTS["date"])
         self._favorites_list = QListWidget()
+        self._configure_favorites_list()
         self._favorites_list.itemDoubleClicked.connect(
             lambda _item: self.use_selected_favorite(),
         )
@@ -174,11 +177,13 @@ class ExperimentSearchDialog(QDialog):
         search_button = QPushButton("Search")
         search_button.setStyleSheet(SECONDARY_ACTION_BUTTON_STYLE)
         search_button.clicked.connect(self.search)
-        self._save_favorite_button = QPushButton("Save favorite...")
+        self._save_favorite_button = QPushButton("Save as favorite...")
         self._save_favorite_button.setStyleSheet(PRIMARY_ACTION_BUTTON_STYLE)
         self._save_favorite_button.clicked.connect(self.save_current_favorite)
         self._use_favorite_button = QPushButton("Use")
         self._use_favorite_button.clicked.connect(self.use_selected_favorite)
+        self._edit_favorite_button = QPushButton("Edit...")
+        self._edit_favorite_button.clicked.connect(self.edit_selected_favorite)
         self._remove_favorite_button = QPushButton("Remove")
         self._remove_favorite_button.clicked.connect(self.remove_selected_favorite)
         load_button = QPushButton("Load selected")
@@ -189,6 +194,7 @@ class ExperimentSearchDialog(QDialog):
             search_button,
             self._save_favorite_button,
             self._use_favorite_button,
+            self._edit_favorite_button,
             self._remove_favorite_button,
             load_button,
             close_button,
@@ -334,6 +340,49 @@ class ExperimentSearchDialog(QDialog):
         self._apply_filters(favorite.filters)
         self.search()
 
+    def edit_selected_favorite(self) -> None:
+        """Edit the selected favorite name and saved filter values.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        Editing targets the selected favorite row. The dialog writes the edited
+        list before updating memory so failed YAML writes cannot desynchronize
+        the visible list from the persisted favorites file.
+        """
+        if self._favorites_load_error is not None:
+            self._show_favorite_error(self._favorites_load_error)
+            return
+
+        selected = self._selected_favorite_index()
+        if selected is None:
+            return
+        dialog = ExperimentFavoriteEditDialog(
+            self._favorites[selected],
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        try:
+            favorite = normalized_database_search_favorite(dialog.favorite())
+            updated_favorites = update_database_search_favorite(
+                self._favorites,
+                selected,
+                favorite,
+            )
+            save_database_search_favorites(updated_favorites, self._favorites_path)
+        except (IndexError, OSError, ValueError) as error:
+            self._show_favorite_error(error)
+            return
+
+        self._favorites = updated_favorites
+        self._render_favorites(selected=favorite)
+        self._update_favorite_action_states()
+
     def remove_selected_favorite(self) -> None:
         """Remove the selected favorite from the local favorite list.
 
@@ -363,6 +412,58 @@ class ExperimentSearchDialog(QDialog):
         self._render_favorites(
             selected_index=min(selected, len(self._favorites) - 1),
         )
+        self._update_favorite_action_states()
+
+    def _reorder_favorites_from_visible_rows(
+        self,
+        *,
+        moved_source_start: int | None = None,
+        moved_source_end: int | None = None,
+        moved_destination_row: int | None = None,
+    ) -> None:
+        """Persist the favorite order currently shown in the list.
+
+        Args:
+            moved_source_start: First source row from the completed Qt move.
+            moved_source_end: Last source row from the completed Qt move.
+            moved_destination_row: Destination row from the completed Qt move.
+
+        Returns:
+            None.
+
+        The dragged list order is the user's requested order. The dialog writes
+        that order before changing its stored tuple, so a disk failure cannot
+        leave the visible rows disagreeing with the YAML file.
+        """
+        if self._favorites_load_error is not None:
+            self._render_favorites()
+            self._show_favorite_error(self._favorites_load_error)
+            return
+
+        previous_favorites = self._favorites
+        selected = self._favorite_for_completed_move(
+            previous_favorites,
+            source_start=moved_source_start,
+            source_end=moved_source_end,
+            destination_row=moved_destination_row,
+        )
+        if selected is None:
+            selected = self._favorite_for_rendered_row(
+                self._favorites_list.currentRow(),
+                previous_favorites,
+            )
+        try:
+            updated_favorites = self._favorites_from_visible_rows(previous_favorites)
+            if updated_favorites == previous_favorites:
+                return
+            save_database_search_favorites(updated_favorites, self._favorites_path)
+        except (OSError, ValueError) as error:
+            self._render_favorites(selected=selected)
+            self._show_favorite_error(error)
+            return
+
+        self._favorites = updated_favorites
+        self._render_favorites(selected=selected)
         self._update_favorite_action_states()
 
     def load_selected(self) -> None:
@@ -425,11 +526,43 @@ class ExperimentSearchDialog(QDialog):
         actions.setContentsMargins(0, 0, 0, 0)
         actions.addStretch(1)
         actions.addWidget(self._use_favorite_button)
+        actions.addWidget(self._edit_favorite_button)
         actions.addWidget(self._remove_favorite_button)
         layout.addLayout(actions)
 
         panel.setLayout(layout)
         return panel
+
+    def _configure_favorites_list(self) -> None:
+        """Configure the favorites list for explicit internal row moves."""
+        self._favorites_list.setDragEnabled(True)
+        self._favorites_list.setAcceptDrops(True)
+        self._favorites_list.setDropIndicatorShown(True)
+        self._favorites_list.setDragDropMode(
+            QAbstractItemView.DragDropMode.InternalMove,
+        )
+        self._favorites_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self._favorites_list.setDragDropOverwriteMode(False)
+        model = self._favorites_list.model()
+        if model is None:
+            msg = "Favorites list must have a Qt model for row reordering."
+            raise RuntimeError(msg)
+        model.rowsMoved.connect(self._handle_favorites_rows_moved)
+
+    def _handle_favorites_rows_moved(
+        self,
+        _source_parent: object,
+        source_start: int,
+        source_end: int,
+        _destination_parent: object,
+        destination_row: int,
+    ) -> None:
+        """Persist a completed favorite row move from the Qt list model."""
+        self._reorder_favorites_from_visible_rows(
+            moved_source_start=source_start,
+            moved_source_end=source_end,
+            moved_destination_row=destination_row,
+        )
 
     def _filter_line_edit(self, placeholder: str) -> QLineEdit:
         """Create one filter field with an italic placeholder hint."""
@@ -497,6 +630,7 @@ class ExperimentSearchDialog(QDialog):
         for index, favorite in enumerate(self._favorites):
             item = QListWidgetItem(favorite.name)
             item.setToolTip(database_search_favorite_tooltip(favorite))
+            item.setData(Qt.ItemDataRole.UserRole, index)
             self._favorites_list.addItem(item)
             if selected is not None and favorite == selected:
                 selected_row = index
@@ -506,6 +640,65 @@ class ExperimentSearchDialog(QDialog):
             and 0 <= selected_row < self._favorites_list.count()
         ):
             self._favorites_list.setCurrentRow(selected_row)
+
+    def _favorites_from_visible_rows(
+        self,
+        favorites: tuple[ExperimentSearchFavorite, ...],
+    ) -> tuple[ExperimentSearchFavorite, ...]:
+        """Return favorites in the order currently shown by the list widget."""
+        if self._favorites_list.count() != len(favorites):
+            msg = "Favorite rows do not match the stored favorite list."
+            raise ValueError(msg)
+
+        ordered: list[ExperimentSearchFavorite] = []
+        seen: set[int] = set()
+        for row in range(self._favorites_list.count()):
+            item = self._favorites_list.item(row)
+            if item is None:
+                msg = f"Favorite row {row + 1} is missing."
+                raise ValueError(msg)
+            index = _favorite_index_from_item(item, len(favorites))
+            if index in seen:
+                msg = "Favorite rows contain a duplicate item."
+                raise ValueError(msg)
+            seen.add(index)
+            ordered.append(favorites[index])
+        return tuple(ordered)
+
+    def _favorite_for_rendered_row(
+        self,
+        row: int,
+        favorites: tuple[ExperimentSearchFavorite, ...],
+    ) -> ExperimentSearchFavorite | None:
+        """Return the favorite represented by a rendered row, if any."""
+        if row < 0 or row >= self._favorites_list.count():
+            return None
+        item = self._favorites_list.item(row)
+        if item is None:
+            return None
+        try:
+            return favorites[_favorite_index_from_item(item, len(favorites))]
+        except ValueError:
+            return None
+
+    def _favorite_for_completed_move(
+        self,
+        favorites: tuple[ExperimentSearchFavorite, ...],
+        *,
+        source_start: int | None,
+        source_end: int | None,
+        destination_row: int | None,
+    ) -> ExperimentSearchFavorite | None:
+        """Return the first favorite moved by a completed Qt row move."""
+        if source_start is None or source_end is None or destination_row is None:
+            return None
+        moved_count = source_end - source_start + 1
+        if moved_count < 1:
+            return None
+        moved_row = destination_row
+        if destination_row > source_start:
+            moved_row -= moved_count
+        return self._favorite_for_rendered_row(moved_row, favorites)
 
     def _selected_favorite_index(self) -> int | None:
         """Return the selected favorite row, if any."""
@@ -529,6 +722,7 @@ class ExperimentSearchDialog(QDialog):
         )
         has_selection = self._selected_favorite_index() is not None
         self._use_favorite_button.setEnabled(has_selection)
+        self._edit_favorite_button.setEnabled(can_write_favorites and has_selection)
         self._remove_favorite_button.setEnabled(can_write_favorites and has_selection)
 
     def _current_filters_can_be_saved(self) -> bool:
@@ -543,7 +737,7 @@ class ExperimentSearchDialog(QDialog):
     def _favorite_name_from_user(self, default_name: str) -> str | None:
         """Prompt the user for a favorite name."""
         dialog = QInputDialog(self)
-        dialog.setWindowTitle("Save Favorite")
+        dialog.setWindowTitle("Save as Favorite")
         dialog.setLabelText("Favorite name")
         dialog.setInputMode(QInputDialog.InputMode.TextInput)
         dialog.setTextValue(default_name)
@@ -646,6 +840,33 @@ def _bottom_button_row(
     layout.addWidget(load_button)
     layout.addWidget(close_button)
     return layout
+
+
+def _favorite_index_from_item(item: QListWidgetItem, favorite_count: int) -> int:
+    """Return the stored favorite index for one list item.
+
+    Args:
+        item: Rendered favorite row.
+        favorite_count: Number of favorites in the tuple used for rendering.
+
+    Returns:
+        Index into the tuple used when the item was rendered.
+
+    Raises:
+        ValueError: If the row metadata is missing or stale.
+
+    The row stores an index instead of duplicating favorite data, so drag/drop
+    reorders the existing records without making widget text part of the data
+    contract.
+    """
+    raw_index = item.data(Qt.ItemDataRole.UserRole)
+    if not isinstance(raw_index, int):
+        msg = "Favorite row is missing its stored favorite index."
+        raise ValueError(msg)
+    if raw_index < 0 or raw_index >= favorite_count:
+        msg = "Favorite row refers to a favorite that no longer exists."
+        raise ValueError(msg)
+    return raw_index
 
 
 class ExperimentSearchErrorDialog(QDialog):

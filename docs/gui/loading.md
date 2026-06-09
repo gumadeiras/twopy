@@ -25,7 +25,7 @@ Filters: **user**, **cell type**, **sensor**, **stimulus**, **date**. The date f
 
 Buttons: **Search** runs the query. **Load selected** loads everything under the selected rows. Results are grouped by user, cell type, sensor, stimulus, date, then source-folder experiment time — selecting a parent loads all children. Failed paths show up in a separate scrollable error dialog so a few bad rows do not block the rest.
 
-**Favorites** (lower left): save the current filter set under a name, restore it later with **Use**, or **Remove** the selected favorite. Favorites are kept in a local YAML file on your machine.
+**Favorites** (lower left): save the current filter set with **Save as favorite...**, drag saved favorites into the order you want, restore one later with **Use**, change its name or filters with **Edit...**, or **Remove** the selected favorite. Favorites are kept in a local YAML file on your machine.
 
 ## Load manually
 
