@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-06-08
+
 ### Changes
 
 - Made `convert_recording_to_twopy(...)` only write converted HDF5 files to its resolved output directory; napari loading now owns publishing cached converted files to `analysis_output`.
