@@ -71,7 +71,7 @@ def default_output_route(
 
     Configured output wins when the source maps cleanly. The fallback keeps
     manual loads outside configured data roots auditable instead of losing the
-    publish step.
+    copy-back step.
     """
     local = local_root.expanduser()
     fallback = fallback_publish_root.expanduser()
@@ -83,13 +83,6 @@ def default_output_route(
 
     try:
         config = load_config(config_path)
-    except FileNotFoundError:
-        return NapariOutputRoute(
-            local_root=local,
-            publish_root=fallback,
-        )
-
-    try:
         publish = resolve_analysis_output_dir(config, source_session_dir)
     except ValueError:
         return NapariOutputRoute(

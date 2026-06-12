@@ -97,6 +97,7 @@ from twopy.analysis.response_processing import (
 from twopy.analysis.response_window_options import ResponseWindowOptions
 from twopy.analysis.responses import GroupedRoiResponses, group_delta_f_over_f_by_epoch
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
+from twopy.config import CONFIG_ENV_VAR
 from twopy.conversion.types import ConvertedRecording
 from twopy.converted import load_converted_recording
 from twopy.database.search import ExperimentSearchFilters
@@ -701,25 +702,53 @@ class NapariAdapterTestCase(unittest.TestCase):
     """Base class that isolates napari state-file writes per test."""
 
     def setUp(self) -> None:
-        """Route napari UI state to a temporary file during tests.
+        """Route napari UI state and user config to temporary files during tests.
 
         Inputs: none.
-        Outputs: isolated state path in the test environment.
+        Outputs: isolated state and config paths for GUI tests.
         """
         self._state_temp_dir = temporary_directory()
+        self._config_temp_dir = temporary_directory()
         self._previous_state_file = environ.get("TWOPY_NAPARI_STATE_FILE")
+        self._previous_config_file = environ.get(CONFIG_ENV_VAR)
         environ["TWOPY_NAPARI_STATE_FILE"] = str(
             Path(self._state_temp_dir.name) / "napari_state.json",
         )
+        config_root = Path(self._config_temp_dir.name)
+        config_path = config_root / "config.yml"
+        config_path.write_text(
+            f"database_path: {config_root / 'db'}\n"
+            "data_paths:\n"
+            f"  - {config_root / 'data'}\n"
+            "analysis_output: source\n",
+            encoding="utf-8",
+        )
+        environ[CONFIG_ENV_VAR] = str(config_path)
 
     def tearDown(self) -> None:
-        """Restore the caller's napari state-file environment.
+        """Restore the caller's napari state-file and config environment.
 
         Inputs: none.
-        Outputs: original environment value restored.
+        Outputs: original environment values restored.
         """
         if self._previous_state_file is None:
             environ.pop("TWOPY_NAPARI_STATE_FILE", None)
         else:
             environ["TWOPY_NAPARI_STATE_FILE"] = self._previous_state_file
+        if self._previous_config_file is None:
+            environ.pop(CONFIG_ENV_VAR, None)
+        else:
+            environ[CONFIG_ENV_VAR] = self._previous_config_file
+        self._config_temp_dir.cleanup()
         self._state_temp_dir.cleanup()
+
+    def _activate_test_config(self, config_path: Path) -> None:
+        """Make one test config file win over local checkout config files.
+
+        Args:
+            config_path: Config file that the current test should load.
+
+        Returns:
+            None.
+        """
+        environ[CONFIG_ENV_VAR] = str(config_path)

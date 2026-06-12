@@ -32,7 +32,7 @@ Create the config template in your user folder:
 twopy config setup
 ```
 
-twopy prints the config path it wrote. On macOS and Linux the default is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. Edit that file with your database, data, and output paths before launching twopy.
+twopy prints the config path it wrote. On macOS and Linux the default is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. Edit that file with your database, data, and output paths before launching twopy. If you launch `twopy` before a config exists, twopy creates the same template, prints the path, and stops so you can edit it.
 
 Validate the active config and show its path and file contents:
 
@@ -47,7 +47,7 @@ micromamba activate twopy
 twopy
 ```
 
-When a config file exists, `twopy` validates it before opening napari. It does not require lab data folders or network drives to be mounted at launch.
+`twopy` validates the config before opening napari. It does not require lab data folders or network drives to be mounted at launch.
 
 Open a source recording or converted recording directly:
 

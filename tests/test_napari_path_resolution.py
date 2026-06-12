@@ -144,6 +144,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             expected_dir = resolve_analysis_cache_dir(
                 load_config(config_path),
                 source_dir.resolve(),
@@ -194,7 +195,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             source_dir = root / "external-source"
             converted_dir = root / "manual-converted"
             _write_converted_recording(converted_dir, source_session_dir=source_dir)
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -204,6 +206,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 f"analysis_output: {root / 'publish'}\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -239,7 +242,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             cache_root = root / "cache"
             _write_source_recording_shape(source_dir)
             _write_converted_recording(converted_dir, source_session_dir=source_dir)
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -249,6 +253,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 f"analysis_output: {root / 'publish'}\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -284,7 +289,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             source_dir = root / "external-source"
             cache_root = root / "cache"
             _write_source_recording_shape(source_dir)
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -294,6 +300,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 f"analysis_output: {root / 'publish'}\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -371,7 +378,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
             cache_root = root / "cache"
             _write_source_recording_shape(source_dir)
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -381,6 +389,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -420,7 +429,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             cache_root = root / "cache"
             publish_root = root / "publish"
             _write_source_recording_shape(source_dir)
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -430,6 +440,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 f"analysis_output: {publish_root}\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -467,7 +478,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             cache_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
             cache_dir.mkdir(parents=True)
             _write_converted_recording(cache_dir, source_session_dir=source_dir)
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -477,6 +489,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -512,7 +525,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             relative_recording = Path("fly") / "stim" / "2023" / "10_17"
             source_dir = first_data_root / relative_recording
             cache_root = root / "cache"
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {first_data_root.resolve()}\n"
@@ -523,6 +537,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -554,7 +569,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             _write_source_recording_shape(source_dir)
             publish_dir.mkdir()
             (publish_dir / "rois.h5").write_text("published", encoding="utf-8")
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -564,6 +580,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -611,6 +628,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             expected_dir = resolve_analysis_cache_dir(
                 load_config(config_path),
                 source_dir.resolve(),
@@ -660,7 +678,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             publish_dir = publish_root / "fly" / "stim" / "2023" / "10_17"
             _write_source_recording_shape(source_dir)
             _write_converted_recording(publish_dir, source_session_dir=source_dir)
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -670,6 +689,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 f"analysis_output: {publish_root}\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -716,7 +736,8 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             source_recording = publish_dir / "recording_data.h5"
             local_recording = local_dir / "recording_data.h5"
             source_recording.touch()
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -726,6 +747,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 f"analysis_output: {publish_root}\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             original_cwd = Path.cwd()
             try:
                 chdir(root)
@@ -780,6 +802,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             output_dir = resolve_analysis_cache_dir(
                 load_config(config_path),
                 source_dir.resolve(),

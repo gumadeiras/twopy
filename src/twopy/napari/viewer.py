@@ -133,7 +133,9 @@ def open_recording_in_napari(
 
     Converted movies are usually small enough for direct interactive loading.
     Analysis code still uses chunked readers; this viewer path favors simple,
-    auditable GUI behavior.
+    auditable GUI behavior. When ``add_controls`` is true, the twopy control
+    docks load ``config.yml`` for output routing, pixel calibration, custom
+    workflows, and database-backed loading.
     """
     resolved_viewer = create_viewer() if viewer is None else viewer
     prepared = prepare_recording_view_data(

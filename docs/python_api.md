@@ -53,7 +53,7 @@ experiments = find_recordings(
 )
 ```
 
-Every filter is optional. The function loads twopy config automatically so you do not need to pass database paths. Use `twopy config setup` once to create the user config file, or set `TWOPY_CONFIG` when a script needs a specific file.
+Every filter is optional. The function loads twopy config automatically so you do not need to pass database paths. Run `twopy config setup` once before using config-backed APIs, or set `TWOPY_CONFIG` when a script needs a specific file.
 
 `config.yml` controls whether queries read the shared database file directly or copy it locally. The default is `database_access: copy` because network DB queries can be slow, while copying the file is usually fast. Pass `database_access="direct"` to override.
 
@@ -71,7 +71,7 @@ print(converted.movie_path)   # aligned_movie.h5
 
 Conversion writes `recording_data.h5` (metadata, stimulus tables, photodiode signals, mean image) plus a separate `aligned_movie.h5` for the big movie array. The mean image defaults to the full movie; pass `mean_start_frame` / `mean_stop_frame` to use a frame range.
 
-By default twopy decides the output folder using your `config.yml`. With `analysis_caching: true`, `convert_recording_to_twopy(...)` writes converted files into your local `analysis_cache_dir`, mirrored under the matched `data_paths` root (or under `_external` for paths outside `data_paths`). With `analysis_caching: false`, it writes straight to `analysis_output`. The napari loading workflow copies cached converted files to `analysis_output` after conversion; the Python conversion function itself only writes the returned `recording_data.h5` and `aligned_movie.h5` paths. Pass `output_dir=...` only when you need one call to use a different output folder.
+By default twopy decides the output folder using your `config.yml`. With `analysis_caching: true`, `convert_recording_to_twopy(...)` writes converted files into your local `analysis_cache_dir`, mirrored under the matched `data_paths` root (or under `_external` for paths outside `data_paths`). With `analysis_caching: false`, it writes straight to `analysis_output`. The napari loading workflow copies cached converted files to `analysis_output` after conversion; the Python conversion function itself only writes the returned `recording_data.h5` and `aligned_movie.h5` paths. Pass `output_dir=...` only when you need one call to use a different output folder; that explicit path also lets conversion run without config-backed output routing.
 
 ## Load a converted recording
 
@@ -395,6 +395,8 @@ rois = save_napari_label_rois(label_image, Path("/path/to/rois.h5"))
 ```
 
 Pass `roi_set=Path("/path/to/rois.h5")` to `open_recording_in_napari` to reopen existing ROIs with the recording.
+
+Run `twopy config setup` before opening napari controls from Python. The controls use `config.yml` for output routing, pixel calibration, custom workflow folders, and database-backed loading. If you only need raw napari layers for a converted recording, pass `add_controls=False` to `open_recording_in_napari(...)`.
 
 ## psycho5 parity helpers
 

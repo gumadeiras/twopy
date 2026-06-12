@@ -482,6 +482,7 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
         """
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
+            output_dir = root / "source" / "twopy"
             analysis_path = root / "analysis_outputs.h5"
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
@@ -569,12 +570,12 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                 ),
             )
             self.assertIn(f"Local: {root / 'analysis_outputs.h5'}", labels_text)
-            self.assertIn(f"Output: {root / 'analysis_outputs.h5'}", labels_text)
+            self.assertIn(f"Output: {output_dir / 'analysis_outputs.h5'}", labels_text)
             self.assertIn(f"Local: {root / 'rois.h5'}", labels_text)
-            self.assertIn(f"Output: {root / 'rois.h5'}", labels_text)
+            self.assertIn(f"Output: {output_dir / 'rois.h5'}", labels_text)
             self.assertIn(f"Saved 1 ROI locally to {root}", labels_text)
             self.assertIn(
-                f"saved directly to {root}",
+                f"syncing to {output_dir}",
                 response_widget._export_status_label.text(),
             )
             response_widget.shutdown()
@@ -598,7 +599,8 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                 local_dir,
                 source_session_dir=source_dir,
             )
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -608,6 +610,7 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             viewer = _FakeViewer()
             original_cwd = Path.cwd()
             response_widget: Any | None = None

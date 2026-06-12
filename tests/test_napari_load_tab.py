@@ -563,6 +563,16 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             missing_recording_data_path = root / "missing" / "recording_data.h5"
             csv_path = root / "loaded_recordings.csv"
             _write_source_recording_shape(source_dir)
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {root}\n"
+                "analysis_caching: false\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+            self._activate_test_config(config_path)
             with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
                 writer = csv.DictWriter(
                     csv_file,
@@ -614,10 +624,6 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 }
 
                 with (
-                    patch.dict(
-                        "os.environ",
-                        {"TWOPY_CONFIG": str(root / "missing-config.yml")},
-                    ),
                     patch.object(
                         napari_controls,
                         "_choose_recording_csv_paths",
@@ -667,7 +673,8 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 cache_dir,
                 source_session_dir=source_dir,
             )
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -677,6 +684,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 f"analysis_output: {root / 'publish'}\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             viewer = _FakeViewer()
             original_cwd = Path.cwd()
             try:
@@ -786,7 +794,8 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 cache_dir,
                 source_session_dir=source_dir,
             )
-            (root / "config.yml").write_text(
+            config_path = root / "config.yml"
+            config_path.write_text(
                 f"database_path: {root / 'db'}\n"
                 "data_paths:\n"
                 f"  - {data_root.resolve()}\n"
@@ -796,6 +805,7 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 "analysis_output: source\n",
                 encoding="utf-8",
             )
+            self._activate_test_config(config_path)
             viewer = _FakeViewer()
             original_cwd = Path.cwd()
             try:

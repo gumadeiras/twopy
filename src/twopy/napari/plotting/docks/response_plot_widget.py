@@ -125,11 +125,7 @@ from twopy.napari.roi import (
     remove_roi_label_values_from_layer,
     set_roi_label_image_on_layer,
 )
-from twopy.pixel_calibration import (
-    DEFAULT_PIXEL_CALIBRATION_PATH,
-    PixelCalibrationRow,
-    load_pixel_calibrations,
-)
+from twopy.pixel_calibration import load_pixel_calibrations
 from twopy.pixel_calibration_profiles import (
     DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
     PixelCalibrationProfileMapping,
@@ -199,7 +195,10 @@ class _ResponsePlotWidget(QWidget):
             on_value_error=self._show_response_map_value_error,
             on_exception=self._show_response_map_exception,
         )
-        self._pixel_calibrations = _load_pixel_calibrations_for_ui()
+        config = load_config()
+        self._pixel_calibrations = load_pixel_calibrations(
+            config.pixel_calibration_path
+        )
         self._pixel_calibration_profile_mappings = (
             _load_pixel_calibration_profile_mappings_for_ui()
         )
@@ -270,7 +269,10 @@ class _ResponsePlotWidget(QWidget):
         )
         self._normalization_options_widget = options_panel.normalization_options_widget
         self._custom_workflow_panel = CustomWorkflowPanel(
-            workflow_paths=_load_custom_workflow_paths_for_ui(),
+            workflow_paths=(
+                *native_custom_workflow_paths(),
+                *config.custom_workflow_paths,
+            ),
             on_run=self._run_custom_workflow,
             parameter_specs_for_workflow=self._custom_parameter_specs_for_workflow,
         )
@@ -1656,37 +1658,6 @@ def _visibility_matches_previous_correlation_filter(
     if previous_correlation_visibility is None:
         return False
     return visibility == previous_correlation_visibility
-
-
-def _load_pixel_calibrations_for_ui() -> tuple[PixelCalibrationRow, ...]:
-    """Load calibration rows for napari ROI generation controls.
-
-    Returns:
-        Calibration rows from ``config.yml`` when available, otherwise twopy's
-        tracked default registry.
-
-    The UI can open a converted recording without a machine-local config file,
-    so the default registry remains available as the fallback. Invalid config
-    files still fail loudly through ``load_config``.
-    """
-    try:
-        calibration_path = load_config().pixel_calibration_path
-    except FileNotFoundError:
-        calibration_path = DEFAULT_PIXEL_CALIBRATION_PATH
-    return load_pixel_calibrations(calibration_path)
-
-
-def _load_custom_workflow_paths_for_ui() -> tuple[Path, ...]:
-    """Load workflow paths for the Custom tab.
-
-    Returns:
-        Built-in workflow paths plus paths from ``config.yml``.
-    """
-    try:
-        configured_paths = load_config().custom_workflow_paths
-    except FileNotFoundError:
-        configured_paths = ()
-    return (*native_custom_workflow_paths(), *configured_paths)
 
 
 def _custom_workflow_display_result(

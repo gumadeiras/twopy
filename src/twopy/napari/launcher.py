@@ -72,7 +72,9 @@ def launch_napari(
         otherwise ``None``.
 
     This launcher may convert source data before opening napari, but all
-    analysis still starts from converted HDF5 files.
+    analysis still starts from converted HDF5 files. The command-line entry
+    point creates a first-launch config template before calling this function;
+    direct Python callers should run ``twopy config setup`` first.
     """
     from twopy.filenames import ROI_FILENAME
     from twopy.napari.controls import add_twopy_magicgui_controls

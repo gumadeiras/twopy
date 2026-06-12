@@ -49,7 +49,7 @@ micromamba activate twopy
 twopy
 ```
 
-When a config file exists, `twopy` checks that it is valid before opening napari. This check does not require lab data folders or network drives to be mounted.
+`twopy` checks that the config is valid before opening napari. This check does not require lab data folders or network drives to be mounted. If you launch `twopy` before a config exists, it creates the template, prints the path, and stops so you can edit it.
 
 Or open a recording directly:
 

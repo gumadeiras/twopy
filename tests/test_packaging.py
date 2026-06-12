@@ -6,6 +6,7 @@ Outputs: assertions that command-line entry points stay wired to the launcher.
 
 import tomllib
 import unittest
+from argparse import Namespace
 from contextlib import redirect_stderr, redirect_stdout
 from importlib.metadata import version
 from io import StringIO
@@ -17,6 +18,7 @@ from twopy.config import CONFIG_ENV_VAR, config_template_text
 from twopy.napari.launcher import (
     _ensure_config_for_launch,
     _run_config_command,
+    main,
     parse_launch_args,
 )
 
@@ -153,6 +155,33 @@ class PackagingTest(unittest.TestCase):
             self.assertFalse(should_launch)
             self.assertTrue(config_path.is_file())
             self.assertIn(str(config_path), output.getvalue())
+
+    def test_explicit_launch_path_still_creates_config_template_and_stops(self) -> None:
+        """Confirm explicit data paths do not bypass first-launch setup."""
+        with temporary_directory() as temp_dir:
+            config_path = Path(temp_dir) / "config.yml"
+            args = Namespace(
+                command=None,
+                recording_data_path=Path("/tmp/recording_data.h5"),
+                roi_file_to_load=None,
+                roi_save_file=None,
+                movie_start=0,
+                movie_end=None,
+                no_movie=False,
+            )
+            output = StringIO()
+
+            with (
+                patch.dict("os.environ", {CONFIG_ENV_VAR: str(config_path)}),
+                patch("twopy.napari.launcher.parse_launch_args", return_value=args),
+                patch("twopy.napari.launcher.launch_napari") as launch,
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertTrue(config_path.is_file())
+            self.assertIn(str(config_path), output.getvalue())
+            launch.assert_not_called()
 
     def test_launch_continues_with_valid_config(self) -> None:
         """Confirm launch validation accepts a complete config."""

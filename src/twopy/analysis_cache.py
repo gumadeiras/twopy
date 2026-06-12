@@ -96,9 +96,10 @@ def refresh_cached_analysis_outputs(
     Returns:
         Local paths refreshed from the configured output folder.
 
-    Missing config or disabled caching means there is no cache refresh to do.
-    HDF5 files needed by the GUI are pulled down; CSV and image exports are
-    regenerated from saved analysis when needed.
+    When called outside the napari launcher, missing config or disabled caching
+    means there is no cache refresh to do. HDF5 files needed by the GUI are
+    pulled down; CSV and image exports are regenerated from saved analysis when
+    needed.
     """
     try:
         config = load_config(config_path)
@@ -144,8 +145,9 @@ def build_analysis_sync_plan(
             The default uses twopy's usual config search.
 
     Returns:
-        A sync plan, or ``None`` when config is missing, the output root is the
-        local root, or no syncable files were written.
+        A sync plan, or ``None`` when config is unavailable to this direct
+        helper call, the output root is the local root, or no syncable files were
+        written.
     """
     try:
         config = load_config(config_path)
@@ -214,8 +216,9 @@ def copy_converted_files_to_publish(
             The default uses twopy's usual config search.
 
     Returns:
-        Sync result, or ``None`` when config is missing, the output root is the
-        local root, or no copy-back is needed.
+        Sync result, or ``None`` when config is unavailable to this direct
+        helper call, the output root is the local root, or no copy-back is
+        needed.
     """
     try:
         config = load_config(config_path)

@@ -199,9 +199,8 @@ def _resolve_cached_unavailable_source_recording(
     """
     if source_dir.exists():
         return None
-    try:
-        config = load_config(DEFAULT_CONFIG_PATH)
-    except FileNotFoundError:
+    config = _load_cache_config()
+    if config is None:
         return None
     if not config.analysis_caching:
         return None
@@ -231,12 +230,11 @@ def _resolve_or_convert_cached_source_recording(
         source_dir: Valid source microscope recording folder.
 
     Returns:
-        Cached converted paths, or ``None`` when config is missing or caching is
-        disabled.
+        Cached converted paths, or ``None`` when caching is disabled or the
+        source cannot be routed through configured paths.
     """
-    try:
-        config = load_config(DEFAULT_CONFIG_PATH)
-    except FileNotFoundError:
+    config = _load_cache_config()
+    if config is None:
         return None
     if not config.analysis_caching:
         return None
@@ -401,9 +399,8 @@ def _localize_converted_paths_for_cache(
     Returns:
         Localized paths, or ``None`` when caching does not apply.
     """
-    try:
-        config = load_config(DEFAULT_CONFIG_PATH)
-    except FileNotFoundError:
+    config = _load_cache_config()
+    if config is None:
         return None
     if not config.analysis_caching:
         return None
@@ -453,6 +450,14 @@ def _localize_converted_paths_for_cache(
     )
 
 
+def _load_cache_config() -> TwopyConfig | None:
+    """Load config for cache routes, or return ``None`` for direct helper calls."""
+    try:
+        return load_config(DEFAULT_CONFIG_PATH)
+    except FileNotFoundError:
+        return None
+
+
 def _selected_converted_root(
     *,
     selected: Path,
@@ -478,7 +483,7 @@ def _configured_output_for_selected_converted_folder(
     try:
         config = load_config(DEFAULT_CONFIG_PATH)
         configured_publish = resolve_analysis_output_dir(config, source_dir)
-    except (FileNotFoundError, ValueError):
+    except ValueError:
         return selected_root
     if same_output_path(selected_root, configured_publish):
         return configured_publish
@@ -517,7 +522,7 @@ def _configured_data_path_error(selected: Path, error: ValueError) -> ValueError
     """
     try:
         config = load_config(DEFAULT_CONFIG_PATH)
-    except (FileNotFoundError, ValueError):
+    except ValueError:
         return error
 
     candidates = data_path_recording_candidates(config, selected)
