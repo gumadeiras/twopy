@@ -16,7 +16,7 @@ twopy is a two-photon imaging analysis tool for Clark Lab recordings. Open a rec
 
 twopy converts raw microscope recordings into a clean, twopy-owned HDF5 format the first time you open them. Everything after that — ROI editing, response plots, custom analyses, saved outputs — works from those converted files. The original microscope files stay untouched.
 
-By default the converted recordings live in a local cache (`~/.cache/twopy/recordings`) for speed; twopy publishes converted HDF5 files and saved analysis outputs back to your `analysis_output` location.
+By default the converted recordings live in a local cache (`~/.cache/twopy/recordings`) for speed; twopy copies converted HDF5 files and saved analysis outputs back to your `analysis_output` location.
 
 ```{toctree}
 :maxdepth: 2

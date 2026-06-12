@@ -508,8 +508,8 @@ analysis_caching: true
 analysis_cache_dir: ~/.cache/twopy/recordings
 analysis_output: /Volumes/magic/clarklab/twopy_outputs
 recording: /Volumes/magic/clarklab/2p_microscope_data/fly/stim/2023/10_17/10_02_49
-work: ~/.cache/twopy/recordings/fly/stim/2023/10_17/10_02_49
-publish: /Volumes/magic/clarklab/twopy_outputs/fly/stim/2023/10_17/10_02_49
+local: ~/.cache/twopy/recordings/fly/stim/2023/10_17/10_02_49
+output: /Volumes/magic/clarklab/twopy_outputs/fly/stim/2023/10_17/10_02_49
 ```
 
 ## Frame Count Audit

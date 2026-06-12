@@ -12,9 +12,13 @@ from pathlib import Path
 
 from twopy.analysis.response_maps import ResponseMapData, save_response_map_data
 from twopy.analysis.workflow import analyze_recording_responses
-from twopy.analysis_cache import AnalysisSyncPlan, build_analysis_sync_plan
+from twopy.analysis_cache import AnalysisSyncPlan, build_analysis_sync_plan_from_roots
 from twopy.filenames import RESPONSE_HEATMAPS_FILENAME
-from twopy.napari.display_paths import format_output_folder
+from twopy.napari.output_routing import (
+    NapariOutputRoute,
+    recording_output_route,
+    same_output_path,
+)
 from twopy.napari.plotting.docks.paths import (
     resolved_analysis_path,
     resolved_roi_save_file,
@@ -51,6 +55,7 @@ def save_current_roi_analysis(
     *,
     roi_save_file: Path | None,
     analysis_path: Path | None,
+    output_route: NapariOutputRoute | None = None,
     response_map_data: ResponseMapData | None = None,
 ) -> SaveAnalysisResult:
     """Persist current Labels ROIs and run response analysis.
@@ -59,6 +64,7 @@ def save_current_roi_analysis(
         request: Response-analysis request from the current napari state.
         roi_save_file: Explicit ROI output path, if one is loaded.
         analysis_path: Explicit analysis output path, if one is loaded.
+        output_route: Local and published output folders for this recording.
         response_map_data: Optional recording-level heatmaps to persist beside
             ROI analysis outputs.
 
@@ -68,6 +74,7 @@ def save_current_roi_analysis(
     Raises:
         ValueError: If analysis settings are invalid for saving.
     """
+    route = output_route or recording_output_route(request.recording)
     roi_output_path = resolved_roi_save_file(roi_save_file, request.recording)
     analysis_output_path = resolved_analysis_path(analysis_path, request.recording)
     save_roi_set(request.roi_set, roi_output_path)
@@ -90,14 +97,17 @@ def save_current_roi_analysis(
         response_processing_options=request.response_processing_options,
     )
     response_heatmap_path = _save_response_heatmaps(request, response_map_data)
-    output_folder = format_output_folder(run.output_path, request.recording)
+    output_folder = str(run.output_path.parent)
     status_text = (
         f"Saved {counted_noun(len(request.roi_set.labels), 'ROI', 'ROIs')} "
-        f"to {output_folder}"
+        f"locally to {output_folder}"
     )
-    sync_plan = build_analysis_sync_plan(
-        recording=request.recording,
+    sync_plan = build_analysis_sync_plan_from_roots(
+        local_root=route.local_root,
+        publish_root=route.publish_root,
         local_paths=(
+            request.recording.path,
+            request.recording.movie.path,
             roi_output_path,
             run.output_path,
             response_heatmap_path,
@@ -105,9 +115,7 @@ def save_current_roi_analysis(
             run.response_summary_grouped_csv_path,
         ),
     )
-    if sync_plan is not None:
-        sync_folder = format_output_folder(sync_plan.publish_root, request.recording)
-        status_text = f"{status_text}; syncing to {sync_folder}"
+    status_text = f"{status_text}; {_sync_status_suffix(route, sync_plan)}"
     return SaveAnalysisResult(
         roi_output_path=roi_output_path,
         analysis_output_path=run.output_path,
@@ -115,6 +123,18 @@ def save_current_roi_analysis(
         status_text=status_text,
         sync_plan=sync_plan,
     )
+
+
+def _sync_status_suffix(
+    route: NapariOutputRoute,
+    sync_plan: AnalysisSyncPlan | None,
+) -> str:
+    """Return the save-status suffix for one route and optional sync plan."""
+    if sync_plan is not None:
+        return f"syncing to {sync_plan.publish_root}"
+    if same_output_path(route.local_root, route.publish_root):
+        return f"saved directly to {route.publish_root}"
+    return f"no syncable files under {route.local_root}"
 
 
 def _save_response_heatmaps(

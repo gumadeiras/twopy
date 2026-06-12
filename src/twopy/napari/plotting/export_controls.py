@@ -18,11 +18,12 @@ from twopy.analysis.response_maps import ResponseMapData
 from twopy.analysis.response_plotting import ResponsePlotData
 from twopy.analysis_cache import (
     AnalysisSyncResult,
-    build_analysis_sync_plan,
+    build_analysis_sync_plan_from_roots,
     copy_analysis_sync_plan,
 )
 from twopy.converted import RecordingData
 from twopy.napari.display_paths import format_output_folder
+from twopy.napari.output_routing import NapariOutputRoute, recording_output_route
 from twopy.napari.plotting.export import (
     export_epoch_plots,
     export_epoch_roi_overlay_plots,
@@ -61,6 +62,7 @@ class ResponseExportState:
     value_bounds: tuple[float, float]
     response_map_data: ResponseMapData | None = None
     response_map_shared_limits: bool = True
+    output_route: NapariOutputRoute | None = None
 
 
 def create_response_export_tab(
@@ -211,7 +213,7 @@ def _button(
         """Run the export action and show a short status."""
         state = get_state()
         result = callback(state)
-        sync_result = _sync_exported_paths(result, state.recording)
+        sync_result = _sync_exported_paths(result, state)
         status_label.setText(_export_status(result, state.recording, sync_result))
 
     button.clicked.connect(run_export)
@@ -220,20 +222,30 @@ def _button(
 
 def _sync_exported_paths(
     result: tuple[Path, ...] | str,
-    recording: RecordingData | None,
+    state: ResponseExportState,
 ) -> AnalysisSyncResult | str | None:
     """Copy just-written export files from local cache to publish storage.
 
     Args:
         result: Export callback result.
-        recording: Loaded recording that defines local and publish roots.
+        state: Current export state with recording and output route.
 
     Returns:
         Sync result, error text, or ``None`` when sync does not apply.
     """
+    recording = state.recording
     if isinstance(result, str) or recording is None:
         return None
-    sync_plan = build_analysis_sync_plan(recording=recording, local_paths=result)
+    route = state.output_route or recording_output_route(recording)
+    sync_plan = build_analysis_sync_plan_from_roots(
+        local_root=route.local_root,
+        publish_root=route.publish_root,
+        local_paths=(
+            recording.path,
+            recording.movie.path,
+            *result,
+        ),
+    )
     if sync_plan is None:
         return None
     try:

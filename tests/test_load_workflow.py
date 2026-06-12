@@ -24,6 +24,7 @@ from twopy.napari.load_workflow import (
     reconvert_selected_recording,
 )
 from twopy.napari.loading import ResolvedNapariRecording
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.paths import NapariRecordingPaths, PathInput
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.session import LoadedNapariRecording, LoadedRecordingsPanel
@@ -127,6 +128,7 @@ class _State:
     roi_labels_layer: object | None = None
     roi_save_file: Path = Path("rois.h5")
     recording: RecordingData | None = None
+    output_route: NapariOutputRoute | None = None
     response_plot_widget: object | None = None
     trial_timeline_controller: object | None = None
     defer_timeline_updates: bool = False
@@ -428,23 +430,33 @@ class LoadWorkflowTest(unittest.TestCase):
         viewer = cast(_Viewer, state.viewer)
         source = Path("/source/first")
         recording_path = Path("/cache/first/recording_data.h5")
+        output_route = NapariOutputRoute(
+            local_root=Path("/cache/first"),
+            publish_root=Path("/publish/first"),
+        )
         load_recording_paths(
             state,
             (source,),
             remember_selected_folder=False,
-            resolve_recording=_resolver({source: _resolved_recording(recording_path)}),
+            resolve_recording=_resolver(
+                {source: _resolved_recording(recording_path, output_route=output_route)}
+            ),
             prepare_view_data=_prepare_view_data,
         )
         old_layers = (*viewer.images, *viewer.labels)
-        reconvert_calls: list[tuple[Path, Path]] = []
+        reconvert_calls: list[tuple[Path, Path, NapariOutputRoute]] = []
 
         def reconvert(
             source_dir: Path,
             output_dir: Path,
+            loaded_output_route: NapariOutputRoute,
         ) -> ResolvedNapariRecording:
             """Record reconversion arguments and return fresh converted paths."""
-            reconvert_calls.append((source_dir, output_dir))
-            return _resolved_recording(output_dir / "recording_data.h5")
+            reconvert_calls.append((source_dir, output_dir, loaded_output_route))
+            return _resolved_recording(
+                output_dir / "recording_data.h5",
+                output_route=loaded_output_route,
+            )
 
         result = reconvert_selected_recording(
             state,
@@ -458,10 +470,12 @@ class LoadWorkflowTest(unittest.TestCase):
             "Reconverted and loaded /cache/first/recording_data.h5",
         )
         self.assertEqual(
-            reconvert_calls, [(Path("/cache/first"), Path("/cache/first"))]
+            reconvert_calls,
+            [(Path("/cache/first"), Path("/cache/first"), output_route)],
         )
         self.assertEqual(len(state.loaded_recordings), 1)
         self.assertEqual(state.selected_recording_index, 0)
+        self.assertEqual(state.loaded_recordings[0].output_route, output_route)
         self.assertEqual(len(viewer.images), 2)
         self.assertEqual(len(viewer.labels), 1)
         for layer in old_layers:
@@ -512,12 +526,15 @@ def _resolver(
 def _resolved_recording(
     recording_data_path: Path,
     *,
+    output_route: NapariOutputRoute | None = None,
     source_unavailable: bool = False,
 ) -> ResolvedNapariRecording:
     """Build a resolved-recording fake for the workflow coordinator.
 
     Args:
         recording_data_path: Converted recording data path.
+        output_route: Optional local and final output route for the fake
+            resolved recording.
         source_unavailable: Whether the resolver used cache because source was
             unreachable.
 
@@ -533,6 +550,11 @@ def _resolved_recording(
     )
     return ResolvedNapariRecording(
         paths=paths,
+        output_route=output_route
+        or NapariOutputRoute(
+            local_root=recording_dir,
+            publish_root=recording_dir,
+        ),
         was_converted=False,
         source_unavailable=source_unavailable,
     )

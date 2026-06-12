@@ -20,6 +20,7 @@ from twopy.converted import ConvertedMovie, RecordingData, load_converted_record
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.display import display_metadata_for_spatial_crop
 from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting import (
     add_twopy_response_plot_widget,
     create_twopy_response_options_widget,
@@ -98,6 +99,7 @@ def open_recording_in_napari(
     add_roi_labels_layer: bool = True,
     add_controls: bool = True,
     roi_save_file: Path | None = None,
+    output_route: NapariOutputRoute | None = None,
 ) -> NapariRecordingView:
     """Open a converted recording in napari.
 
@@ -123,6 +125,8 @@ def open_recording_in_napari(
         roi_save_file: Default ROI HDF5 path used by the response-options
             persistence button. When omitted, twopy uses ``rois.h5`` beside
             ``recording_data.h5``.
+        output_route: Optional local and published output folders resolved by
+            the launcher or Load tab.
 
     Returns:
         ``NapariRecordingView`` with the loaded recording and created layers.
@@ -170,6 +174,7 @@ def open_recording_in_napari(
             recording=recording,
             roi_labels_layer=roi_layer,
             roi_save_file=resolved_roi_save_file,
+            output_route=output_route,
         )
         response_options_widget = create_twopy_response_options_widget(
             response_plot_widget,
@@ -179,6 +184,7 @@ def open_recording_in_napari(
             roi_labels_layer=roi_layer,
             roi_save_file=resolved_roi_save_file,
             recording=recording,
+            output_route=output_route,
             response_plot_widget=response_plot_widget,
             response_options_widget=response_options_widget,
             mean_image_layer=mean_layer,

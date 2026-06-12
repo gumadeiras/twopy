@@ -69,6 +69,7 @@ from twopy.napari.group_matching.fov_cards import FovRecordingCard
 from twopy.napari.group_matching.roi_cards import RoiRecordingCard
 from twopy.napari.group_matching.style import style_group_matching_panel
 from twopy.napari.group_matching.window import GroupMatchingPanel
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting import widgets as plotting_widgets
 from twopy.napari.plotting.preview_strip import ResponsePreviewStrip
 from twopy.napari.session import LoadedNapariRecording
@@ -745,6 +746,10 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             )
             loaded = LoadedNapariRecording(
                 recording=recording,
+                output_route=NapariOutputRoute(
+                    local_root=root,
+                    publish_root=root,
+                ),
                 roi_save_file=root / "rois.h5",
                 mean_image_layer=_FakeLayer("mean", np.ones((2, 2)), {}),
                 movie_layer=None,
@@ -1340,6 +1345,10 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             )
             loaded = LoadedNapariRecording(
                 recording=recording,
+                output_route=NapariOutputRoute(
+                    local_root=Path(temp_dir),
+                    publish_root=Path(temp_dir),
+                ),
                 roi_save_file=Path(temp_dir) / "rois.h5",
                 mean_image_layer=_FakeLayer(
                     name="mean",

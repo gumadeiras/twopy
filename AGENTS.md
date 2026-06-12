@@ -11,7 +11,7 @@ twopy is a two-photon imaging analysis tool.
 - Prefer simple, auditable code.
 - Use Occam's razor: add complexity only when a real observed need requires it.
 - Start from first principles: identify the real data contract, invariant, or failure mode before changing code.
-- Fix root causes. Do not add bandaid patches that only hide symptoms.
+- Fix root causes. Prefer making the bad state unrepresentable or unreachable over patching each symptom after it appears.
 - Keep changes scoped to the problem being solved, and remove dead code when a change makes it obsolete.
 - Reuse existing shared helpers when they make the code clearer, and deduplicate repeated logic when the shared version stays easy to read.
 - Keep data flow explicit. Avoid hidden global state, surprising side effects, and clever indirection.

@@ -44,11 +44,47 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting.docks.save_actions import save_current_roi_analysis
 
 
 class NapariResponseWorkflowTest(NapariAdapterTestCase):
     """Napari response workflow tests."""
+
+    def test_startup_open_routes_output_to_resolved_publish_folder(self) -> None:
+        """Confirm startup-loaded recordings keep launcher output routing.
+
+        Inputs: converted recording opened through the startup viewer helper
+            with an explicit local and publish route.
+        Outputs: response metadata labels show the publish folder from the
+            route instead of recomputing a cache-local fallback.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            local_dir = root / "cache"
+            publish_dir = root / "source" / "twopy"
+            recording_path = _write_converted_recording(local_dir)
+            viewer = _FakeViewer()
+
+            opened = open_recording_in_napari(
+                recording_path,
+                viewer=viewer,
+                output_route=NapariOutputRoute(
+                    local_root=local_dir,
+                    publish_root=publish_dir,
+                ),
+            )
+
+            response_widget = cast(Any, opened.response_plot_widget)
+            self.assertIn(
+                f"Output: {publish_dir / 'analysis_outputs.h5'}",
+                response_widget._analysis_path_label.text(),
+            )
+            self.assertIn(
+                f"Output: {publish_dir / 'rois.h5'}",
+                response_widget._roi_save_path_label.text(),
+            )
+            response_widget.shutdown()
 
     def test_response_update_rejects_full_frame_labels_layer(self) -> None:
         """Confirm response updates use the same crop-native ROI contract.
@@ -361,6 +397,7 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                     request,
                     roi_save_file=None,
                     analysis_path=analysis_path,
+                    output_route=None,
                 )
 
             save_kwargs = save_analyze.call_args.kwargs
@@ -531,11 +568,13 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                     response_widget._update_status_label.text(),
                 ),
             )
-            self.assertIn("Analysis output: ./twopy/analysis_outputs.h5", labels_text)
-            self.assertIn("ROI output: ./twopy/rois.h5", labels_text)
-            self.assertIn("Saved 1 ROI to ./twopy", labels_text)
+            self.assertIn(f"Local: {root / 'analysis_outputs.h5'}", labels_text)
+            self.assertIn(f"Output: {root / 'analysis_outputs.h5'}", labels_text)
+            self.assertIn(f"Local: {root / 'rois.h5'}", labels_text)
+            self.assertIn(f"Output: {root / 'rois.h5'}", labels_text)
+            self.assertIn(f"Saved 1 ROI locally to {root}", labels_text)
             self.assertIn(
-                "Saved 1 ROI to ./twopy",
+                f"saved directly to {root}",
                 response_widget._export_status_label.text(),
             )
             response_widget.shutdown()
@@ -598,8 +637,9 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                 ):
                     response_widget.save_analysis_and_rois()
 
-                future = response_widget._sync_future
-                self.assertIsNotNone(future)
+                futures = tuple(response_widget._sync_futures)
+                self.assertEqual(len(futures), 1)
+                future = futures[0]
                 future.result(timeout=2)
                 response_widget._collect_finished_sync()
             finally:

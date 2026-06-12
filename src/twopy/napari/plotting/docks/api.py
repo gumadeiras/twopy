@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from twopy.converted import RecordingData
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.protocols import NapariViewer
 
 if TYPE_CHECKING:
@@ -27,6 +28,7 @@ def add_twopy_response_plot_widget(
     recording: RecordingData | None,
     roi_labels_layer: object | None = None,
     roi_save_file: Path | None = None,
+    output_route: NapariOutputRoute | None = None,
     dock_name: str = "twopy responses",
     dock_area: str = "top",
     initial_height: int = DEFAULT_RESPONSE_DOCK_HEIGHT,
@@ -39,6 +41,7 @@ def add_twopy_response_plot_widget(
         roi_labels_layer: Optional napari Labels layer used for analysis
             previews from current ROIs.
         roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
+        output_route: Optional local and published output folders.
         dock_name: Dock widget title.
         dock_area: Napari dock area.
         initial_height: Preferred height, in screen pixels, for the top response
@@ -52,6 +55,7 @@ def add_twopy_response_plot_widget(
         viewer=viewer,
         roi_labels_layer=roi_labels_layer,
         roi_save_file=roi_save_file,
+        output_route=output_route,
     )
     dock_widget = viewer.window.add_dock_widget(
         widget,
@@ -128,6 +132,7 @@ def create_response_plot_widget(
     viewer: object | None = None,
     roi_labels_layer: object | None = None,
     roi_save_file: Path | None = None,
+    output_route: NapariOutputRoute | None = None,
 ) -> object:
     """Create a response plotting widget.
 
@@ -137,6 +142,7 @@ def create_response_plot_widget(
         roi_labels_layer: Optional napari Labels layer used when the user asks
             to compute responses from the current ROIs.
         roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
+        output_route: Optional local and published output folders.
 
     Returns:
         Qt widget as a plain object for napari docking.
@@ -148,6 +154,7 @@ def create_response_plot_widget(
         recording=recording,
         roi_labels_layer=roi_labels_layer,
         roi_save_file=roi_save_file,
+        output_route=output_route,
     )
     return widget
 
@@ -158,6 +165,7 @@ def refresh_response_plot_widget(
     recording: RecordingData | None,
     roi_labels_layer: object | None = None,
     roi_save_file: Path | None = None,
+    output_route: NapariOutputRoute | None = None,
 ) -> None:
     """Refresh a response plotting widget after a recording is loaded.
 
@@ -166,6 +174,7 @@ def refresh_response_plot_widget(
         recording: Optional loaded converted recording.
         roi_labels_layer: Optional current ROI Labels layer.
         roi_save_file: Optional ROI HDF5 path used by the Save Analysis action.
+        output_route: Optional local and published output folders.
 
     Returns:
         None.
@@ -176,10 +185,11 @@ def refresh_response_plot_widget(
         return
     widget.set_roi_labels_layer(roi_labels_layer)
     widget.set_roi_save_file(roi_save_file)
+    widget.set_output_route(output_route)
     if recording is None:
         widget.clear_recording()
         return
-    widget.load_recording(recording)
+    widget.load_recording(recording, output_route=output_route)
 
 
 def _ensure_qapplication() -> None:

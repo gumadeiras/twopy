@@ -23,6 +23,7 @@ from tests.napari_support import (
     cast,
     chdir,
     csv,
+    load_converted_recording,
     make_manual_fov_group_rows,
     napari_controls,
     np,
@@ -33,7 +34,12 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
-from twopy.napari.loaded_recordings_csv import load_recording_paths_csv
+from twopy.napari.loaded_recordings_csv import (
+    load_recording_paths_csv,
+    write_loaded_recordings_csv,
+)
+from twopy.napari.output_routing import NapariOutputRoute
+from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.state import (
     read_last_recording_csv_folder,
     read_last_recording_folder,
@@ -715,6 +721,50 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             self.assertEqual(
                 Path(rows[0]["recording_data_path"]).resolve(strict=False),
                 (publish_dir / "recording_data.h5").resolve(strict=False),
+            )
+
+    def test_loaded_recording_csv_uses_loaded_output_route(self) -> None:
+        """Confirm CSV writing uses the route resolved at load time.
+
+        Inputs: one loaded recording with a local cache folder and a final
+            source-local output route.
+        Outputs: the reusable CSV points at the route's output HDF5 file.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = root / "external-source"
+            local_dir = root / "cache"
+            publish_dir = source_dir / "twopy"
+            recording_path = _write_converted_recording(
+                local_dir,
+                source_session_dir=source_dir,
+            )
+            recording = load_converted_recording(recording_path)
+            csv_path = root / "loaded_recordings.csv"
+
+            write_loaded_recordings_csv(
+                (
+                    LoadedNapariRecording(
+                        recording=recording,
+                        output_route=NapariOutputRoute(
+                            local_root=local_dir,
+                            publish_root=publish_dir,
+                        ),
+                        roi_save_file=local_dir / "rois.h5",
+                        mean_image_layer=object(),
+                        movie_layer=None,
+                        roi_labels_layer=None,
+                    ),
+                ),
+                csv_path,
+            )
+
+            with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
+                rows = list(csv.DictReader(csv_file))
+            self.assertEqual(rows[0]["recording_path"], str(source_dir))
+            self.assertEqual(
+                Path(rows[0]["recording_data_path"]),
+                publish_dir / "recording_data.h5",
             )
 
     def test_load_tab_warns_when_using_cache_for_unavailable_source(self) -> None:

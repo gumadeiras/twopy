@@ -41,6 +41,7 @@ from twopy.napari.loaded_recordings_csv import (
     load_recording_paths_csv,
     write_loaded_recordings_csv,
 )
+from twopy.napari.output_routing import NapariOutputRoute, recording_output_route
 from twopy.napari.paths import (
     DEFAULT_PATH_TEXT,
     PathInput,
@@ -103,6 +104,7 @@ class NapariControlState:
     roi_save_file: Path
     recording: RecordingData | None
     response_plot_widget: object | None
+    output_route: NapariOutputRoute | None = None
     trial_timeline_controller: object | None = None
     loaded_recordings: list[LoadedNapariRecording] = field(default_factory=list)
     selected_recording_index: int | None = None
@@ -125,6 +127,7 @@ def add_twopy_magicgui_controls(
     roi_labels_layer: object | None,
     roi_save_file: Path,
     recording: RecordingData | None = None,
+    output_route: NapariOutputRoute | None = None,
     response_plot_widget: object | None = None,
     response_options_widget: object | None = None,
     mean_image_layer: object | None = None,
@@ -142,6 +145,8 @@ def add_twopy_magicgui_controls(
             status message.
         roi_save_file: Default destination for saved ROI HDF5 files.
         recording: Optional loaded recording used to populate GUI defaults.
+        output_route: Optional local and published output folders for the
+            startup recording.
         response_plot_widget: Optional response plotting widget to refresh
             after a new recording is loaded.
         response_options_widget: Optional response-options tabs to place in the
@@ -163,11 +168,15 @@ def add_twopy_magicgui_controls(
     itself stays small and uses the same helpers as scripts, so a future plugin
     can wrap this without changing how recordings load.
     """
+    startup_output_route = output_route
+    if recording is not None and startup_output_route is None:
+        startup_output_route = recording_output_route(recording)
     state = NapariControlState(
         viewer=viewer,
         roi_labels_layer=roi_labels_layer,
         roi_save_file=roi_save_file,
         recording=recording,
+        output_route=startup_output_route,
         response_plot_widget=response_plot_widget,
         trial_timeline_controller=trial_timeline_controller,
     )
@@ -176,9 +185,13 @@ def add_twopy_magicgui_controls(
         on_finished=lambda result: _finish_async_recording_load(state, result),
     )
     if recording is not None and mean_image_layer is not None:
+        if startup_output_route is None:
+            msg = "Startup recording route was not initialized."
+            raise RuntimeError(msg)
         state.loaded_recordings.append(
             LoadedNapariRecording(
                 recording=recording,
+                output_route=startup_output_route,
                 roi_save_file=roi_save_file,
                 mean_image_layer=mean_image_layer,
                 movie_layer=movie_layer,

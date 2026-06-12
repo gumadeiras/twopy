@@ -24,6 +24,7 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.converted import RecordingData
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting import refresh_response_plot_widget
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import select_next_roi_label_value
@@ -50,6 +51,7 @@ class NapariSessionState(Protocol):
     roi_labels_layer: object | None
     roi_save_file: Path
     recording: RecordingData | None
+    output_route: NapariOutputRoute | None
     response_plot_widget: object | None
     trial_timeline_controller: object | None
     defer_timeline_updates: bool
@@ -95,6 +97,7 @@ class LoadedNapariRecording:
     """
 
     recording: RecordingData
+    output_route: NapariOutputRoute
     roi_save_file: Path
     mean_image_layer: object
     movie_layer: object | None
@@ -238,6 +241,7 @@ def record_loaded_view(
     state: NapariSessionState,
     *,
     view: NapariRecordingView,
+    output_route: NapariOutputRoute,
     roi_save_file: Path,
     replace_selected: bool,
 ) -> None:
@@ -246,6 +250,7 @@ def record_loaded_view(
     Args:
         state: Mutable napari session state.
         view: Viewer/layer objects returned by ``open_recording_in_napari``.
+        output_route: Local and published output folders for this recording.
         roi_save_file: Default ROI file for this recording.
         replace_selected: Whether to replace the selected loaded recording
             instead of appending a new list entry.
@@ -255,6 +260,7 @@ def record_loaded_view(
     """
     loaded = LoadedNapariRecording(
         recording=view.recording,
+        output_route=output_route,
         roi_save_file=roi_save_file,
         mean_image_layer=view.mean_image_layer,
         movie_layer=view.movie_layer,
@@ -286,6 +292,7 @@ def select_loaded_recording(
     if index is None or index < 0 or index >= len(state.loaded_recordings):
         state.selected_recording_index = None
         state.recording = None
+        state.output_route = None
         state.roi_labels_layer = None
         set_loaded_recording_visibility(state.loaded_recordings, selected_index=None)
         refresh_response_plot_widget(
@@ -293,6 +300,7 @@ def select_loaded_recording(
             recording=None,
             roi_labels_layer=None,
             roi_save_file=None,
+            output_route=None,
         )
         if not state.defer_timeline_updates:
             refresh_trial_timeline_controller(
@@ -306,6 +314,7 @@ def select_loaded_recording(
     selected = state.loaded_recordings[index]
     state.selected_recording_index = index
     state.recording = selected.recording
+    state.output_route = selected.output_route
     state.roi_labels_layer = selected.roi_labels_layer
     state.roi_save_file = selected.roi_save_file
     set_loaded_recording_visibility(state.loaded_recordings, selected_index=index)
@@ -316,6 +325,7 @@ def select_loaded_recording(
         recording=selected.recording,
         roi_labels_layer=selected.roi_labels_layer,
         roi_save_file=selected.roi_save_file,
+        output_route=selected.output_route,
     )
     if not state.defer_timeline_updates:
         refresh_trial_timeline_controller(

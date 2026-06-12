@@ -24,6 +24,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - DB query access modes: direct mounted DB query or local cached DB copies with metadata and SHA-256 change checks.
 - Configured database access mode with `copy` as the default.
 - Configured analysis output paths with source-folder and mirrored-output-root modes.
+- Napari save/export routing keeps local cache folders and final output folders explicit, copies manual source loads outside `data_paths` to the source `twopy/` folder, saves manual converted-folder loads outside `data_paths` in the selected folder, and queues concurrent background copies instead of canceling earlier saves.
 - MATLAB file inspection and loading layer for older MAT files and HDF5-backed MAT files.
 - MATLAB SciPy loading code simplified so inspect and load paths share one visible-variable reader.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus parameters, stimulus data, photodiode signals, mean image, and a separate aligned movie file.

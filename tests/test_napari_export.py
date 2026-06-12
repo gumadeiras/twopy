@@ -41,6 +41,7 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting.panels import SidebarTextLabel
 
 
@@ -244,24 +245,13 @@ class NapariExportTest(NapariAdapterTestCase):
         _ = QApplication.instance() or QApplication([])
         with temporary_directory() as temp_dir:
             root = Path(temp_dir)
-            data_root = root / "data"
-            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            source_dir = root / "external" / "fly" / "stim" / "2023" / "10_17"
             local_dir = root / "cache" / "fly" / "stim" / "2023" / "10_17"
             publish_dir = source_dir / "twopy"
             local_dir.mkdir(parents=True)
             _write_source_recording_shape(source_dir)
             recording = load_converted_recording(
                 _write_converted_recording(local_dir, source_session_dir=source_dir),
-            )
-            (root / "config.yml").write_text(
-                f"database_path: {root / 'db'}\n"
-                "data_paths:\n"
-                f"  - {data_root.resolve()}\n"
-                "database_access: copy\n"
-                "analysis_caching: true\n"
-                f"analysis_cache_dir: {root / 'cache'}\n"
-                "analysis_output: source\n",
-                encoding="utf-8",
             )
             state = ResponseExportState(
                 viewer=None,
@@ -277,6 +267,10 @@ class NapariExportTest(NapariAdapterTestCase):
                 show_sem=True,
                 time_bounds=(0.0, 1.0),
                 value_bounds=(0.0, 1.0),
+                output_route=NapariOutputRoute(
+                    local_root=local_dir,
+                    publish_root=publish_dir,
+                ),
             )
             original_cwd = Path.cwd()
             try:

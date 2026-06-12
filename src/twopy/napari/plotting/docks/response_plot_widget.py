@@ -49,7 +49,7 @@ from twopy.analysis.trials import EpochFrameWindow
 from twopy.analysis_cache import (
     AnalysisSyncPlan,
     AnalysisSyncResult,
-    build_analysis_sync_plan,
+    build_analysis_sync_plan_from_roots,
     start_analysis_sync,
 )
 from twopy.config import load_config
@@ -68,6 +68,7 @@ from twopy.filenames import EXPORTS_DIRNAME
 from twopy.napari.custom_tab import CustomWorkflowPanel
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.latest_worker import LatestWorker
+from twopy.napari.output_routing import NapariOutputRoute, recording_output_route
 from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import (
     load_response_plot_data,
@@ -164,6 +165,7 @@ class _ResponsePlotWidget(QWidget):
         super().__init__()
         self._viewer = viewer
         self._recording: RecordingData | None = None
+        self._output_route: NapariOutputRoute | None = None
         self._roi_labels_layer: object | None = None
         self._analysis_path: Path | None = None
         self._roi_save_file: Path | None = None
@@ -190,7 +192,7 @@ class _ResponsePlotWidget(QWidget):
             max_workers=1,
             thread_name_prefix="twopy-analysis-sync",
         )
-        self._sync_future: Future[AnalysisSyncResult] | None = None
+        self._sync_futures: set[Future[AnalysisSyncResult]] = set()
         self._response_map_worker = LatestWorker[ResponseMapData](
             thread_name_prefix="twopy-response-heatmaps",
             on_result=self._apply_response_map_data,
@@ -322,9 +324,9 @@ class _ResponsePlotWidget(QWidget):
                 self._quit_application.aboutToQuit.disconnect(self.shutdown)
             self._quit_application = None
         self._sync_timer.stop()
-        if self._sync_future is not None:
-            self._sync_future.cancel()
-            self._sync_future = None
+        for future in self._sync_futures:
+            future.cancel()
+        self._sync_futures.clear()
         self._sync_executor.shutdown(wait=True, cancel_futures=True)
         self._response_map_worker.shutdown()
         self._live_controller.shutdown()
@@ -380,6 +382,18 @@ class _ResponsePlotWidget(QWidget):
         self._roi_save_file = roi_save_file
         self._refresh_update_path_labels()
 
+    def set_output_route(self, output_route: NapariOutputRoute | None) -> None:
+        """Store local and published output folders for the selected recording.
+
+        Args:
+            output_route: Optional route from load-time path resolution.
+
+        Returns:
+            None.
+        """
+        self._output_route = output_route
+        self._refresh_update_path_labels()
+
     def clear_recording(self) -> None:
         """Reset the widget to the empty-launch state.
 
@@ -390,6 +404,7 @@ class _ResponsePlotWidget(QWidget):
             None.
         """
         self._recording = None
+        self._output_route = None
         self._roi_generation_widget.set_recording(None)
         self._analysis_path = None
         self._plot_data = None
@@ -421,11 +436,17 @@ class _ResponsePlotWidget(QWidget):
         self._reset_empty_option_tabs()
         self._set_status("No recording loaded.")
 
-    def load_recording(self, recording: RecordingData) -> None:
+    def load_recording(
+        self,
+        recording: RecordingData,
+        *,
+        output_route: NapariOutputRoute | None = None,
+    ) -> None:
         """Load response plots for one recording.
 
         Args:
             recording: Loaded converted recording.
+            output_route: Local and published output folders for this recording.
 
         Returns:
             None.
@@ -439,6 +460,7 @@ class _ResponsePlotWidget(QWidget):
             recording.alignment_valid_crop.shape,
         )
         self._recording = recording
+        self._output_route = output_route or recording_output_route(recording)
         self._roi_generation_widget.set_recording(recording)
         self._analysis_path = resolved_analysis_path(None, recording)
         epoch_names = stimulus_epoch_names_by_number(recording)
@@ -545,6 +567,7 @@ class _ResponsePlotWidget(QWidget):
                 request,
                 roi_save_file=self._roi_save_file,
                 analysis_path=self._analysis_path,
+                output_route=self._output_route,
                 response_map_data=self._response_map_data,
             )
         except ValueError as error:
@@ -608,9 +631,13 @@ class _ResponsePlotWidget(QWidget):
             roi_colors=self._custom_workflow_roi_colors(roi_set),
         )
         result = run.result
-        sync_plan = build_analysis_sync_plan(
-            recording=self._recording,
+        route = self._output_route or recording_output_route(self._recording)
+        sync_plan = build_analysis_sync_plan_from_roots(
+            local_root=route.local_root,
+            publish_root=route.publish_root,
             local_paths=(
+                self._recording.path,
+                self._recording.movie.path,
                 *custom_result_artifact_paths(result),
                 *run.provenance_paths,
             ),
@@ -759,37 +786,37 @@ class _ResponsePlotWidget(QWidget):
         """
         if self._is_shutdown:
             return
-        if self._sync_future is not None and not self._sync_future.done():
-            self._sync_future.cancel()
-        self._sync_future = start_analysis_sync(
+        future = start_analysis_sync(
             sync_plan,
             executor=self._sync_executor,
         )
+        self._sync_futures.add(future)
         self._sync_timer.start()
 
     def _collect_finished_sync(self) -> None:
         """Update the UI when a background analysis sync finishes."""
-        future = self._sync_future
-        if future is None or not future.done():
+        finished = [future for future in self._sync_futures if future.done()]
+        if len(finished) == 0:
             return
-        self._sync_future = None
-        self._sync_timer.stop()
-        try:
-            result = future.result()
-        except Exception as error:
-            status_text = f"Saved locally; sync failed: {error}"
-            self._update_status_label.setText(status_text)
-            self._export_status_label.setText(status_text)
+        status_text = ""
+        for future in finished:
+            self._sync_futures.remove(future)
+            try:
+                result = future.result()
+            except Exception as error:
+                status_text = f"Saved locally; sync failed: {error}"
+                continue
+            if len(result.copied_paths) == 0:
+                status_text = "Saved locally; sync already current"
+                continue
+            copied_count = len(result.copied_paths)
+            status_text = (
+                f"Saved locally; synced {copied_count} files to {result.publish_root}"
+            )
+        if len(self._sync_futures) == 0:
+            self._sync_timer.stop()
+        if status_text == "":
             return
-        if len(result.copied_paths) == 0:
-            status_text = "Saved locally; sync already current"
-            self._update_status_label.setText(status_text)
-            self._export_status_label.setText(status_text)
-            return
-        copied_count = len(result.copied_paths)
-        status_text = (
-            f"Saved locally; synced {copied_count} files to {result.publish_root}"
-        )
         self._update_status_label.setText(status_text)
         self._export_status_label.setText(status_text)
 
@@ -1191,6 +1218,7 @@ class _ResponsePlotWidget(QWidget):
             plot_data=self._plot_data,
             response_map_data=self._response_map_data,
             response_map_shared_limits=self._response_map_shared_limits,
+            output_route=self._output_route,
             output_dir=self._export_output_dir(),
             roi_label_values=self._roi_label_values(),
             roi_colors=self._roi_color_hex(),
@@ -1227,6 +1255,7 @@ class _ResponsePlotWidget(QWidget):
             recording=self._recording,
             analysis_path=self._analysis_path,
             roi_save_file=self._roi_save_file,
+            output_route=self._output_route,
             recording_summary_label=self._recording_summary_label,
             microscope_summary_label=self._microscope_summary_label,
             analysis_path_label=self._analysis_path_label,

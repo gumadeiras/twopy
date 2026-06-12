@@ -16,7 +16,7 @@ The save uses the same response window, smoothing, and normalization values you 
 
 ### Cache sync
 
-With `analysis_caching: true` (the default), twopy saves locally first and then syncs the converted HDF5 files and changed analysis files to `analysis_output` in a background worker. The **Metadata** tab shows whether the sync succeeded or failed. When the sync publishes export PDFs and PNGs, twopy deletes the local cache copies after the destination copy succeeds.
+With `analysis_caching: true` (the default), twopy saves locally first and then copies the converted HDF5 files and changed analysis files to the final output folder in a background worker. The final output folder is normally `analysis_output`; if you manually load a source recording outside `data_paths`, twopy copies files to that recording's `twopy/` folder, and if you manually load a converted folder outside `data_paths`, twopy saves directly in that selected converted folder. The **Metadata** tab shows the full local and final output paths plus whether the copy succeeded or failed. When export PDFs and PNGs are copied, twopy deletes the local cache copies after the destination copy succeeds.
 
 ## Image and plot exports
 
@@ -29,7 +29,7 @@ With `analysis_caching: true` (the default), twopy saves locally first and then 
 | **Save plots with ROIs** | `exports/plots_with_rois/` | Paired ROI-overlay + response figures |
 | **Save heatmaps** | `exports/response_heatmaps/` | The visible heatmaps as PDF + PNG |
 
-All export folders live beside the converted recording. Export PDFs and PNGs follow the same cache-publish flow as the saved analysis files when caching is on.
+All export folders live beside the converted recording. Export PDFs and PNGs follow the same local-save-then-copy flow as the saved analysis files when caching is on.
 
 ## Reload after editing elsewhere
 

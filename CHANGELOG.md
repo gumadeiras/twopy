@@ -9,6 +9,7 @@
 ### Changes
 
 - Added `twopy config setup` and first-launch config-template creation so installed users can create an editable config file in their user folder without a source checkout. `twopy` and `twopy config` now validate an existing config file before continuing.
+- Made napari manual-load output routing explicit for Save ROIs + analysis and every figure export button: source recordings outside `data_paths` copy files to the source `twopy/` folder, converted folders outside `data_paths` save where they were selected, Metadata shows both local and final output paths, and queued background copies no longer cancel earlier saves.
 
 ## 0.3.1 - 2026-06-08
 

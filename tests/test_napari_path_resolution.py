@@ -25,6 +25,8 @@ from tests.napari_support import (
     unittest,
 )
 from twopy.config import load_config, resolve_analysis_cache_dir
+from twopy.napari.loading import reconvert_recording_to_output
+from twopy.napari.output_routing import NapariOutputRoute
 
 
 class NapariPathResolutionTest(NapariAdapterTestCase):
@@ -171,8 +173,191 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 resolved.paths.movie_path,
                 (expected_dir / "aligned_movie.h5").resolve(),
             )
-            self.assertTrue((source_dir / "twopy" / "recording_data.h5").is_file())
-            self.assertTrue((source_dir / "twopy" / "aligned_movie.h5").is_file())
+            self.assertEqual(resolved.output_route.local_root, expected_dir)
+            self.assertEqual(
+                resolved.output_route.publish_root,
+                source_dir.resolve() / "twopy",
+            )
+
+    def test_recording_path_resolution_falls_back_to_manual_converted_folder(
+        self,
+    ) -> None:
+        """Confirm converted outputs outside data paths publish where selected.
+
+        Inputs: manually selected converted folder with source metadata that is
+            outside configured ``data_paths``.
+        Outputs: local and publish roots both use the selected converted folder.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = root / "external-source"
+            converted_dir = root / "manual-converted"
+            _write_converted_recording(converted_dir, source_session_dir=source_dir)
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {root / 'cache'}\n"
+                f"analysis_output: {root / 'publish'}\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                resolved = resolve_or_convert_recording(converted_dir)
+            finally:
+                chdir(original_cwd)
+
+            self.assertFalse(resolved.was_converted)
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (converted_dir / "recording_data.h5").resolve(),
+            )
+            self.assertEqual(resolved.output_route.local_root, converted_dir.resolve())
+            self.assertEqual(
+                resolved.output_route.publish_root,
+                converted_dir.resolve(),
+            )
+
+    def test_recording_path_resolution_keeps_manual_converted_folder_when_source_maps(
+        self,
+    ) -> None:
+        """Confirm manual converted folders are not redirected to config output.
+
+        Inputs: manually selected converted folder outside the configured
+            output tree, with source metadata under ``data_paths``.
+        Outputs: twopy loads from and saves to the selected converted folder.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
+            converted_dir = root / "manual-converted"
+            cache_root = root / "cache"
+            _write_source_recording_shape(source_dir)
+            _write_converted_recording(converted_dir, source_session_dir=source_dir)
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                f"analysis_output: {root / 'publish'}\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                resolved = resolve_or_convert_recording(converted_dir)
+            finally:
+                chdir(original_cwd)
+
+            self.assertFalse(resolved.was_converted)
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (converted_dir / "recording_data.h5").resolve(),
+            )
+            self.assertEqual(resolved.output_route.local_root, converted_dir.resolve())
+            self.assertEqual(
+                resolved.output_route.publish_root,
+                converted_dir.resolve(),
+            )
+            self.assertFalse((cache_root / "fly" / "stim" / "2023" / "10_17").exists())
+
+    def test_recording_path_resolution_falls_back_to_source_twopy_folder(
+        self,
+    ) -> None:
+        """Confirm external source loads publish beside the selected source.
+
+        Inputs: source recording outside configured ``data_paths`` with caching
+            enabled and a mirrored ``analysis_output`` root.
+        Outputs: local root uses the external cache and publish root uses
+            ``source/twopy``.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            source_dir = root / "external-source"
+            cache_root = root / "cache"
+            _write_source_recording_shape(source_dir)
+            (root / "config.yml").write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                f"analysis_output: {root / 'publish'}\n",
+                encoding="utf-8",
+            )
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                with patch(
+                    "twopy.napari.loading.convert_recording_to_twopy",
+                    side_effect=_fake_convert_recording,
+                ):
+                    resolved = resolve_or_convert_recording(source_dir)
+            finally:
+                chdir(original_cwd)
+
+            self.assertTrue(resolved.was_converted)
+            self.assertEqual(
+                resolved.output_route.local_root,
+                resolved.paths.recording_data_path.parent,
+            )
+            self.assertEqual(
+                resolved.output_route.publish_root,
+                source_dir.resolve() / "twopy",
+            )
+            self.assertTrue(
+                (source_dir.resolve() / "twopy" / "recording_data.h5").is_file()
+            )
+            self.assertTrue(
+                (source_dir.resolve() / "twopy" / "aligned_movie.h5").is_file()
+            )
+
+    def test_reconvert_recording_to_output_preserves_loaded_route(self) -> None:
+        """Confirm reconversion copies converted files through the loaded route.
+
+        Inputs: source folder, local output folder, and an explicit final output
+            folder that differs from config inference.
+        Outputs: converted files are rewritten locally and copied to the loaded
+            route's final output folder.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = root / "source"
+            local_dir = root / "manual-converted"
+            publish_dir = root / "chosen-output"
+            _write_source_recording_shape(source_dir)
+            output_route = NapariOutputRoute(
+                local_root=local_dir,
+                publish_root=publish_dir,
+            )
+
+            with patch(
+                "twopy.napari.loading.convert_recording_to_twopy",
+                side_effect=_fake_convert_recording,
+            ):
+                resolved = reconvert_recording_to_output(
+                    source_dir,
+                    local_dir,
+                    output_route,
+                )
+
+            self.assertTrue(resolved.was_converted)
+            self.assertEqual(resolved.output_route, output_route)
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (local_dir / "recording_data.h5").resolve(),
+            )
+            self.assertTrue((publish_dir / "recording_data.h5").is_file())
+            self.assertTrue((publish_dir / "aligned_movie.h5").is_file())
 
     def test_recording_path_resolution_uses_local_analysis_cache(self) -> None:
         """Confirm source loading converts into local cache when enabled.
@@ -471,9 +656,9 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
             cache_root = root / "cache"
-            publish_dir = root / "publish"
+            publish_root = root / "publish"
+            publish_dir = publish_root / "fly" / "stim" / "2023" / "10_17"
             _write_source_recording_shape(source_dir)
-            publish_dir.mkdir()
             _write_converted_recording(publish_dir, source_session_dir=source_dir)
             (root / "config.yml").write_text(
                 f"database_path: {root / 'db'}\n"
@@ -482,7 +667,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
-                f"analysis_output: {publish_dir}\n",
+                f"analysis_output: {publish_root}\n",
                 encoding="utf-8",
             )
             original_cwd = Path.cwd()
@@ -502,6 +687,11 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 resolved.paths.movie_path,
                 (expected_dir / "aligned_movie.h5").resolve(),
             )
+            self.assertEqual(resolved.output_route.local_root, expected_dir)
+            self.assertEqual(
+                resolved.output_route.publish_root,
+                publish_dir,
+            )
 
     def test_recording_path_resolution_refreshes_stale_localized_output(
         self,
@@ -516,10 +706,10 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
             data_root = root / "data"
             source_dir = data_root / "fly" / "stim" / "2023" / "10_17"
             cache_root = root / "cache"
-            publish_dir = root / "publish"
+            publish_root = root / "publish"
+            publish_dir = publish_root / "fly" / "stim" / "2023" / "10_17"
             local_dir = cache_root / "fly" / "stim" / "2023" / "10_17"
             _write_source_recording_shape(source_dir)
-            publish_dir.mkdir()
             local_dir.mkdir(parents=True)
             _write_converted_recording(publish_dir, source_session_dir=source_dir)
             _write_converted_recording(local_dir, source_session_dir=source_dir)
@@ -533,7 +723,7 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 "database_access: copy\n"
                 "analysis_caching: true\n"
                 f"analysis_cache_dir: {cache_root}\n"
-                f"analysis_output: {publish_dir}\n",
+                f"analysis_output: {publish_root}\n",
                 encoding="utf-8",
             )
             original_cwd = Path.cwd()

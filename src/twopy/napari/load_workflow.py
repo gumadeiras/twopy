@@ -22,6 +22,7 @@ from twopy.napari.loading import (
     reconvert_recording_to_output,
     resolve_or_convert_recording,
 )
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.paths import (
     DEFAULT_PATH_TEXT,
     PathInput,
@@ -411,6 +412,7 @@ def apply_prepared_recording_load(
     record_loaded_view(
         state,
         view=view,
+        output_route=prepared.resolved_recording.output_route,
         roi_save_file=paths.roi_save_file,
         replace_selected=replace_selected,
     )
@@ -433,9 +435,10 @@ def apply_prepared_recording_load(
 def reconvert_selected_recording(
     state: RecordingLoadState,
     *,
-    reconvert_recording: Callable[[Path, Path], ResolvedNapariRecording] = (
-        reconvert_recording_to_output
-    ),
+    reconvert_recording: Callable[
+        [Path, Path, NapariOutputRoute],
+        ResolvedNapariRecording,
+    ] = reconvert_recording_to_output,
     prepare_view_data: Callable[..., PreparedNapariRecordingViewData] | None = None,
 ) -> RecordingLoadResult:
     """Reconvert the selected loaded recording and reload it in place.
@@ -443,7 +446,8 @@ def reconvert_selected_recording(
     Args:
         state: Mutable napari session state.
         reconvert_recording: Conversion callback. Tests can provide a fake;
-            production rewrites the selected output folder from source data.
+            production rewrites the selected output folder from source data
+            while preserving the selected recording's output route.
         prepare_view_data: Worker-safe view-data reader. Tests can provide a
             fake; production reads converted HDF5 files.
 
@@ -477,7 +481,11 @@ def reconvert_selected_recording(
     state.defer_timeline_updates = True
     try:
         try:
-            resolved = reconvert_recording(source_dir, output_dir)
+            resolved = reconvert_recording(
+                source_dir,
+                output_dir,
+                selected.output_route,
+            )
             prepared = prepare_resolved_recording_load(
                 ResolvedRecordingLoad(
                     selected_path=source_dir,

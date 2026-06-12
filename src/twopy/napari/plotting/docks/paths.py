@@ -17,6 +17,7 @@ from twopy.napari.display_paths import (
     microscope_display_lines,
     recording_display_summary,
 )
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.paths import DEFAULT_PATH_TEXT
 from twopy.napari.plotting.data import default_analysis_output_path
 from twopy.napari.plotting.panels import SidebarTextLabel
@@ -67,6 +68,7 @@ def refresh_update_path_labels(
     recording: RecordingData | None,
     analysis_path: Path | None,
     roi_save_file: Path | None,
+    output_route: NapariOutputRoute | None,
     recording_summary_label: SidebarTextLabel,
     microscope_summary_label: SidebarTextLabel,
     analysis_path_label: SidebarTextLabel,
@@ -78,6 +80,7 @@ def refresh_update_path_labels(
         recording: Optional loaded converted recording.
         analysis_path: Explicit analysis output path, if one is loaded.
         roi_save_file: Explicit ROI output path, if one is loaded.
+        output_route: Local and published output folders, if known.
         recording_summary_label: Label showing the selected recording summary.
         microscope_summary_label: Label showing selected microscope metadata.
         analysis_path_label: Label showing the analysis output path.
@@ -96,11 +99,22 @@ def refresh_update_path_labels(
     summary = recording_display_summary(recording)
     recording_summary_label.setText("\n\n".join(summary.lines()))
     microscope_summary_label.setText("\n\n".join(microscope_display_lines(recording)))
+    analysis_file = resolved_analysis_path(analysis_path, recording)
+    roi_file = resolved_roi_save_file(roi_save_file, recording)
+    if output_route is None:
+        analysis_path_label.setText(
+            f"Analysis output: {format_twopy_h5_output(analysis_file)}"
+        )
+        roi_save_path_label.setText(f"ROI output: {format_twopy_h5_output(roi_file)}")
+        return
+
     analysis_path_label.setText(
-        "Analysis output: "
-        f"{format_twopy_h5_output(resolved_analysis_path(analysis_path, recording))}"
+        "Analysis output:\n"
+        f"Local: {analysis_file}\n"
+        f"Output: {output_route.publish_root / analysis_file.name}"
     )
     roi_save_path_label.setText(
-        "ROI output: "
-        f"{format_twopy_h5_output(resolved_roi_save_file(roi_save_file, recording))}"
+        "ROI output:\n"
+        f"Local: {roi_file}\n"
+        f"Output: {output_route.publish_root / roi_file.name}"
     )

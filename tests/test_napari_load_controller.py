@@ -23,6 +23,7 @@ from twopy.napari.load_workflow import (
     ResolvedRecordingLoad,
 )
 from twopy.napari.loading import ResolvedNapariRecording
+from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.paths import NapariRecordingPaths
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.session import LoadedNapariRecording, LoadedRecordingsPanel
@@ -41,6 +42,7 @@ class _State:
     roi_labels_layer: object | None = None
     roi_save_file: Path = Path("rois.h5")
     recording: RecordingData | None = None
+    output_route: NapariOutputRoute | None = None
     response_plot_widget: object | None = None
     trial_timeline_controller: object | None = None
     is_loading: bool = False
@@ -248,6 +250,10 @@ def _resolved_load(selected_path: Path) -> ResolvedRecordingLoad:
         selected_path=selected_path,
         resolved_recording=ResolvedNapariRecording(
             paths=paths,
+            output_route=NapariOutputRoute(
+                local_root=selected_path,
+                publish_root=selected_path,
+            ),
             was_converted=False,
         ),
     )

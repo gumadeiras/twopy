@@ -119,6 +119,7 @@ def launch_napari(
             roi_save_file=roi_save_file,
             movie_path=paths.movie_path,
             movie_frame_range=movie_range,
+            output_route=resolved_recording.output_route,
         )
 
     import napari

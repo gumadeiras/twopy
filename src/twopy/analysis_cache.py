@@ -35,6 +35,7 @@ __all__ = [
     "AnalysisSyncPlan",
     "AnalysisSyncResult",
     "build_analysis_sync_plan",
+    "build_analysis_sync_plan_from_roots",
     "copy_file_atomically",
     "copy_analysis_sync_plan",
     "copy_converted_files_to_publish",
@@ -164,6 +165,37 @@ def build_analysis_sync_plan(
     return plan
 
 
+def build_analysis_sync_plan_from_roots(
+    *,
+    local_root: Path,
+    publish_root: Path,
+    local_paths: tuple[Path | None, ...],
+) -> AnalysisSyncPlan | None:
+    """Plan publish syncing from already-resolved local and publish roots.
+
+    Args:
+        local_root: Folder where napari wrote the files.
+        publish_root: Folder where those files should be visible.
+        local_paths: Files written or refreshed by the save action.
+
+    Returns:
+        A sync plan, or ``None`` when the publish root is already local or no
+        supplied paths sit under the local root.
+
+    The caller has already resolved the publish destination. This helper keeps
+    the sync decision independent from config inference without mixing GUI
+    status text into the cache layer.
+    """
+    plan = _build_sync_plan_from_roots(
+        local_root=local_root,
+        publish_root=publish_root,
+        local_paths=local_paths,
+    )
+    if len(plan.local_paths) == 0:
+        return None
+    return plan
+
+
 def copy_converted_files_to_publish(
     *,
     recording_data_path: Path,
@@ -263,10 +295,26 @@ def _build_sync_plan_from_config(
 ) -> AnalysisSyncPlan:
     """Return a sync plan from an already-loaded config."""
     publish_root = resolve_analysis_output_dir(config, source_session_dir)
-    if _same_path(local_root, publish_root):
+    return _build_sync_plan_from_roots(
+        local_root=local_root,
+        publish_root=publish_root,
+        local_paths=local_paths,
+    )
+
+
+def _build_sync_plan_from_roots(
+    *,
+    local_root: Path,
+    publish_root: Path,
+    local_paths: tuple[Path | None, ...],
+) -> AnalysisSyncPlan:
+    """Return a sync plan from explicit local and publish folders."""
+    local = local_root.expanduser().resolve(strict=False)
+    publish = publish_root.expanduser().resolve(strict=False)
+    if _same_path(local, publish):
         return AnalysisSyncPlan(
-            local_root=local_root,
-            publish_root=publish_root,
+            local_root=local,
+            publish_root=publish,
             local_paths=(),
         )
 
@@ -275,9 +323,9 @@ def _build_sync_plan_from_config(
     for path in local_paths:
         if path is None:
             continue
-        local_path = path.expanduser()
+        local_path = path.expanduser().resolve(strict=False)
         try:
-            local_path.relative_to(local_root)
+            local_path.relative_to(local)
         except ValueError:
             continue
         if local_path in seen:
@@ -286,8 +334,8 @@ def _build_sync_plan_from_config(
         syncable.append(local_path)
 
     return AnalysisSyncPlan(
-        local_root=local_root,
-        publish_root=publish_root,
+        local_root=local,
+        publish_root=publish,
         local_paths=tuple(syncable),
     )
 
