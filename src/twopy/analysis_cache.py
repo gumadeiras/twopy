@@ -1,13 +1,12 @@
 """Local analysis-cache helpers for converted recordings.
 
 Inputs: configured recording roots, local cache folders, and saved analysis files.
-Outputs: cache refreshes and publish-sync plans for twopy-owned outputs.
+Outputs: cache refreshes and copy-back plans for twopy-owned outputs.
 
-The cache keeps interactive reads and writes on local storage. The publish sync
-copies twopy-owned converted files and user-visible analysis outputs back to the
-configured output folder. Exported figure files are removed from the local cache
-after they copy successfully because the publish destination is their durable
-location.
+The cache keeps interactive reads and writes on local storage. Sync copies
+converted files and user-visible analysis outputs back to the configured output
+folder. Exported figure files are removed from the local cache after they copy
+successfully because the configured output folder is their durable location.
 """
 
 import os
@@ -55,9 +54,9 @@ _REMOVE_AFTER_SYNC_SUFFIXES = frozenset((".pdf", ".png"))
 
 @dataclass(frozen=True)
 class AnalysisSyncPlan:
-    """Files that should be copied from local cache to publish storage.
+    """Files that should be copied from local cache to the output folder.
 
-    Inputs: local and publish roots plus local paths that were just written.
+    Inputs: local and output roots plus local paths that were just written.
     Outputs: immutable copy plan consumed by a worker thread.
     """
 
@@ -68,10 +67,10 @@ class AnalysisSyncPlan:
 
 @dataclass(frozen=True)
 class AnalysisSyncResult:
-    """Result of publishing saved analysis outputs.
+    """Result of copying saved analysis outputs.
 
     Inputs: one completed sync plan.
-    Outputs: publish paths that were copied and local cache files removed.
+    Outputs: output paths that were copied and local cache files removed.
     """
 
     publish_root: Path
@@ -85,15 +84,16 @@ def refresh_cached_analysis_outputs(
     local_output_dir: Path,
     config_path: Path = DEFAULT_CONFIG_PATH,
 ) -> tuple[Path, ...]:
-    """Copy newer published analysis outputs into the local cache.
+    """Copy newer output files into the local cache.
 
     Args:
         source_session_dir: Source microscope recording folder.
         local_output_dir: Local cache/work directory for that recording.
-        config_path: YAML config file with cache and publish settings.
+        config_path: Optional YAML config file with cache and output settings.
+            The default uses twopy's usual config search.
 
     Returns:
-        Local paths refreshed from published outputs.
+        Local paths refreshed from the configured output folder.
 
     Missing config or disabled caching means there is no cache refresh to do.
     HDF5 files needed by the GUI are pulled down; CSV and image exports are
@@ -133,16 +133,17 @@ def build_analysis_sync_plan(
     local_paths: tuple[Path | None, ...],
     config_path: Path = DEFAULT_CONFIG_PATH,
 ) -> AnalysisSyncPlan | None:
-    """Build a publish-sync plan for saved local analysis outputs.
+    """Plan which saved local analysis files should be copied back.
 
     Args:
-        recording: Loaded local recording whose source path defines publish
-            routing.
+        recording: Loaded local recording whose source path defines the output
+            folder.
         local_paths: Files written by the save action.
-        config_path: YAML config file with cache and publish settings.
+        config_path: Optional YAML config file with cache and output settings.
+            The default uses twopy's usual config search.
 
     Returns:
-        A sync plan, or ``None`` when config is missing, the publish root is the
+        A sync plan, or ``None`` when config is missing, the output root is the
         local root, or no syncable files were written.
     """
     try:
@@ -170,18 +171,19 @@ def copy_converted_files_to_publish(
     source_session_dir: Path,
     config_path: Path = DEFAULT_CONFIG_PATH,
 ) -> AnalysisSyncResult | None:
-    """Copy converted recording files to the configured publish folder.
+    """Copy converted recording files to the configured output folder.
 
     Args:
         recording_data_path: Local ``recording_data.h5`` file.
         movie_path: Local ``aligned_movie.h5`` file.
         source_session_dir: Source microscope recording folder that defines the
-            configured publish location.
-        config_path: YAML config file with cache and publish settings.
+            configured output location.
+        config_path: Optional YAML config file with cache and output settings.
+            The default uses twopy's usual config search.
 
     Returns:
-        Sync result, or ``None`` when config is missing, the publish root is the
-        local root, or publish routing does not apply.
+        Sync result, or ``None`` when config is missing, the output root is the
+        local root, or no copy-back is needed.
     """
     try:
         config = load_config(config_path)
@@ -203,10 +205,10 @@ def start_analysis_sync(
     *,
     executor: Executor,
 ) -> Future[AnalysisSyncResult]:
-    """Start an analysis-output publish sync in a worker executor.
+    """Start copying analysis outputs in a worker executor.
 
     Args:
-        plan: Files to copy from local cache to publish storage.
+        plan: Files to copy from local cache to the output folder.
         executor: Executor owned by the caller.
 
     Returns:
@@ -216,13 +218,13 @@ def start_analysis_sync(
 
 
 def copy_analysis_sync_plan(plan: AnalysisSyncPlan) -> AnalysisSyncResult:
-    """Copy all files in one publish-sync plan.
+    """Copy all files in one sync plan.
 
     Args:
-        plan: Local files and publish root.
+        plan: Local files and output root.
 
     Returns:
-        Publish paths copied by this sync.
+        Output paths copied by this sync.
 
     Copies go through a temporary file in the target directory before replace,
     so readers never see a partially written HDF5, CSV, or figure file. Figure
@@ -333,7 +335,7 @@ def _same_path(left: Path, right: Path) -> bool:
 
 
 def _copy_is_current(source: Path, target: Path) -> bool:
-    """Return whether the published file already matches this source version."""
+    """Return whether the target file already matches this source version."""
     if not target.is_file():
         return False
     source_stat = source.stat()
@@ -345,10 +347,10 @@ def _copy_is_current(source: Path, target: Path) -> bool:
 
 
 def _converted_recording_paths(recording: RecordingData) -> tuple[Path, Path]:
-    """Return the converted HDF5 files that travel with every publish sync."""
+    """Return the converted HDF5 files copied with every sync."""
     return (recording.path, recording.movie.path)
 
 
 def _should_remove_after_sync(path: Path) -> bool:
-    """Return whether a local cache file is disposable after publish sync."""
+    """Return whether a local cache file can be removed after sync."""
     return path.suffix.lower() in _REMOVE_AFTER_SYNC_SUFFIXES

@@ -17,12 +17,20 @@ Check that the package imported cleanly:
 micromamba run -n twopy python -c 'import twopy; print(twopy.__version__)'
 ```
 
-## 2. Tell twopy where your data lives
+## 2. Create your config file
 
-twopy reads a `config.yml` file from the directory you launch it from. Copy the example and edit the paths:
+Create an editable config template:
 
 ```sh
-cp config.example.yml config.yml
+twopy config setup
+```
+
+twopy prints the path it wrote. On macOS and Linux the default is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. If you launch `twopy` before a config exists, it creates the same template, prints the path, and stops so you can edit it.
+
+Check which config twopy will use:
+
+```sh
+twopy config
 ```
 
 The main keys you usually edit:
@@ -30,9 +38,9 @@ The main keys you usually edit:
 - `database_path` — folder holding the lab SQLite database files.
 - `data_paths` — list of folders that contain microscope recording folders. twopy checks them in order; the first one that has the recording wins.
 - `analysis_output` — where saved analyses end up. Use `source` to write into each recording's own `twopy/` folder, or a folder path to mirror the recording tree under it.
-- `analysis_caching` — keep `true` for normal use. twopy converts and writes locally first, then publishes converted HDF5 files and saved analysis files to `analysis_output`.
+- `analysis_caching` — keep `true` for normal use. twopy converts and writes locally first, then copies converted HDF5 files and saved analysis files to `analysis_output`.
 
-`config.yml` is private to your machine and is never committed.
+`config.yml` is private to your machine and is never committed. For source checkouts, a local `./config.yml` still works and takes precedence over the user config file.
 
 ## 3. Launch the app
 

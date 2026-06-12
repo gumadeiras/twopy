@@ -16,14 +16,14 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Recording file reference schema in `docs/recording_file_schema.md`.
 - README kept as a short landing page, with detailed GUI, Python API, and development guides split into `docs/`.
 - YAML config file and typed loader for `database_path` and ordered `data_paths`.
-- Tracked `config.example.yml` with instructions for creating private local `config.yml`.
+- Packaged config template with `twopy config setup`, first-launch template creation, and support for private local or user-folder `config.yml`.
 - Schema-agnostic SQLite database module for discovering DB files and filtering experiment rows.
 - Database code split into focused modules for catalog discovery, generic table search, modeled recording search, and read-only connections.
 - Modeled database query for `stimulusPresentation` joined with `fly` metadata.
 - Script-friendly `find_recordings` API with filters for date parts, genotype, stimulus, sensor, cell type, hemisphere, and person.
 - DB query access modes: direct mounted DB query or local cached DB copies with metadata and SHA-256 change checks.
 - Configured database access mode with `copy` as the default.
-- Configured analysis output routing with source-folder and mirrored-output-root modes.
+- Configured analysis output paths with source-folder and mirrored-output-root modes.
 - MATLAB file inspection and loading layer for older MAT files and HDF5-backed MAT files.
 - MATLAB SciPy loading code simplified so inspect and load paths share one visible-variable reader.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus parameters, stimulus data, photodiode signals, mean image, and a separate aligned movie file.

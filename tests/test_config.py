@@ -6,24 +6,29 @@ Outputs: assertions that valid paths load and invalid configs fail clearly.
 
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tests.tempdir import temporary_directory
-
 from twopy.config import (
+    CONFIG_ENV_VAR,
     DEFAULT_ANALYSIS_CACHE_DIR,
+    config_template_text,
     data_path_match,
     data_path_recording_candidates,
     load_config,
+    preferred_config_path,
     resolve_analysis_cache_dir,
     resolve_analysis_output_dir,
     resolve_analysis_work_dir,
+    resolve_config_path,
     resolve_data_recording_path,
+    write_config_template,
 )
 from twopy.pixel_calibration import DEFAULT_PIXEL_CALIBRATION_PATH
 
 
 class LoadConfigTest(unittest.TestCase):
-    """Tests the machine-local config loader."""
+    """Tests the config loader for this machine."""
 
     def test_loads_database_and_data_paths(self) -> None:
         """Confirm expected config keys become typed paths.
@@ -60,6 +65,108 @@ class LoadConfigTest(unittest.TestCase):
                 DEFAULT_PIXEL_CALIBRATION_PATH,
             )
             self.assertEqual(config.custom_workflow_paths, ())
+
+    def test_load_config_uses_env_path_for_default_search(self) -> None:
+        """Confirm ``TWOPY_CONFIG`` points default loading at one file.
+
+        Inputs: an environment override and a valid temporary config file.
+        Outputs: loaded paths from the override file.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "env-config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {root / 'data'}\n"
+                "analysis_output: source\n",
+                encoding="utf-8",
+            )
+
+            with patch.dict("os.environ", {CONFIG_ENV_VAR: str(config_path)}):
+                self.assertEqual(resolve_config_path(), config_path)
+                config = load_config()
+
+            self.assertEqual(config.database_path, root / "db")
+            self.assertEqual(config.data_paths, (root / "data",))
+
+    def test_write_config_template_creates_editable_yaml(self) -> None:
+        """Confirm setup writes the packaged example config.
+
+        Inputs: a temporary destination path.
+        Outputs: a parseable config template at that path.
+        """
+        with temporary_directory() as temp_dir:
+            config_path = Path(temp_dir) / "config.yml"
+
+            written_path = write_config_template(config_path)
+
+            self.assertEqual(written_path, config_path)
+            self.assertEqual(
+                config_path.read_text(encoding="utf-8"),
+                config_template_text(),
+            )
+            config = load_config(config_path)
+            self.assertEqual(config.analysis_output, "source")
+
+    def test_write_config_template_refuses_existing_file(self) -> None:
+        """Confirm setup does not overwrite config files by default."""
+        with temporary_directory() as temp_dir:
+            config_path = Path(temp_dir) / "config.yml"
+            config_path.write_text("database_path: /tmp/db\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(FileExistsError, "already exists"):
+                write_config_template(config_path)
+
+    def test_preferred_config_path_uses_env_path(self) -> None:
+        """Confirm setup honors an explicit config destination."""
+        with temporary_directory() as temp_dir:
+            config_path = Path(temp_dir) / "custom.yml"
+
+            with patch.dict("os.environ", {CONFIG_ENV_VAR: str(config_path)}):
+                self.assertEqual(preferred_config_path(), config_path)
+
+    def test_missing_env_config_reports_env_path(self) -> None:
+        """Confirm a missing environment override fails loudly."""
+        with temporary_directory() as temp_dir:
+            config_path = Path(temp_dir) / "missing.yml"
+
+            with (
+                patch.dict("os.environ", {CONFIG_ENV_VAR: str(config_path)}),
+                self.assertRaisesRegex(FileNotFoundError, CONFIG_ENV_VAR),
+            ):
+                load_config()
+
+    def test_default_search_prefers_local_config_over_user_config(self) -> None:
+        """Confirm source checkout config wins over the user config file."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            local_path = root / "local.yml"
+            user_path = root / "user.yml"
+            local_path.write_text("database_path: /local/db\n", encoding="utf-8")
+            user_path.write_text("database_path: /user/db\n", encoding="utf-8")
+
+            with (
+                patch.dict("os.environ", {}, clear=True),
+                patch("twopy.config.DEFAULT_CONFIG_PATH", local_path),
+                patch("twopy.config.user_config_path", return_value=user_path),
+            ):
+                self.assertEqual(resolve_config_path(), local_path)
+
+    def test_default_search_uses_user_config_when_local_is_missing(self) -> None:
+        """Confirm installed users get the user config path."""
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            local_path = root / "missing-local.yml"
+            user_path = root / "user.yml"
+            user_path.write_text("database_path: /user/db\n", encoding="utf-8")
+
+            with (
+                patch.dict("os.environ", {}, clear=True),
+                patch("twopy.config.DEFAULT_CONFIG_PATH", local_path),
+                patch("twopy.config.user_config_path", return_value=user_path),
+            ):
+                self.assertEqual(resolve_config_path(), user_path)
 
     def test_database_access_defaults_to_copy(self) -> None:
         """Confirm missing DB access uses fast local-copy mode.
@@ -216,7 +323,7 @@ class LoadConfigTest(unittest.TestCase):
                 load_config(config_path)
 
     def test_missing_analysis_output_raises_clear_error(self) -> None:
-        """Confirm output routing is explicit in config.
+        """Confirm the output path is explicit in config.
 
         Inputs: a temporary YAML file without ``analysis_output``.
         Outputs: an assertion that the error names the missing key.
@@ -319,7 +426,7 @@ class LoadConfigTest(unittest.TestCase):
             self.assertEqual(resolve_analysis_work_dir(config, recording_dir), expected)
 
     def test_resolves_external_analysis_cache_dir(self) -> None:
-        """Confirm cache routing accepts recordings outside ``data_paths``.
+        """Confirm cache paths support recordings outside ``data_paths``.
 
         Inputs: a configured cache root and an external recording path.
         Outputs: stable external cache path under ``_external``.

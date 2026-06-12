@@ -128,7 +128,8 @@ class ExperimentSearchDialog(QDialog):
         on_load_recording_paths: Callback that receives source recording paths
             selected from the result hierarchy and returns structured load
             results.
-        config_path: Optional twopy config path. Defaults to ``config.yml``.
+        config_path: Optional twopy config path. The default uses twopy's usual
+            config search.
         parent: Optional Qt parent widget.
 
     Outputs:

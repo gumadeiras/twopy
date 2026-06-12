@@ -6,6 +6,10 @@
 
 ## Unreleased
 
+### Changes
+
+- Added `twopy config setup` and first-launch config-template creation so installed users can create an editable config file in their user folder without a source checkout.
+
 ## 0.3.1 - 2026-06-08
 
 ### Changes

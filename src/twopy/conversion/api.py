@@ -53,7 +53,9 @@ def convert_recording_to_twopy(
             When omitted, twopy uses the configured analysis work directory.
         mean_start_frame: Optional first frame for the mean image.
         mean_stop_frame: Optional exclusive stop frame for the mean image.
-        config_path: YAML config file used when ``output_dir`` is omitted.
+        config_path: Optional YAML config file. The default uses twopy's usual
+            config search when choosing output paths or reading database
+            metadata.
 
     Returns:
         Summary of the converted HDF5 files.
@@ -126,8 +128,8 @@ def _resolve_conversion_output_dir(
     Returns:
         Expanded output directory path.
 
-    Passing ``output_dir`` is an explicit override. Otherwise conversion follows
-    the same work-directory routing that the rest of twopy uses. With
+    Passing ``output_dir`` uses that folder for one call. Otherwise conversion
+    uses the same work directory as the rest of twopy. With
     ``analysis_caching: true``, that work directory is local cache storage.
     """
     if output_dir is not None:

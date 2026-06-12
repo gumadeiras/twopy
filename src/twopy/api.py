@@ -51,7 +51,8 @@ def find_recordings(
             because network DB queries can be slow while file transfer is fast.
         database_cache_dir: Optional cache directory for local DB copies.
         limit: Maximum number of recordings to return.
-        config_path: YAML config file containing ``database_path``.
+        config_path: Optional YAML config file containing ``database_path``.
+            The default uses twopy's usual config search.
 
     Returns:
         Typed recording experiment rows.
@@ -59,8 +60,8 @@ def find_recordings(
     Example:
         ``find_recordings(year=2023, month=10, genotype="gh146")``
 
-    The function loads ``config.yml`` by default so scripts can start with a
-    single import and call.
+    The function loads twopy config by default so scripts can start with a
+    single import and call after ``twopy config setup``.
     """
     config = load_config(config_path)
     return _find_recordings(

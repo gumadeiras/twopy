@@ -6,7 +6,9 @@ workflow paths, and output settings.
 """
 
 import hashlib
+import os
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 from typing import Literal
 
@@ -17,20 +19,32 @@ from twopy.pixel_calibration import DEFAULT_PIXEL_CALIBRATION_PATH
 __all__ = [
     "DEFAULT_CONFIG_PATH",
     "DEFAULT_ANALYSIS_CACHE_DIR",
+    "CONFIG_ENV_VAR",
     "AnalysisOutputMode",
     "DatabaseAccess",
     "TwopyConfig",
+    "config_search_paths",
+    "config_template_text",
     "data_path_match",
     "data_path_recording_candidates",
+    "discover_config_path",
     "load_config",
+    "preferred_config_path",
     "resolve_data_recording_path",
     "resolve_analysis_cache_dir",
     "resolve_analysis_output_dir",
     "resolve_analysis_work_dir",
+    "resolve_config_path",
+    "user_config_path",
+    "write_config_template",
 ]
 
 DEFAULT_CONFIG_PATH = Path("config.yml")
 DEFAULT_ANALYSIS_CACHE_DIR = Path.home() / ".cache" / "twopy" / "recordings"
+CONFIG_ENV_VAR = "TWOPY_CONFIG"
+_CONFIG_DIRNAME = "twopy"
+_CONFIG_FILENAME = "config.yml"
+_CONFIG_TEMPLATE_RESOURCE = "config.example.yml"
 DatabaseAccess = Literal["direct", "copy"]
 AnalysisOutputMode = Path | Literal["source"]
 
@@ -53,12 +67,163 @@ class TwopyConfig:
     custom_workflow_paths: tuple[Path, ...] = ()
 
 
-def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
+def user_config_path() -> Path:
+    """Return the usual twopy config path for this user.
+
+    Args:
+        None.
+
+    Returns:
+        ``~/.config/twopy/config.yml`` on macOS and Linux, or the user's
+        roaming app-data path on Windows.
+
+    This path stays the same no matter where twopy starts, so installed GUI
+    users can set up their paths once.
+    """
+    if os.name == "nt":
+        roaming_root = os.environ.get("APPDATA")
+        if roaming_root is not None and roaming_root != "":
+            return Path(roaming_root) / _CONFIG_DIRNAME / _CONFIG_FILENAME
+        return Path.home() / "AppData" / "Roaming" / _CONFIG_DIRNAME / _CONFIG_FILENAME
+
+    return Path.home() / ".config" / _CONFIG_DIRNAME / _CONFIG_FILENAME
+
+
+def preferred_config_path() -> Path:
+    """Return where setup should write a new config file.
+
+    Args:
+        None.
+
+    Returns:
+        The path from ``TWOPY_CONFIG`` when set, otherwise the user config path.
+
+    Setup uses ``TWOPY_CONFIG`` when it is set. Otherwise, first launch writes
+    the usual config file for this user.
+    """
+    env_path = _env_config_path()
+    if env_path is not None:
+        return env_path
+    return user_config_path()
+
+
+def config_search_paths() -> tuple[Path, ...]:
+    """Return the default config search order.
+
+    Args:
+        None.
+
+    Returns:
+        Config paths in the order twopy checks them.
+
+    ``TWOPY_CONFIG`` comes first when it is set. A source checkout can still
+    use a local ``config.yml``. Installed users get one stable config file in
+    their user folder.
+    """
+    candidates: list[Path] = []
+    env_path = _env_config_path()
+    if env_path is not None:
+        candidates.append(env_path)
+    candidates.append(DEFAULT_CONFIG_PATH)
+    candidates.append(user_config_path())
+    return tuple(candidates)
+
+
+def discover_config_path() -> Path | None:
+    """Find the first existing default config file.
+
+    Args:
+        None.
+
+    Returns:
+        The first existing config path, or ``None`` when setup is still needed.
+
+    Callers that need a clear "not configured yet" branch use this before
+    loading and validating YAML.
+    """
+    env_path = _env_config_path()
+    if env_path is not None:
+        return env_path if env_path.is_file() else None
+
+    for candidate in (DEFAULT_CONFIG_PATH, user_config_path()):
+        expanded = candidate.expanduser()
+        if expanded.is_file():
+            return expanded
+    return None
+
+
+def resolve_config_path(path: Path | None = None) -> Path:
+    """Return the config path twopy should load.
+
+    Args:
+        path: Optional config path. ``None`` or the old ``config.yml`` default
+            uses twopy's usual config search.
+
+    Returns:
+        The given path, an existing config found by search, or the path that
+        setup would write when no config exists yet.
+
+    Returning the setup path for a missing default keeps error messages and
+    first-launch setup pointed at the same file.
+    """
+    if path is not None and path != DEFAULT_CONFIG_PATH:
+        return path.expanduser()
+
+    discovered = discover_config_path()
+    if discovered is not None:
+        return discovered
+    return preferred_config_path()
+
+
+def config_template_text() -> str:
+    """Read the packaged example config template.
+
+    Args:
+        None.
+
+    Returns:
+        YAML text for a new editable ``config.yml``.
+
+    The template is included in the installed package, so pip-installed users
+    do not need a source checkout to create their first config file.
+    """
+    template = files("twopy").joinpath(_CONFIG_TEMPLATE_RESOURCE)
+    return template.read_text(encoding="utf-8")
+
+
+def write_config_template(path: Path | None = None, *, force: bool = False) -> Path:
+    """Create an editable config template.
+
+    Args:
+        path: Optional destination. Defaults to the preferred setup path.
+        force: Whether to replace an existing file.
+
+    Returns:
+        The path that was written.
+
+    Raises:
+        FileExistsError: If the target exists and ``force`` is false.
+
+    Setup writes a plain YAML file that users can inspect before twopy reads
+    any paths from it.
+    """
+    config_path = (path if path is not None else preferred_config_path()).expanduser()
+    if config_path.exists() and not force:
+        msg = f"twopy config already exists: {config_path}"
+        raise FileExistsError(msg)
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(config_template_text(), encoding="utf-8")
+    return config_path
+
+
+def load_config(path: Path | None = None) -> TwopyConfig:
     """Load twopy configuration from YAML.
 
     Args:
-        path: YAML config file path. Defaults to ``config.yml`` in the current
-            working directory.
+        path: Optional YAML config file path. Defaults to twopy's usual config
+            search: ``TWOPY_CONFIG``, local ``config.yml``, then the user
+            config path.
 
     Returns:
         A typed configuration object with paths, DB access, and output mode.
@@ -69,9 +234,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
 
     YAML is used because the file is edited by people and benefits from comments.
     """
-    config_path = path.expanduser()
+    config_path = resolve_config_path(path)
     if not config_path.is_file():
-        msg = f"Missing twopy config file: {config_path}"
+        msg = _missing_config_message(path, config_path)
         raise FileNotFoundError(msg)
 
     with config_path.open("r", encoding="utf-8") as config_file:
@@ -118,6 +283,28 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> TwopyConfig:
     )
 
 
+def _missing_config_message(path: Path | None, resolved_path: Path) -> str:
+    """Return the missing-config error shown to scripts and tests."""
+    if path is not None and path != DEFAULT_CONFIG_PATH:
+        return f"Missing twopy config file: {resolved_path}"
+    if _env_config_path() is not None:
+        return f"Missing twopy config file from {CONFIG_ENV_VAR}: {resolved_path}"
+
+    searched = "\n".join(f"- {candidate}" for candidate in config_search_paths())
+    return (
+        "Missing twopy config file. Run `twopy config setup`, edit the file, "
+        f"then try again.\nSearched:\n{searched}"
+    )
+
+
+def _env_config_path() -> Path | None:
+    """Return the explicit config path from the environment, when set."""
+    env_path = os.environ.get(CONFIG_ENV_VAR)
+    if env_path is None or env_path == "":
+        return None
+    return Path(env_path).expanduser()
+
+
 def resolve_data_recording_path(
     config: TwopyConfig,
     relative_parts: tuple[str, ...],
@@ -158,7 +345,7 @@ def data_path_match(
         ``(data_root, relative_recording)`` for the first configured root that
         contains ``recording_dir``, or ``None`` when the recording is external.
 
-    Output and cache routing need the same root-relative path that database
+    Output and cache paths need the same path below the data root that database
     search used. Keeping that rule here avoids each caller inventing its own
     root membership test.
     """
@@ -266,11 +453,11 @@ def resolve_analysis_work_dir(config: TwopyConfig, recording_dir: Path) -> Path:
 
     Returns:
         Local cache directory when ``analysis_caching`` is true; otherwise the
-        configured publish/output directory.
+        configured output directory.
 
     The work directory is where converted HDF5, ROIs, and analysis outputs are
-    read during normal analysis. ``analysis_output`` remains the publish
-    destination used for sync.
+    read during normal analysis. ``analysis_output`` remains the folder where
+    finished files are copied.
     """
     if config.analysis_caching:
         return resolve_analysis_cache_dir(config, recording_dir)

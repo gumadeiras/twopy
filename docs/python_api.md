@@ -53,7 +53,7 @@ experiments = find_recordings(
 )
 ```
 
-Every filter is optional. The function loads `config.yml` automatically so you do not need to pass database paths.
+Every filter is optional. The function loads twopy config automatically so you do not need to pass database paths. Use `twopy config setup` once to create the user config file, or set `TWOPY_CONFIG` when a script needs a specific file.
 
 `config.yml` controls whether queries read the shared database file directly or copy it locally. The default is `database_access: copy` because network DB queries can be slow, while copying the file is usually fast. Pass `database_access="direct"` to override.
 
@@ -71,7 +71,7 @@ print(converted.movie_path)   # aligned_movie.h5
 
 Conversion writes `recording_data.h5` (metadata, stimulus tables, photodiode signals, mean image) plus a separate `aligned_movie.h5` for the big movie array. The mean image defaults to the full movie; pass `mean_start_frame` / `mean_stop_frame` to use a frame range.
 
-By default twopy decides the output folder using your `config.yml`. With `analysis_caching: true`, `convert_recording_to_twopy(...)` writes converted files into your local `analysis_cache_dir`, mirrored under the matched `data_paths` root (or under `_external` for paths outside `data_paths`). With `analysis_caching: false`, it writes straight to `analysis_output`. The napari loading workflow publishes cached converted files to `analysis_output` after conversion; the Python conversion function itself only writes the returned `recording_data.h5` and `aligned_movie.h5` paths. Pass `output_dir=...` only when you need to override routing for one call.
+By default twopy decides the output folder using your `config.yml`. With `analysis_caching: true`, `convert_recording_to_twopy(...)` writes converted files into your local `analysis_cache_dir`, mirrored under the matched `data_paths` root (or under `_external` for paths outside `data_paths`). With `analysis_caching: false`, it writes straight to `analysis_output`. The napari loading workflow copies cached converted files to `analysis_output` after conversion; the Python conversion function itself only writes the returned `recording_data.h5` and `aligned_movie.h5` paths. Pass `output_dir=...` only when you need one call to use a different output folder.
 
 ## Load a converted recording
 

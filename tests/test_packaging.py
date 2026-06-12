@@ -10,8 +10,15 @@ from contextlib import redirect_stdout
 from importlib.metadata import version
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
-from twopy.napari.launcher import parse_launch_args
+from tests.tempdir import temporary_directory
+from twopy.config import CONFIG_ENV_VAR, config_template_text
+from twopy.napari.launcher import (
+    _ensure_config_for_launch,
+    _run_config_command,
+    parse_launch_args,
+)
 
 
 class PackagingTest(unittest.TestCase):
@@ -32,6 +39,14 @@ class PackagingTest(unittest.TestCase):
             "twopy.napari:main",
         )
 
+    def test_repository_has_one_packaged_config_template(self) -> None:
+        """Confirm the packaged config example is the canonical template."""
+        repo_root = Path(__file__).parents[1]
+
+        self.assertFalse((repo_root / "config.example.yml").exists())
+        self.assertTrue((repo_root / "src" / "twopy" / "config.example.yml").is_file())
+        self.assertIn("database_path:", config_template_text())
+
     def test_twopy_cli_prints_version_aliases(self) -> None:
         """Confirm version flags report package metadata.
 
@@ -49,6 +64,73 @@ class PackagingTest(unittest.TestCase):
 
                 self.assertEqual(exit_context.exception.code, 0)
                 self.assertEqual(output.getvalue().strip(), f"twopy {version('twopy')}")
+
+    def test_twopy_config_command_parses_setup(self) -> None:
+        """Confirm ``twopy config setup`` reaches the config command path."""
+        args = parse_launch_args(["config", "setup"])
+
+        self.assertEqual(args.command, "config")
+        self.assertEqual(args.config_command, "setup")
+        self.assertFalse(args.force)
+
+    def test_recording_path_still_parses_as_launcher_argument(self) -> None:
+        """Confirm config command dispatch does not consume recording paths."""
+        args = parse_launch_args(["/tmp/recording_data.h5"])
+
+        self.assertIsNone(args.command)
+        self.assertEqual(args.recording_data_path, Path("/tmp/recording_data.h5"))
+
+    def test_twopy_config_prints_active_config(self) -> None:
+        """Confirm ``twopy config`` shows the selected config file."""
+        with temporary_directory() as temp_dir:
+            config_path = Path(temp_dir) / "config.yml"
+            config_path.write_text("database_path: /tmp/db\n", encoding="utf-8")
+            args = parse_launch_args(["config"])
+            output = StringIO()
+
+            with (
+                patch.dict("os.environ", {CONFIG_ENV_VAR: str(config_path)}),
+                redirect_stdout(output),
+            ):
+                _run_config_command(args)
+
+            text = output.getvalue()
+            self.assertIn(str(config_path), text)
+            self.assertIn("database_path: /tmp/db", text)
+
+    def test_twopy_config_reports_missing_config_setup_path(self) -> None:
+        """Confirm ``twopy config`` gives setup guidance when missing."""
+        with temporary_directory() as temp_dir:
+            config_path = Path(temp_dir) / "missing.yml"
+            args = parse_launch_args(["config"])
+            output = StringIO()
+
+            with (
+                patch.dict("os.environ", {CONFIG_ENV_VAR: str(config_path)}),
+                redirect_stdout(output),
+            ):
+                _run_config_command(args)
+
+            text = output.getvalue()
+            self.assertIn("No twopy config file found.", text)
+            self.assertIn(str(config_path), text)
+            self.assertIn("twopy config setup", text)
+
+    def test_first_launch_creates_config_template_and_stops(self) -> None:
+        """Confirm first launch creates a template before opening napari."""
+        with temporary_directory() as temp_dir:
+            config_path = Path(temp_dir) / "config.yml"
+            output = StringIO()
+
+            with (
+                patch.dict("os.environ", {CONFIG_ENV_VAR: str(config_path)}),
+                redirect_stdout(output),
+            ):
+                should_launch = _ensure_config_for_launch()
+
+            self.assertFalse(should_launch)
+            self.assertTrue(config_path.is_file())
+            self.assertIn(str(config_path), output.getvalue())
 
 
 if __name__ == "__main__":

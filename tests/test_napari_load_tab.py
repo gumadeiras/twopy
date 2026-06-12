@@ -608,6 +608,10 @@ class NapariLoadTabTest(NapariAdapterTestCase):
                 }
 
                 with (
+                    patch.dict(
+                        "os.environ",
+                        {"TWOPY_CONFIG": str(root / "missing-config.yml")},
+                    ),
                     patch.object(
                         napari_controls,
                         "_choose_recording_csv_paths",

@@ -8,18 +8,32 @@ The launcher is the application entry point. It should stay thin: query and
 analysis workflows belong in dedicated helpers that the controls call.
 """
 
+from __future__ import annotations
+
+import sys
 from argparse import ArgumentParser, Namespace
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from twopy._version import __version__
-from twopy.filenames import ROI_FILENAME
-from twopy.napari.controls import add_twopy_magicgui_controls
-from twopy.napari.loading import resolve_or_convert_launch_recording
-from twopy.napari.types import NapariRecordingView
-from twopy.napari.viewer import create_viewer, open_recording_in_napari
+from twopy.config import (
+    config_search_paths,
+    discover_config_path,
+    preferred_config_path,
+    write_config_template,
+)
+
+if TYPE_CHECKING:
+    from twopy.napari.types import NapariRecordingView
 
 __all__ = ["launch_napari", "main"]
+
+_CONFIG_SETUP_MESSAGE = (
+    "Created twopy config template:\n"
+    "  {path}\n\n"
+    "Edit this file with your lab paths, then run twopy again."
+)
 
 
 def launch_napari(
@@ -50,9 +64,14 @@ def launch_napari(
         ``NapariRecordingView`` when a recording is loaded at startup,
         otherwise ``None``.
 
-    This is the script-facing launcher. It may convert source data before
-    opening napari, but all analysis still starts from converted HDF5 files.
+    This launcher may convert source data before opening napari, but all
+    analysis still starts from converted HDF5 files.
     """
+    from twopy.filenames import ROI_FILENAME
+    from twopy.napari.controls import add_twopy_magicgui_controls
+    from twopy.napari.loading import resolve_or_convert_launch_recording
+    from twopy.napari.viewer import create_viewer, open_recording_in_napari
+
     resolved_recording = resolve_or_convert_launch_recording(recording_data_path)
     movie_range = (int(movie_start_frame), movie_end_frame) if load_movie else None
     viewer = create_viewer()
@@ -111,6 +130,53 @@ def parse_launch_args(args: Sequence[str] | None = None) -> Namespace:
     Returns:
         Parsed argument namespace.
     """
+    raw_args = list(sys.argv[1:] if args is None else args)
+    if raw_args and raw_args[0] == "config":
+        parsed_config_args = _build_config_parser().parse_args(raw_args[1:])
+        parsed_config_args.command = "config"
+        return parsed_config_args
+
+    parser = _build_parser()
+    parsed_args = parser.parse_args(raw_args)
+    parsed_args.command = None
+    return parsed_args
+
+
+def _build_config_parser() -> ArgumentParser:
+    """Build the parser for ``twopy config`` commands.
+
+    Args:
+        None.
+
+    Returns:
+        Configured config-command parser.
+    """
+    config_parser = ArgumentParser(
+        prog="twopy config",
+        description="Show or create the twopy config file.",
+    )
+    config_subparsers = config_parser.add_subparsers(dest="config_command")
+    setup_parser = config_subparsers.add_parser(
+        "setup",
+        help="Create an editable twopy config template.",
+    )
+    setup_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing config file.",
+    )
+    return config_parser
+
+
+def _build_parser() -> ArgumentParser:
+    """Build the command-line parser for the twopy app.
+
+    Args:
+        None.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = ArgumentParser(
         description="Launch napari for a twopy-converted recording.",
     )
@@ -162,7 +228,7 @@ def parse_launch_args(args: Sequence[str] | None = None) -> Namespace:
         action="store_true",
         help="Skip loading movie preview frames and show only the mean image.",
     )
-    return parser.parse_args(args)
+    return parser
 
 
 def main() -> None:
@@ -175,6 +241,12 @@ def main() -> None:
         None.
     """
     args = parse_launch_args()
+    if args.command == "config":
+        _run_config_command(args)
+        return
+    if not _ensure_config_for_launch():
+        return
+
     launch_napari(
         args.recording_data_path,
         roi_file_to_load=args.roi_file_to_load,
@@ -183,3 +255,86 @@ def main() -> None:
         movie_end_frame=args.movie_end,
         load_movie=not args.no_movie,
     )
+
+
+def _run_config_command(args: Namespace) -> None:
+    """Run a ``twopy config`` subcommand.
+
+    Args:
+        args: Parsed CLI arguments for the config command.
+
+    Returns:
+        None.
+    """
+    if args.config_command is None:
+        _show_config()
+        return
+
+    if args.config_command == "setup":
+        _setup_config(force=args.force)
+        return
+
+    msg = f"Unsupported twopy config command: {args.config_command}"
+    raise ValueError(msg)
+
+
+def _show_config() -> None:
+    """Print the active config file path and contents.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    config_path = discover_config_path()
+    if config_path is None:
+        print("No twopy config file found.")
+        print(f"Setup path: {preferred_config_path()}")
+        print("Searched:")
+        for candidate in config_search_paths():
+            print(f"  {candidate}")
+        print("Run `twopy config setup` to create a template.")
+        return
+
+    print(f"twopy config: {config_path}")
+    print()
+    print(config_path.read_text(encoding="utf-8"), end="")
+
+
+def _ensure_config_for_launch() -> bool:
+    """Create a first-launch config template when none exists yet.
+
+    Args:
+        None.
+
+    Returns:
+        ``True`` when twopy can keep launching, or ``False`` after creating a
+        template that the user must edit before running twopy again.
+    """
+    if discover_config_path() is not None:
+        return True
+
+    config_path = write_config_template()
+    print(_CONFIG_SETUP_MESSAGE.format(path=config_path))
+    return False
+
+
+def _setup_config(*, force: bool = False) -> None:
+    """Create the editable config template for ``twopy config setup``.
+
+    Args:
+        force: Whether to replace an existing config file.
+
+    Returns:
+        None.
+    """
+    try:
+        config_path = write_config_template(force=force)
+    except FileExistsError:
+        config_path = preferred_config_path()
+        print(f"twopy config already exists:\n  {config_path}")
+        print("Use `twopy config setup --force` to replace it.")
+        return
+
+    print(_CONFIG_SETUP_MESSAGE.format(path=config_path))

@@ -8,7 +8,7 @@ Two-photon imaging analysis tool for the Clark Lab output format.
 
 twopy lets you open two-photon recordings, draw ROIs, plot responses in real time, process and analyze them, and save them.
 
-When you first load a recording, twopy converts it to a standardized HDF5 format. The converted format includes the aligned movie, mean image, stimulus tables, photodiode signals, and  recording metadata. Analysis and the GUI both work from the converted files, so the original source files remain separate from twopy's outputs. By default, converted recordings and interactive analysis outputs are cached locally under `~/.cache/twopy/recordings` for speed; saving ROIs and analysis publishes the changed output files back to the configured `analysis_output` location in the background.
+When you first load a recording, twopy converts it to HDF5 files that it owns. Those files include the aligned movie, mean image, stimulus tables, photodiode signals, and recording metadata. Analysis and the GUI both work from the converted files, so the original source files remain separate from twopy's outputs. By default, converted recordings and interactive analysis outputs are cached locally under `~/.cache/twopy/recordings` for speed; saving ROIs and analysis copies the changed output files back to the configured `analysis_output` location in the background.
 
 ## Install
 
@@ -26,7 +26,19 @@ Verify the install:
 micromamba run -n twopy python -c 'import twopy; print(twopy.__name__)'
 ```
 
-For a source checkout, copy `config.example.yml` to `config.yml` and edit the paths for your computer. `config.yml` stays local and is not tracked by git.
+Create the config template in your user folder:
+
+```sh
+twopy config setup
+```
+
+twopy prints the config path it wrote. On macOS and Linux the default is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. Edit that file with your database, data, and output paths before launching twopy.
+
+Show the active config path and file contents:
+
+```sh
+twopy config
+```
 
 ## Start
 

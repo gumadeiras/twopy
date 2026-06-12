@@ -487,14 +487,14 @@ Raw-data fallback/audit:
 
 - top-level raw `*.tif`
 
-## Analysis Output Routing
+## Analysis Output Paths
 
-`config.yml` contains ordered `data_paths`, `analysis_caching`, `analysis_cache_dir`, and `analysis_output`.
+twopy reads config from `TWOPY_CONFIG`, local `./config.yml`, or the user config file created by `twopy config setup`. On macOS and Linux that user file is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. The file contains ordered `data_paths`, `analysis_caching`, `analysis_cache_dir`, and `analysis_output`.
 
 - `data_paths` lists source recording roots in preference order. Database recording lookup checks each root and uses the first existing recording; if none exists, twopy reports the path under the first root.
-- `analysis_caching: true` keeps converted recordings and interactive analysis work under `analysis_cache_dir`, mirrored relative to the matched `data_paths` root for normal lab recordings. Recordings outside `data_paths` use a stable `_external` cache folder. The napari load and save workflows sync converted HDF5 files and saved analysis outputs back to `analysis_output`.
+- `analysis_caching: true` keeps converted recordings and interactive analysis work under `analysis_cache_dir`, mirrored relative to the matched `data_paths` root for normal lab recordings. Recordings outside `data_paths` use a stable `_external` cache folder. The napari load and save workflows copy converted HDF5 files and saved analysis outputs back to `analysis_output`.
 - `analysis_caching: false` uses `analysis_output` directly as the work directory.
-- `analysis_output: source` publishes saved twopy outputs into a `twopy/` folder inside the recording folder.
+- `analysis_output: source` saves twopy outputs into a `twopy/` folder inside the recording folder.
 - `analysis_output: /some/output/root` mirrors the recording directory structure relative to the matched `data_paths` root under that output root.
 - `convert_recording_to_twopy(recording)` uses the configured work directory by default and only writes the returned converted files. Passing `output_dir` to that function is an explicit one-call override.
 

@@ -37,7 +37,7 @@ Repository = "https://github.com/gumadeiras/twopy"
 where = ["src"]
 
 [tool.setuptools.package-data]
-twopy = ["calibrations/*.csv"]
+twopy = ["calibrations/*.csv", "config.example.yml"]
 
 [tool.ruff]
 line-length = 88
