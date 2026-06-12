@@ -16,7 +16,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Recording file reference schema in `docs/recording_file_schema.md`.
 - README kept as a short landing page, with detailed GUI, Python API, and development guides split into `docs/`.
 - YAML config file and typed loader for `database_path` and ordered `data_paths`.
-- Packaged config template with `twopy config setup`, first-launch template creation, and support for private local or user-folder `config.yml`.
+- Packaged config template with `twopy config setup`, first-launch template creation, launch-time config validation, and support for private local or user-folder `config.yml`.
 - Schema-agnostic SQLite database module for discovering DB files and filtering experiment rows.
 - Database code split into focused modules for catalog discovery, generic table search, modeled recording search, and read-only connections.
 - Modeled database query for `stimulusPresentation` joined with `fly` metadata.

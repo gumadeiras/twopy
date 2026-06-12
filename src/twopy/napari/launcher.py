@@ -20,6 +20,7 @@ from twopy._version import __version__
 from twopy.config import (
     config_search_paths,
     discover_config_path,
+    load_config,
     preferred_config_path,
     write_config_template,
 )
@@ -33,6 +34,12 @@ _CONFIG_SETUP_MESSAGE = (
     "Created twopy config template:\n"
     "  {path}\n\n"
     "Edit this file with your lab paths, then run twopy again."
+)
+_INVALID_CONFIG_MESSAGE = (
+    "Invalid twopy config:\n"
+    "  {path}\n\n"
+    "{error}\n\n"
+    "Edit this file, then run twopy again."
 )
 
 
@@ -297,7 +304,9 @@ def _show_config() -> None:
         print("Run `twopy config setup` to create a template.")
         return
 
+    _validate_config(config_path)
     print(f"twopy config: {config_path}")
+    print("status: valid")
     print()
     print(config_path.read_text(encoding="utf-8"), end="")
 
@@ -312,12 +321,33 @@ def _ensure_config_for_launch() -> bool:
         ``True`` when twopy can keep launching, or ``False`` after creating a
         template that the user must edit before running twopy again.
     """
-    if discover_config_path() is not None:
+    config_path = discover_config_path()
+    if config_path is not None:
+        _validate_config(config_path)
         return True
 
     config_path = write_config_template()
     print(_CONFIG_SETUP_MESSAGE.format(path=config_path))
     return False
+
+
+def _validate_config(config_path: Path) -> None:
+    """Validate one config file and stop the command when it is invalid.
+
+    Args:
+        config_path: Config file selected for this command.
+
+    Returns:
+        None.
+    """
+    try:
+        load_config(config_path)
+    except (FileNotFoundError, ValueError) as error:
+        print(
+            _INVALID_CONFIG_MESSAGE.format(path=config_path, error=error),
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from error
 
 
 def _setup_config(*, force: bool = False) -> None:
