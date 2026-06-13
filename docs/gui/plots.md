@@ -42,7 +42,7 @@ Optional Butterworth low-pass. Runs alongside smoothing on continuous dF/F befor
 
 ### Normalization
 
-Optional epoch-peak normalization. After trial grouping, every grouped response is divided by the per-ROI peak mean response in the selected epoch — so that epoch peaks at 1 for every ROI. Defaults to the first non-baseline epoch when names make that clear. The selected epoch and per-ROI scale factors are saved with the analysis.
+Optional response-size normalization. After trial grouping, twopy finds each ROI's strongest average response in the selected epoch, whether it is positive or negative. Every grouped response for that ROI is divided by that response size, so the strongest selected-epoch response has size 1. Defaults to the first non-baseline epoch when names make that clear. The selected epoch and per-ROI scale factors are saved with the analysis.
 
 ### Correlation QC
 

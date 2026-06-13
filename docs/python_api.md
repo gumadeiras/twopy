@@ -216,14 +216,14 @@ run = analyze_recording_responses(recording, rois)
 save_analysis_outputs(Path("/path/to/analysis_outputs.h5"), run)
 ```
 
-`analyze_recording_responses` is the single-call equivalent of the **Save ROIs + analysis** button. It chains background correction, dF/F, trial grouping, and (optionally) processing. Pass `ResponseProcessingOptions(...)` to set smoothing, low-pass filtering, epoch-peak normalization, or correlation QC; processing runs are stored in the saved HDF5 file.
+`analyze_recording_responses` is the single-call equivalent of the **Save ROIs + analysis** button. It chains background correction, dF/F, trial grouping, and (optionally) processing. Pass `ResponseProcessingOptions(...)` to set smoothing, low-pass filtering, response-size normalization, or correlation QC; processing runs are stored in the saved HDF5 file.
 
 For finer control, `compute_recording_responses(recording, rois, options=...)` returns the same computation object without writing it.
 
 A few invariants you can rely on:
 
 - Smoothing and low-pass filters run on continuous dF/F **before** trial grouping.
-- Epoch-peak normalization runs **after** trial grouping; the selected epoch and per-ROI scale factors are saved with the outputs.
+- Response-size normalization runs **after** trial grouping. The selected epoch and per-ROI scale factors are saved with the outputs.
 - Correlation filtering scores grouped trials and saves the settings plus per-ROI scores.
 - Use `finite_mean_and_sem(values, axis=...)` for the same finite-sample mean / sample-SEM convention used by twopy's response plots and CSV exports.
 - Call `validate_grouped_roi_responses(...)` when you build grouped response objects by hand — processing, persistence, and CSV exports all run the same validator before trusting the time / frame / ROI axes.

@@ -37,7 +37,7 @@ from twopy.analysis.responses import (
 
 __all__ = [
     "apply_correlation_filter_to_grouped_roi_responses",
-    "normalize_grouped_roi_responses_by_epoch_peak",
+    "normalize_grouped_roi_responses_by_epoch_abs_peak",
     "mask_grouped_roi_responses_by_included_rois",
     "RoiNormalizationFactors",
     "ResponseProcessingResult",
@@ -50,10 +50,10 @@ _NORMALIZATION_MIN_PEAK = 1e-12
 
 @dataclass(frozen=True)
 class RoiNormalizationFactors:
-    """Per-ROI factors used for epoch-peak response normalization.
+    """Per-ROI scale factors used for response-size normalization.
 
     Inputs: grouped response trials and one enabled normalization option.
-    Outputs: the positive peak factor for each ROI in the selected epoch.
+    Outputs: the positive response size used to scale each ROI.
     """
 
     roi_labels: tuple[str, ...]
@@ -150,9 +150,11 @@ def process_grouped_roi_responses(
     validate_response_processing_options(options, data_rate_hz=grouped.data_rate_hz)
     validate_grouped_roi_responses(grouped)
     processed = _copy_grouped_with_processed_values(grouped, options=options)
-    processed, normalization_factors = normalize_grouped_roi_responses_by_epoch_peak(
-        processed,
-        options=options.normalization,
+    processed, normalization_factors = (
+        normalize_grouped_roi_responses_by_epoch_abs_peak(
+            processed,
+            options=options.normalization,
+        )
     )
     processed, correlation_scores = apply_correlation_filter_to_grouped_roi_responses(
         processed,
@@ -166,12 +168,12 @@ def process_grouped_roi_responses(
     )
 
 
-def normalize_grouped_roi_responses_by_epoch_peak(
+def normalize_grouped_roi_responses_by_epoch_abs_peak(
     grouped: GroupedRoiResponses,
     *,
     options: NormalizationOptions,
 ) -> tuple[GroupedRoiResponses, RoiNormalizationFactors | None]:
-    """Normalize grouped responses by each ROI's selected-epoch peak.
+    """Scale each ROI by its strongest average response in the selected epoch.
 
     Args:
         grouped: Grouped ROI responses to normalize.
@@ -182,17 +184,17 @@ def normalize_grouped_roi_responses_by_epoch_peak(
         normalization is disabled.
 
     Raises:
-        ValueError: If the selected epoch is absent or any ROI lacks a positive
-        finite peak in that epoch.
+        ValueError: If the selected epoch is absent or any ROI lacks a finite
+        nonzero response in that epoch.
     """
     validate_grouped_roi_responses(grouped)
-    if options.method not in {"none", "epoch_peak"}:
+    if options.method not in {"none", "epoch_abs_peak"}:
         msg = f"Unknown normalization method {options.method!r}"
         raise ValueError(msg)
     if options.method == "none":
         return grouped, None
     if options.epoch_number is None:
-        msg = "epoch-peak normalization requires an epoch_number"
+        msg = "response-size normalization requires an epoch_number"
         raise ValueError(msg)
     factors = _normalization_factors(grouped, options=options)
     trials = tuple(
@@ -336,7 +338,7 @@ def _normalization_factors(
     *,
     options: NormalizationOptions,
 ) -> RoiNormalizationFactors:
-    """Return per-ROI selected-epoch peak factors."""
+    """Return each ROI's selected-epoch response size."""
     selected_trials = tuple(
         trial
         for trial in grouped.trials
@@ -356,7 +358,7 @@ def _normalization_factors(
         roi_labels=grouped.roi_labels,
         data_rate_hz=grouped.data_rate_hz,
     )
-    factors = np.nanmax(summary.mean_values, axis=1)
+    factors = np.nanmax(np.abs(summary.mean_values), axis=1)
     bad_indices = tuple(
         index
         for index, factor in enumerate(factors)
@@ -365,7 +367,7 @@ def _normalization_factors(
     if len(bad_indices) > 0:
         bad_labels = ", ".join(grouped.roi_labels[index] for index in bad_indices)
         msg = (
-            "Normalization epoch peak must be positive for every ROI; "
+            "Normalization epoch must have a nonzero response for every ROI; "
             f"invalid ROI labels: {bad_labels}"
         )
         raise ValueError(msg)

@@ -28,7 +28,7 @@ __all__ = [
 
 SmoothingMethod = Literal["none", "moving_average", "savgol"]
 LowPassFilterMethod = Literal["none", "butterworth"]
-NormalizationMethod = Literal["none", "epoch_peak"]
+NormalizationMethod = Literal["none", "epoch_abs_peak"]
 CorrelationFilterReference = Literal["none", "epoch_mean", "epoch_peak"]
 CorrelationWindowSeconds = tuple[float | None, float | None]
 
@@ -70,15 +70,16 @@ class LowPassFilterOptions:
 
 @dataclass(frozen=True)
 class NormalizationOptions:
-    """Epoch-peak normalization settings for grouped ROI responses.
+    """Settings for scaling grouped ROI responses by one selected epoch.
 
     Inputs: a normalization method and the stimulus epoch used as the scale
     reference.
     Outputs: normalization values applied after trial grouping.
 
-    ``method="none"`` leaves grouped responses unchanged. ``method="epoch_peak"``
-    divides every response for each ROI by that ROI's mean-response peak in the
-    selected epoch, so the selected epoch's plotted peak becomes one.
+    ``method="none"`` leaves grouped responses unchanged.
+    ``method="epoch_abs_peak"`` divides every response for each ROI by that
+    ROI's strongest average response in the selected epoch, whether positive or
+    negative.
     """
 
     method: NormalizationMethod = "none"
@@ -111,8 +112,8 @@ class CorrelationFilterOptions:
 class ResponseProcessingOptions:
     """Complete response post-processing configuration.
 
-    Inputs: optional smoothing, low-pass filtering, epoch-peak normalization,
-    and correlation QC settings.
+    Inputs: optional smoothing, low-pass filtering, response-size
+    normalization, and correlation QC settings.
     Outputs: one immutable object used by workflow, plotting, and saved analysis
     metadata.
     """
@@ -210,15 +211,15 @@ def _validate_low_pass_options(
 
 
 def _validate_normalization_options(options: NormalizationOptions) -> None:
-    """Validate epoch-peak normalization options."""
-    if options.method not in {"none", "epoch_peak"}:
+    """Validate response-size normalization options."""
+    if options.method not in {"none", "epoch_abs_peak"}:
         msg = f"Unknown normalization method {options.method!r}"
         raise ValueError(msg)
     if options.epoch_number is not None and options.epoch_number < 1:
         msg = f"normalization epoch_number must be positive; got {options.epoch_number}"
         raise ValueError(msg)
-    if options.method == "epoch_peak" and options.epoch_number is None:
-        msg = "epoch-peak normalization requires an epoch_number"
+    if options.method == "epoch_abs_peak" and options.epoch_number is None:
+        msg = "response-size normalization requires an epoch_number"
         raise ValueError(msg)
 
 

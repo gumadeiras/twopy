@@ -605,7 +605,9 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             response_widget = cast(Any, opened.response_plot_widget)
             normalization_widget = response_widget._normalization_options_widget
 
-            self.assertFalse(normalization_widget._normalize_to_epoch_peak.isChecked())
+            self.assertFalse(
+                normalization_widget._normalize_to_epoch_abs_peak.isChecked(),
+            )
             self.assertFalse(normalization_widget._epoch.isEnabled())
             self.assertEqual(normalization_widget.options().method, "none")
             self.assertEqual(normalization_widget.options().epoch_number, 2)
@@ -626,7 +628,7 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 polynomial_order=3,
             ),
             normalization=NormalizationOptions(
-                method="epoch_peak",
+                method="epoch_abs_peak",
                 epoch_number=2,
                 epoch_name="Odor A",
             ),

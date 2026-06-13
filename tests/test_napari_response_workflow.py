@@ -351,7 +351,7 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                     window_frames=3,
                 ),
                 normalization=NormalizationOptions(
-                    method="epoch_peak",
+                    method="epoch_abs_peak",
                     epoch_number=2,
                     epoch_name="Odor",
                 ),
@@ -961,7 +961,7 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
             response_widget._live_controller.request_update = lambda: requests.append(
                 "requested"
             )
-            options = NormalizationOptions(method="epoch_peak", epoch_number=1)
+            options = NormalizationOptions(method="epoch_abs_peak", epoch_number=1)
 
             response_widget._set_normalization_options(options)
 

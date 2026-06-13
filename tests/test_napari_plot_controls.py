@@ -447,7 +447,7 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
         normalization_widget = cast(
             Any,
             NormalizationOptionsWidget(
-                NormalizationOptions(method="epoch_peak", epoch_number=2),
+                NormalizationOptions(method="epoch_abs_peak", epoch_number=2),
             ),
         )
         processing_widget = cast(
@@ -528,8 +528,8 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             {PLOT_DROPDOWN_WIDTH},
         )
         self.assertEqual(
-            normalization_widget._normalize_to_epoch_peak.width(),
-            180,
+            normalization_widget._normalize_to_epoch_abs_peak.width(),
+            230,
         )
         popup_view_widths: set[int] = set()
         popup_window_widths: set[int] = set()

@@ -146,7 +146,7 @@ def save_analysis_outputs(
         grouped_responses: Optional grouped trial responses.
         response_processing_options: Optional smoothing, low-pass, and
             correlation-QC settings used for these outputs.
-        normalization_factors: Optional per-ROI factors used for epoch-peak
+        normalization_factors: Optional per-ROI factors used for response-size
             normalization.
         correlation_scores: Optional ROI-level correlation QC scores.
         response_summary_trials_csv: Optional CSV path for one row per trial

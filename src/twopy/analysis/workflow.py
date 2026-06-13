@@ -33,7 +33,7 @@ from twopy.analysis.response_processing import (
     RoiCorrelationScores,
     RoiNormalizationFactors,
     apply_correlation_filter_to_grouped_roi_responses,
-    normalize_grouped_roi_responses_by_epoch_peak,
+    normalize_grouped_roi_responses_by_epoch_abs_peak,
     process_roi_delta_f_over_f,
 )
 from twopy.analysis.response_window_options import (
@@ -561,7 +561,7 @@ def _compute_recording_responses_from_baseline(
     )
     _check_cancelled(check_cancelled)
     grouped_responses, normalization_factors = (
-        normalize_grouped_roi_responses_by_epoch_peak(
+        normalize_grouped_roi_responses_by_epoch_abs_peak(
             grouped_responses,
             options=processing_options.normalization,
         )

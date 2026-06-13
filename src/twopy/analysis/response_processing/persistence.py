@@ -51,7 +51,7 @@ _SMOOTHING_METHODS: tuple[SmoothingMethod, ...] = (
     "savgol",
 )
 _LOW_PASS_METHODS: tuple[LowPassFilterMethod, ...] = ("none", "butterworth")
-_NORMALIZATION_METHODS: tuple[NormalizationMethod, ...] = ("none", "epoch_peak")
+_NORMALIZATION_METHODS: tuple[NormalizationMethod, ...] = ("none", "epoch_abs_peak")
 _CORRELATION_REFERENCES: tuple[CorrelationFilterReference, ...] = (
     "none",
     "epoch_mean",
@@ -86,7 +86,7 @@ def write_response_processing_group(
         group: Destination ``response_processing`` HDF5 group.
         options: Processing options used for the saved analysis output.
         normalization_factors: Optional per-ROI normalization factors used for
-            epoch-peak normalization.
+            response-size normalization.
         correlation_scores: Optional ROI-level correlation QC result.
 
     Returns:
@@ -246,7 +246,7 @@ def _read_normalization_factors(
     *,
     options: NormalizationOptions,
 ) -> RoiNormalizationFactors:
-    """Read persisted epoch-peak normalization factors."""
+    """Read persisted response-size normalization factors."""
     return RoiNormalizationFactors(
         roi_labels=_read_string_dataset(group, "roi_labels"),
         factors=require_float64_array(

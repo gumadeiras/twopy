@@ -23,7 +23,7 @@ from twopy.napari.plotting.form_controls import (
 
 __all__ = ["NormalizationOptionsWidget", "default_normalization_epoch_number"]
 
-_NORMALIZE_TO_EPOCH_PEAK_WIDTH = 180
+_NORMALIZE_TO_EPOCH_ABS_PEAK_WIDTH = 230
 
 
 class NormalizationOptionsWidget(QWidget):
@@ -49,12 +49,16 @@ class NormalizationOptionsWidget(QWidget):
         """
         super().__init__()
         self._on_change = on_change
-        self._normalize_to_epoch_peak = QCheckBox("Normalize to epoch peak")
-        set_plot_control_width(
-            self._normalize_to_epoch_peak,
-            width=_NORMALIZE_TO_EPOCH_PEAK_WIDTH,
+        self._normalize_to_epoch_abs_peak = QCheckBox(
+            "Normalize to strongest response",
         )
-        self._normalize_to_epoch_peak.setChecked(options.method == "epoch_peak")
+        set_plot_control_width(
+            self._normalize_to_epoch_abs_peak,
+            width=_NORMALIZE_TO_EPOCH_ABS_PEAK_WIDTH,
+        )
+        self._normalize_to_epoch_abs_peak.setChecked(
+            options.method == "epoch_abs_peak",
+        )
         self._epoch = QComboBox()
         set_plot_dropdown_width(self._epoch)
         self._epoch_name_values: dict[int, str | None] = {}
@@ -90,7 +94,9 @@ class NormalizationOptionsWidget(QWidget):
         )
         return NormalizationOptions(
             method=(
-                "epoch_peak" if self._normalize_to_epoch_peak.isChecked() else "none"
+                "epoch_abs_peak"
+                if self._normalize_to_epoch_abs_peak.isChecked()
+                else "none"
             ),
             epoch_number=epoch_number,
             epoch_name=epoch_name,
@@ -140,7 +146,7 @@ class NormalizationOptionsWidget(QWidget):
             None.
         """
         blockers = [
-            QSignalBlocker(self._normalize_to_epoch_peak),
+            QSignalBlocker(self._normalize_to_epoch_abs_peak),
             QSignalBlocker(self._epoch),
         ]
         epoch_names = {
@@ -154,7 +160,9 @@ class NormalizationOptionsWidget(QWidget):
             epoch_names,
             selected_epoch_number=options.epoch_number,
         )
-        self._normalize_to_epoch_peak.setChecked(options.method == "epoch_peak")
+        self._normalize_to_epoch_abs_peak.setChecked(
+            options.method == "epoch_abs_peak",
+        )
         del blockers
         self._refresh_enabled_state()
 
@@ -163,14 +171,14 @@ class NormalizationOptionsWidget(QWidget):
         group = QGroupBox("Normalization")
         layout = plot_form_layout()
         layout.setVerticalSpacing(8)
-        layout.addRow("", self._normalize_to_epoch_peak)
+        layout.addRow("", self._normalize_to_epoch_abs_peak)
         layout.addRow("Epoch", self._epoch)
         group.setLayout(layout)
         return group
 
     def _connect_changes(self) -> None:
         """Connect control changes to state refresh and callback dispatch."""
-        self._normalize_to_epoch_peak.stateChanged.connect(self._emit_change)
+        self._normalize_to_epoch_abs_peak.stateChanged.connect(self._emit_change)
         self._epoch.currentIndexChanged.connect(self._emit_change)
 
     def _emit_change(self, *_args: object) -> None:
@@ -181,7 +189,7 @@ class NormalizationOptionsWidget(QWidget):
 
     def _refresh_enabled_state(self) -> None:
         """Enable epoch selection only when normalization is active."""
-        self._epoch.setEnabled(self._normalize_to_epoch_peak.isChecked())
+        self._epoch.setEnabled(self._normalize_to_epoch_abs_peak.isChecked())
 
     def _selected_epoch_number(self) -> int | None:
         """Return the selected epoch number, if any."""

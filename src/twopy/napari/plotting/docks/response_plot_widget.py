@@ -1063,7 +1063,7 @@ class _ResponsePlotWidget(QWidget):
         self._set_response_processing_options(
             replace(self._response_processing_options, normalization=options),
         )
-        if options.method == "epoch_peak":
+        if options.method == "epoch_abs_peak":
             self._update_status_label.setText("Normalization settings updated.")
             return
         self._update_status_label.setText("Normalization disabled.")

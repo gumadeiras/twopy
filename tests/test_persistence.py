@@ -82,7 +82,7 @@ class PersistenceTest(unittest.TestCase):
                     order=2,
                 ),
                 normalization=NormalizationOptions(
-                    method="epoch_peak",
+                    method="epoch_abs_peak",
                     epoch_number=1,
                     epoch_name="Gray",
                 ),
@@ -154,7 +154,7 @@ class PersistenceTest(unittest.TestCase):
                 )
                 self.assertEqual(
                     h5_file["response_processing/normalization"].attrs["method"],
-                    "epoch_peak",
+                    "epoch_abs_peak",
                 )
                 np.testing.assert_allclose(
                     h5_file["response_processing/normalization/factors"][()],

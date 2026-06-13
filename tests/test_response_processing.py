@@ -21,7 +21,7 @@ from twopy.analysis.response_processing import (
     mask_grouped_roi_responses_by_included_rois,
     nan_aware_moving_average,
     nan_aware_savgol_filter,
-    normalize_grouped_roi_responses_by_epoch_peak,
+    normalize_grouped_roi_responses_by_epoch_abs_peak,
     process_grouped_roi_responses,
     process_roi_delta_f_over_f,
     validate_response_processing_options,
@@ -195,35 +195,58 @@ class ResponseProcessingTest(unittest.TestCase):
             self.assertTrue(np.all(np.isnan(trial.values[:, 1])))
             self.assertTrue(np.all(np.isfinite(trial.values[:, 0])))
 
-    def test_epoch_peak_normalization_scales_each_roi(self) -> None:
-        """Confirm selected-epoch mean peaks become one for every ROI.
+    def test_epoch_abs_peak_normalization_scales_each_roi(self) -> None:
+        """Confirm the selected epoch's strongest response sets each ROI scale.
 
         Inputs: repeated grouped responses with different ROI amplitudes.
-        Outputs: all trials divided by each ROI's selected-epoch peak.
+        Outputs: all trials divided by each ROI's selected-epoch response size.
         """
         grouped = _grouped_responses(
             trial_values=(
-                np.array([[0.0, 0.0], [2.0, 4.0]], dtype=np.float64),
-                np.array([[0.0, 0.0], [4.0, 8.0]], dtype=np.float64),
+                np.array([[0.0, 0.0], [2.0, -6.0]], dtype=np.float64),
+                np.array([[0.0, 0.0], [4.0, -8.0]], dtype=np.float64),
             ),
         )
 
-        normalized, factors = normalize_grouped_roi_responses_by_epoch_peak(
+        normalized, factors = normalize_grouped_roi_responses_by_epoch_abs_peak(
             grouped,
-            options=NormalizationOptions(method="epoch_peak", epoch_number=2),
+            options=NormalizationOptions(method="epoch_abs_peak", epoch_number=2),
         )
 
         factors = _require_normalization_factors(factors)
-        np.testing.assert_allclose(factors.factors, np.array([3.0, 6.0]))
+        np.testing.assert_allclose(factors.factors, np.array([3.0, 7.0]))
         np.testing.assert_allclose(
             normalized.trials[0].values,
-            np.array([[0.0, 0.0], [2.0 / 3.0, 4.0 / 6.0]], dtype=np.float64),
+            np.array([[0.0, 0.0], [2.0 / 3.0, -6.0 / 7.0]], dtype=np.float64),
+        )
+
+    def test_epoch_abs_peak_normalization_keeps_inhibition_bounded(self) -> None:
+        """Confirm a small positive blip does not exaggerate inhibition.
+
+        Inputs: one ROI with a small positive peak and larger negative trough.
+        Outputs: normalization uses the trough size as the scale factor.
+        """
+        grouped = _grouped_responses(
+            trial_values=(np.array([[0.1], [-0.8]], dtype=np.float64),),
+            roi_labels=("roi_1",),
+        )
+
+        normalized, factors = normalize_grouped_roi_responses_by_epoch_abs_peak(
+            grouped,
+            options=NormalizationOptions(method="epoch_abs_peak", epoch_number=2),
+        )
+
+        factors = _require_normalization_factors(factors)
+        np.testing.assert_allclose(factors.factors, np.array([0.8]))
+        np.testing.assert_allclose(
+            normalized.trials[0].values,
+            np.array([[0.125], [-1.0]], dtype=np.float64),
         )
 
     def test_grouped_processing_normalizes_before_correlation_qc(self) -> None:
         """Confirm normalization is part of the grouped processing path.
 
-        Inputs: grouped responses with epoch-peak normalization enabled.
+        Inputs: grouped responses with response-size normalization enabled.
         Outputs: processed grouped responses and persisted normalization factors.
         """
         grouped = _grouped_responses(
@@ -233,7 +256,7 @@ class ResponseProcessingTest(unittest.TestCase):
             ),
         )
         options = ResponseProcessingOptions(
-            normalization=NormalizationOptions(method="epoch_peak", epoch_number=2),
+            normalization=NormalizationOptions(method="epoch_abs_peak", epoch_number=2),
         )
 
         result = process_grouped_roi_responses(grouped, options=options)
@@ -260,10 +283,10 @@ class ResponseProcessingTest(unittest.TestCase):
             ),
         )
 
-    def test_epoch_peak_normalization_rejects_zero_peaks(self) -> None:
+    def test_epoch_abs_peak_normalization_rejects_zero_responses(self) -> None:
         """Confirm normalization fails loudly when scale factors are invalid.
 
-        Inputs: grouped responses with no positive selected-epoch peak.
+        Inputs: grouped responses with no selected-epoch response.
         Outputs: a clear validation error naming the invalid ROI labels.
         """
         grouped = _grouped_responses(
@@ -271,9 +294,9 @@ class ResponseProcessingTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "roi_1"):
-            normalize_grouped_roi_responses_by_epoch_peak(
+            normalize_grouped_roi_responses_by_epoch_abs_peak(
                 grouped,
-                options=NormalizationOptions(method="epoch_peak", epoch_number=2),
+                options=NormalizationOptions(method="epoch_abs_peak", epoch_number=2),
             )
 
     def test_correlation_filter_can_use_epoch_peak_reference(self) -> None:
@@ -414,6 +437,7 @@ def _dff(values: np.ndarray) -> RoiDeltaFOverF:
 def _grouped_responses(
     *,
     trial_values: tuple[np.ndarray, ...],
+    roi_labels: tuple[str, ...] = ("roi_1", "roi_2"),
 ) -> GroupedRoiResponses:
     """Return grouped responses with one epoch and repeated trials."""
     trials = tuple(
@@ -431,7 +455,7 @@ def _grouped_responses(
         for index, values in enumerate(trial_values)
     )
     return GroupedRoiResponses(
-        roi_labels=("roi_1", "roi_2"),
+        roi_labels=roi_labels,
         data_rate_hz=1.0,
         trials=trials,
     )

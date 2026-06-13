@@ -15,7 +15,7 @@ from twopy.analysis.response_processing.apply import (
     RoiNormalizationFactors,
     apply_correlation_filter_to_grouped_roi_responses,
     mask_grouped_roi_responses_by_included_rois,
-    normalize_grouped_roi_responses_by_epoch_peak,
+    normalize_grouped_roi_responses_by_epoch_abs_peak,
     process_grouped_roi_responses,
     process_roi_delta_f_over_f,
 )
@@ -55,7 +55,7 @@ __all__ = [
     "mask_grouped_roi_responses_by_included_rois",
     "nan_aware_moving_average",
     "nan_aware_savgol_filter",
-    "normalize_grouped_roi_responses_by_epoch_peak",
+    "normalize_grouped_roi_responses_by_epoch_abs_peak",
     "process_grouped_roi_responses",
     "process_roi_delta_f_over_f",
     "ResponseProcessingOptions",
