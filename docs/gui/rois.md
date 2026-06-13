@@ -17,7 +17,7 @@ The **ROIs** tab has a **Create ROIs** section with a **Mode** dropdown:
 
 - **manual** — leaves the layer alone for hand-drawing.
 - **grid** — square template ROIs covering the crop. Choose **Units = pixels** for an exact pixel width, or **Units = microns** to convert from a physical width using the pixel calibration registry. Micron mode prefills known calibration fields (rig, mode, scanner, zoom) from converted metadata; if a field is missing it is left unselected rather than guessed.
-- **watershed** — segments bright structures from the mean image. Tune **Min pixels** and **Smoothing** (sigma).
+- **watershed** — segments bright structures from the displayed mean-image crop. Tune **Min pixels** and **Smoothing** (sigma). **Min pixels** uses the same displayed crop pixels shown in the **area (px)** column.
 - **response watershed** — segments stimulus-locked pixel responses from photodiode-aligned epoch windows. Tune **Response min pixels** and **Response smoothing**. **Fill response holes** is on by default; **Response closing** adds an opt-in conservative binary close for tiny same-basin gaps.
 
 Click **Create ROIs** to replace the contents of the `rois` Labels layer with the generated mask set.

@@ -22,6 +22,7 @@ from twopy.pixel_calibration import PixelCalibrationRow, resolve_pixel_size_um
 from twopy.response_roi_extraction import response_watershed_roi_set
 from twopy.roi import roi_set_to_label_image
 from twopy.roi_extraction import grid_roi_set, grid_roi_set_microns, watershed_roi_set
+from twopy.spatial import SpatialCrop
 
 __all__ = [
     "GeneratedRoiLabels",
@@ -70,13 +71,17 @@ def generate_roi_labels(
         raise ValueError(msg)
 
     if options.roi_mode == "watershed":
+        crop = recording.alignment_valid_crop
         roi_set = watershed_roi_set(
-            recording.mean_image,
+            crop.crop_image(recording.mean_image),
             min_pixels=options.watershed_min_pixels,
             smoothing_sigma=options.watershed_smoothing_sigma,
         )
         return GeneratedRoiLabels(
-            label_image=roi_set_to_label_image(roi_set),
+            label_image=_full_frame_label_image_from_crop(
+                roi_set_to_label_image(roi_set),
+                crop,
+            ),
             status_text=f"Created watershed ROIs: {len(roi_set.labels)} ROIs.",
         )
 
@@ -128,3 +133,31 @@ def generate_roi_labels(
         label_image=roi_set_to_label_image(roi_set),
         status_text=f"Estimated pixel size: {pixel_size.pixel_size_um:.6g} um/px.",
     )
+
+
+def _full_frame_label_image_from_crop(
+    label_image: npt.NDArray[np.int64],
+    crop: SpatialCrop,
+) -> npt.NDArray[np.int64]:
+    """Place a crop-native label image back into full-frame coordinates.
+
+    Args:
+        label_image: Labels produced inside the displayed crop.
+        crop: Alignment-valid crop that defines where the labels belong.
+
+    Returns:
+        Full-frame Labels image with background outside the crop.
+
+    The napari ROI layer is crop-native, but saved ROI files stay full-frame.
+    Mapping after generation keeps watershed size filtering tied to the pixels
+    the user can see and edit.
+    """
+    if label_image.shape != crop.shape:
+        msg = f"Label image shape {label_image.shape} does not match crop {crop.shape}"
+        raise ValueError(msg)
+    full_frame = np.zeros(crop.original_shape, dtype=np.int64)
+    full_frame[
+        crop.axis0_start : crop.axis0_stop,
+        crop.axis1_start : crop.axis1_stop,
+    ] = label_image
+    return full_frame

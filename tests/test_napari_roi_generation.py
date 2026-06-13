@@ -50,6 +50,8 @@ from twopy.napari.roi import (
     next_roi_label_value,
     select_next_roi_label_value,
 )
+from twopy.roi import roi_area_pixels_from_label_image
+from twopy.spatial import SpatialCrop
 
 
 class NapariRoiGenerationTest(NapariAdapterTestCase):
@@ -780,6 +782,59 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
             "Created watershed ROIs",
             response_widget._update_status_label.text(),
         )
+
+    def test_watershed_generation_filters_inside_display_crop(self) -> None:
+        """Confirm watershed minimum size applies to visible crop pixels.
+
+        Inputs: a cropped recording where full-frame watershed would leave a
+            small visible edge fragment.
+        Outputs: generated watershed labels contain only ROIs meeting the
+            minimum size inside the alignment-valid crop.
+        """
+        image = np.zeros((4, 6), dtype=np.float64)
+        image[1, 0] = 10.0
+        image[1, 4] = 9.0
+        movie_values = np.repeat(image[np.newaxis, :, :], 3, axis=0)
+        with temporary_directory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(
+                    Path(temp_dir),
+                    movie_values=movie_values,
+                    alignment_valid_crop=SpatialCrop(
+                        axis0_start=0,
+                        axis0_stop=4,
+                        axis1_start=3,
+                        axis1_stop=6,
+                        original_shape=(4, 6),
+                        source="alignment_valid_crop",
+                    ),
+                ),
+            )
+            options = RoiGenerationOptions(
+                roi_mode="watershed",
+                units="pixels",
+                grid_size_pixels=16,
+                micron_grid_size=10.0,
+                rig="",
+                calibration_mode=0,
+                scanner="",
+                zoom=1.0,
+                allow_extrapolation=True,
+                watershed_min_pixels=4,
+                watershed_smoothing_sigma=0.0,
+            )
+
+            generated = generate_roi_labels(recording, options, ())
+
+        np.testing.assert_array_equal(
+            generated.label_image[:, :3],
+            np.zeros((4, 3), dtype=np.int64),
+        )
+        visible_areas = roi_area_pixels_from_label_image(
+            recording.alignment_valid_crop.crop_image(generated.label_image),
+        )
+        self.assertEqual(visible_areas, {1: 12})
+        self.assertTrue(all(area >= 4 for area in visible_areas.values()))
 
     def test_generated_rois_rebuild_roi_table_before_live_update(self) -> None:
         """Confirm generated labels replace stale ROI table rows immediately.

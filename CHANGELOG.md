@@ -14,6 +14,10 @@
 - Added a 33 GB default limit for the local analysis cache. twopy now keeps a small rebuildable cache inventory and removes old cache entries after cache-growing writes only when their files already exist in the final output folder, while preserving active, unsynced, stale, or source-unavailable entries.
 - Made napari save ROI-generation mode and mode-specific settings in `rois.h5`, mark generated masks that were edited by hand, and restore those ROIs-tab controls with Reload saved analysis.
 
+### Fixes
+
+- Made napari watershed ROI generation apply **Min pixels** inside the displayed alignment-valid crop, preventing edge ROIs that are large full-frame but undersized in the editable ROIs tab.
+
 ## 0.3.1 - 2026-06-08
 
 ### Changes
