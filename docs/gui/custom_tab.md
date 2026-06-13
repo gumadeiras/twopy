@@ -22,14 +22,15 @@ Invalid workflows (missing metadata, bad type annotations, unknown roles, …) a
 
 ### Direction selectivity
 
-Computes a direction-selectivity index (DSI) for every current ROI.
+Computes a direction-selectivity index (DSI) for the visible ROIs by default.
 
 - **Preferred epoch** / **Null epoch** — pick from the loaded recording's epoch names.
 - **Metric** — `mean`, `peak`, or `minimum` over the configured window.
+- **ROIs** — `visible ROIs` by default, or `all ROIs` when you want every current ROI included.
 - **Window start (s)** / **Window end (s)** — epoch-relative metric window. Capped to the shorter of the preferred and null epoch durations.
 - **Rectify** option zeroes negative responses before computing DSI.
 
-The result is a three-decimal per-ROI DSI table. Rows above the **absolute DSI threshold** are highlighted, and only the passing ROIs stay selected in the response plot and ROIs tab — without replacing the plot data.
+The result is a three-decimal per-ROI DSI table. Rows at or above the **DSI show threshold** are highlighted, and only the passing ROIs stay selected in the response plot and ROIs tab — without replacing the plot data. The threshold defaults to `0.1`.
 
 ### Response kernels
 

@@ -53,7 +53,7 @@ class DirectionSelectivityParams:
         metadata={"label": "Metric", "twopy_role": "response_metric"},
     )
     roi_selector: str = field(
-        default="all_rois",
+        default="visible_rois",
         metadata={
             "label": "ROIs",
             "description": "ROI subset used for DSI computation.",
@@ -86,7 +86,7 @@ class DirectionSelectivityParams:
         },
     )
     dsi_threshold: float = field(
-        default=0.0,
+        default=0.1,
         metadata={
             "label": "DSI show threshold",
             "description": (

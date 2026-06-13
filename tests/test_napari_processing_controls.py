@@ -196,11 +196,13 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
                 specs["roi_selector"].choices,
                 ("all_rois", "visible_rois"),
             )
+            self.assertEqual(specs["roi_selector"].default, "visible_rois")
             self.assertEqual(specs["window_start_seconds"].minimum, 0.0)
             self.assertEqual(specs["window_start_seconds"].step, 0.1)
             self.assertEqual(specs["window_stop_seconds"].default, 3.3)
             self.assertEqual(specs["window_stop_seconds"].minimum, 0.0)
             self.assertEqual(specs["window_stop_seconds"].step, 0.1)
+            self.assertEqual(specs["dsi_threshold"].default, 0.1)
             self.assertEqual(specs["dsi_threshold"].minimum, 0.0)
             self.assertEqual(specs["dsi_threshold"].step, 0.05)
             self.assertEqual(specs["dsi_threshold"].decimals, 3)

@@ -255,6 +255,7 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
         self.assertEqual(specs["metric"].role, "response_metric")
         self.assertEqual(specs["roi_selector"].kind, "str")
         self.assertEqual(specs["roi_selector"].role, "roi_selector")
+        self.assertEqual(specs["roi_selector"].default, "visible_rois")
         self.assertEqual(specs["window_start_seconds"].kind, "float")
         self.assertEqual(specs["window_start_seconds"].role, "epoch_window_start")
         self.assertIsNone(specs["window_start_seconds"].minimum)
@@ -268,6 +269,7 @@ class CustomWorkflowDiscoveryTest(unittest.TestCase):
         self.assertEqual(specs["rectify_responses"].kind, "bool")
         self.assertEqual(specs["dsi_threshold"].kind, "float")
         self.assertEqual(specs["dsi_threshold"].role, "table_highlight_threshold")
+        self.assertEqual(specs["dsi_threshold"].default, 0.1)
         self.assertEqual(specs["dsi_threshold"].maximum, 1.0)
         self.assertEqual(specs["output_name"].kind, "str")
         self.assertEqual(specs["output_name"].role, "output_name")
@@ -837,6 +839,7 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
             params = DirectionSelectivityParams(
                 preferred_epoch="preferred",
                 null_epoch="null",
+                roi_selector="all_rois",
                 dsi_threshold=0.5,
             )
 
@@ -860,7 +863,6 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
             params = DirectionSelectivityParams(
                 preferred_epoch="preferred",
                 null_epoch="null",
-                roi_selector="visible_rois",
                 dsi_threshold=0.5,
             )
 
@@ -884,6 +886,7 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
             params = DirectionSelectivityParams(
                 preferred_epoch="preferred",
                 null_epoch="null",
+                roi_selector="all_rois",
                 dsi_threshold=0.5,
                 rectify_responses=False,
             )
@@ -907,6 +910,7 @@ class NativeDirectionSelectivityWorkflowTest(unittest.TestCase):
             params = DirectionSelectivityParams(
                 preferred_epoch="preferred",
                 null_epoch="null",
+                roi_selector="all_rois",
                 dsi_threshold=0.5,
                 rectify_responses=False,
             )
