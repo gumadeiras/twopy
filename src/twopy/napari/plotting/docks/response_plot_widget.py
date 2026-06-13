@@ -994,6 +994,7 @@ class _ResponsePlotWidget(QWidget):
             self._plot_data = None
             self._reset_plot_state()
             self._reset_empty_option_tabs()
+            self.refresh_roi_options_from_labels()
             self._plot_area.set_status(result)
             self._render_response_maps()
             return

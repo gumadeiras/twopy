@@ -14,6 +14,7 @@ from tests.napari_support import (
     NapariAdapterTestCase,
     NormalizationOptions,
     Path,
+    QCheckBox,
     QLabel,
     ResponseProcessingOptions,
     ResponseWindowOptions,
@@ -906,6 +907,16 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
             self.assertEqual(options.roi_mode, "watershed")
             self.assertEqual(options.watershed_min_pixels, 15)
             self.assertEqual(options.watershed_smoothing_sigma, 0.75)
+            self.assertEqual(
+                {
+                    checkbox.text()
+                    for checkbox in response_widget.options_widget().findChildren(
+                        QCheckBox
+                    )
+                    if checkbox.text().startswith("roi_")
+                },
+                {"roi_0001"},
+            )
             response_widget.shutdown()
 
     def test_processing_option_changes_request_preview_update(self) -> None:
