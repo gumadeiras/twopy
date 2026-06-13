@@ -16,6 +16,11 @@ from concurrent.futures import Executor, Future
 from dataclasses import dataclass
 from pathlib import Path
 
+from twopy.cache_inventory import (
+    enforce_analysis_cache_limit,
+    record_analysis_cache_refresh,
+    record_analysis_cache_sync,
+)
 from twopy.config import (
     DEFAULT_CONFIG_PATH,
     TwopyConfig,
@@ -84,6 +89,7 @@ def refresh_cached_analysis_outputs(
     source_session_dir: Path,
     local_output_dir: Path,
     config_path: Path = DEFAULT_CONFIG_PATH,
+    protected_cache_roots: tuple[Path, ...] = (),
 ) -> tuple[Path, ...]:
     """Copy newer output files into the local cache.
 
@@ -92,6 +98,8 @@ def refresh_cached_analysis_outputs(
         local_output_dir: Local cache/work directory for that recording.
         config_path: Optional YAML config file with cache and output settings.
             The default uses twopy's usual config search.
+        protected_cache_roots: Additional cache roots that must not be removed
+            if refreshing this recording triggers cache cleanup.
 
     Returns:
         Local paths refreshed from the configured output folder.
@@ -126,6 +134,16 @@ def refresh_cached_analysis_outputs(
             continue
         copy_file_atomically(source, target)
         refreshed.append(target)
+    if len(refreshed) > 0:
+        record_analysis_cache_refresh(
+            config,
+            local_root=local_dir,
+            publish_root=publish_dir,
+        )
+        enforce_analysis_cache_limit(
+            config,
+            protected_roots=(*protected_cache_roots, local_dir),
+        )
     return tuple(refreshed)
 
 
@@ -232,7 +250,14 @@ def copy_converted_files_to_publish(
         return None
     if len(plan.local_paths) == 0:
         return None
-    return copy_analysis_sync_plan(plan)
+    result = copy_analysis_sync_plan(plan)
+    record_analysis_cache_sync(
+        config,
+        local_root=plan.local_root,
+        publish_root=plan.publish_root,
+    )
+    enforce_analysis_cache_limit(config, protected_roots=(plan.local_root,))
+    return result
 
 
 def start_analysis_sync(

@@ -30,6 +30,7 @@ from twopy.napari.paths import (
 )
 from twopy.napari.session import (
     NapariSessionState,
+    loaded_recording_cache_roots,
     record_loaded_view,
     select_loaded_recording,
     selected_loaded_recording,
@@ -216,8 +217,10 @@ def load_recording_paths(
         for path in paths:
             try:
                 previous_loaded_count = len(state.loaded_recordings)
+                protected_roots = loaded_recording_cache_roots(state.loaded_recordings)
                 resolved = resolve_recording_load(
                     path,
+                    protected_cache_roots=protected_roots,
                     resolve_recording=resolve_recording,
                 )
                 single = select_duplicate_recording_load(
@@ -274,12 +277,19 @@ def load_recording_paths(
 def resolve_recording_load(
     selected_recording_path: Path,
     *,
+    protected_cache_roots: tuple[Path, ...] = (),
     resolve_recording: Callable[[PathInput], ResolvedNapariRecording] = (
         resolve_or_convert_recording
     ),
 ) -> ResolvedRecordingLoad:
     """Resolve one selected recording path without reading movie arrays."""
-    resolved_recording = resolve_recording(selected_recording_path)
+    if resolve_recording is resolve_or_convert_recording:
+        resolved_recording = resolve_or_convert_recording(
+            selected_recording_path,
+            protected_cache_roots=protected_cache_roots,
+        )
+    else:
+        resolved_recording = resolve_recording(selected_recording_path)
     return ResolvedRecordingLoad(
         selected_path=selected_recording_path,
         resolved_recording=resolved_recording,
@@ -481,11 +491,20 @@ def reconvert_selected_recording(
     state.defer_timeline_updates = True
     try:
         try:
-            resolved = reconvert_recording(
-                source_dir,
-                output_dir,
-                selected.output_route,
-            )
+            protected_roots = loaded_recording_cache_roots(state.loaded_recordings)
+            if reconvert_recording is reconvert_recording_to_output:
+                resolved = reconvert_recording_to_output(
+                    source_dir,
+                    output_dir,
+                    selected.output_route,
+                    protected_cache_roots=protected_roots,
+                )
+            else:
+                resolved = reconvert_recording(
+                    source_dir,
+                    output_dir,
+                    selected.output_route,
+                )
             prepared = prepare_resolved_recording_load(
                 ResolvedRecordingLoad(
                     selected_path=source_dir,

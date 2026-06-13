@@ -32,7 +32,7 @@ from twopy.napari.load_workflow import (
     select_duplicate_recording_load,
 )
 from twopy.napari.paths import DEFAULT_PATH_TEXT, PathInput
-from twopy.napari.session import select_loaded_recording
+from twopy.napari.session import loaded_recording_cache_roots, select_loaded_recording
 
 __all__ = ["RecordingLoadController"]
 
@@ -200,9 +200,11 @@ class RecordingLoadController:
             phase="Preparing recording data...",
         )
         active = self._active
+        protected_roots = loaded_recording_cache_roots(self._state.loaded_recordings)
         self._future = self._executor.submit(
             resolve_recording_load,
             active.path,
+            protected_cache_roots=protected_roots,
         )
         self._active_stage = "resolve"
         self._poll_timer.start()

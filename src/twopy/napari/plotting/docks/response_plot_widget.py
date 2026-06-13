@@ -11,7 +11,7 @@ to focused helpers, while keeping the current recording, ROI layer, visibility,
 and options in sync.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import replace
@@ -51,6 +51,11 @@ from twopy.analysis_cache import (
     AnalysisSyncResult,
     build_analysis_sync_plan_from_roots,
     start_analysis_sync,
+)
+from twopy.cache_inventory import (
+    enforce_analysis_cache_limit,
+    record_analysis_cache_sync,
+    record_analysis_cache_write,
 )
 from twopy.config import load_config
 from twopy.converted import RecordingData
@@ -160,6 +165,7 @@ class _ResponsePlotWidget(QWidget):
         """
         super().__init__()
         self._viewer = viewer
+        self._protected_cache_roots: Callable[[], tuple[Path, ...]] = tuple
         self._recording: RecordingData | None = None
         self._output_route: NapariOutputRoute | None = None
         self._roi_labels_layer: object | None = None
@@ -188,7 +194,7 @@ class _ResponsePlotWidget(QWidget):
             max_workers=1,
             thread_name_prefix="twopy-analysis-sync",
         )
-        self._sync_futures: set[Future[AnalysisSyncResult]] = set()
+        self._sync_futures: dict[Future[AnalysisSyncResult], AnalysisSyncPlan] = {}
         self._response_map_worker = LatestWorker[ResponseMapData](
             thread_name_prefix="twopy-response-heatmaps",
             on_result=self._apply_response_map_data,
@@ -582,6 +588,7 @@ class _ResponsePlotWidget(QWidget):
         self._refresh_update_path_labels()
         self._update_status_label.setText(result.status_text)
         self._export_status_label.setText(result.status_text)
+        _record_analysis_cache_write_from_root(result.analysis_output_path.parent)
         if result.sync_plan is not None:
             self._start_sync(result.sync_plan)
 
@@ -634,6 +641,7 @@ class _ResponsePlotWidget(QWidget):
         )
         result = run.result
         route = self._output_route or recording_output_route(self._recording)
+        _record_analysis_cache_write_from_root(route.local_root)
         sync_plan = build_analysis_sync_plan_from_roots(
             local_root=route.local_root,
             publish_root=route.publish_root,
@@ -792,7 +800,7 @@ class _ResponsePlotWidget(QWidget):
             sync_plan,
             executor=self._sync_executor,
         )
-        self._sync_futures.add(future)
+        self._sync_futures[future] = sync_plan
         self._sync_timer.start()
 
     def _collect_finished_sync(self) -> None:
@@ -802,12 +810,13 @@ class _ResponsePlotWidget(QWidget):
             return
         status_text = ""
         for future in finished:
-            self._sync_futures.remove(future)
+            sync_plan = self._sync_futures.pop(future)
             try:
                 result = future.result()
             except Exception as error:
                 status_text = f"Saved locally; sync failed: {error}"
                 continue
+            self._record_cache_sync(sync_plan)
             if len(result.copied_paths) == 0:
                 status_text = "Saved locally; sync already current"
                 continue
@@ -821,6 +830,32 @@ class _ResponsePlotWidget(QWidget):
             return
         self._update_status_label.setText(status_text)
         self._export_status_label.setText(status_text)
+
+    def _record_cache_sync(self, sync_plan: AnalysisSyncPlan) -> None:
+        """Mark local cache output as published after background sync succeeds."""
+        try:
+            config = load_config()
+        except FileNotFoundError:
+            return
+        record_analysis_cache_sync(
+            config,
+            local_root=sync_plan.local_root,
+            publish_root=sync_plan.publish_root,
+        )
+        enforce_analysis_cache_limit(
+            config,
+            protected_roots=(
+                *self._protected_cache_roots(),
+                sync_plan.local_root,
+            ),
+        )
+
+    def set_protected_cache_roots(
+        self,
+        provider: Callable[[], tuple[Path, ...]],
+    ) -> None:
+        """Set the callback that returns currently loaded cache roots."""
+        self._protected_cache_roots = provider
 
     def set_response_plot_data(
         self,
@@ -1221,6 +1256,7 @@ class _ResponsePlotWidget(QWidget):
             response_map_data=self._response_map_data,
             response_map_shared_limits=self._response_map_shared_limits,
             output_route=self._output_route,
+            protected_cache_roots=self._protected_cache_roots(),
             output_dir=self._export_output_dir(),
             roi_label_values=self._roi_label_values(),
             roi_colors=self._roi_color_hex(),
@@ -1700,6 +1736,15 @@ def _custom_workflow_publish_path(
     except ValueError:
         return None
     return sync_plan.publish_root / relative_path
+
+
+def _record_analysis_cache_write_from_root(local_root: Path) -> None:
+    """Mark a local root as cache-dirty when it belongs to the cache."""
+    try:
+        config = load_config()
+    except FileNotFoundError:
+        return
+    record_analysis_cache_write(config, local_root)
 
 
 def _custom_epoch_choices(recording: RecordingData) -> tuple[str, ...]:

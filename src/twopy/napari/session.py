@@ -9,7 +9,7 @@ responses; it records which viewer layers belong to which loaded recording so
 the controls can switch context cleanly.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
@@ -33,6 +33,7 @@ from twopy.napari.types import NapariRecordingView
 __all__ = [
     "LoadedNapariRecording",
     "LoadedRecordingsPanel",
+    "loaded_recording_cache_roots",
     "record_loaded_view",
     "remove_loaded_recording_layers",
     "render_loaded_recordings_panel",
@@ -119,6 +120,33 @@ class LoadedNapariRecording:
         if self.roi_labels_layer is not None:
             layers.append(self.roi_labels_layer)
         return tuple(layers)
+
+
+def loaded_recording_cache_roots(
+    recordings: Sequence[LoadedNapariRecording],
+) -> tuple[Path, ...]:
+    """Return local roots that must survive cache cleanup while loaded.
+
+    Args:
+        recordings: Loaded recordings owned by the current napari session.
+
+    Returns:
+        Unique local output roots in stable order.
+
+    Napari can keep several recordings open at once. Cache cleanup must not
+    remove any loaded recording's local files, even when another recording is
+    being converted, saved, or exported.
+    """
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for loaded in recordings:
+        root = loaded.output_route.local_root
+        resolved = root.expanduser().resolve(strict=False)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        roots.append(resolved)
+    return tuple(roots)
 
 
 class LoadedRecordingsPanel(QWidget):

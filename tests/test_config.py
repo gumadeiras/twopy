@@ -12,6 +12,7 @@ from tests.tempdir import temporary_directory
 from twopy.config import (
     CONFIG_ENV_VAR,
     DEFAULT_ANALYSIS_CACHE_DIR,
+    DEFAULT_ANALYSIS_CACHE_MAX_BYTES,
     config_template_text,
     data_path_match,
     data_path_recording_candidates,
@@ -60,6 +61,11 @@ class LoadConfigTest(unittest.TestCase):
             self.assertEqual(config.analysis_output, "source")
             self.assertTrue(config.analysis_caching)
             self.assertEqual(config.analysis_cache_dir, DEFAULT_ANALYSIS_CACHE_DIR)
+            self.assertEqual(DEFAULT_ANALYSIS_CACHE_MAX_BYTES, 33 * 1024**3)
+            self.assertEqual(
+                config.analysis_cache_max_bytes,
+                DEFAULT_ANALYSIS_CACHE_MAX_BYTES,
+            )
             self.assertEqual(
                 config.pixel_calibration_path,
                 DEFAULT_PIXEL_CALIBRATION_PATH,
@@ -206,7 +212,8 @@ class LoadConfigTest(unittest.TestCase):
                 "database_access: copy\n"
                 "analysis_output: source\n"
                 "analysis_caching: false\n"
-                f"analysis_cache_dir: {cache_dir}\n",
+                f"analysis_cache_dir: {cache_dir}\n"
+                "analysis_cache_max_gb: 2.5\n",
                 encoding="utf-8",
             )
 
@@ -214,6 +221,34 @@ class LoadConfigTest(unittest.TestCase):
 
             self.assertFalse(config.analysis_caching)
             self.assertEqual(config.analysis_cache_dir, cache_dir)
+            self.assertEqual(config.analysis_cache_max_bytes, int(2.5 * 1024**3))
+
+    def test_invalid_analysis_cache_max_size_raises_clear_error(self) -> None:
+        """Confirm cache max size must be a positive number.
+
+        Inputs: a temporary YAML file with invalid cache size values.
+        Outputs: ValueError messages naming ``analysis_cache_max_gb``.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "config.yml"
+            for value in ("0", "-1", ".nan", ".inf", "-.inf"):
+                with self.subTest(value=value):
+                    config_path.write_text(
+                        f"database_path: {root / 'db'}\n"
+                        "data_paths:\n"
+                        f"  - {root / 'data'}\n"
+                        "database_access: copy\n"
+                        "analysis_output: source\n"
+                        f"analysis_cache_max_gb: {value}\n",
+                        encoding="utf-8",
+                    )
+
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "analysis_cache_max_gb.*finite number greater than zero",
+                    ):
+                        load_config(config_path)
 
     def test_loads_alternative_pixel_calibration_path(self) -> None:
         """Confirm config can point at an alternative calibration registry.

@@ -4,6 +4,8 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+import shutil
+
 from tests.converted_files import write_converted_recording_files
 from tests.napari_support import (
     NapariAdapterTestCase,
@@ -24,6 +26,7 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
+from twopy.cache_inventory import record_analysis_cache_sync
 from twopy.config import load_config, resolve_analysis_cache_dir
 from twopy.napari.loading import reconvert_recording_to_output
 from twopy.napari.output_routing import NapariOutputRoute
@@ -712,6 +715,70 @@ class NapariPathResolutionTest(NapariAdapterTestCase):
                 resolved.output_route.publish_root,
                 publish_dir,
             )
+
+    def test_recording_path_resolution_keeps_protected_cache_roots_during_cleanup(
+        self,
+    ) -> None:
+        """Confirm localization cleanup does not remove another loaded recording.
+
+        Inputs: one old published cache entry, one selected publish folder to
+            localize, and the old root listed as protected.
+        Outputs: the selected recording localizes to cache and the protected old
+            cache entry remains on disk despite a tiny cache limit.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            cache_root = root / "cache"
+            publish_root = root / "publish"
+            old_source = data_root / "old" / "stim" / "2023" / "10_17"
+            new_source = data_root / "new" / "stim" / "2023" / "10_17"
+            old_cache = cache_root / "old" / "stim" / "2023" / "10_17"
+            old_publish = publish_root / "old" / "stim" / "2023" / "10_17"
+            new_publish = publish_root / "new" / "stim" / "2023" / "10_17"
+            _write_source_recording_shape(old_source)
+            _write_source_recording_shape(new_source)
+            _write_converted_recording(old_cache, source_session_dir=old_source)
+            old_publish.parent.mkdir(parents=True)
+            shutil.copytree(old_cache, old_publish)
+            _write_converted_recording(new_publish, source_session_dir=new_source)
+            config_path = root / "config.yml"
+            config_path.write_text(
+                f"database_path: {root / 'db'}\n"
+                "data_paths:\n"
+                f"  - {data_root.resolve()}\n"
+                "database_access: copy\n"
+                "analysis_caching: true\n"
+                f"analysis_cache_dir: {cache_root}\n"
+                "analysis_cache_max_gb: 0.000000001\n"
+                f"analysis_output: {publish_root}\n",
+                encoding="utf-8",
+            )
+            self._activate_test_config(config_path)
+            config = load_config(config_path)
+            record_analysis_cache_sync(
+                config,
+                local_root=old_cache,
+                publish_root=old_publish,
+            )
+
+            original_cwd = Path.cwd()
+            try:
+                chdir(root)
+                resolved = resolve_or_convert_recording(
+                    new_publish,
+                    protected_cache_roots=(old_cache,),
+                )
+            finally:
+                chdir(original_cwd)
+
+            new_cache = cache_root / "new" / "stim" / "2023" / "10_17"
+            self.assertEqual(
+                resolved.paths.recording_data_path,
+                (new_cache / "recording_data.h5").resolve(),
+            )
+            self.assertTrue(old_cache.is_dir())
+            self.assertTrue(new_cache.is_dir())
 
     def test_recording_path_resolution_refreshes_stale_localized_output(
         self,

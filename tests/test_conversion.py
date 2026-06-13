@@ -9,6 +9,7 @@ import json
 import sqlite3
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZipFile
 
 import h5py
@@ -387,6 +388,77 @@ class ConversionTest(unittest.TestCase):
                         np.arange(12, dtype=np.float64).reshape(3, 2, 2),
                     ),
                 )
+
+    def test_failed_conversion_does_not_leave_partial_output(self) -> None:
+        """Confirm failed conversion does not expose half-written HDF5 output.
+
+        Inputs: an existing output folder and a recording-data writer failure.
+        Outputs: old output files remain untouched and temporary files are removed.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            session_dir = root / "recording"
+            output_dir = root / "output"
+            output_dir.mkdir()
+            recording_path = output_dir / "recording_data.h5"
+            movie_path = output_dir / "aligned_movie.h5"
+            recording_path.write_bytes(b"old-recording")
+            movie_path.write_bytes(b"old-movie")
+            self._write_session(session_dir)
+
+            with (
+                patch(
+                    "twopy.conversion.api.write_recording_data_file",
+                    side_effect=RuntimeError("recording write failed"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "recording write failed"),
+            ):
+                convert_recording_to_twopy(session_dir, output_dir)
+
+            self.assertEqual(recording_path.read_bytes(), b"old-recording")
+            self.assertEqual(movie_path.read_bytes(), b"old-movie")
+            self.assertEqual(tuple(output_dir.parent.glob(".output.convert.*")), ())
+
+    def test_failed_conversion_commit_restores_existing_output(self) -> None:
+        """Confirm final replacement failure restores the previous file pair.
+
+        Inputs: an existing output folder and a failure replacing recording data.
+        Outputs: both old converted files are still present after the failure.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            session_dir = root / "recording"
+            output_dir = root / "output"
+            output_dir.mkdir()
+            recording_path = output_dir / "recording_data.h5"
+            movie_path = output_dir / "aligned_movie.h5"
+            recording_path.write_bytes(b"old-recording")
+            movie_path.write_bytes(b"old-movie")
+            self._write_session(session_dir)
+            original_replace = Path.replace
+            failed_once = False
+
+            def replace_or_fail(source: Path, target: Path) -> Path:
+                nonlocal failed_once
+                if (
+                    not failed_once
+                    and source.name == "recording_data.h5"
+                    and Path(target) == recording_path
+                ):
+                    failed_once = True
+                    raise OSError("locked recording_data.h5")
+                return original_replace(source, target)
+
+            with (
+                patch.object(Path, "replace", replace_or_fail),
+                self.assertRaisesRegex(OSError, "locked recording_data.h5"),
+            ):
+                convert_recording_to_twopy(session_dir, output_dir)
+
+            self.assertEqual(recording_path.read_bytes(), b"old-recording")
+            self.assertEqual(movie_path.read_bytes(), b"old-movie")
+            self.assertEqual(tuple(output_dir.parent.glob(".output.convert.*")), ())
+            self.assertEqual(tuple(output_dir.parent.glob(".output.previous.*")), ())
 
     def test_conversion_stores_movie_in_python_image_order(self) -> None:
         """Confirm conversion orients non-square source movies once at write time.

@@ -489,14 +489,15 @@ Raw-data fallback/audit:
 
 ## Analysis Output Paths
 
-twopy reads config from `TWOPY_CONFIG`, local `./config.yml`, or the user config file created by `twopy config setup`. On macOS and Linux that user file is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. The file contains ordered `data_paths`, `analysis_caching`, `analysis_cache_dir`, and `analysis_output`.
+twopy reads config from `TWOPY_CONFIG`, local `./config.yml`, or the user config file created by `twopy config setup`. On macOS and Linux that user file is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. The file contains ordered `data_paths`, `analysis_caching`, `analysis_cache_dir`, `analysis_cache_max_gb`, and `analysis_output`.
 
 - `data_paths` lists source recording roots in preference order. Database recording lookup checks each root and uses the first existing recording; if none exists, twopy reports the path under the first root.
 - `analysis_caching: true` keeps converted recordings and interactive analysis work under `analysis_cache_dir`, mirrored relative to the matched `data_paths` root for normal lab recordings. Recordings outside `data_paths` use a stable `_external` cache folder. The napari load and save workflows copy converted HDF5 files and saved analysis outputs back to `analysis_output`.
+- `analysis_cache_max_gb` defaults to `33` when omitted. After conversion, localization, save, or export writes grow the local cache, twopy removes old cache entries until the known cache size is under this limit. It only removes entries whose files already exist in the final output folder, and skips active, unsynced, stale, source-unavailable, or unmapped entries.
 - `analysis_caching: false` uses `analysis_output` directly as the work directory.
 - `analysis_output: source` saves twopy outputs into a `twopy/` folder inside the recording folder.
 - `analysis_output: /some/output/root` mirrors the recording directory structure relative to the matched `data_paths` root under that output root.
-- `convert_recording_to_twopy(recording)` uses the configured work directory by default and only writes the returned converted files. Passing `output_dir` to that function is an explicit one-call override.
+- `convert_recording_to_twopy(recording)` uses the configured work directory by default and returns the converted file paths. When caching is on, it can also update the cache inventory and remove older cache entries whose files already exist in the final output folder. Passing `output_dir` to that function is an explicit one-call override.
 
 Example:
 
@@ -506,6 +507,7 @@ data_paths:
   - /Volumes/archive/clarklab/2p_microscope_data
 analysis_caching: true
 analysis_cache_dir: ~/.cache/twopy/recordings
+analysis_cache_max_gb: 33
 analysis_output: /Volumes/magic/clarklab/twopy_outputs
 recording: /Volumes/magic/clarklab/2p_microscope_data/fly/stim/2023/10_17/10_02_49
 local: ~/.cache/twopy/recordings/fly/stim/2023/10_17/10_02_49

@@ -6,6 +6,7 @@ workflow paths, and output settings.
 """
 
 import hashlib
+import math
 import os
 from dataclasses import dataclass
 from importlib.resources import files
@@ -19,6 +20,7 @@ from twopy.pixel_calibration import DEFAULT_PIXEL_CALIBRATION_PATH
 __all__ = [
     "DEFAULT_CONFIG_PATH",
     "DEFAULT_ANALYSIS_CACHE_DIR",
+    "DEFAULT_ANALYSIS_CACHE_MAX_BYTES",
     "CONFIG_ENV_VAR",
     "AnalysisOutputMode",
     "DatabaseAccess",
@@ -41,6 +43,7 @@ __all__ = [
 
 DEFAULT_CONFIG_PATH = Path("config.yml")
 DEFAULT_ANALYSIS_CACHE_DIR = Path.home() / ".cache" / "twopy" / "recordings"
+DEFAULT_ANALYSIS_CACHE_MAX_BYTES = 33 * 1024**3
 CONFIG_ENV_VAR = "TWOPY_CONFIG"
 _CONFIG_DIRNAME = "twopy"
 _CONFIG_FILENAME = "config.yml"
@@ -63,6 +66,7 @@ class TwopyConfig:
     analysis_output: AnalysisOutputMode
     analysis_caching: bool = True
     analysis_cache_dir: Path = DEFAULT_ANALYSIS_CACHE_DIR
+    analysis_cache_max_bytes: int = DEFAULT_ANALYSIS_CACHE_MAX_BYTES
     pixel_calibration_path: Path = DEFAULT_PIXEL_CALIBRATION_PATH
     custom_workflow_paths: tuple[Path, ...] = ()
 
@@ -268,6 +272,12 @@ def load_config(path: Path | None = None) -> TwopyConfig:
             "analysis_cache_dir",
             config_path,
             default=DEFAULT_ANALYSIS_CACHE_DIR,
+        ),
+        analysis_cache_max_bytes=_optional_gigabytes(
+            raw_config,
+            "analysis_cache_max_gb",
+            config_path,
+            default_bytes=DEFAULT_ANALYSIS_CACHE_MAX_BYTES,
         ),
         pixel_calibration_path=_optional_path(
             raw_config,
@@ -644,6 +654,39 @@ def _optional_bool(
 
     msg = f"twopy config key {key!r} must be true or false: {config_path}"
     raise ValueError(msg)
+
+
+def _optional_gigabytes(
+    config: dict[object, object],
+    key: str,
+    config_path: Path,
+    *,
+    default_bytes: int,
+) -> int:
+    """Read an optional positive gigabyte value as bytes.
+
+    Args:
+        config: Parsed YAML mapping.
+        key: Optional key to read.
+        config_path: Source config file path, used for clear errors.
+        default_bytes: Byte value returned when the key is absent.
+
+    Returns:
+        Positive byte count.
+    """
+    value = config.get(key)
+    if value is None:
+        return default_bytes
+    error = (
+        f"twopy config key {key!r} must be a finite number greater than zero: "
+        f"{config_path}"
+    )
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(error)
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise ValueError(error)
+    return max(1, int(number * 1024**3))
 
 
 def _optional_path(

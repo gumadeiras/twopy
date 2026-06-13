@@ -14,10 +14,16 @@ from pathlib import Path
 import h5py
 
 from twopy.analysis_cache import (
+    AnalysisSyncPlan,
     build_analysis_sync_plan_from_roots,
     copy_analysis_sync_plan,
     copy_file_atomically,
     refresh_cached_analysis_outputs,
+)
+from twopy.cache_inventory import (
+    enforce_analysis_cache_limit,
+    record_analysis_cache_sync,
+    record_analysis_cache_use,
 )
 from twopy.config import (
     DEFAULT_CONFIG_PATH,
@@ -62,12 +68,18 @@ class ResolvedNapariRecording:
     source_unavailable: bool = False
 
 
-def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
+def resolve_or_convert_recording(
+    path: PathInput,
+    *,
+    protected_cache_roots: tuple[Path, ...] = (),
+) -> ResolvedNapariRecording:
     """Resolve a selected recording path, converting source data if needed.
 
     Args:
         path: User-selected source folder, converted folder, or
             ``recording_data.h5`` path.
+        protected_cache_roots: Local cache roots that must stay on disk while
+            this load may trigger cache cleanup.
 
     Returns:
         Converted recording paths and whether conversion was run.
@@ -83,11 +95,17 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
     selected = Path.cwd() if is_default_path(path) else Path(path).expanduser()
     source_dir = _source_recording_dir(selected)
     if source_dir is not None:
-        cached = _resolve_or_convert_cached_source_recording(source_dir)
+        cached = _resolve_or_convert_cached_source_recording(
+            source_dir,
+            protected_cache_roots=protected_cache_roots,
+        )
         if cached is not None:
             return cached
 
-    cached = _resolve_cached_unavailable_source_recording(selected)
+    cached = _resolve_cached_unavailable_source_recording(
+        selected,
+        protected_cache_roots=protected_cache_roots,
+    )
     if cached is not None:
         return cached
 
@@ -96,15 +114,25 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
     except ValueError as error:
         if source_dir is None:
             raise _configured_data_path_error(selected, error) from error
-        converted = convert_recording_to_twopy(source_dir)
-        converted_paths, output_route = _converted_paths_with_output_route(converted)
+        converted = _convert_recording_to_twopy(
+            source_dir,
+            protected_cache_roots=protected_cache_roots,
+        )
+        converted_paths, output_route = _converted_paths_with_output_route(
+            converted,
+            protected_cache_roots=protected_cache_roots,
+        )
         return ResolvedNapariRecording(
             paths=converted_paths,
             output_route=output_route,
             was_converted=True,
         )
 
-    localized = _localize_converted_paths_for_cache(paths=paths, selected=selected)
+    localized = _localize_converted_paths_for_cache(
+        paths=paths,
+        selected=selected,
+        protected_cache_roots=protected_cache_roots,
+    )
     if localized is not None:
         return localized
 
@@ -132,11 +160,15 @@ def resolve_or_convert_recording(path: PathInput) -> ResolvedNapariRecording:
             was_converted=False,
         )
 
-    converted = convert_recording_to_twopy(
+    converted = _convert_recording_to_twopy(
         source_dir,
         output_dir=paths.recording_data_path.parent,
+        protected_cache_roots=protected_cache_roots,
     )
-    converted_paths, output_route = _converted_paths_with_output_route(converted)
+    converted_paths, output_route = _converted_paths_with_output_route(
+        converted,
+        protected_cache_roots=protected_cache_roots,
+    )
     return ResolvedNapariRecording(
         paths=converted_paths,
         output_route=output_route,
@@ -148,6 +180,8 @@ def reconvert_recording_to_output(
     source_dir: Path,
     output_dir: Path,
     output_route: NapariOutputRoute,
+    *,
+    protected_cache_roots: tuple[Path, ...] = (),
 ) -> ResolvedNapariRecording:
     """Rebuild converted files for one source recording in a chosen output folder.
 
@@ -156,6 +190,8 @@ def reconvert_recording_to_output(
         output_dir: Existing converted output folder to overwrite.
         output_route: Local and final output folders already resolved for the
             loaded recording.
+        protected_cache_roots: Local cache roots that must stay on disk while
+            this reconversion may trigger cache cleanup.
 
     Returns:
         Resolved converted paths after the recording and movie files are
@@ -166,7 +202,11 @@ def reconvert_recording_to_output(
     existing files or rediscover output routing. This helper forces conversion
     while preserving the selected recording's loaded route.
     """
-    converted = convert_recording_to_twopy(source_dir, output_dir=output_dir)
+    converted = _convert_recording_to_twopy(
+        source_dir,
+        output_dir=output_dir,
+        protected_cache_roots=protected_cache_roots,
+    )
     converted_paths = resolve_converted_paths(converted.path)
     if converted_paths.movie_path is not None:
         sync_plan = build_analysis_sync_plan_from_roots(
@@ -179,6 +219,11 @@ def reconvert_recording_to_output(
         )
         if sync_plan is not None:
             copy_analysis_sync_plan(sync_plan)
+            _record_cache_sync_plan(sync_plan)
+            _enforce_cache_limit(
+                sync_plan.local_root,
+                protected_cache_roots=protected_cache_roots,
+            )
     return ResolvedNapariRecording(
         paths=converted_paths,
         output_route=output_route,
@@ -188,11 +233,14 @@ def reconvert_recording_to_output(
 
 def _resolve_cached_unavailable_source_recording(
     source_dir: Path,
+    *,
+    protected_cache_roots: tuple[Path, ...],
 ) -> ResolvedNapariRecording | None:
     """Resolve an existing cache entry for a currently unavailable source path.
 
     Args:
         source_dir: Source recording folder requested by the user.
+        protected_cache_roots: Local cache roots that should survive cleanup.
 
     Returns:
         Cached converted paths, or ``None`` when no usable cache entry exists.
@@ -218,16 +266,20 @@ def _resolve_cached_unavailable_source_recording(
         source_dir=source_dir,
         was_converted=False,
         source_unavailable=True,
+        protected_cache_roots=protected_cache_roots,
     )
 
 
 def _resolve_or_convert_cached_source_recording(
     source_dir: Path,
+    *,
+    protected_cache_roots: tuple[Path, ...],
 ) -> ResolvedNapariRecording | None:
     """Resolve or create local cached output for a source recording.
 
     Args:
         source_dir: Valid source microscope recording folder.
+        protected_cache_roots: Local cache roots that should survive cleanup.
 
     Returns:
         Cached converted paths, or ``None`` when caching is disabled or the
@@ -249,18 +301,21 @@ def _resolve_or_convert_cached_source_recording(
         return _convert_cached_source_recording(
             source_dir=source_dir,
             output_dir=output_dir,
+            protected_cache_roots=protected_cache_roots,
         )
 
     if paths.movie_path is None:
         return _convert_cached_source_recording(
             source_dir=source_dir,
             output_dir=output_dir,
+            protected_cache_roots=protected_cache_roots,
         )
 
     return _refresh_cached_analysis_outputs(
         paths=paths,
         source_dir=source_dir,
         was_converted=False,
+        protected_cache_roots=protected_cache_roots,
     )
 
 
@@ -268,27 +323,39 @@ def _convert_cached_source_recording(
     *,
     source_dir: Path,
     output_dir: Path,
+    protected_cache_roots: tuple[Path, ...],
 ) -> ResolvedNapariRecording:
     """Convert one source recording into cache and refresh saved outputs.
 
     Args:
         source_dir: Valid source microscope recording folder.
         output_dir: Cache directory that should receive converted files.
+        protected_cache_roots: Local cache roots that should survive cleanup.
 
     Returns:
         Resolved cached paths for the converted recording.
     """
-    converted = convert_recording_to_twopy(source_dir, output_dir=output_dir)
-    converted_paths, _ = _converted_paths_with_output_route(converted)
+    converted = _convert_recording_to_twopy(
+        source_dir,
+        output_dir=output_dir,
+        protected_cache_roots=protected_cache_roots,
+    )
+    converted_paths, _ = _converted_paths_with_output_route(
+        converted,
+        protected_cache_roots=protected_cache_roots,
+    )
     return _refresh_cached_analysis_outputs(
         paths=converted_paths,
         source_dir=source_dir,
         was_converted=True,
+        protected_cache_roots=protected_cache_roots,
     )
 
 
 def _converted_paths_with_output_route(
     converted: ConvertedRecording,
+    *,
+    protected_cache_roots: tuple[Path, ...] = (),
 ) -> tuple[NapariRecordingPaths, NapariOutputRoute]:
     """Resolve converted files, choose the route, and publish HDF5 outputs."""
     converted_paths = resolve_converted_paths(converted.path)
@@ -307,6 +374,11 @@ def _converted_paths_with_output_route(
         )
         if sync_plan is not None:
             copy_analysis_sync_plan(sync_plan)
+            _record_cache_sync_plan(sync_plan)
+            _enforce_cache_limit(
+                sync_plan.local_root,
+                protected_cache_roots=protected_cache_roots,
+            )
     return converted_paths, output_route
 
 
@@ -356,6 +428,7 @@ def _refresh_cached_analysis_outputs(
     source_dir: Path,
     was_converted: bool,
     source_unavailable: bool = False,
+    protected_cache_roots: tuple[Path, ...] = (),
 ) -> ResolvedNapariRecording:
     """Pull published saved outputs into cache and resolve fresh paths.
 
@@ -365,6 +438,7 @@ def _refresh_cached_analysis_outputs(
         was_converted: Whether conversion ran during this load.
         source_unavailable: Whether this load used cache because source data
             was unavailable.
+        protected_cache_roots: Local cache roots that should survive cleanup.
 
     Returns:
         Resolved cached paths after optional saved-output refresh.
@@ -372,8 +446,10 @@ def _refresh_cached_analysis_outputs(
     refresh_cached_analysis_outputs(
         source_session_dir=source_dir,
         local_output_dir=paths.recording_data_path.parent,
+        protected_cache_roots=protected_cache_roots,
     )
     refreshed_paths = resolve_converted_paths(paths.recording_data_path)
+    _record_cache_use(refreshed_paths.recording_data_path.parent)
     return ResolvedNapariRecording(
         paths=refreshed_paths,
         output_route=_source_output_route(
@@ -389,12 +465,14 @@ def _localize_converted_paths_for_cache(
     *,
     paths: NapariRecordingPaths,
     selected: Path,
+    protected_cache_roots: tuple[Path, ...],
 ) -> ResolvedNapariRecording | None:
     """Copy explicitly selected converted files into the local cache when needed.
 
     Args:
         paths: Converted paths resolved from the user selection.
         selected: Original path selected by the user.
+        protected_cache_roots: Local cache roots that should survive cleanup.
 
     Returns:
         Localized paths, or ``None`` when caching does not apply.
@@ -437,8 +515,14 @@ def _localize_converted_paths_for_cache(
     refresh_cached_analysis_outputs(
         source_session_dir=source_dir,
         local_output_dir=output_dir,
+        protected_cache_roots=protected_cache_roots,
     )
     localized_paths = resolve_converted_paths(local_recording_path)
+    _record_cache_sync(local_root=output_dir, publish_root=publish_root)
+    _enforce_cache_limit(
+        output_dir,
+        protected_cache_roots=protected_cache_roots,
+    )
     return ResolvedNapariRecording(
         paths=localized_paths,
         output_route=default_output_route(
@@ -456,6 +540,69 @@ def _load_cache_config() -> TwopyConfig | None:
         return load_config(DEFAULT_CONFIG_PATH)
     except FileNotFoundError:
         return None
+
+
+def _record_cache_use(local_root: Path) -> None:
+    """Record cache use when cache configuration is available."""
+    config = _load_cache_config()
+    if config is None:
+        return
+    record_analysis_cache_use(config, local_root)
+
+
+def _record_cache_sync_plan(plan: AnalysisSyncPlan) -> None:
+    """Record a successful sync in the analysis-cache inventory."""
+    _record_cache_sync(local_root=plan.local_root, publish_root=plan.publish_root)
+
+
+def _record_cache_sync(*, local_root: Path, publish_root: Path) -> None:
+    """Record a successful sync when cache configuration is available."""
+    config = _load_cache_config()
+    if config is None:
+        return
+    record_analysis_cache_sync(
+        config,
+        local_root=local_root,
+        publish_root=publish_root,
+    )
+
+
+def _enforce_cache_limit(
+    protected_root: Path,
+    *,
+    protected_cache_roots: tuple[Path, ...] = (),
+) -> None:
+    """Apply configured cache cleanup after cache-growing load work."""
+    config = _load_cache_config()
+    if config is None:
+        return
+    enforce_analysis_cache_limit(
+        config,
+        protected_roots=(*protected_cache_roots, protected_root),
+    )
+
+
+def _convert_recording_to_twopy(
+    source_dir: Path,
+    output_dir: Path | None = None,
+    *,
+    protected_cache_roots: tuple[Path, ...] = (),
+) -> ConvertedRecording:
+    """Convert a recording, passing cache protections only when needed."""
+    if len(protected_cache_roots) == 0:
+        if output_dir is None:
+            return convert_recording_to_twopy(source_dir)
+        return convert_recording_to_twopy(source_dir, output_dir=output_dir)
+    if output_dir is None:
+        return convert_recording_to_twopy(
+            source_dir,
+            protected_cache_roots=protected_cache_roots,
+        )
+    return convert_recording_to_twopy(
+        source_dir,
+        output_dir=output_dir,
+        protected_cache_roots=protected_cache_roots,
+    )
 
 
 def _selected_converted_root(

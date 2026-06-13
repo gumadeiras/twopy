@@ -21,6 +21,12 @@ from twopy.analysis_cache import (
     build_analysis_sync_plan_from_roots,
     copy_analysis_sync_plan,
 )
+from twopy.cache_inventory import (
+    enforce_analysis_cache_limit,
+    record_analysis_cache_sync,
+    record_analysis_cache_write,
+)
+from twopy.config import load_config
 from twopy.converted import RecordingData
 from twopy.napari.display_paths import format_output_folder
 from twopy.napari.output_routing import NapariOutputRoute, recording_output_route
@@ -63,6 +69,7 @@ class ResponseExportState:
     response_map_data: ResponseMapData | None = None
     response_map_shared_limits: bool = True
     output_route: NapariOutputRoute | None = None
+    protected_cache_roots: tuple[Path, ...] = ()
 
 
 def create_response_export_tab(
@@ -237,6 +244,7 @@ def _sync_exported_paths(
     if isinstance(result, str) or recording is None:
         return None
     route = state.output_route or recording_output_route(recording)
+    _record_cache_write(route.local_root)
     sync_plan = build_analysis_sync_plan_from_roots(
         local_root=route.local_root,
         publish_root=route.publish_root,
@@ -249,9 +257,46 @@ def _sync_exported_paths(
     if sync_plan is None:
         return None
     try:
-        return copy_analysis_sync_plan(sync_plan)
+        sync_result = copy_analysis_sync_plan(sync_plan)
     except Exception as error:
         return f"sync failed: {error}"
+    _record_cache_sync(
+        local_root=sync_plan.local_root,
+        publish_root=sync_plan.publish_root,
+        protected_cache_roots=state.protected_cache_roots,
+    )
+    return sync_result
+
+
+def _record_cache_write(local_root: Path) -> None:
+    """Mark a cache entry dirty before export sync."""
+    try:
+        config = load_config()
+    except FileNotFoundError:
+        return
+    record_analysis_cache_write(config, local_root)
+
+
+def _record_cache_sync(
+    *,
+    local_root: Path,
+    publish_root: Path,
+    protected_cache_roots: tuple[Path, ...],
+) -> None:
+    """Mark a cache entry published after export sync."""
+    try:
+        config = load_config()
+    except FileNotFoundError:
+        return
+    record_analysis_cache_sync(
+        config,
+        local_root=local_root,
+        publish_root=publish_root,
+    )
+    enforce_analysis_cache_limit(
+        config,
+        protected_roots=(*protected_cache_roots, local_root),
+    )
 
 
 def _export_status(

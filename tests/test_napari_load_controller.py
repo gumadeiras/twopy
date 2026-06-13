@@ -194,7 +194,12 @@ def _patched_load_stages(
         Context manager that patches resolve, prepare, and apply stages.
     """
 
-    def resolve(path: Path) -> ResolvedRecordingLoad:
+    def resolve(
+        path: Path,
+        *,
+        protected_cache_roots: tuple[Path, ...] = (),
+    ) -> ResolvedRecordingLoad:
+        del protected_cache_roots
         if resolve_started is not None and not resolve_started.is_set():
             resolve_started.set()
             assert release_resolve is not None
@@ -220,7 +225,7 @@ def _patched_load_stages(
         remember_selected_folder: bool,
     ) -> AppliedRecordingLoad:
         del replace_selected, remember_selected_folder
-        state.loaded_recordings.append(cast(LoadedNapariRecording, object()))
+        state.loaded_recordings.append(_loaded_recording(prepared.selected_path))
         applied_paths.append(prepared.selected_path)
         return AppliedRecordingLoad(status_text=f"Loaded {prepared.selected_path}")
 
@@ -256,6 +261,21 @@ def _resolved_load(selected_path: Path) -> ResolvedRecordingLoad:
             ),
             was_converted=False,
         ),
+    )
+
+
+def _loaded_recording(path: Path) -> LoadedNapariRecording:
+    """Return a loaded-recording row with the path as its local root."""
+    return LoadedNapariRecording(
+        recording=cast(RecordingData, object()),
+        output_route=NapariOutputRoute(
+            local_root=path,
+            publish_root=path,
+        ),
+        roi_save_file=path / "rois.h5",
+        mean_image_layer=object(),
+        movie_layer=None,
+        roi_labels_layer=None,
     )
 
 

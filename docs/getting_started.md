@@ -39,6 +39,7 @@ The main keys you usually edit:
 - `data_paths` — list of folders that contain microscope recording folders. twopy checks them in order; the first one that has the recording wins.
 - `analysis_output` — where saved analyses end up. Use `source` to write into each recording's own `twopy/` folder, or a folder path to mirror the recording tree under it.
 - `analysis_caching` — keep `true` for normal use. twopy converts and writes locally first, then copies converted HDF5 files and saved analysis files to `analysis_output`.
+- `analysis_cache_max_gb` — maximum local analysis-cache size. The default is `33`; twopy removes old cache entries after writes only when their files already exist in the final output folder.
 
 `config.yml` is private to your machine and is never committed. For source checkouts, a local `./config.yml` still works and takes precedence over the user config file.
 

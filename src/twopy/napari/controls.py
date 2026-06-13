@@ -51,6 +51,7 @@ from twopy.napari.protocols import NapariViewer
 from twopy.napari.session import (
     LoadedNapariRecording,
     LoadedRecordingsPanel,
+    loaded_recording_cache_roots,
     render_loaded_recordings_panel,
     select_loaded_recording,
     selected_loaded_recording,
@@ -184,6 +185,7 @@ def add_twopy_magicgui_controls(
         state,
         on_finished=lambda result: _finish_async_recording_load(state, result),
     )
+    _set_response_plot_cache_protections(state, response_plot_widget)
     if recording is not None and mean_image_layer is not None:
         if startup_output_route is None:
             msg = "Startup recording route was not initialized."
@@ -241,6 +243,19 @@ def add_twopy_magicgui_controls(
         sidebar_widget=sidebar_widget,
         sidebar_dock_widget=sidebar_dock_widget,
     )
+
+
+def _set_response_plot_cache_protections(
+    state: NapariControlState,
+    response_plot_widget: object | None,
+) -> None:
+    """Let the response widget protect all loaded recordings during cleanup."""
+    if response_plot_widget is None:
+        return
+    setter = getattr(response_plot_widget, "set_protected_cache_roots", None)
+    if setter is None:
+        return
+    setter(lambda: loaded_recording_cache_roots(state.loaded_recordings))
 
 
 def _make_twopy_load_widget(state: NapariControlState) -> object:
