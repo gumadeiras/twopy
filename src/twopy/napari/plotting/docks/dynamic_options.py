@@ -61,6 +61,7 @@ def render_dynamic_options(
     visible_roi_indices: tuple[int, ...],
     visible_epoch_indices: tuple[int, ...],
     roi_labels: tuple[str, ...],
+    roi_keys: tuple[int, ...],
     roi_visibility: dict[int, bool],
     roi_colors: tuple[QColor, ...],
     roi_area_pixel_details: tuple[str, ...] | None,
@@ -90,9 +91,10 @@ def render_dynamic_options(
         manual_y_max: Manual y-axis maximum, if set.
         visible_roi_indices: ROI rows currently visible in plots.
         visible_epoch_indices: Epoch rows currently visible in plots.
-        roi_labels: ROI labels in plot order.
-        roi_visibility: Current ROI visibility state.
-        roi_colors: ROI colors in plot order.
+        roi_labels: ROI labels in Labels-layer order.
+        roi_keys: Labels-layer values matching ``roi_labels``.
+        roi_visibility: Current ROI visibility state by Labels value.
+        roi_colors: ROI colors in Labels-layer order.
         roi_area_pixel_details: Area text shown beside each ROI row, or
             ``None`` when no editable Labels layer is available.
         epoch_visibility: Current epoch visibility state.
@@ -140,6 +142,7 @@ def render_dynamic_options(
     render_roi_options(
         roi_options_layout=roi_options_layout,
         roi_labels=roi_labels,
+        roi_keys=roi_keys,
         roi_visibility=roi_visibility,
         roi_colors=roi_colors,
         roi_area_pixel_details=roi_area_pixel_details,
@@ -168,6 +171,7 @@ def render_roi_options(
     *,
     roi_options_layout: QVBoxLayout,
     roi_labels: tuple[str, ...],
+    roi_keys: tuple[int, ...],
     roi_visibility: dict[int, bool],
     roi_colors: tuple[QColor, ...],
     on_roi_visibility_change: Callable[[object, bool], None],
@@ -180,9 +184,10 @@ def render_roi_options(
 
     Args:
         roi_options_layout: Layout containing ROI visibility controls.
-        roi_labels: ROI labels in plot order.
-        roi_visibility: Current ROI visibility state.
-        roi_colors: ROI colors in plot order.
+        roi_labels: ROI labels in Labels-layer order.
+        roi_keys: Labels-layer values matching ``roi_labels``.
+        roi_visibility: Current ROI visibility state by Labels value.
+        roi_colors: ROI colors in Labels-layer order.
         on_roi_visibility_change: Callback for one ROI checkbox.
         on_roi_visibility_batch: Callback for ROI batch buttons.
         on_merge_selected_rois: Callback that combines checked ROI labels in
@@ -202,7 +207,7 @@ def render_roi_options(
         visibility=roi_visibility,
         on_change=on_roi_visibility_change,
         on_change_batch=on_roi_visibility_batch,
-        keys=tuple(range(len(roi_labels))),
+        keys=roi_keys,
         colors=roi_colors,
         details=roi_area_pixel_details,
         detail_header="area (px)" if roi_area_pixel_details is not None else None,

@@ -36,3 +36,5 @@ For dense grids that cover the whole crop, prefer **shared y-stripe P%** backgro
 ## Persistence
 
 ROI masks are saved in twopy's own HDF5 format independently from napari. If a `rois.h5` file sits beside the converted recording, twopy loads it automatically when you open the recording.
+
+When you save from the app, `rois.h5` also records the ROI mode and generator settings for the current masks. Generated modes save only the settings that apply to that mode, such as watershed **Min pixels** and **Smoothing** or grid size and micron-calibration fields. If you edit generated masks by hand before saving, the file marks that the saved masks changed after generation. **Reload saved analysis** reloads the masks, restores those ROIs-tab settings, and shows that edit marker. Older ROI files without this metadata still load their masks normally and leave the ROI mode at the default manual setting.

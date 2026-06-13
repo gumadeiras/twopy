@@ -22,6 +22,7 @@ from tests.napari_support import (
     RoiGenerationOptions,
     _combo_data,
     _combo_texts,
+    _FakeLabelEvents,
     _FakeLayer,
     _two_roi_response_plot_data,
     _write_converted_recording,
@@ -39,6 +40,11 @@ from tests.napari_support import (
     unittest,
     visibility_options_widget,
 )
+from twopy.napari.plotting.roi_generation import (
+    roi_generation_edited_after_generation,
+    roi_generation_metadata_from_options,
+    roi_generation_options_from_metadata,
+)
 from twopy.napari.roi import (
     merge_roi_label_values_on_layer,
     next_roi_label_value,
@@ -48,6 +54,135 @@ from twopy.napari.roi import (
 
 class NapariRoiGenerationTest(NapariAdapterTestCase):
     """Napari ROI generation tests."""
+
+    def test_roi_generation_metadata_round_trips_mode_specific_settings(self) -> None:
+        """Confirm saved ROI-generation metadata restores all generated modes.
+
+        Inputs: representative grid, watershed, and response-watershed options.
+        Outputs: metadata contains only mode-relevant settings and parses back
+        to equivalent options for those settings.
+        """
+        cases = (
+            RoiGenerationOptions(
+                roi_mode="manual",
+                units="pixels",
+                grid_size_pixels=16,
+                micron_grid_size=10.0,
+                rig="",
+                calibration_mode=0,
+                scanner="",
+                zoom=1.0,
+                allow_extrapolation=True,
+                watershed_min_pixels=1,
+                watershed_smoothing_sigma=0.0,
+            ),
+            RoiGenerationOptions(
+                roi_mode="grid",
+                units="pixels",
+                grid_size_pixels=24,
+                micron_grid_size=10.0,
+                rig="",
+                calibration_mode=0,
+                scanner="",
+                zoom=1.0,
+                allow_extrapolation=True,
+                watershed_min_pixels=1,
+                watershed_smoothing_sigma=0.0,
+            ),
+            RoiGenerationOptions(
+                roi_mode="grid",
+                units="microns",
+                grid_size_pixels=16,
+                micron_grid_size=8.5,
+                rig="TestRig",
+                calibration_mode=2,
+                scanner="Galvo",
+                zoom=3.25,
+                allow_extrapolation=False,
+                watershed_min_pixels=1,
+                watershed_smoothing_sigma=0.0,
+            ),
+            RoiGenerationOptions(
+                roi_mode="watershed",
+                units="pixels",
+                grid_size_pixels=16,
+                micron_grid_size=10.0,
+                rig="",
+                calibration_mode=0,
+                scanner="",
+                zoom=1.0,
+                allow_extrapolation=True,
+                watershed_min_pixels=15,
+                watershed_smoothing_sigma=0.75,
+            ),
+            RoiGenerationOptions(
+                roi_mode="response_watershed",
+                units="pixels",
+                grid_size_pixels=16,
+                micron_grid_size=10.0,
+                rig="",
+                calibration_mode=0,
+                scanner="",
+                zoom=1.0,
+                allow_extrapolation=True,
+                watershed_min_pixels=1,
+                watershed_smoothing_sigma=0.0,
+                response_watershed_min_pixels=9,
+                response_watershed_smoothing_sigma=1.25,
+                response_watershed_fill_holes=False,
+                response_watershed_closing_radius=2,
+            ),
+        )
+
+        for options in cases:
+            with self.subTest(mode=options.roi_mode, units=options.units):
+                metadata = roi_generation_metadata_from_options(options)
+                loaded = roi_generation_options_from_metadata(metadata)
+
+                self.assertIsNotNone(loaded)
+                if loaded is None:
+                    self.fail("metadata did not parse")
+                self.assertEqual(loaded.roi_mode, options.roi_mode)
+                for key in metadata:
+                    if key in {"roi_mode", "units"}:
+                        continue
+                    self.assertEqual(getattr(loaded, key), metadata[key])
+
+    def test_roi_generation_metadata_marks_generated_masks_edited_by_hand(
+        self,
+    ) -> None:
+        """Confirm saved provenance can mark post-generation ROI edits.
+
+        Inputs: watershed options plus the edit marker.
+        Outputs: metadata carries the marker separately from generation
+        settings and the parser reads it back as a boolean.
+        """
+        options = RoiGenerationOptions(
+            roi_mode="watershed",
+            units="pixels",
+            grid_size_pixels=16,
+            micron_grid_size=10.0,
+            rig="",
+            calibration_mode=0,
+            scanner="",
+            zoom=1.0,
+            allow_extrapolation=True,
+            watershed_min_pixels=15,
+            watershed_smoothing_sigma=0.75,
+        )
+
+        metadata = roi_generation_metadata_from_options(
+            options,
+            edited_after_generation=True,
+        )
+
+        self.assertEqual(metadata["edited_after_generation"], True)
+        self.assertTrue(roi_generation_edited_after_generation(metadata))
+        self.assertFalse(
+            roi_generation_edited_after_generation(
+                roi_generation_metadata_from_options(options),
+            )
+        )
 
     def test_roi_visibility_options_show_color_swatches(self) -> None:
         """Confirm ROI visibility rows include color squares.
@@ -185,7 +320,20 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
             _two_roi_response_plot_data(),
             reset_axes=True,
         )
-        response_widget._set_roi_visibility(1, False)
+        response_widget._roi_generation_options = RoiGenerationOptions(
+            roi_mode="watershed",
+            units="pixels",
+            grid_size_pixels=16,
+            micron_grid_size=10.0,
+            rig="",
+            calibration_mode=0,
+            scanner="",
+            zoom=1.0,
+            allow_extrapolation=True,
+            watershed_min_pixels=15,
+            watershed_smoothing_sigma=0.0,
+        )
+        response_widget._set_roi_visibility(2, False)
         remove_button = next(
             button
             for button in response_widget.options_widget().findChildren(QPushButton)
@@ -205,6 +353,7 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
         }
         self.assertNotIn("roi_0001", checkbox_texts)
         self.assertIn("roi_0002", checkbox_texts)
+        self.assertTrue(response_widget._roi_generation_edited_after_generation)
 
     def test_roi_tab_merge_selected_combines_checked_rois(self) -> None:
         """Confirm the ROI tab can merge selected Labels values.
@@ -228,6 +377,19 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
         response_widget.set_response_plot_data(
             _two_roi_response_plot_data(),
             reset_axes=True,
+        )
+        response_widget._roi_generation_options = RoiGenerationOptions(
+            roi_mode="watershed",
+            units="pixels",
+            grid_size_pixels=16,
+            micron_grid_size=10.0,
+            rig="",
+            calibration_mode=0,
+            scanner="",
+            zoom=1.0,
+            allow_extrapolation=True,
+            watershed_min_pixels=15,
+            watershed_smoothing_sigma=0.0,
         )
         buttons = response_widget.options_widget().findChildren(QPushButton)
         button_texts = [button.text() for button in buttons]
@@ -253,6 +415,7 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
         self.assertIn("roi_0001", checkbox_texts)
         self.assertNotIn("roi_0002", checkbox_texts)
         self.assertEqual(update_requests, ["update"])
+        self.assertTrue(response_widget._roi_generation_edited_after_generation)
 
     def test_roi_tab_create_grid_replaces_labels_layer(self) -> None:
         """Confirm the ROIs tab can create editable grid ROI labels.
@@ -618,6 +781,114 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
             response_widget._update_status_label.text(),
         )
 
+    def test_generated_rois_rebuild_roi_table_before_live_update(self) -> None:
+        """Confirm generated labels replace stale ROI table rows immediately.
+
+        Inputs: old plot data for ``roi_0002`` and a generated label image with
+            only ``roi_0001``.
+        Outputs: the ROIs tab follows the current Labels layer before async live
+            analysis returns new plot data.
+        """
+        from twopy.napari.plotting.roi_generation.actions import GeneratedRoiLabels
+
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            recording = load_converted_recording(
+                _write_converted_recording(Path(temp_dir)),
+            )
+            layer = _FakeLayer(
+                name="rois",
+                data=np.array([[2, 2], [2, 2]], dtype=np.int64),
+                options={},
+            )
+            response_widget = cast(Any, create_response_plot_widget(None))
+            response_widget._live_controller.request_update = lambda: None
+            response_widget.load_recording(recording)
+            response_widget.set_roi_labels_layer(layer)
+            response_widget.set_response_plot_data(
+                _two_roi_response_plot_data(),
+                reset_axes=True,
+            )
+            options = RoiGenerationOptions(
+                roi_mode="watershed",
+                units="pixels",
+                grid_size_pixels=16,
+                micron_grid_size=10.0,
+                rig="",
+                calibration_mode=0,
+                scanner="",
+                zoom=1.0,
+                allow_extrapolation=True,
+                watershed_min_pixels=15,
+                watershed_smoothing_sigma=0.0,
+            )
+
+            with patch(
+                "twopy.napari.plotting.docks.response_plot_widget.generate_roi_labels",
+                return_value=GeneratedRoiLabels(
+                    label_image=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                    status_text="Created watershed ROIs: 226 ROIs.",
+                ),
+            ):
+                response_widget.create_generated_rois(options)
+
+        checkbox_texts = {
+            checkbox.text()
+            for checkbox in response_widget.options_widget().findChildren(QCheckBox)
+        }
+        label_texts = {
+            label.text()
+            for label in response_widget.options_widget().findChildren(QLabel)
+        }
+        self.assertEqual(
+            response_widget._update_status_label.text(),
+            "Created watershed ROIs: 226 ROIs.",
+        )
+        self.assertIsNone(response_widget._plot_data)
+        self.assertIn("roi_0001", checkbox_texts)
+        self.assertNotIn("roi_0002", checkbox_texts)
+        self.assertIn("1 px", label_texts)
+        self.assertNotIn("4 px", label_texts)
+
+    def test_manual_label_edit_rebuilds_roi_table_before_live_update(self) -> None:
+        """Confirm Labels-layer edits refresh ROI rows before live analysis.
+
+        Inputs: old plot data plus a Labels layer changed to a different label
+            value.
+        Outputs: the ROIs tab follows the edited Labels layer as soon as the
+            Labels data event fires.
+        """
+        _ = QApplication.instance() or QApplication([])
+        events = _FakeLabelEvents()
+        layer = _FakeLayer(
+            name="rois",
+            data=np.array([[1, 1], [0, 0]], dtype=np.int64),
+            options={},
+            events=events,
+        )
+        response_widget = cast(Any, create_response_plot_widget(None))
+        response_widget.set_roi_labels_layer(layer)
+        response_widget.set_response_plot_data(
+            _two_roi_response_plot_data(),
+            reset_axes=True,
+        )
+
+        layer.data = np.array([[3, 0], [0, 0]], dtype=np.int64)
+        events.data.emit()
+
+        checkbox_texts = {
+            checkbox.text()
+            for checkbox in response_widget.options_widget().findChildren(QCheckBox)
+        }
+        label_texts = {
+            label.text()
+            for label in response_widget.options_widget().findChildren(QLabel)
+        }
+        self.assertIn("roi_0003", checkbox_texts)
+        self.assertNotIn("roi_0001", checkbox_texts)
+        self.assertNotIn("roi_0002", checkbox_texts)
+        self.assertIn("1 px", label_texts)
+
     def test_roi_generation_controls_filter_calibration_choices(self) -> None:
         """Confirm calibration dropdowns expose only valid measured groups.
 
@@ -682,6 +953,78 @@ class NapariRoiGenerationTest(NapariAdapterTestCase):
 
         self.assertEqual(_combo_data(widget._mode), (None, 5))
         self.assertEqual(_combo_texts(widget._scanner), ("Select scanner",))
+
+    def test_roi_generation_restore_does_not_fall_back_to_active_profile(
+        self,
+    ) -> None:
+        """Confirm saved micron settings do not use unrelated profile defaults.
+
+        Inputs: controls already prefilled for one recording profile, then
+        saved micron-grid settings for a missing calibration.
+        Outputs: calibration fields remain unselected and generation is
+        disabled instead of showing the stale recording profile.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            recording_path = _write_converted_recording(Path(temp_dir))
+            with h5py.File(recording_path, "a") as h5_file:
+                h5_file["metadata"].attrs["configName"] = (
+                    "256x128_0.5ms_fastAcquisition"
+                )
+                h5_file["run"].attrs["rig_name"] = "day rig"
+            recording = load_converted_recording(recording_path)
+            widget = RoiGenerationControls(
+                (
+                    PixelCalibrationRow(
+                        "day",
+                        2,
+                        "galvo",
+                        1.0,
+                        0.5,
+                        date(2023, 12, 14),
+                    ),
+                ),
+                (
+                    PixelCalibrationProfileMapping(
+                        "256x128_0.5ms_fastAcquisition",
+                        2,
+                        "galvo",
+                        {},
+                    ),
+                ),
+                on_generate=lambda _options: None,
+            )
+            widget.set_recording(recording)
+            widget._roi_mode.setCurrentIndex(1)
+            widget._units.setCurrentIndex(1)
+
+        self.assertEqual(widget._rig.currentText(), "day")
+        self.assertEqual(widget._mode.currentData(), 2)
+        self.assertEqual(widget._scanner.currentText(), "galvo")
+
+        widget.set_options(
+            RoiGenerationOptions(
+                roi_mode="grid",
+                units="microns",
+                grid_size_pixels=16,
+                micron_grid_size=12.5,
+                rig="missing",
+                calibration_mode=9,
+                scanner="resonant",
+                zoom=3.0,
+                allow_extrapolation=False,
+                watershed_min_pixels=1,
+                watershed_smoothing_sigma=0.0,
+            )
+        )
+
+        self.assertIsNone(widget._rig.currentData())
+        self.assertIsNone(widget._mode.currentData())
+        self.assertIsNone(widget._scanner.currentData())
+        self.assertEqual(
+            widget._status.text(), "Saved ROI generation calibration is not available."
+        )
+        self.assertFalse(widget._create_button.isEnabled())
 
     def test_roi_tab_remove_selected_handles_empty_roi_selection(self) -> None:
         """Confirm deleting all selected ROIs leaves a stable empty ROI list.

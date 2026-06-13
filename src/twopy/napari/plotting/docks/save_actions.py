@@ -7,6 +7,7 @@ This module keeps persistence side effects out of the response plot widget so
 the widget only coordinates UI state and displays the result.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from twopy.analysis.response_maps import ResponseMapData, save_response_map_data
 from twopy.analysis.workflow import analyze_recording_responses
 from twopy.analysis_cache import AnalysisSyncPlan, build_analysis_sync_plan_from_roots
 from twopy.filenames import RESPONSE_HEATMAPS_FILENAME
+from twopy.hdf5_utils import Hdf5Scalar
 from twopy.napari.output_routing import (
     NapariOutputRoute,
     recording_output_route,
@@ -57,6 +59,7 @@ def save_current_roi_analysis(
     analysis_path: Path | None,
     output_route: NapariOutputRoute | None = None,
     response_map_data: ResponseMapData | None = None,
+    roi_generation_metadata: Mapping[str, Hdf5Scalar] | None = None,
 ) -> SaveAnalysisResult:
     """Persist current Labels ROIs and run response analysis.
 
@@ -67,6 +70,8 @@ def save_current_roi_analysis(
         output_route: Local and published output folders for this recording.
         response_map_data: Optional recording-level heatmaps to persist beside
             ROI analysis outputs.
+        roi_generation_metadata: Optional ROI-generation provenance written to
+            the saved ROI HDF5 file.
 
     Returns:
         Saved output paths and status text for the Metadata tab.
@@ -77,7 +82,11 @@ def save_current_roi_analysis(
     route = output_route or recording_output_route(request.recording)
     roi_output_path = resolved_roi_save_file(roi_save_file, request.recording)
     analysis_output_path = resolved_analysis_path(analysis_path, request.recording)
-    save_roi_set(request.roi_set, roi_output_path)
+    save_roi_set(
+        request.roi_set,
+        roi_output_path,
+        generation_metadata=roi_generation_metadata,
+    )
     dff_options = request.delta_f_over_f_options
     pre_window_seconds, post_window_seconds = request.response_window_seconds()
     run = analyze_recording_responses(

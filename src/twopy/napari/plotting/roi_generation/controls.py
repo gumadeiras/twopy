@@ -24,6 +24,14 @@ from qtpy.QtWidgets import (
 
 from twopy.converted import RecordingData
 from twopy.napari.plotting.roi_generation.options import (
+    DEFAULT_GRID_SIZE_PIXELS,
+    DEFAULT_MICRON_GRID_SIZE,
+    DEFAULT_RESPONSE_WATERSHED_CLOSING_RADIUS,
+    DEFAULT_RESPONSE_WATERSHED_FILL_HOLES,
+    DEFAULT_RESPONSE_WATERSHED_MIN_PIXELS,
+    DEFAULT_RESPONSE_WATERSHED_SMOOTHING_SIGMA,
+    DEFAULT_WATERSHED_MIN_PIXELS,
+    DEFAULT_WATERSHED_SMOOTHING_SIGMA,
     RoiGenerationMode,
     RoiGenerationOptions,
     RoiGenerationUnits,
@@ -100,11 +108,11 @@ class RoiGenerationControls(QGroupBox):
         self._units.addItem("microns", "microns")
         self._pixel_grid_size = QSpinBox()
         self._pixel_grid_size.setRange(1, 2048)
-        self._pixel_grid_size.setValue(16)
+        self._pixel_grid_size.setValue(DEFAULT_GRID_SIZE_PIXELS)
         self._micron_grid_size = QDoubleSpinBox()
         self._micron_grid_size.setRange(0.001, 10000.0)
         self._micron_grid_size.setDecimals(3)
-        self._micron_grid_size.setValue(10.0)
+        self._micron_grid_size.setValue(DEFAULT_MICRON_GRID_SIZE)
         self._rig = QComboBox()
         self._mode = QComboBox()
         self._scanner = QComboBox()
@@ -115,23 +123,31 @@ class RoiGenerationControls(QGroupBox):
         self._allow_extrapolation.setChecked(True)
         self._watershed_min_pixels = QSpinBox()
         self._watershed_min_pixels.setRange(1, 1_000_000)
-        self._watershed_min_pixels.setValue(1)
+        self._watershed_min_pixels.setValue(DEFAULT_WATERSHED_MIN_PIXELS)
         self._watershed_smoothing_sigma = QDoubleSpinBox()
         self._watershed_smoothing_sigma.setRange(0.0, 100.0)
         self._watershed_smoothing_sigma.setDecimals(3)
-        self._watershed_smoothing_sigma.setValue(0.0)
+        self._watershed_smoothing_sigma.setValue(DEFAULT_WATERSHED_SMOOTHING_SIGMA)
         self._response_watershed_min_pixels = QSpinBox()
         self._response_watershed_min_pixels.setRange(1, 1_000_000)
-        self._response_watershed_min_pixels.setValue(5)
+        self._response_watershed_min_pixels.setValue(
+            DEFAULT_RESPONSE_WATERSHED_MIN_PIXELS
+        )
         self._response_watershed_smoothing_sigma = QDoubleSpinBox()
         self._response_watershed_smoothing_sigma.setRange(0.0, 100.0)
         self._response_watershed_smoothing_sigma.setDecimals(3)
-        self._response_watershed_smoothing_sigma.setValue(0.0)
+        self._response_watershed_smoothing_sigma.setValue(
+            DEFAULT_RESPONSE_WATERSHED_SMOOTHING_SIGMA
+        )
         self._response_watershed_fill_holes = QCheckBox("Fill response holes")
-        self._response_watershed_fill_holes.setChecked(True)
+        self._response_watershed_fill_holes.setChecked(
+            DEFAULT_RESPONSE_WATERSHED_FILL_HOLES
+        )
         self._response_watershed_closing_radius = QSpinBox()
         self._response_watershed_closing_radius.setRange(0, 100)
-        self._response_watershed_closing_radius.setValue(0)
+        self._response_watershed_closing_radius.setValue(
+            DEFAULT_RESPONSE_WATERSHED_CLOSING_RADIUS
+        )
         self._status = QLabel("")
         self._status.setWordWrap(True)
         self._create_button = QPushButton("Create ROIs")
@@ -240,6 +256,58 @@ class RoiGenerationControls(QGroupBox):
             ),
         )
 
+    def set_options(self, options: RoiGenerationOptions) -> None:
+        """Update controls from saved ROI-generation settings.
+
+        Args:
+            options: Generation settings read from a saved ROI file.
+
+        Returns:
+            None.
+
+        Reloading a saved analysis should show the mode and settings that made
+        the current ROI masks. The controls remain normal editable widgets
+        after this method applies the saved values.
+        """
+        _set_combo_data(self._roi_mode, options.roi_mode)
+        if options.roi_mode == "grid":
+            _set_combo_data(self._units, options.units)
+            if options.units == "pixels":
+                self._pixel_grid_size.setValue(options.grid_size_pixels)
+                self._select_no_calibration_group()
+            else:
+                self._micron_grid_size.setValue(options.micron_grid_size)
+                self._zoom.setValue(options.zoom)
+                self._allow_extrapolation.setChecked(options.allow_extrapolation)
+                self._select_saved_calibration_fields(options)
+        elif options.roi_mode == "watershed":
+            self._watershed_min_pixels.setValue(options.watershed_min_pixels)
+            self._watershed_smoothing_sigma.setValue(
+                options.watershed_smoothing_sigma,
+            )
+        elif options.roi_mode == "response_watershed":
+            self._response_watershed_min_pixels.setValue(
+                options.response_watershed_min_pixels,
+            )
+            self._response_watershed_smoothing_sigma.setValue(
+                options.response_watershed_smoothing_sigma,
+            )
+            self._response_watershed_fill_holes.setChecked(
+                options.response_watershed_fill_holes,
+            )
+            self._response_watershed_closing_radius.setValue(
+                options.response_watershed_closing_radius,
+            )
+        self._sync_mode()
+        if (
+            options.roi_mode == "grid"
+            and options.units == "microns"
+            and not self._can_generate()
+        ):
+            self.set_status("Saved ROI generation calibration is not available.")
+        else:
+            self._clear_status()
+
     def set_status(self, text: str) -> None:
         """Show generation status in the ROIs tab.
 
@@ -261,6 +329,18 @@ class RoiGenerationControls(QGroupBox):
 
     def _sync_calibration_mode_choices(self) -> None:
         """Keep mode choices valid for the selected calibration rig."""
+        self._replace_calibration_mode_choices(
+            previous=self._mode.currentData(),
+            use_profile_fallback=True,
+        )
+
+    def _replace_calibration_mode_choices(
+        self,
+        *,
+        previous: object,
+        use_profile_fallback: bool,
+    ) -> None:
+        """Replace mode choices for the selected rig."""
         rig = self._rig.currentData()
         modes = tuple(
             (_mode_label(mode, self._mode_labels), mode)
@@ -268,19 +348,35 @@ class RoiGenerationControls(QGroupBox):
                 {row.mode for row in self._calibrations if row.rig == rig},
             )
         )
-        previous = self._mode.currentData()
-        if previous is None and self._active_profile is not None:
-            previous = self._active_profile.mode
+        selected = previous
+        if (
+            selected is None
+            and use_profile_fallback
+            and self._active_profile is not None
+        ):
+            selected = self._active_profile.mode
         _replace_combo_items(
             self._mode,
             ((_MODE_PLACEHOLDER, None), *modes),
-            previous=previous,
+            previous=selected,
         )
         self._sync_calibration_scanner_choices()
         self._sync_create_button()
 
     def _sync_calibration_scanner_choices(self) -> None:
         """Keep scanner choices valid for the selected rig and mode."""
+        self._replace_calibration_scanner_choices(
+            previous=self._scanner.currentData(),
+            use_profile_fallback=True,
+        )
+
+    def _replace_calibration_scanner_choices(
+        self,
+        *,
+        previous: object,
+        use_profile_fallback: bool,
+    ) -> None:
+        """Replace scanner choices for the selected rig and mode."""
         rig = self._rig.currentData()
         mode = self._mode.currentData()
         scanners = tuple(
@@ -291,13 +387,17 @@ class RoiGenerationControls(QGroupBox):
                 if row.rig == rig and row.mode == mode
             )
         )
-        previous = self._scanner.currentData()
-        if previous is None and self._active_profile is not None:
-            previous = self._active_profile.scanner
+        selected = previous
+        if (
+            selected is None
+            and use_profile_fallback
+            and self._active_profile is not None
+        ):
+            selected = self._active_profile.scanner
         _replace_combo_items(
             self._scanner,
             ((_SCANNER_PLACEHOLDER, None), *scanners),
-            previous=previous,
+            previous=selected,
         )
         self._sync_create_button()
 
@@ -367,6 +467,27 @@ class RoiGenerationControls(QGroupBox):
             self._sync_calibration_scanner_choices()
         if profile.scanner is not None:
             _set_combo_text(self._scanner, profile.scanner)
+        self._sync_create_button()
+
+    def _select_saved_calibration_fields(self, options: RoiGenerationOptions) -> None:
+        """Select calibration fields from saved micron-grid settings."""
+        _set_combo_data(self._rig, None)
+        self._replace_calibration_mode_choices(
+            previous=None,
+            use_profile_fallback=False,
+        )
+        if not _set_combo_text(self._rig, options.rig):
+            self._sync_create_button()
+            return
+        self._replace_calibration_mode_choices(
+            previous=options.calibration_mode,
+            use_profile_fallback=False,
+        )
+        self._replace_calibration_scanner_choices(
+            previous=options.scanner,
+            use_profile_fallback=False,
+        )
+        _set_combo_text(self._scanner, options.scanner)
         self._sync_create_button()
 
     def _sync_mode(self) -> None:

@@ -424,7 +424,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             response_widget._response_map_area.epoch_map_panels[1].isHidden()
         )
 
-    def test_roi_visibility_toggle_is_idempotent_by_row_index(self) -> None:
+    def test_roi_visibility_toggle_is_idempotent_by_label_value(self) -> None:
         """Confirm ROI visibility does not depend on unique display labels.
 
         Inputs: one plot data object with duplicate ROI names.
@@ -454,10 +454,10 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         response_widget = cast(Any, create_response_plot_widget(None))
         response_widget.set_response_plot_data(plot_data, reset_axes=True)
 
-        response_widget._set_roi_visibility(1, False)
+        response_widget._set_roi_visibility(2, False)
         self.assertEqual(response_widget._visible_roi_indices(), (0,))
 
-        response_widget._set_roi_visibility(1, True)
+        response_widget._set_roi_visibility(2, True)
         self.assertEqual(response_widget._visible_roi_indices(), (0, 1))
 
     def test_roi_visibility_repaints_without_rebuilding_epoch_layout(self) -> None:
@@ -487,7 +487,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             clear_calls.append("clear")
         )
 
-        response_widget._set_roi_visibility(1, False)
+        response_widget._set_roi_visibility(2, False)
 
         self.assertEqual(clear_calls, [])
         self.assertEqual(response_widget._visible_roi_indices(), (0,))

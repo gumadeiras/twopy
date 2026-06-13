@@ -66,6 +66,28 @@ class ResponsePlotReceiver(Protocol):
         """
         ...
 
+    def refresh_roi_options_from_labels(self) -> None:
+        """Refresh ROI rows from the current Labels layer.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+        """
+        ...
+
+    def mark_roi_labels_edited(self) -> None:
+        """Record that the user edited the current ROI Labels layer.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+        """
+        ...
+
 
 @dataclass(frozen=True)
 class _LiveResponseJob:
@@ -228,11 +250,29 @@ class LiveResponseController:
         if self._is_shutdown:
             return
         self._version += 1
+        if self._plot_widget is not None:
+            self._plot_widget.refresh_roi_options_from_labels()
         self._cancel_active_job()
         if self._debounce_ms <= 0:
             self._start_latest_job()
             return
         self._debounce_timer.start(self._debounce_ms)
+
+    def request_roi_edit_update(self, *_event_args: object) -> None:
+        """Schedule a live response update after a user ROI edit.
+
+        Args:
+            _event_args: Optional napari event arguments. They are ignored
+                because the Labels layer itself is the source of truth.
+
+        Returns:
+            None.
+        """
+        if self._is_shutdown:
+            return
+        if self._plot_widget is not None:
+            self._plot_widget.mark_roi_labels_edited()
+        self.request_update(*_event_args)
 
     def update_now(self) -> None:
         """Compute responses immediately on the GUI thread.
@@ -411,12 +451,12 @@ class LiveResponseController:
             if emitter is None:
                 continue
             connected = cast(NapariEventEmitter, emitter)
-            connected.connect(self.request_update)
+            connected.connect(self.request_roi_edit_update)
             self._connections.append(connected)
 
     def _disconnect_layer_events(self) -> None:
         """Disconnect all Labels event handlers owned by the controller."""
         for connection in self._connections:
             with suppress(RuntimeError, ValueError):
-                connection.disconnect(self.request_update)
+                connection.disconnect(self.request_roi_edit_update)
         self._connections.clear()

@@ -18,6 +18,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+import numpy as np
 import numpy.typing as npt
 from qtpy.QtCore import QTimer
 from qtpy.QtGui import QCloseEvent, QColor
@@ -101,7 +102,6 @@ from twopy.napari.plotting.docks.visibility_state import (
     epoch_visibility_signature,
     roi_label_values,
     roi_labels_from_plot_data,
-    row_visibility,
     set_row_visibility,
     set_row_visibility_batch,
     visible_indices,
@@ -110,7 +110,11 @@ from twopy.napari.plotting.export_controls import ResponseExportState
 from twopy.napari.plotting.label_visibility import apply_roi_visibility_to_labels_layer
 from twopy.napari.plotting.roi_generation import (
     RoiGenerationOptions,
+    default_roi_generation_options,
     generate_roi_labels,
+    roi_generation_edited_after_generation,
+    roi_generation_metadata_from_options,
+    roi_generation_options_from_metadata,
 )
 from twopy.napari.plotting.widgets import (
     clear_layout,
@@ -176,6 +180,9 @@ class _ResponsePlotWidget(QWidget):
         self._show_sem = False
         self._plot_size = 300
         self._roi_visibility: dict[int, bool] = {}
+        self._roi_generation_options = default_roi_generation_options()
+        self._roi_generation_edited_after_generation = False
+        self._suppress_roi_edit_tracking = False
         self._correlation_roi_visibility: dict[int, bool] | None = None
         self._roi_colors: tuple[QColor, ...] = ()
         self._epoch_visibility: dict[int, bool] = {}
@@ -376,7 +383,42 @@ class _ResponsePlotWidget(QWidget):
         """
         self._roi_labels_layer = roi_labels_layer
         self._live_controller.set_context(self._recording, self._roi_labels_layer)
+        self.refresh_roi_options_from_labels()
         self._render_plots()
+
+    def refresh_roi_options_from_labels(self) -> None:
+        """Refresh ROIs-tab rows from the current editable Labels layer.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+        """
+        label_values = self._roi_label_values()
+        self._roi_visibility = {
+            label_value: self._roi_visibility.get(label_value, True)
+            for label_value in label_values
+        }
+        self._render_roi_options()
+
+    def mark_roi_labels_edited(self) -> None:
+        """Record a user edit to generated ROI Labels.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+
+        Saved ROI masks are always the authority. This marker keeps the saved
+        generation metadata honest by noting when generated masks were changed
+        by hand after creation.
+        """
+        if self._suppress_roi_edit_tracking:
+            return
+        if self._roi_generation_options.roi_mode != "manual":
+            self._roi_generation_edited_after_generation = True
 
     def set_roi_save_file(self, roi_save_file: Path | None) -> None:
         """Store the ROI HDF5 path used by Save Analysis.
@@ -413,6 +455,8 @@ class _ResponsePlotWidget(QWidget):
         """
         self._recording = None
         self._output_route = None
+        self._roi_generation_options = default_roi_generation_options()
+        self._roi_generation_edited_after_generation = False
         self._roi_generation_widget.set_recording(None)
         self._analysis_path = None
         self._plot_data = None
@@ -462,6 +506,8 @@ class _ResponsePlotWidget(QWidget):
         self._recording = None
         self._plot_data = None
         self._response_map_data = None
+        self._roi_generation_options = default_roi_generation_options()
+        self._roi_generation_edited_after_generation = False
         self._invalidate_response_map_jobs()
         self._reset_plot_state()
         self._response_map_options_widget.set_spatial_shape(
@@ -542,18 +588,42 @@ class _ResponsePlotWidget(QWidget):
                 options,
                 self._pixel_calibrations,
             )
-            set_roi_label_image_on_layer(
-                self._roi_labels_layer,
-                self._recording,
-                generated.label_image,
-            )
+            self._set_roi_label_image_from_program(generated.label_image)
         except ValueError as error:
             self._set_roi_generation_status(str(error))
             return
 
         self._set_roi_generation_status(generated.status_text)
         self._update_status_label.setText(generated.status_text)
+        self._roi_generation_options = options
+        self._roi_generation_edited_after_generation = False
+        self._invalidate_response_state_after_roi_replacement()
         self._live_controller.request_update()
+
+    def _set_roi_label_image_from_program(
+        self,
+        label_image: npt.NDArray[np.int64],
+    ) -> None:
+        """Replace ROI Labels without marking a manual edit.
+
+        Args:
+            label_image: Full-frame ROI Labels image.
+
+        Returns:
+            None.
+        """
+        if self._recording is None or self._roi_labels_layer is None:
+            msg = "No ROI Labels layer is available."
+            raise ValueError(msg)
+        self._suppress_roi_edit_tracking = True
+        try:
+            set_roi_label_image_on_layer(
+                self._roi_labels_layer,
+                self._recording,
+                label_image,
+            )
+        finally:
+            self._suppress_roi_edit_tracking = False
 
     def save_analysis_and_rois(self) -> None:
         """Save current ROI labels plus persisted analysis outputs.
@@ -577,6 +647,12 @@ class _ResponsePlotWidget(QWidget):
                 analysis_path=self._analysis_path,
                 output_route=self._output_route,
                 response_map_data=self._response_map_data,
+                roi_generation_metadata=roi_generation_metadata_from_options(
+                    self._roi_generation_options,
+                    edited_after_generation=(
+                        self._roi_generation_edited_after_generation
+                    ),
+                ),
             )
         except ValueError as error:
             self._set_status(str(error))
@@ -758,11 +834,13 @@ class _ResponsePlotWidget(QWidget):
             if self._roi_labels_layer is None or self._recording is None:
                 msg = "Custom workflow returned ROIs, but no Labels layer is available."
                 raise ValueError(msg)
-            set_roi_label_image_on_layer(
-                self._roi_labels_layer,
-                self._recording,
-                roi_set_to_label_image(result.roi_set),
+            self._set_roi_label_image_from_program(
+                roi_set_to_label_image(result.roi_set)
             )
+            self._roi_generation_options = default_roi_generation_options()
+            self._roi_generation_edited_after_generation = False
+            self._roi_generation_widget.set_options(self._roi_generation_options)
+            self._invalidate_response_state_after_roi_replacement()
             self._live_controller.request_update()
         if result.response_plot_data is not None:
             self.set_response_plot_data(result.response_plot_data, reset_axes=True)
@@ -774,14 +852,16 @@ class _ResponsePlotWidget(QWidget):
         visible_roi_indices: tuple[int, ...],
     ) -> None:
         """Apply workflow-selected ROI rows to the current plot state."""
-        roi_count = len(self._roi_labels())
-        if roi_count == 0:
+        label_values = self._roi_label_values()
+        if len(label_values) == 0:
             return
-        visible_rows = {
-            index for index in visible_roi_indices if 0 <= index < roi_count
+        visible_values = {
+            label_values[index]
+            for index in visible_roi_indices
+            if 0 <= index < len(label_values)
         }
         self._set_roi_visibility_batch(
-            {index: index in visible_rows for index in range(roi_count)},
+            {value: value in visible_values for value in label_values},
         )
         self._render_roi_options()
 
@@ -910,6 +990,7 @@ class _ResponsePlotWidget(QWidget):
             return
         result = load_response_plot_data(self._analysis_path)
         if isinstance(result, str):
+            self._reload_saved_rois()
             self._plot_data = None
             self._reset_plot_state()
             self._reset_empty_option_tabs()
@@ -928,11 +1009,30 @@ class _ResponsePlotWidget(QWidget):
         roi_path = resolved_roi_save_file(self._roi_save_file, self._recording)
         try:
             self._live_controller.set_context(self._recording, None)
-            load_roi_file_on_layer(roi_path, self._roi_labels_layer, self._recording)
+            generation_metadata = load_roi_file_on_layer(
+                roi_path,
+                self._roi_labels_layer,
+                self._recording,
+            )
         except (FileNotFoundError, OSError, ValueError) as error:
             return f"ROI reload failed: {error}"
         finally:
             self._live_controller.set_context(self._recording, self._roi_labels_layer)
+        generation_options = roi_generation_options_from_metadata(generation_metadata)
+        if generation_options is None:
+            generation_options = default_roi_generation_options()
+            edited_after_generation = False
+        else:
+            edited_after_generation = roi_generation_edited_after_generation(
+                generation_metadata
+            )
+        self._roi_generation_options = generation_options
+        self._roi_generation_edited_after_generation = edited_after_generation
+        self._roi_generation_widget.set_options(generation_options)
+        if self._roi_generation_edited_after_generation:
+            self._roi_generation_widget.set_status(
+                "Saved ROI masks were edited after generation."
+            )
         self._roi_save_file = roi_path
         self._refresh_update_path_labels()
         return None
@@ -1022,13 +1122,14 @@ class _ResponsePlotWidget(QWidget):
             self._reset_plot_state()
             return
 
-        roi_labels = self._roi_labels()
-        self._sync_roi_visibility_from_plot_data(roi_labels)
+        plot_roi_labels = roi_labels_from_plot_data(self._plot_data)
+        plot_roi_values = self._plot_roi_label_values()
+        self._sync_roi_visibility_from_plot_data(plot_roi_labels, plot_roi_values)
         self._roi_colors = opaque_colors(
             roi_colors_from_label_values(
                 self._roi_labels_layer,
-                roi_label_values(self._plot_data),
-                fallback_count=len(roi_labels),
+                plot_roi_values,
+                fallback_count=len(plot_roi_values),
             )
         )
         signature = epoch_visibility_signature(self._plot_data.epochs)
@@ -1081,6 +1182,8 @@ class _ResponsePlotWidget(QWidget):
         )
 
     def _render_options(self) -> None:
+        roi_areas = self._roi_area_pixels_by_label_value()
+        roi_label_values = self._roi_label_values_from_area_pixels(roi_areas)
         render_dynamic_options(
             plot_data=self._plot_data,
             plot_display_options_layout=self._plot_display_options_layout,
@@ -1094,10 +1197,14 @@ class _ResponsePlotWidget(QWidget):
             manual_y_max=self._manual_y_max,
             visible_roi_indices=self._visible_roi_indices(),
             visible_epoch_indices=self._visible_epoch_indices(),
-            roi_labels=self._roi_labels(),
+            roi_labels=self._roi_labels_from_values(roi_label_values),
+            roi_keys=roi_label_values,
             roi_visibility=self._roi_visibility,
-            roi_colors=self._roi_colors,
-            roi_area_pixel_details=self._roi_area_pixel_details(),
+            roi_colors=self._roi_table_colors(roi_label_values),
+            roi_area_pixel_details=self._roi_area_pixel_details(
+                roi_label_values,
+                roi_areas,
+            ),
             epoch_visibility=self._epoch_visibility,
             on_show_sem_change=self._set_show_sem,
             on_plot_size_change=self._set_plot_size,
@@ -1111,12 +1218,18 @@ class _ResponsePlotWidget(QWidget):
         )
 
     def _render_roi_options(self) -> None:
+        roi_areas = self._roi_area_pixels_by_label_value()
+        roi_label_values = self._roi_label_values_from_area_pixels(roi_areas)
         render_roi_options(
             roi_options_layout=self._roi_options_layout,
-            roi_labels=self._roi_labels(),
+            roi_labels=self._roi_labels_from_values(roi_label_values),
+            roi_keys=roi_label_values,
             roi_visibility=self._roi_visibility,
-            roi_colors=self._roi_colors,
-            roi_area_pixel_details=self._roi_area_pixel_details(),
+            roi_colors=self._roi_table_colors(roi_label_values),
+            roi_area_pixel_details=self._roi_area_pixel_details(
+                roi_label_values,
+                roi_areas,
+            ),
             on_roi_visibility_change=self._set_roi_visibility,
             on_roi_visibility_batch=self._set_roi_visibility_batch,
             on_merge_selected_rois=self.merge_selected_rois,
@@ -1151,6 +1264,7 @@ class _ResponsePlotWidget(QWidget):
         self._remove_rois_from_current_plot_data(merged_away_values)
         merged_count = len(merge_result.merged_label_values)
         self._update_status_label.setText(f"Merged {merged_count} selected ROIs.")
+        self.mark_roi_labels_edited()
         self._live_controller.request_update()
 
     def remove_selected_rois(self) -> None:
@@ -1177,6 +1291,7 @@ class _ResponsePlotWidget(QWidget):
         self._remove_rois_from_current_plot_data(selected_label_values)
         noun = "ROI" if removed_count == 1 else "ROIs"
         self._update_status_label.setText(f"Removed {removed_count} selected {noun}.")
+        self.mark_roi_labels_edited()
         self._live_controller.request_update()
 
     def _selected_roi_label_values(self) -> tuple[int, ...]:
@@ -1188,11 +1303,10 @@ class _ResponsePlotWidget(QWidget):
         Returns:
             Napari Labels values selected by the ROIs-tab checkboxes.
         """
-        label_values = self._roi_label_values()
         return tuple(
-            label_values[index]
-            for index in self._visible_roi_indices()
-            if index < len(label_values)
+            label_value
+            for label_value in self._roi_label_values()
+            if self._roi_visibility.get(label_value, True)
         )
 
     def _set_roi_generation_status(self, text: str) -> None:
@@ -1205,6 +1319,22 @@ class _ResponsePlotWidget(QWidget):
             None.
         """
         self._roi_generation_widget.set_status(text)
+
+    def _invalidate_response_state_after_roi_replacement(self) -> None:
+        """Clear response data that no longer matches the current Labels layer.
+
+        Args:
+            None.
+
+        Returns:
+            None.
+        """
+        self._plot_data = None
+        self._reset_plot_state()
+        self._roi_visibility = dict.fromkeys(self._roi_label_values(), True)
+        self._reset_empty_option_tabs()
+        self._render_roi_options()
+        self._render_plots()
 
     def _remove_rois_from_current_plot_data(
         self,
@@ -1223,7 +1353,7 @@ class _ResponsePlotWidget(QWidget):
         removed_values = set(removed_label_values)
         keep_indices = tuple(
             index
-            for index, label_value in enumerate(self._roi_label_values())
+            for index, label_value in enumerate(self._plot_roi_label_values())
             if label_value not in removed_values
         )
         self._plot_data = filter_response_plot_data_rois(
@@ -1258,7 +1388,7 @@ class _ResponsePlotWidget(QWidget):
             output_route=self._output_route,
             protected_cache_roots=self._protected_cache_roots(),
             output_dir=self._export_output_dir(),
-            roi_label_values=self._roi_label_values(),
+            roi_label_values=self._plot_roi_label_values(),
             roi_colors=self._roi_color_hex(),
             epoch_indices=self._visible_epoch_indices(),
             response_map_epoch_indices=self._visible_response_map_epoch_indices(),
@@ -1304,49 +1434,82 @@ class _ResponsePlotWidget(QWidget):
         return tuple(color.name() for color in self._roi_colors)
 
     def _roi_label_values(self) -> tuple[int, ...]:
+        roi_areas = self._roi_area_pixels_by_label_value()
+        if roi_areas is not None:
+            return self._roi_label_values_from_area_pixels(roi_areas)
+        return self._plot_roi_label_values()
+
+    def _plot_roi_label_values(self) -> tuple[int, ...]:
         return roi_label_values(self._plot_data)
 
-    def _roi_area_pixel_details(self) -> tuple[str, ...] | None:
-        """Return displayed ROI area text for the ROIs tab.
-
-        Args:
-            None.
-
-        Returns:
-            Per-ROI ``"<count> px"`` text in plot order, or ``None`` when no
-            editable Labels layer is available.
-
-        The ROIs tab describes the mask the user can currently see and edit, so
-        this reads the displayed Labels layer data and leaves the counting
-        rules in the GUI-independent ROI helper.
-        """
+    def _roi_area_pixels_by_label_value(self) -> dict[int, int] | None:
         if self._roi_labels_layer is None:
             return None
         label_image = cast(
             npt.ArrayLike,
             cast(NapariLayerWithData, self._roi_labels_layer).data,
         )
-        areas_by_label_value = roi_area_pixels_from_label_image(label_image)
-        return tuple(
-            f"{areas_by_label_value.get(label_value, 0)} px"
-            for label_value in self._roi_label_values()
+        return roi_area_pixels_from_label_image(label_image)
+
+    def _roi_label_values_from_area_pixels(
+        self,
+        roi_areas: dict[int, int] | None,
+    ) -> tuple[int, ...]:
+        if roi_areas is None:
+            return self._plot_roi_label_values()
+        return tuple(sorted(roi_areas))
+
+    def _roi_labels_from_values(self, label_values: tuple[int, ...]) -> tuple[str, ...]:
+        if self._roi_labels_layer is not None:
+            return tuple(f"roi_{value:04d}" for value in label_values)
+        return roi_labels_from_plot_data(self._plot_data)
+
+    def _roi_table_colors(self, label_values: tuple[int, ...]) -> tuple[QColor, ...]:
+        return opaque_colors(
+            roi_colors_from_label_values(
+                self._roi_labels_layer,
+                label_values,
+                fallback_count=len(label_values),
+            )
         )
 
-    def _set_roi_visibility(self, index: object, visible: bool) -> None:
-        set_row_visibility(
-            self._roi_visibility,
-            index,
-            visible,
-            row_count=len(self._roi_labels()),
+    def _roi_area_pixel_details(
+        self,
+        label_values: tuple[int, ...],
+        areas_by_label_value: dict[int, int] | None,
+    ) -> tuple[str, ...] | None:
+        """Return displayed ROI area text for the ROIs tab.
+
+        Args:
+            label_values: Labels-layer values in displayed ROI row order.
+            areas_by_label_value: Pixel counts from the current Labels layer,
+                or ``None`` when no editable Labels layer is available.
+
+        Returns:
+            Per-ROI ``"<count> px"`` text in Labels-layer order, or ``None``
+            when no editable Labels layer is available.
+
+        The ROIs tab describes the mask the user can currently see and edit, so
+        this reads the displayed Labels layer data and leaves the counting
+        rules in the GUI-independent ROI helper.
+        """
+        if areas_by_label_value is None:
+            return None
+        return tuple(
+            f"{areas_by_label_value.get(label_value, 0)} px"
+            for label_value in label_values
         )
+
+    def _set_roi_visibility(self, label_value: object, visible: bool) -> None:
+        if type(label_value) is int and label_value in self._roi_label_values():
+            self._roi_visibility[label_value] = visible
         self._update_visible_plot_widgets()
 
     def _set_roi_visibility_batch(self, visibility: dict[object, bool]) -> None:
-        set_row_visibility_batch(
-            self._roi_visibility,
-            visibility,
-            row_count=len(self._roi_labels()),
-        )
+        label_values = set(self._roi_label_values())
+        for label_value, visible in visibility.items():
+            if type(label_value) is int and label_value in label_values:
+                self._roi_visibility[label_value] = visible
         self._update_visible_plot_widgets()
 
     def _set_epoch_visibility(self, index: object, visible: bool) -> None:
@@ -1367,7 +1530,11 @@ class _ResponsePlotWidget(QWidget):
         self._update_epoch_visibility_display()
 
     def _visible_roi_indices(self) -> tuple[int, ...]:
-        return visible_indices(self._roi_visibility, len(self._roi_labels()))
+        return tuple(
+            index
+            for index, label_value in enumerate(self._plot_roi_label_values())
+            if self._roi_visibility.get(label_value, True)
+        )
 
     def _visible_epoch_indices(self) -> tuple[int, ...]:
         return visible_indices(self._epoch_visibility, self._epoch_count())
@@ -1405,34 +1572,51 @@ class _ResponsePlotWidget(QWidget):
         return tuple(indices)
 
     def _roi_labels(self) -> tuple[str, ...]:
-        return roi_labels_from_plot_data(self._plot_data)
+        return self._roi_labels_from_values(self._roi_label_values())
 
-    def _sync_roi_visibility_from_plot_data(self, roi_labels: tuple[str, ...]) -> None:
+    def _sync_roi_visibility_from_plot_data(
+        self,
+        plot_roi_labels: tuple[str, ...],
+        plot_roi_values: tuple[int, ...],
+    ) -> None:
         """Update ROI visibility from correlation QC or existing user choices."""
+        table_values = self._roi_label_values()
         if (
             self._plot_data is not None
             and self._plot_data.visible_roi_indices is not None
         ):
-            visible_indices_set = set(self._plot_data.visible_roi_indices)
+            visible_values = {
+                plot_roi_values[index]
+                for index in self._plot_data.visible_roi_indices
+                if 0 <= index < len(plot_roi_values)
+            }
             self._roi_visibility = {
-                index: index in visible_indices_set for index in range(len(roi_labels))
+                label_value: label_value in visible_values
+                for label_value in table_values
             }
             self._correlation_roi_visibility = None
             return
         correlation_visibility = _correlation_roi_visibility(
             self._plot_data,
-            roi_labels,
+            plot_roi_labels,
+            plot_roi_values,
         )
         if correlation_visibility is not None:
-            self._roi_visibility = correlation_visibility
-            self._correlation_roi_visibility = dict(correlation_visibility)
+            self._roi_visibility = {
+                label_value: correlation_visibility.get(label_value, True)
+                for label_value in table_values
+            }
+            self._correlation_roi_visibility = dict(self._roi_visibility)
             return
-        existing_visibility = row_visibility(self._roi_visibility, len(roi_labels))
+        existing_visibility = {
+            label_value: self._roi_visibility.get(label_value, True)
+            for label_value in table_values
+        }
         if _visibility_matches_previous_correlation_filter(
             existing_visibility,
             self._correlation_roi_visibility,
         ):
-            self._roi_visibility = dict.fromkeys(range(len(roi_labels)), True)
+            self._roi_visibility = dict.fromkeys(table_values, True)
         else:
             self._roi_visibility = existing_visibility
         self._correlation_roi_visibility = None
@@ -1660,20 +1844,22 @@ class _ResponsePlotWidget(QWidget):
         self._render_response_maps()
 
     def _apply_roi_layer_visibility(self) -> None:
+        label_values = self._roi_label_values()
         apply_roi_visibility_to_labels_layer(
             self._roi_labels_layer,
-            roi_labels=self._roi_labels(),
+            roi_labels=self._roi_labels_from_values(label_values),
             visibility=self._roi_visibility,
-            colors=self._roi_colors,
-            keys=tuple(range(len(self._roi_labels()))),
+            colors=self._roi_table_colors(label_values),
+            keys=label_values,
         )
 
 
 def _correlation_roi_visibility(
     plot_data: ResponsePlotData | None,
     roi_labels: tuple[str, ...],
+    roi_label_values: tuple[int, ...],
 ) -> dict[int, bool] | None:
-    """Return ROI row visibility from correlation QC scores when available."""
+    """Return ROI label-value visibility from correlation QC scores when available."""
     if plot_data is None or plot_data.correlation_scores is None:
         return None
     scores = plot_data.correlation_scores
@@ -1682,7 +1868,9 @@ def _correlation_roi_visibility(
     if scores.included_mask.shape != (len(roi_labels),):
         return None
     return {
-        index: bool(scores.included_mask[index]) for index in range(len(roi_labels))
+        roi_label_values[index]: bool(scores.included_mask[index])
+        for index in range(len(roi_labels))
+        if index < len(roi_label_values)
     }
 
 

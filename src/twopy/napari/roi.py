@@ -18,10 +18,12 @@ import numpy.typing as npt
 
 from twopy.converted import RecordingData
 from twopy.filenames import ROI_FILENAME
+from twopy.hdf5_utils import Hdf5Scalar
 from twopy.napari.display import spatial_crop_from_layer_metadata
 from twopy.napari.protocols import NapariLayerWithData
 from twopy.roi import (
     RoiSet,
+    load_roi_generation_metadata,
     load_roi_set,
     make_roi_set_from_label_image,
     roi_set_to_label_image,
@@ -258,7 +260,7 @@ def load_roi_file_on_layer(
     path: Path,
     layer: object,
     recording: RecordingData,
-) -> None:
+) -> dict[str, Hdf5Scalar] | None:
     """Load one saved ROI HDF5 file into a napari Labels layer.
 
     Args:
@@ -268,7 +270,7 @@ def load_roi_file_on_layer(
             displayed crop.
 
     Returns:
-        None.
+        Optional ROI-generation metadata from the saved file.
 
     Raises:
         ValueError: If the ROI file does not match the recording shape.
@@ -281,6 +283,7 @@ def load_roi_file_on_layer(
         recording,
         roi_set_to_label_image(roi_set),
     )
+    return load_roi_generation_metadata(path)
 
 
 def roi_label_image_from_layer_for_recording(

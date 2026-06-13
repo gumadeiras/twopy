@@ -566,6 +566,8 @@ class _FakePlotReceiver:
         """Create an empty receiver."""
         self.plot_data: ResponsePlotData | None = None
         self.status: str | None = None
+        self.roi_refresh_count = 0
+        self.roi_edit_count = 0
 
     def set_response_plot_data(
         self,
@@ -580,6 +582,14 @@ class _FakePlotReceiver:
     def show_response_status(self, text: str) -> None:
         """Store status text received from the controller."""
         self.status = text
+
+    def refresh_roi_options_from_labels(self) -> None:
+        """Record a Labels-layer ROI table refresh request."""
+        self.roi_refresh_count += 1
+
+    def mark_roi_labels_edited(self) -> None:
+        """Record a Labels-layer ROI edit marker."""
+        self.roi_edit_count += 1
 
 
 class _ProcessingEchoPlotReceiver(_FakePlotReceiver):

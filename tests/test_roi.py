@@ -25,6 +25,7 @@ from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData
 from twopy.roi import (
     TraceStatistic,
+    load_roi_generation_metadata,
     roi_area_pixels_from_label_image,
     roi_label_value_from_label,
     roi_label_values_from_labels,
@@ -70,6 +71,53 @@ class RoiTest(unittest.TestCase):
                     h5_file["masks"].attrs[SPATIAL_ORIENTATION_ATTR],
                     TWOPY_SPATIAL_ORIENTATION,
                 )
+
+    def test_saves_optional_roi_generation_metadata(self) -> None:
+        """Confirm ROI files can keep generation settings beside masks.
+
+        Inputs: one ROI mask plus watershed-generation metadata.
+        Outputs: the metadata round-trips as scalar HDF5 attributes without
+        changing normal ROI mask loading.
+        """
+        with temporary_directory() as temp_dir:
+            roi_path = Path(temp_dir) / "rois.h5"
+            roi_set = make_roi_set(np.ones((1, 2, 2), dtype=bool))
+
+            save_roi_set(
+                roi_set,
+                roi_path,
+                generation_metadata={
+                    "roi_mode": "watershed",
+                    "watershed_min_pixels": 15,
+                    "watershed_smoothing_sigma": 0.0,
+                },
+            )
+
+            loaded = load_roi_set(roi_path)
+            metadata = load_roi_generation_metadata(roi_path)
+
+            np.testing.assert_array_equal(loaded.masks, roi_set.masks)
+            self.assertEqual(
+                metadata,
+                {
+                    "schema_version": 1,
+                    "roi_mode": "watershed",
+                    "watershed_min_pixels": 15,
+                    "watershed_smoothing_sigma": 0.0,
+                },
+            )
+
+    def test_missing_roi_generation_metadata_loads_as_none(self) -> None:
+        """Confirm older ROI files keep loading without generation metadata.
+
+        Inputs: one ROI file saved without generation settings.
+        Outputs: metadata loading returns ``None``.
+        """
+        with temporary_directory() as temp_dir:
+            roi_path = Path(temp_dir) / "rois.h5"
+            save_roi_set(make_roi_set(np.ones((1, 2, 2), dtype=bool)), roi_path)
+
+            self.assertIsNone(load_roi_generation_metadata(roi_path))
 
     def test_rejects_saved_roi_file_without_current_spatial_orientation(self) -> None:
         """Confirm unmarked square ROI files fail instead of being guessed.

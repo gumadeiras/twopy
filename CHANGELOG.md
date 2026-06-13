@@ -11,6 +11,7 @@
 - Added `twopy config setup` and first-launch config-template creation so installed users can create an editable config file in their user folder without a source checkout. `twopy`, including `twopy /path/to/recording`, now creates the template and stops before opening napari when config is missing, and validates an existing config before continuing. Python napari controls now require config-backed setup; pass `add_controls=False` to `open_recording_in_napari(...)` when scripts only need raw napari layers.
 - Made napari manual-load output routing explicit for Save ROIs + analysis and every figure export button: source recordings outside `data_paths` copy files to the source `twopy/` folder, converted folders outside `data_paths` save where they were selected, Metadata shows both local and final output paths, and queued background copies no longer cancel earlier saves.
 - Added a 33 GB default limit for the local analysis cache. twopy now keeps a small rebuildable cache inventory and removes old cache entries after cache-growing writes only when their files already exist in the final output folder, while preserving active, unsynced, stale, or source-unavailable entries.
+- Made napari save ROI-generation mode and mode-specific settings in `rois.h5`, mark generated masks that were edited by hand, and restore those ROIs-tab controls with Reload saved analysis.
 
 ## 0.3.1 - 2026-06-08
 

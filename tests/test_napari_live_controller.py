@@ -42,7 +42,6 @@ from tests.napari_support import (
     unittest,
     write_converted_recording_files,
 )
-
 from twopy.napari.display_paths import microscope_display_lines
 
 
@@ -153,6 +152,8 @@ class NapariLiveControllerTest(NapariAdapterTestCase):
 
             self.assertIsNotNone(receiver.plot_data)
             self.assertIsNone(receiver.status)
+            self.assertEqual(receiver.roi_refresh_count, 1)
+            self.assertEqual(receiver.roi_edit_count, 1)
 
     def test_live_response_controller_defaults_to_short_update_delay(self) -> None:
         """Confirm live ROI updates use a short drawing debounce.

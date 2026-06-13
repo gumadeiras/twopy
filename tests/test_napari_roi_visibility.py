@@ -48,7 +48,7 @@ class NapariRoiVisibilityTest(NapariAdapterTestCase):
         )
 
         self.assertEqual(response_widget._visible_roi_indices(), (0,))
-        self.assertEqual(response_widget._roi_visibility, {0: True, 1: False})
+        self.assertEqual(response_widget._roi_visibility, {1: True, 2: False})
 
         response_widget.set_response_plot_data(
             _two_roi_response_plot_data(),
@@ -70,7 +70,7 @@ class NapariRoiVisibilityTest(NapariAdapterTestCase):
 
         self.assertEqual(response_widget._roi_labels(), ("roi_0001", "roi_0002"))
         self.assertEqual(response_widget._visible_roi_indices(), (0,))
-        self.assertEqual(response_widget._roi_visibility, {0: True, 1: False})
+        self.assertEqual(response_widget._roi_visibility, {1: True, 2: False})
 
     def test_custom_result_roi_visibility_keeps_existing_plot_data(self) -> None:
         """Confirm workflow ROI filters update checkboxes without replacing data."""
@@ -86,7 +86,7 @@ class NapariRoiVisibilityTest(NapariAdapterTestCase):
         self.assertIs(response_widget._plot_data, plot_data)
         self.assertEqual(response_widget._roi_labels(), ("roi_0001", "roi_0002"))
         self.assertEqual(response_widget._visible_roi_indices(), (1,))
-        self.assertEqual(response_widget._roi_visibility, {0: False, 1: True})
+        self.assertEqual(response_widget._roi_visibility, {1: False, 2: True})
         roi_checkboxes = {
             checkbox.text(): checkbox.isChecked()
             for checkbox in response_widget.options_widget().findChildren(QCheckBox)

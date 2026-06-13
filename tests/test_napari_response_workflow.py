@@ -46,6 +46,8 @@ from tests.napari_support import (
 )
 from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting.docks.save_actions import save_current_roi_analysis
+from twopy.napari.plotting.roi_generation import RoiGenerationOptions
+from twopy.roi import load_roi_generation_metadata
 
 
 class NapariResponseWorkflowTest(NapariAdapterTestCase):
@@ -580,6 +582,136 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
             )
             response_widget.shutdown()
 
+    def test_save_analysis_button_writes_roi_generation_metadata(self) -> None:
+        """Confirm generated ROI settings are saved with ROI masks.
+
+        Inputs: a Labels layer made by watershed generation and a patched
+            analysis workflow.
+        Outputs: ``rois.h5`` records the watershed mode and parameters that
+            produced the current masks.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            analysis_path = root / "analysis_outputs.h5"
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            response_widget._live_controller.request_update = lambda: None
+            options = RoiGenerationOptions(
+                roi_mode="watershed",
+                units="pixels",
+                grid_size_pixels=16,
+                micron_grid_size=10.0,
+                rig="",
+                calibration_mode=0,
+                scanner="",
+                zoom=1.0,
+                allow_extrapolation=True,
+                watershed_min_pixels=15,
+                watershed_smoothing_sigma=0.75,
+            )
+
+            with patch(
+                "twopy.napari.plotting.docks.response_plot_widget.generate_roi_labels",
+                return_value=SimpleNamespace(
+                    label_image=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                    status_text="Created watershed ROIs: 1 ROI.",
+                ),
+            ):
+                response_widget.create_generated_rois(options)
+            with patch(
+                (
+                    "twopy.napari.plotting.docks.save_actions."
+                    "analyze_recording_responses"
+                ),
+                return_value=SimpleNamespace(
+                    output_path=analysis_path,
+                    grouped_responses=_tiny_grouped_responses(),
+                    response_summary_trials_csv_path=None,
+                    response_summary_grouped_csv_path=None,
+                ),
+            ):
+                response_widget.save_analysis_and_rois()
+
+            self.assertEqual(
+                load_roi_generation_metadata(root / "rois.h5"),
+                {
+                    "schema_version": 1,
+                    "roi_mode": "watershed",
+                    "watershed_min_pixels": 15,
+                    "watershed_smoothing_sigma": 0.75,
+                },
+            )
+            response_widget.shutdown()
+
+    def test_save_analysis_marks_generated_rois_edited_after_manual_change(
+        self,
+    ) -> None:
+        """Confirm manual edits to generated ROIs are saved as provenance.
+
+        Inputs: watershed-generated ROI masks marked as hand-edited before
+        saving.
+        Outputs: saved ROI metadata keeps the watershed settings and records
+        the post-generation edit marker.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            analysis_path = root / "analysis_outputs.h5"
+            recording_path = _write_converted_recording(root)
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+            response_widget._live_controller.request_update = lambda: None
+            options = RoiGenerationOptions(
+                roi_mode="watershed",
+                units="pixels",
+                grid_size_pixels=16,
+                micron_grid_size=10.0,
+                rig="",
+                calibration_mode=0,
+                scanner="",
+                zoom=1.0,
+                allow_extrapolation=True,
+                watershed_min_pixels=15,
+                watershed_smoothing_sigma=0.75,
+            )
+
+            with patch(
+                "twopy.napari.plotting.docks.response_plot_widget.generate_roi_labels",
+                return_value=SimpleNamespace(
+                    label_image=np.array([[1, 0], [0, 0]], dtype=np.int64),
+                    status_text="Created watershed ROIs: 1 ROI.",
+                ),
+            ):
+                response_widget.create_generated_rois(options)
+            response_widget.mark_roi_labels_edited()
+            with patch(
+                (
+                    "twopy.napari.plotting.docks.save_actions."
+                    "analyze_recording_responses"
+                ),
+                return_value=SimpleNamespace(
+                    output_path=analysis_path,
+                    grouped_responses=_tiny_grouped_responses(),
+                    response_summary_trials_csv_path=None,
+                    response_summary_grouped_csv_path=None,
+                ),
+            ):
+                response_widget.save_analysis_and_rois()
+
+            self.assertEqual(
+                load_roi_generation_metadata(root / "rois.h5"),
+                {
+                    "schema_version": 1,
+                    "roi_mode": "watershed",
+                    "watershed_min_pixels": 15,
+                    "watershed_smoothing_sigma": 0.75,
+                    "edited_after_generation": True,
+                },
+            )
+            response_widget.shutdown()
+
     def test_save_analysis_button_syncs_cached_outputs_in_background(self) -> None:
         """Confirm cached saves publish changed outputs without blocking save.
 
@@ -691,6 +823,89 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.array([[1, 0], [0, 0]], dtype=np.int64),
             )
+            response_widget.shutdown()
+
+    def test_reload_saved_analysis_restores_roi_generation_settings(self) -> None:
+        """Confirm Reload saved analysis restores saved ROI-generation controls.
+
+        Inputs: saved analysis output and saved watershed ROI metadata.
+        Outputs: the ROIs tab shows watershed mode with the saved min-pixel and
+        smoothing settings after reload.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            save_analysis_outputs(
+                root / "analysis_outputs.h5",
+                grouped_responses=_tiny_grouped_responses(),
+            )
+            save_roi_set(
+                make_roi_set(
+                    np.array([[[True, False], [False, False]]], dtype=np.bool_),
+                    labels=("roi_0001",),
+                ),
+                root / "rois.h5",
+                generation_metadata={
+                    "roi_mode": "watershed",
+                    "watershed_min_pixels": 15,
+                    "watershed_smoothing_sigma": 0.75,
+                    "edited_after_generation": True,
+                },
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            response_widget.reload()
+            options = response_widget._roi_generation_widget.options()
+
+            self.assertEqual(options.roi_mode, "watershed")
+            self.assertEqual(options.watershed_min_pixels, 15)
+            self.assertEqual(options.watershed_smoothing_sigma, 0.75)
+            self.assertTrue(response_widget._roi_generation_edited_after_generation)
+            self.assertEqual(
+                response_widget._roi_generation_widget._status.text(),
+                "Saved ROI masks were edited after generation.",
+            )
+            response_widget.shutdown()
+
+    def test_open_recording_restores_roi_generation_settings_without_analysis(
+        self,
+    ) -> None:
+        """Confirm ROI metadata loads even when saved analysis is absent.
+
+        Inputs: a recording with ``rois.h5`` generation metadata but no saved
+        analysis output.
+        Outputs: opening the ROI file restores ROIs-tab settings from the ROI
+        file instead of requiring analysis outputs to exist first.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            save_roi_set(
+                make_roi_set(
+                    np.array([[[True, False], [False, False]]], dtype=np.bool_),
+                    labels=("roi_0001",),
+                ),
+                root / "rois.h5",
+                generation_metadata={
+                    "roi_mode": "watershed",
+                    "watershed_min_pixels": 15,
+                    "watershed_smoothing_sigma": 0.75,
+                },
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(
+                recording_path,
+                viewer=viewer,
+                roi_set=root / "rois.h5",
+            )
+            response_widget = cast(Any, opened.response_plot_widget)
+            options = response_widget._roi_generation_widget.options()
+
+            self.assertEqual(options.roi_mode, "watershed")
+            self.assertEqual(options.watershed_min_pixels, 15)
+            self.assertEqual(options.watershed_smoothing_sigma, 0.75)
             response_widget.shutdown()
 
     def test_processing_option_changes_request_preview_update(self) -> None:

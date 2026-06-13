@@ -7,6 +7,7 @@ This module is GUI-independent. napari can create or edit masks, but analysis
 code should use these typed objects and functions.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -17,7 +18,12 @@ import numpy.typing as npt
 
 from twopy.converted import RecordingData
 from twopy.frame_ranges import normalize_frame_range
-from twopy.hdf5_utils import read_string_dataset, write_string_dataset
+from twopy.hdf5_utils import (
+    Hdf5Scalar,
+    plain_hdf5_attr_value,
+    read_string_dataset,
+    write_string_dataset,
+)
 from twopy.spatial_orientation import (
     require_twopy_spatial_orientation,
     write_twopy_spatial_orientation,
@@ -26,9 +32,11 @@ from twopy.typing_guards import require_bool_array
 
 __all__ = [
     "ROI_FILE_FORMAT",
+    "ROI_GENERATION_METADATA_GROUP",
     "RoiSet",
     "RoiTraces",
     "extract_roi_traces",
+    "load_roi_generation_metadata",
     "load_roi_set",
     "make_roi_set_from_label_image",
     "make_roi_set",
@@ -40,6 +48,7 @@ __all__ = [
 ]
 
 ROI_FILE_FORMAT = "twopy-roi-set"
+ROI_GENERATION_METADATA_GROUP = "roi_generation"
 TraceStatistic = Literal["mean"]
 
 
@@ -259,12 +268,19 @@ def roi_label_values_from_labels(roi_labels: tuple[str, ...]) -> tuple[int, ...]
     )
 
 
-def save_roi_set(roi_set: RoiSet, path: Path) -> None:
+def save_roi_set(
+    roi_set: RoiSet,
+    path: Path,
+    *,
+    generation_metadata: Mapping[str, Hdf5Scalar] | None = None,
+) -> None:
     """Save ROI masks and labels to an inspectable HDF5 file.
 
     Args:
         roi_set: Validated ROI masks and labels.
         path: Destination HDF5 file.
+        generation_metadata: Optional ROI-generation settings to write beside
+            the masks as inspectable scalar HDF5 attributes.
 
     Returns:
         None.
@@ -284,6 +300,36 @@ def save_roi_set(roi_set: RoiSet, path: Path) -> None:
         )
         write_twopy_spatial_orientation(masks)
         write_string_dataset(h5_file, "labels", roi_set.labels)
+        if generation_metadata is not None:
+            _write_roi_generation_metadata(h5_file, generation_metadata)
+
+
+def load_roi_generation_metadata(path: Path) -> dict[str, Hdf5Scalar] | None:
+    """Load optional ROI-generation settings from a saved ROI HDF5 file.
+
+    Args:
+        path: ROI HDF5 file path.
+
+    Returns:
+        Plain scalar metadata attributes, or ``None`` when the file predates
+        generation metadata.
+
+    Raises:
+        ValueError: If the file is not a twopy ROI file.
+
+    The core ROI layer treats this as provenance metadata only. Napari owns the
+    meaning of each setting because generated ROI controls are a GUI workflow.
+    """
+    input_path = path.expanduser()
+    with h5py.File(input_path, "r") as h5_file:
+        _require_roi_file_format(h5_file, path=input_path)
+        if ROI_GENERATION_METADATA_GROUP not in h5_file:
+            return None
+        group = h5_file[ROI_GENERATION_METADATA_GROUP]
+        return {
+            str(key): plain_hdf5_attr_value(value, scalar_only=True)
+            for key, value in group.attrs.items()
+        }
 
 
 def load_roi_set(path: Path) -> RoiSet:
@@ -300,10 +346,7 @@ def load_roi_set(path: Path) -> RoiSet:
     """
     input_path = path.expanduser()
     with h5py.File(input_path, "r") as h5_file:
-        actual_format = str(h5_file.attrs.get("twopy_format", ""))
-        if actual_format != ROI_FILE_FORMAT:
-            msg = f"Expected {ROI_FILE_FORMAT!r} file at {input_path}"
-            raise ValueError(msg)
+        _require_roi_file_format(h5_file, path=input_path)
         require_twopy_spatial_orientation(
             h5_file,
             path=input_path,
@@ -318,6 +361,27 @@ def load_roi_set(path: Path) -> RoiSet:
         masks = require_bool_array(mask_dataset[()], name="masks", ndim=3)
         labels = read_string_dataset(h5_file, "labels")
     return make_roi_set(masks, labels=labels)
+
+
+def _write_roi_generation_metadata(
+    h5_file: h5py.File,
+    metadata: Mapping[str, Hdf5Scalar],
+) -> None:
+    """Write ROI-generation provenance attributes under one HDF5 group."""
+    group = h5_file.create_group(ROI_GENERATION_METADATA_GROUP)
+    group.attrs["schema_version"] = 1
+    for key, value in metadata.items():
+        if key == "schema_version":
+            continue
+        group.attrs[key] = value
+
+
+def _require_roi_file_format(h5_file: h5py.File, *, path: Path) -> None:
+    """Reject HDF5 files that are not twopy ROI files."""
+    actual_format = str(h5_file.attrs.get("twopy_format", ""))
+    if actual_format != ROI_FILE_FORMAT:
+        msg = f"Expected {ROI_FILE_FORMAT!r} file at {path}"
+        raise ValueError(msg)
 
 
 def extract_roi_traces(
