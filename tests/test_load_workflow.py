@@ -23,7 +23,7 @@ from twopy.napari.load_workflow import (
     load_recording_paths,
     reconvert_selected_recording,
 )
-from twopy.napari.loading import ResolvedNapariRecording
+from twopy.napari.loading import NapariReadRoute, ResolvedNapariRecording
 from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.paths import NapariRecordingPaths, PathInput
 from twopy.napari.protocols import NapariViewer
@@ -527,6 +527,7 @@ def _resolved_recording(
     recording_data_path: Path,
     *,
     output_route: NapariOutputRoute | None = None,
+    read_route: NapariReadRoute = "selected output",
     source_unavailable: bool = False,
 ) -> ResolvedNapariRecording:
     """Build a resolved-recording fake for the workflow coordinator.
@@ -535,6 +536,7 @@ def _resolved_recording(
         recording_data_path: Converted recording data path.
         output_route: Optional local and final output route for the fake
             resolved recording.
+        read_route: User-facing route label for the fake resolved recording.
         source_unavailable: Whether the resolver used cache because source was
             unreachable.
 
@@ -555,6 +557,7 @@ def _resolved_recording(
             local_root=recording_dir,
             publish_root=recording_dir,
         ),
+        read_route=read_route,
         was_converted=False,
         source_unavailable=source_unavailable,
     )

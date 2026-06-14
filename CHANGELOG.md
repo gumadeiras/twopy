@@ -8,7 +8,7 @@
 
 ### Changes
 
-- Made the napari recording-load progress dialog show a dense scrollable queue and Metadata-style active path fields so large batches are easier to monitor.
+- Made the napari recording-load progress dialog show a dense scrollable queue, source recording identity, the converted folder currently being read, and the read route so large cached batches are easier to monitor.
 - Made ROI response normalization use each ROI's strongest selected-epoch response, whether positive or negative, so inhibitory or mixed responses are not exaggerated by a small positive peak.
 - Added `twopy config setup` and first-launch config-template creation so installed users can create an editable config file in their user folder without a source checkout. `twopy`, including `twopy /path/to/recording`, now creates the template and stops before opening napari when config is missing, and validates an existing config before continuing. Python napari controls now require config-backed setup; pass `add_controls=False` to `open_recording_in_napari(...)` when scripts only need raw napari layers.
 - Made Direction selectivity run on visible ROIs by default and start with a `0.1` DSI show threshold.

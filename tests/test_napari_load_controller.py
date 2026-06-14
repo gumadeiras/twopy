@@ -22,7 +22,7 @@ from twopy.napari.load_workflow import (
     PreparedRecordingLoad,
     ResolvedRecordingLoad,
 )
-from twopy.napari.loading import ResolvedNapariRecording
+from twopy.napari.loading import NapariReadRoute, ResolvedNapariRecording
 from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.paths import NapariRecordingPaths
 from twopy.napari.protocols import NapariViewer
@@ -152,6 +152,7 @@ class RecordingLoadControllerTest(unittest.TestCase):
         results = []
         updates: list[dict[str, object]] = []
         selected_path = Path("/analysis-cache/genotype/stim/2026/06_12/18_42_11")
+        publish_path = Path("/analysis-output/genotype/stim/2026/06_12/18_42_11")
         source_path = Path(
             "/Volumes/DataNAS_2/2p_microscope_data/genotype/stim/2026/06_12/18_42_11",
         )
@@ -161,7 +162,12 @@ class RecordingLoadControllerTest(unittest.TestCase):
         )
 
         with (
-            _patched_load_stages(applied_paths, source_session_dir=source_path),
+            _patched_load_stages(
+                applied_paths,
+                source_session_dir=source_path,
+                publish_root=publish_path,
+                read_route="local cache",
+            ),
             patch.object(
                 load_controller,
                 "RecordingLoadProgressDialog",
@@ -183,6 +189,17 @@ class RecordingLoadControllerTest(unittest.TestCase):
         self.assertGreaterEqual(len(resolved_updates), 2)
         self.assertTrue(
             all(update["current_path"] == source_path for update in resolved_updates),
+        )
+        self.assertTrue(
+            all(
+                update["reading_from_path"] == selected_path
+                for update in resolved_updates
+            ),
+        )
+        self.assertTrue(
+            all(
+                update["reading_route"] == "local cache" for update in resolved_updates
+            ),
         )
         self.assertTrue(all(update["active_index"] == 0 for update in resolved_updates))
         controller.shutdown()
@@ -232,6 +249,8 @@ def _patched_load_stages(
     resolve_started: Event | None = None,
     release_resolve: Event | None = None,
     source_session_dir: Path | None = None,
+    publish_root: Path | None = None,
+    read_route: NapariReadRoute = "selected output",
 ) -> AbstractContextManager[dict[str, object]]:
     """Patch controller load stages with deterministic test doubles.
 
@@ -241,6 +260,8 @@ def _patched_load_stages(
         release_resolve: Optional event that lets the first resolve continue.
         source_session_dir: Optional source path to attach to each resolved
             fake.
+        publish_root: Optional publish root for the fake output route.
+        read_route: User-facing route label for the fake resolved load.
 
     Returns:
         Context manager that patches resolve, prepare, and apply stages.
@@ -256,7 +277,12 @@ def _patched_load_stages(
             resolve_started.set()
             assert release_resolve is not None
             release_resolve.wait(timeout=2.0)
-        return _resolved_load(path, source_session_dir=source_session_dir)
+        return _resolved_load(
+            path,
+            source_session_dir=source_session_dir,
+            publish_root=publish_root,
+            read_route=read_route,
+        )
 
     def prepare(
         resolved: ResolvedRecordingLoad,
@@ -298,6 +324,8 @@ def _resolved_load(
     selected_path: Path,
     *,
     source_session_dir: Path | None = None,
+    publish_root: Path | None = None,
+    read_route: NapariReadRoute = "selected output",
 ) -> ResolvedRecordingLoad:
     """Return a resolved-load fake for one selected path."""
     converted_path = selected_path / "recording_data.h5"
@@ -313,8 +341,9 @@ def _resolved_load(
             paths=paths,
             output_route=NapariOutputRoute(
                 local_root=selected_path,
-                publish_root=selected_path,
+                publish_root=selected_path if publish_root is None else publish_root,
             ),
+            read_route=read_route,
             was_converted=False,
             source_session_dir=source_session_dir,
         ),

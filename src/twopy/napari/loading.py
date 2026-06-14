@@ -10,6 +10,7 @@ path resolver.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import h5py
 
@@ -46,10 +47,18 @@ from twopy.napari.paths import resolve_recording_paths as resolve_converted_path
 from twopy.session import discover_session_files
 
 __all__ = [
+    "NapariReadRoute",
     "ResolvedNapariRecording",
     "reconvert_recording_to_output",
     "resolve_or_convert_launch_recording",
     "resolve_or_convert_recording",
+]
+
+NapariReadRoute = Literal[
+    "source output",
+    "local cache",
+    "analysis output",
+    "selected output",
 ]
 
 
@@ -58,12 +67,14 @@ class ResolvedNapariRecording:
     """Resolved recording paths plus load-path status.
 
     Inputs: one selected path.
-    Outputs: converted paths, output routing, source recording identity,
-    whether conversion ran, and whether source data was unavailable.
+    Outputs: converted paths, output routing, read-route label, source
+    recording identity, whether conversion ran, and whether source data was
+    unavailable.
     """
 
     paths: NapariRecordingPaths
     output_route: NapariOutputRoute
+    read_route: NapariReadRoute
     was_converted: bool
     source_session_dir: Path | None = None
     source_unavailable: bool = False
@@ -126,6 +137,7 @@ def resolve_or_convert_recording(
         return ResolvedNapariRecording(
             paths=converted_paths,
             output_route=output_route,
+            read_route="source output",
             was_converted=True,
             source_session_dir=source_dir,
         )
@@ -140,13 +152,15 @@ def resolve_or_convert_recording(
 
     selected_source_dir = _source_dir_from_recording_data(paths.recording_data_path)
     if paths.movie_path is not None:
+        output_route, read_route = _converted_selection_routes(
+            paths=paths,
+            selected=selected,
+            source_dir=selected_source_dir,
+        )
         return ResolvedNapariRecording(
             paths=paths,
-            output_route=_converted_selection_output_route(
-                paths=paths,
-                selected=selected,
-                source_dir=selected_source_dir,
-            ),
+            output_route=output_route,
+            read_route=read_route,
             was_converted=False,
             source_session_dir=selected_source_dir,
         )
@@ -156,17 +170,24 @@ def resolve_or_convert_recording(
         recording_data_path=paths.recording_data_path,
     )
     if source_dir is None:
+        output_route, read_route = _converted_selection_routes(
+            paths=paths,
+            selected=selected,
+            source_dir=selected_source_dir,
+        )
         return ResolvedNapariRecording(
             paths=paths,
-            output_route=_converted_selection_output_route(
-                paths=paths,
-                selected=selected,
-                source_dir=selected_source_dir,
-            ),
+            output_route=output_route,
+            read_route=read_route,
             was_converted=False,
             source_session_dir=selected_source_dir,
         )
 
+    _, read_route = _converted_selection_routes(
+        paths=paths,
+        selected=selected,
+        source_dir=source_dir,
+    )
     converted = _convert_recording_to_twopy(
         source_dir,
         output_dir=paths.recording_data_path.parent,
@@ -179,6 +200,7 @@ def resolve_or_convert_recording(
     return ResolvedNapariRecording(
         paths=converted_paths,
         output_route=output_route,
+        read_route=read_route,
         was_converted=True,
         source_session_dir=source_dir,
     )
@@ -235,6 +257,11 @@ def reconvert_recording_to_output(
     return ResolvedNapariRecording(
         paths=converted_paths,
         output_route=output_route,
+        read_route=_read_route_for_output_route(
+            paths=converted_paths,
+            output_route=output_route,
+            source_dir=source_dir,
+        ),
         was_converted=True,
         source_session_dir=source_dir,
     )
@@ -404,30 +431,37 @@ def _source_output_route(
     )
 
 
-def _converted_selection_output_route(
+def _converted_selection_routes(
     *,
     paths: NapariRecordingPaths,
     selected: Path,
     source_dir: Path | None,
-) -> NapariOutputRoute:
-    """Return output routing for a manually selected converted output."""
+) -> tuple[NapariOutputRoute, NapariReadRoute]:
+    """Return save and read routing for a selected converted output."""
     selected_root = _selected_converted_root(
         selected=selected,
         paths=paths,
     )
-    if source_dir is None:
-        return NapariOutputRoute(
-            local_root=paths.recording_data_path.parent,
-            publish_root=selected_root,
-        )
+    publish_root = selected_root
+    configured_publish = None
+    if source_dir is not None:
+        configured_publish = _configured_analysis_output_for_source(source_dir)
+    if configured_publish is not None and same_output_path(
+        selected_root,
+        configured_publish,
+    ):
+        publish_root = configured_publish
 
-    publish_root = _configured_output_for_selected_converted_folder(
-        source_dir=source_dir,
-        selected_root=selected_root,
-    )
-    return NapariOutputRoute(
-        local_root=paths.recording_data_path.parent,
-        publish_root=publish_root,
+    return (
+        NapariOutputRoute(
+            local_root=paths.recording_data_path.parent,
+            publish_root=publish_root,
+        ),
+        _read_route_for_roots(
+            read_root=paths.recording_data_path.parent,
+            publish_root=publish_root,
+            source_dir=source_dir,
+        ),
     )
 
 
@@ -465,6 +499,7 @@ def _refresh_cached_analysis_outputs(
             paths=refreshed_paths,
             source_dir=source_dir,
         ),
+        read_route="local cache",
         was_converted=was_converted,
         source_session_dir=source_dir,
         source_unavailable=source_unavailable,
@@ -540,6 +575,7 @@ def _localize_converted_paths_for_cache(
             source_session_dir=source_dir,
             fallback_publish_root=paths.recording_data_path.parent,
         ),
+        read_route="local cache",
         was_converted=False,
         source_session_dir=source_dir,
     )
@@ -627,25 +663,49 @@ def _selected_converted_root(
     return paths.recording_data_path.parent
 
 
-def _configured_output_for_selected_converted_folder(
-    *,
-    source_dir: Path,
-    selected_root: Path,
-) -> Path:
-    """Return the final output folder for a manually selected converted folder.
-
-    Manual converted folders stay where the user selected them unless that
-    folder is the configured output location. This keeps arbitrary converted
-    folders from being silently redirected to a different publish root.
-    """
+def _configured_analysis_output_for_source(source_dir: Path) -> Path | None:
+    """Return configured analysis output for one source, or ``None``."""
     try:
         config = load_config(DEFAULT_CONFIG_PATH)
-        configured_publish = resolve_analysis_output_dir(config, source_dir)
+        return resolve_analysis_output_dir(config, source_dir)
     except ValueError:
-        return selected_root
-    if same_output_path(selected_root, configured_publish):
-        return configured_publish
-    return selected_root
+        return None
+
+
+def _read_route_for_output_route(
+    *,
+    paths: NapariRecordingPaths,
+    output_route: NapariOutputRoute,
+    source_dir: Path,
+) -> NapariReadRoute:
+    """Return the read-route label for an already-known output route."""
+    return _read_route_for_roots(
+        read_root=paths.recording_data_path.parent,
+        publish_root=output_route.publish_root,
+        source_dir=source_dir,
+    )
+
+
+def _read_route_for_roots(
+    *,
+    read_root: Path,
+    publish_root: Path,
+    source_dir: Path | None,
+) -> NapariReadRoute:
+    """Return the read-route label for concrete read, publish, and source roots."""
+    if not same_output_path(read_root, publish_root):
+        return "local cache"
+    if source_dir is not None and same_output_path(read_root, source_dir / "twopy"):
+        return "source output"
+    configured_publish = None
+    if source_dir is not None:
+        configured_publish = _configured_analysis_output_for_source(source_dir)
+    if configured_publish is not None and same_output_path(
+        read_root,
+        configured_publish,
+    ):
+        return "analysis output"
+    return "selected output"
 
 
 def _source_is_under_data_path(config: TwopyConfig, source_dir: Path) -> bool:

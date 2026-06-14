@@ -27,6 +27,7 @@ from qtpy.QtWidgets import (
 
 from twopy.napari.display_paths import (
     format_recording_queue_path,
+    format_recording_read_folder,
     recording_path_display_summary,
 )
 
@@ -94,6 +95,8 @@ class RecordingLoadProgressDialog(QDialog):
         self._genotype_value = self._metadata_value_label()
         self._stimulus_value = self._metadata_value_label()
         self._date_value = self._metadata_value_label()
+        self._reading_from_value = self._metadata_value_label()
+        self._reading_route_value = self._metadata_value_label()
         self._progress = QProgressBar()
         self._progress.setRange(0, max(len(paths), 1))
         self._progress.setValue(0)
@@ -114,6 +117,8 @@ class RecordingLoadProgressDialog(QDialog):
             completed_count=0,
             total_count=len(paths),
             current_path=None,
+            reading_from_path=None,
+            reading_route=None,
             active_index=None,
             phase="Preparing load queue...",
         )
@@ -125,6 +130,8 @@ class RecordingLoadProgressDialog(QDialog):
         completed_count: int,
         total_count: int,
         current_path: Path | None,
+        reading_from_path: Path | None,
+        reading_route: str | None,
         active_index: int | None,
         phase: str,
         failed_indexes: tuple[int, ...] = (),
@@ -134,7 +141,10 @@ class RecordingLoadProgressDialog(QDialog):
         Args:
             completed_count: Number of recordings finished or failed.
             total_count: Total requested recording count.
-            current_path: Source-like path to show for the active recording.
+            current_path: Source-like path that identifies the active recording.
+            reading_from_path: Converted HDF5 folder being read, or ``None``
+                before resolution.
+            reading_route: Short route label for ``reading_from_path``.
             active_index: Zero-based queue row currently being prepared or
                 applied.
             phase: Short user-facing phase text.
@@ -158,6 +168,7 @@ class RecordingLoadProgressDialog(QDialog):
             failed_indexes=self._failed_indexes,
         )
         self._refresh_active_path(current_path)
+        self._refresh_reading_path(reading_from_path, reading_route)
         self._progress.setRange(0, max(total_count, 1))
         self._progress.setValue(bounded_completed)
         self._progress.setFormat(
@@ -233,7 +244,10 @@ class RecordingLoadProgressDialog(QDialog):
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(14)
         layout.addWidget(_section_title("Now loading"))
+        layout.addWidget(_subsection_title("Source recording"))
         layout.addWidget(self._path_metadata_panel())
+        layout.addWidget(_subsection_title("Reading from"))
+        layout.addWidget(self._reading_metadata_panel())
         layout.addWidget(self._progress)
         layout.addWidget(self._hint)
         layout.addStretch(1)
@@ -253,10 +267,30 @@ class RecordingLoadProgressDialog(QDialog):
         layout.setHorizontalSpacing(10)
         layout.setVerticalSpacing(6)
         fields = (
-            ("Root", self._root_value),
+            ("Source root", self._root_value),
             ("Genotype", self._genotype_value),
             ("Stimulus", self._stimulus_value),
             ("Date", self._date_value),
+        )
+        for row_index, (label, value) in enumerate(fields):
+            key = QLabel(label)
+            key.setObjectName("recording_load_path_key")
+            layout.addWidget(key, row_index, 0)
+            layout.addWidget(value, row_index, 1)
+        layout.setColumnStretch(1, 1)
+        return panel
+
+    def _reading_metadata_panel(self) -> QWidget:
+        """Return compact fields for the converted data path being read."""
+        panel = QFrame()
+        panel.setObjectName("recording_load_path_panel")
+        layout = QGridLayout(panel)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(6)
+        fields = (
+            ("Folder", self._reading_from_value),
+            ("Route", self._reading_route_value),
         )
         for row_index, (label, value) in enumerate(fields):
             key = QLabel(label)
@@ -320,6 +354,26 @@ class RecordingLoadProgressDialog(QDialog):
         ):
             label.setText(value)
             label.setToolTip(value)
+
+    def _refresh_reading_path(
+        self,
+        reading_from_path: Path | None,
+        reading_route: str | None,
+    ) -> None:
+        """Show the actual converted data folder being read."""
+        path_text = (
+            ""
+            if reading_from_path is None
+            else format_recording_read_folder(reading_from_path)
+        )
+        path_tooltip = "" if reading_from_path is None else str(reading_from_path)
+        route_text = "" if reading_route is None else reading_route
+        for label, value, tooltip in (
+            (self._reading_from_value, path_text, path_tooltip),
+            (self._reading_route_value, route_text, route_text),
+        ):
+            label.setText(value)
+            label.setToolTip(tooltip)
 
     def _active_index_for_progress(
         self,
@@ -437,6 +491,13 @@ def _section_title(text: str) -> QLabel:
     return label
 
 
+def _subsection_title(text: str) -> QLabel:
+    """Return one compact subsection heading label."""
+    label = QLabel(text)
+    label.setObjectName("recording_load_subsection_title")
+    return label
+
+
 def _state_chip(text: str) -> QLabel:
     """Return one queue state label."""
     label = QLabel(text)
@@ -550,6 +611,10 @@ QFrame#recording_load_panel {{
 QLabel#recording_load_section_title {{
     color: {text};
     font-size: 16px;
+    font-weight: 700;
+}}
+QLabel#recording_load_subsection_title {{
+    color: {muted};
     font-weight: 700;
 }}
 QLabel#recording_load_muted,

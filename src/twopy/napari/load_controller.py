@@ -185,6 +185,8 @@ class RecordingLoadController:
             completed_count=0,
             total_count=self._total_count,
             current_path=None,
+            reading_from_path=None,
+            reading_route=None,
             active_index=None,
             phase="Preparing load queue...",
         )
@@ -279,12 +281,16 @@ class RecordingLoadController:
             self._complete_active(
                 active,
                 current_path=_display_path_for_result(result),
+                reading_from_path=_reading_path_for_result(result),
+                reading_route=result.resolved_recording.read_route,
             )
             return
 
         self._update_progress(
             active=active,
             current_path=_display_path_for_result(result),
+            reading_from_path=_reading_path_for_result(result),
+            reading_route=result.resolved_recording.read_route,
             phase="Reading recording data...",
         )
         self._future = self._executor.submit(
@@ -312,6 +318,8 @@ class RecordingLoadController:
         self._update_progress(
             active=active,
             current_path=_display_path_for_result(result),
+            reading_from_path=_reading_path_for_result(result),
+            reading_route=result.resolved_recording.read_route,
             phase="Adding recording layers...",
         )
         try:
@@ -335,6 +343,8 @@ class RecordingLoadController:
         self._complete_active(
             active,
             current_path=_display_path_for_result(result),
+            reading_from_path=_reading_path_for_result(result),
+            reading_route=result.resolved_recording.read_route,
         )
 
     def _record_failure(self, active: _QueuedRecordingLoad, *, message: str) -> None:
@@ -366,6 +376,8 @@ class RecordingLoadController:
         active: _QueuedRecordingLoad,
         *,
         current_path: Path | None = None,
+        reading_from_path: Path | None = None,
+        reading_route: str | None = None,
     ) -> None:
         """Mark the current queue item complete and continue the batch."""
         self._active = None
@@ -375,6 +387,8 @@ class RecordingLoadController:
                 completed_count=self._completed_count,
                 total_count=self._total_count,
                 current_path=active.path if current_path is None else current_path,
+                reading_from_path=reading_from_path,
+                reading_route=reading_route,
                 active_index=None,
                 phase="Recording finished.",
                 failed_indexes=tuple(self._failed_indexes),
@@ -404,6 +418,8 @@ class RecordingLoadController:
                 completed_count=self._completed_count,
                 total_count=self._total_count,
                 current_path=None,
+                reading_from_path=None,
+                reading_route=None,
                 active_index=None,
                 phase=phase,
                 failed_indexes=tuple(self._failed_indexes),
@@ -422,6 +438,8 @@ class RecordingLoadController:
         active: _QueuedRecordingLoad,
         current_path: Path | None,
         phase: str,
+        reading_from_path: Path | None = None,
+        reading_route: str | None = None,
     ) -> None:
         """Refresh the progress dialog when it exists."""
         if self._progress_dialog is None:
@@ -430,6 +448,8 @@ class RecordingLoadController:
             completed_count=self._completed_count,
             total_count=self._total_count,
             current_path=current_path,
+            reading_from_path=reading_from_path,
+            reading_route=reading_route,
             active_index=active.index,
             phase=phase,
             failed_indexes=tuple(self._failed_indexes),
@@ -444,3 +464,10 @@ def _display_path_for_result(
     if source_dir is not None:
         return source_dir
     return result.selected_path
+
+
+def _reading_path_for_result(
+    result: ResolvedRecordingLoad | PreparedRecordingLoad,
+) -> Path:
+    """Return the converted HDF5 folder the worker actually reads."""
+    return result.resolved_recording.paths.recording_data_path.parent

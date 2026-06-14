@@ -11,6 +11,7 @@ from qtpy.QtGui import QColor, QPalette
 from tests.napari_support import Path, QApplication, unittest
 from twopy.napari.display_paths import (
     format_recording_queue_path,
+    format_recording_read_folder,
     recording_path_display_summary,
 )
 from twopy.napari.load_progress import RecordingLoadProgressDialog, _style_sheet
@@ -51,6 +52,19 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
 
         self.assertEqual(format_recording_queue_path(path), ".../2026/06_12/18_42_11")
 
+    def test_shared_read_folder_helper_preserves_timestamp_suffixes(self) -> None:
+        """Confirm the read-folder label distinguishes source-local twopy output.
+
+        Inputs: a converted output folder below a source recording.
+        Outputs: the visible read label keeps the ``/twopy`` suffix.
+        """
+        path = _recording_paths(count=1)[0] / "twopy"
+
+        self.assertEqual(
+            format_recording_read_folder(path),
+            "/Volumes/DataNAS_2/2p_microscope_data/.../2026/06_12/18_42_11/twopy",
+        )
+
     def test_queue_shows_compact_recording_paths(self) -> None:
         """Confirm queue rows use the final three source folders.
 
@@ -68,6 +82,8 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
             completed_count=5,
             total_count=20,
             current_path=paths[5],
+            reading_from_path=paths[5] / "twopy",
+            reading_route="source output",
             active_index=5,
             phase="Reading recording data...",
         )
@@ -81,6 +97,10 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
         self.assertEqual(
             active_row.frame.objectName(),
             "recording_load_queue_row_active",
+        )
+        self.assertEqual(
+            dialog._reading_from_value.text(),
+            "/Volumes/DataNAS_2/2p_microscope_data/.../2026/06_12/19_05_43/twopy",
         )
         self.assertEqual(dialog._progress.format(), "6 of 20 - reading recording data")
 
@@ -172,6 +192,8 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
             completed_count=0,
             total_count=1,
             current_path=paths[0],
+            reading_from_path=paths[0] / "twopy",
+            reading_route="source output",
             active_index=0,
             phase="Preparing recording data...",
         )
@@ -212,6 +234,8 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
             completed_count=0,
             total_count=1,
             current_path=source_path,
+            reading_from_path=queued_path.parent,
+            reading_route="local cache",
             active_index=0,
             phase="Reading recording data...",
         )
@@ -222,6 +246,12 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
             "/Volumes/DataNAS_2/2p_microscope_data",
         )
         self.assertEqual(dialog._date_value.text(), "2026/06_12/18_42_11")
+        self.assertEqual(
+            dialog._reading_from_value.text(),
+            "/analysis-cache/.../2026/06_12/18_42_11",
+        )
+        self.assertEqual(dialog._reading_from_value.toolTip(), str(queued_path.parent))
+        self.assertEqual(dialog._reading_route_value.text(), "local cache")
 
     def test_failed_paths_keep_failed_queue_state(self) -> None:
         """Confirm failed recordings do not appear loaded after completion.
@@ -241,6 +271,8 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
             completed_count=2,
             total_count=3,
             current_path=paths[2],
+            reading_from_path=paths[2] / "twopy",
+            reading_route="source output",
             active_index=2,
             phase="Adding recording layers...",
             failed_indexes=(0,),
@@ -267,6 +299,8 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
             completed_count=1,
             total_count=2,
             current_path=path,
+            reading_from_path=path / "twopy",
+            reading_route="source output",
             active_index=1,
             phase="Reading recording data...",
             failed_indexes=(0,),

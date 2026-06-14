@@ -19,6 +19,7 @@ from twopy.converted import RecordingData
 __all__ = [
     "RecordingDisplaySummary",
     "RecordingPathDisplaySummary",
+    "format_recording_read_folder",
     "format_recording_queue_path",
     "format_output_folder",
     "format_recording_minute_label",
@@ -225,6 +226,30 @@ def format_recording_queue_path(path: Path) -> str:
     if len(parts) < 3:
         return str(recording_path)
     return f".../{parts[-3]}/{parts[-2]}/{parts[-1]}"
+
+
+def format_recording_read_folder(path: Path) -> str:
+    """Return a compact label for the converted folder napari is reading.
+
+    Args:
+        path: Full folder containing ``recording_data.h5``.
+
+    Returns:
+        ``<root>/.../YYYY/MM_DD/HH_MM_SS`` plus any suffix after the recording
+        timestamp, such as ``/twopy`` for source-local converted output.
+
+    The source identity panel already shows genotype and stimulus. This label
+    keeps the concrete read root visible while preserving enough suffix detail
+    to distinguish source-local output from cache or analysis output.
+    """
+    read_folder = path.expanduser()
+    date_index = _recording_date_index(read_folder)
+    if date_index is None:
+        return str(read_folder)
+
+    summary = recording_path_display_summary(read_folder)
+    suffix = "/".join(read_folder.parts[date_index:])
+    return f"{summary.root}/.../{suffix}"
 
 
 def _recording_identity_parts(
