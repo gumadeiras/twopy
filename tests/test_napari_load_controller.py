@@ -138,6 +138,55 @@ class RecordingLoadControllerTest(unittest.TestCase):
         self.assertFalse(state.is_loading)
         controller.shutdown()
 
+    def test_progress_uses_resolved_source_path_after_resolve(self) -> None:
+        """Confirm the progress dialog shows source identity after resolution.
+
+        Inputs: a selected converted path whose resolved load names a source
+        recording folder.
+        Outputs: progress updates keep the queued row index but switch active
+        path fields to the source recording.
+        """
+        _ = QApplication.instance() or QApplication([])
+        state = _State()
+        applied_paths: list[Path] = []
+        results = []
+        updates: list[dict[str, object]] = []
+        selected_path = Path("/analysis-cache/genotype/stim/2026/06_12/18_42_11")
+        source_path = Path(
+            "/Volumes/DataNAS_2/2p_microscope_data/genotype/stim/2026/06_12/18_42_11",
+        )
+        controller = load_controller.RecordingLoadController(
+            state,
+            on_finished=results.append,
+        )
+
+        with (
+            _patched_load_stages(applied_paths, source_session_dir=source_path),
+            patch.object(
+                load_controller,
+                "RecordingLoadProgressDialog",
+                lambda **kwargs: _ProgressDialogSpy(updates, **kwargs),
+            ),
+        ):
+            controller.load_paths(
+                (selected_path,),
+                remember_selected_folder=False,
+            )
+            process_qt_events_until(lambda: len(results) == 1)
+
+        resolved_updates = [
+            update
+            for update in updates
+            if update["phase"]
+            in {"Reading recording data...", "Adding recording layers..."}
+        ]
+        self.assertGreaterEqual(len(resolved_updates), 2)
+        self.assertTrue(
+            all(update["current_path"] == source_path for update in resolved_updates),
+        )
+        self.assertTrue(all(update["active_index"] == 0 for update in resolved_updates))
+        controller.shutdown()
+
     def test_cancel_pending_finishes_active_and_skips_queue(self) -> None:
         """Confirm cancellation skips queued paths after the active load.
 
@@ -182,6 +231,7 @@ def _patched_load_stages(
     *,
     resolve_started: Event | None = None,
     release_resolve: Event | None = None,
+    source_session_dir: Path | None = None,
 ) -> AbstractContextManager[dict[str, object]]:
     """Patch controller load stages with deterministic test doubles.
 
@@ -189,6 +239,8 @@ def _patched_load_stages(
         applied_paths: List that receives paths applied on the Qt thread.
         resolve_started: Optional event set when the first resolve begins.
         release_resolve: Optional event that lets the first resolve continue.
+        source_session_dir: Optional source path to attach to each resolved
+            fake.
 
     Returns:
         Context manager that patches resolve, prepare, and apply stages.
@@ -204,7 +256,7 @@ def _patched_load_stages(
             resolve_started.set()
             assert release_resolve is not None
             release_resolve.wait(timeout=2.0)
-        return _resolved_load(path)
+        return _resolved_load(path, source_session_dir=source_session_dir)
 
     def prepare(
         resolved: ResolvedRecordingLoad,
@@ -242,7 +294,11 @@ def _patched_load_stages(
     )
 
 
-def _resolved_load(selected_path: Path) -> ResolvedRecordingLoad:
+def _resolved_load(
+    selected_path: Path,
+    *,
+    source_session_dir: Path | None = None,
+) -> ResolvedRecordingLoad:
     """Return a resolved-load fake for one selected path."""
     converted_path = selected_path / "recording_data.h5"
     paths = NapariRecordingPaths(
@@ -260,8 +316,42 @@ def _resolved_load(selected_path: Path) -> ResolvedRecordingLoad:
                 publish_root=selected_path,
             ),
             was_converted=False,
+            source_session_dir=source_session_dir,
         ),
     )
+
+
+class _ProgressDialogSpy:
+    """Capture progress-dialog updates without showing a Qt dialog."""
+
+    def __init__(
+        self,
+        updates: list[dict[str, object]],
+        *,
+        paths: tuple[Path, ...],
+        on_cancel_pending: object,
+    ) -> None:
+        """Store constructor inputs and a mutable update list."""
+        del on_cancel_pending
+        self.paths = paths
+        self._updates = updates
+
+    def update_progress(self, **kwargs: object) -> None:
+        """Record one progress update."""
+        self._updates.append(dict(kwargs))
+
+    def show(self) -> None:
+        """Match the dialog API used by the controller."""
+
+    def raise_(self) -> None:
+        """Match the dialog API used by the controller."""
+
+    def mark_finishing(self, *, phase: str) -> None:
+        """Record final progress state."""
+        self._updates.append({"phase": phase, "mark_finishing": True})
+
+    def close(self) -> None:
+        """Match the QTimer close callback target."""
 
 
 def _loaded_recording(path: Path) -> LoadedNapariRecording:

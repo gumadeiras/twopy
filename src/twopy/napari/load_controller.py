@@ -41,6 +41,7 @@ __all__ = ["RecordingLoadController"]
 class _QueuedRecordingLoad:
     """One selected recording waiting for worker preparation."""
 
+    index: int
     path: Path
     roi_file_to_load: PathInput
     replace_selected: bool
@@ -84,6 +85,7 @@ class RecordingLoadController:
         self._completed_count = 0
         self._loaded_count = 0
         self._failures: list[RecordingLoadFailure] = []
+        self._failed_indexes: list[int] = []
         self._source_warnings: list[SourceUnavailableWarning] = []
         self._status_text = ""
         self._remember_selected_folder = False
@@ -139,18 +141,20 @@ class RecordingLoadController:
         self._completed_count = 0
         self._loaded_count = 0
         self._failures = []
+        self._failed_indexes = []
         self._source_warnings = []
         self._status_text = ""
         self._after_finished = after_finished
         self._queue = [
             _QueuedRecordingLoad(
+                index=index,
                 path=path,
                 roi_file_to_load=(
                     roi_file_to_load if len(paths) == 1 else Path(DEFAULT_PATH_TEXT)
                 ),
                 replace_selected=replace_selected if len(paths) == 1 else False,
             )
-            for path in paths
+            for index, path in enumerate(paths)
         ]
         self._show_progress_dialog()
         self._start_next_job()
@@ -173,7 +177,7 @@ class RecordingLoadController:
     def _show_progress_dialog(self) -> None:
         """Open or reset the modeless progress dialog."""
         dialog = RecordingLoadProgressDialog(
-            total_count=self._total_count,
+            paths=tuple(load.path for load in self._queue),
             on_cancel_pending=self.cancel_pending,
         )
         self._progress_dialog = dialog
@@ -181,6 +185,7 @@ class RecordingLoadController:
             completed_count=0,
             total_count=self._total_count,
             current_path=None,
+            active_index=None,
             phase="Preparing load queue...",
         )
         dialog.show()
@@ -196,6 +201,7 @@ class RecordingLoadController:
 
         self._active = self._queue.pop(0)
         self._update_progress(
+            active=self._active,
             current_path=self._active.path,
             phase="Preparing recording data...",
         )
@@ -228,11 +234,9 @@ class RecordingLoadController:
         try:
             result = future.result()
         except Exception as error:
-            self._failures.append(
-                RecordingLoadFailure(
-                    path=active.path,
-                    message=exception_message_for_user(error),
-                ),
+            self._record_failure(
+                active,
+                message=exception_message_for_user(error),
             )
             self._complete_active(active)
             return
@@ -244,11 +248,9 @@ class RecordingLoadController:
             self._handle_prepared_recording(active, result)
             return
 
-        self._failures.append(
-            RecordingLoadFailure(
-                path=active.path,
-                message=f"Unknown recording-load stage: {stage}",
-            ),
+        self._record_failure(
+            active,
+            message=f"Unknown recording-load stage: {stage}",
         )
         self._complete_active(active)
 
@@ -259,11 +261,9 @@ class RecordingLoadController:
     ) -> None:
         """Select a duplicate or start array preparation for a resolved path."""
         if not isinstance(result, ResolvedRecordingLoad):
-            self._failures.append(
-                RecordingLoadFailure(
-                    path=active.path,
-                    message=f"Expected resolved recording, got {type(result).__name__}",
-                ),
+            self._record_failure(
+                active,
+                message=f"Expected resolved recording, got {type(result).__name__}",
             )
             self._complete_active(active)
             return
@@ -276,11 +276,15 @@ class RecordingLoadController:
         )
         if applied is not None:
             self._record_applied_load(applied, previous_loaded_count=None)
-            self._complete_active(active)
+            self._complete_active(
+                active,
+                current_path=_display_path_for_result(result),
+            )
             return
 
         self._update_progress(
-            current_path=active.path,
+            active=active,
+            current_path=_display_path_for_result(result),
             phase="Reading recording data...",
         )
         self._future = self._executor.submit(
@@ -298,17 +302,16 @@ class RecordingLoadController:
     ) -> None:
         """Apply one prepared recording to napari."""
         if not isinstance(result, PreparedRecordingLoad):
-            self._failures.append(
-                RecordingLoadFailure(
-                    path=active.path,
-                    message=f"Expected prepared recording, got {type(result).__name__}",
-                ),
+            self._record_failure(
+                active,
+                message=f"Expected prepared recording, got {type(result).__name__}",
             )
             self._complete_active(active)
             return
 
         self._update_progress(
-            current_path=active.path,
+            active=active,
+            current_path=_display_path_for_result(result),
             phase="Adding recording layers...",
         )
         try:
@@ -320,18 +323,29 @@ class RecordingLoadController:
                 remember_selected_folder=self._remember_selected_folder,
             )
         except Exception as error:
-            self._failures.append(
-                RecordingLoadFailure(
-                    path=active.path,
-                    message=exception_message_for_user(error),
-                ),
+            self._record_failure(
+                active,
+                message=exception_message_for_user(error),
             )
         else:
             self._record_applied_load(
                 applied,
                 previous_loaded_count=previous_loaded_count,
             )
-        self._complete_active(active)
+        self._complete_active(
+            active,
+            current_path=_display_path_for_result(result),
+        )
+
+    def _record_failure(self, active: _QueuedRecordingLoad, *, message: str) -> None:
+        """Record one failed queue row while preserving the selected path."""
+        self._failures.append(
+            RecordingLoadFailure(
+                path=active.path,
+                message=message,
+            ),
+        )
+        self._failed_indexes.append(active.index)
 
     def _record_applied_load(
         self,
@@ -347,14 +361,24 @@ class RecordingLoadController:
         if len(self._state.loaded_recordings) > previous_loaded_count:
             self._loaded_count += 1
 
-    def _complete_active(self, active: _QueuedRecordingLoad) -> None:
+    def _complete_active(
+        self,
+        active: _QueuedRecordingLoad,
+        *,
+        current_path: Path | None = None,
+    ) -> None:
         """Mark the current queue item complete and continue the batch."""
         self._active = None
         self._completed_count += 1
-        self._update_progress(
-            current_path=active.path,
-            phase="Recording finished.",
-        )
+        if self._progress_dialog is not None:
+            self._progress_dialog.update_progress(
+                completed_count=self._completed_count,
+                total_count=self._total_count,
+                current_path=active.path if current_path is None else current_path,
+                active_index=None,
+                phase="Recording finished.",
+                failed_indexes=tuple(self._failed_indexes),
+            )
         self._start_next_job()
 
     def _finish(self) -> None:
@@ -380,7 +404,9 @@ class RecordingLoadController:
                 completed_count=self._completed_count,
                 total_count=self._total_count,
                 current_path=None,
+                active_index=None,
                 phase=phase,
+                failed_indexes=tuple(self._failed_indexes),
             )
             dialog.mark_finishing(phase=phase)
             QTimer.singleShot(700, dialog.close)
@@ -390,7 +416,13 @@ class RecordingLoadController:
             self._after_finished()
         self._after_finished = None
 
-    def _update_progress(self, *, current_path: Path | None, phase: str) -> None:
+    def _update_progress(
+        self,
+        *,
+        active: _QueuedRecordingLoad,
+        current_path: Path | None,
+        phase: str,
+    ) -> None:
         """Refresh the progress dialog when it exists."""
         if self._progress_dialog is None:
             return
@@ -398,5 +430,17 @@ class RecordingLoadController:
             completed_count=self._completed_count,
             total_count=self._total_count,
             current_path=current_path,
+            active_index=active.index,
             phase=phase,
+            failed_indexes=tuple(self._failed_indexes),
         )
+
+
+def _display_path_for_result(
+    result: ResolvedRecordingLoad | PreparedRecordingLoad,
+) -> Path:
+    """Return the source identity path the progress dialog should display."""
+    source_dir = result.resolved_recording.source_session_dir
+    if source_dir is not None:
+        return source_dir
+    return result.selected_path

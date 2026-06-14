@@ -18,10 +18,13 @@ from twopy.converted import RecordingData
 
 __all__ = [
     "RecordingDisplaySummary",
+    "RecordingPathDisplaySummary",
+    "format_recording_queue_path",
     "format_output_folder",
     "format_recording_minute_label",
     "format_twopy_h5_output",
     "microscope_display_lines",
+    "recording_path_display_summary",
     "recording_display_summary",
 ]
 
@@ -61,6 +64,21 @@ class RecordingDisplaySummary:
         )
 
 
+@dataclass(frozen=True)
+class RecordingPathDisplaySummary:
+    """Short recording identity parsed directly from a selected path.
+
+    Inputs: source recording folders, converted folders, or converted HDF5 paths.
+    Outputs: root data path, genotype folder, stimulus folder, and date/time
+    folder label when the lab path pattern is present.
+    """
+
+    root: Path
+    genotype: str
+    stimulus: str
+    date: str
+
+
 def recording_display_summary(recording: RecordingData) -> RecordingDisplaySummary:
     """Parse one recording into stable, readable identity fields.
 
@@ -76,24 +94,53 @@ def recording_display_summary(recording: RecordingData) -> RecordingDisplaySumma
     """
     recording_dir = recording.source_session_dir.expanduser()
     date_index = _recording_date_index(recording_dir)
-    recording_label = _recording_label(recording_dir, date_index)
-
-    try:
-        match = data_path_match(load_config(DEFAULT_CONFIG_PATH), recording_dir)
-        if match is None:
-            raise ValueError
-        data_root, relative = match
-    except (FileNotFoundError, ValueError):
-        data_root, genotype, stimulus = _fallback_path_parts(recording_dir, date_index)
-    else:
-        genotype = relative.parts[0] if len(relative.parts) > 0 else "unknown"
-        stimulus = relative.parts[1] if len(relative.parts) > 1 else "unknown"
+    data_root, genotype, stimulus = _recording_identity_parts(
+        recording_dir,
+        date_index,
+    )
 
     return RecordingDisplaySummary(
         root=data_root,
         genotype=genotype,
         stimulus=stimulus,
-        recording=recording_label,
+        recording=_recording_label(recording_dir, date_index),
+    )
+
+
+def recording_path_display_summary(path: Path) -> RecordingPathDisplaySummary:
+    """Parse one selected recording path into display fields.
+
+    Args:
+        path: Source recording folder, converted folder, or converted HDF5 file.
+
+    Returns:
+        Root, genotype, stimulus, and ``YYYY/MM_DD/HH_MM_SS`` date/time text
+        when the selected path includes that lab folder pattern. Unknown fields
+        are explicit when the path does not match the microscope layout.
+
+    The load-progress dialog uses this before a converted ``RecordingData``
+    object exists, so it cannot call ``recording_display_summary(...)``.
+    """
+    recording_path = path.expanduser()
+    date_index = _recording_date_index(recording_path)
+    if date_index is None or date_index < 2:
+        return RecordingPathDisplaySummary(
+            root=recording_path.parent,
+            genotype="unknown",
+            stimulus="unknown",
+            date=recording_path.name,
+        )
+
+    data_root, genotype, stimulus = _recording_identity_parts(
+        recording_path,
+        date_index,
+    )
+    parts = recording_path.parts
+    return RecordingPathDisplaySummary(
+        root=data_root,
+        genotype=genotype,
+        stimulus=stimulus,
+        date=f"{parts[date_index]}/{parts[date_index + 1]}/{parts[date_index + 2]}",
     )
 
 
@@ -156,6 +203,46 @@ def format_recording_minute_label(recording_dir: Path) -> str:
     month_day = parts[date_index + 1].replace("_", ".")
     hour, minute, _second = parts[date_index + 2].split("_")
     return f"{year}.{month_day} {hour}:{minute}"
+
+
+def format_recording_queue_path(path: Path) -> str:
+    """Return the compact queue label for one selected recording path.
+
+    Args:
+        path: Source recording folder, converted folder, or converted HDF5 file.
+
+    Returns:
+        ``.../YYYY/MM_DD/HH_MM_SS`` when the lab folder pattern is present,
+        otherwise the final three path parts.
+    """
+    recording_path = path.expanduser()
+    date_index = _recording_date_index(recording_path)
+    parts = recording_path.parts
+    if date_index is not None:
+        return (
+            f".../{parts[date_index]}/{parts[date_index + 1]}/{parts[date_index + 2]}"
+        )
+    if len(parts) < 3:
+        return str(recording_path)
+    return f".../{parts[-3]}/{parts[-2]}/{parts[-1]}"
+
+
+def _recording_identity_parts(
+    recording_dir: Path,
+    date_index: int | None,
+) -> tuple[Path, str, str]:
+    """Return root, genotype, and stimulus fields for one source-like path."""
+    try:
+        match = data_path_match(load_config(DEFAULT_CONFIG_PATH), recording_dir)
+        if match is None:
+            raise ValueError
+        data_root, relative = match
+    except (FileNotFoundError, ValueError):
+        return _fallback_path_parts(recording_dir, date_index)
+
+    genotype = relative.parts[0] if len(relative.parts) > 0 else "unknown"
+    stimulus = relative.parts[1] if len(relative.parts) > 1 else "unknown"
+    return data_root, genotype, stimulus
 
 
 def _metadata_text(metadata: dict[str, object], key: str) -> str:

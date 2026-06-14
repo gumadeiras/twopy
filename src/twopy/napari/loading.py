@@ -58,13 +58,14 @@ class ResolvedNapariRecording:
     """Resolved recording paths plus load-path status.
 
     Inputs: one selected path.
-    Outputs: converted paths, output routing, whether conversion ran, and
-    whether source data was unavailable.
+    Outputs: converted paths, output routing, source recording identity,
+    whether conversion ran, and whether source data was unavailable.
     """
 
     paths: NapariRecordingPaths
     output_route: NapariOutputRoute
     was_converted: bool
+    source_session_dir: Path | None = None
     source_unavailable: bool = False
 
 
@@ -126,6 +127,7 @@ def resolve_or_convert_recording(
             paths=converted_paths,
             output_route=output_route,
             was_converted=True,
+            source_session_dir=source_dir,
         )
 
     localized = _localize_converted_paths_for_cache(
@@ -136,14 +138,17 @@ def resolve_or_convert_recording(
     if localized is not None:
         return localized
 
+    selected_source_dir = _source_dir_from_recording_data(paths.recording_data_path)
     if paths.movie_path is not None:
         return ResolvedNapariRecording(
             paths=paths,
             output_route=_converted_selection_output_route(
                 paths=paths,
                 selected=selected,
+                source_dir=selected_source_dir,
             ),
             was_converted=False,
+            source_session_dir=selected_source_dir,
         )
 
     source_dir = _source_recording_dir_for_converted_selection(
@@ -156,8 +161,10 @@ def resolve_or_convert_recording(
             output_route=_converted_selection_output_route(
                 paths=paths,
                 selected=selected,
+                source_dir=selected_source_dir,
             ),
             was_converted=False,
+            source_session_dir=selected_source_dir,
         )
 
     converted = _convert_recording_to_twopy(
@@ -173,6 +180,7 @@ def resolve_or_convert_recording(
         paths=converted_paths,
         output_route=output_route,
         was_converted=True,
+        source_session_dir=source_dir,
     )
 
 
@@ -228,6 +236,7 @@ def reconvert_recording_to_output(
         paths=converted_paths,
         output_route=output_route,
         was_converted=True,
+        source_session_dir=source_dir,
     )
 
 
@@ -399,9 +408,9 @@ def _converted_selection_output_route(
     *,
     paths: NapariRecordingPaths,
     selected: Path,
+    source_dir: Path | None,
 ) -> NapariOutputRoute:
     """Return output routing for a manually selected converted output."""
-    source_dir = _source_dir_from_recording_data(paths.recording_data_path)
     selected_root = _selected_converted_root(
         selected=selected,
         paths=paths,
@@ -457,6 +466,7 @@ def _refresh_cached_analysis_outputs(
             source_dir=source_dir,
         ),
         was_converted=was_converted,
+        source_session_dir=source_dir,
         source_unavailable=source_unavailable,
     )
 
@@ -531,6 +541,7 @@ def _localize_converted_paths_for_cache(
             fallback_publish_root=paths.recording_data_path.parent,
         ),
         was_converted=False,
+        source_session_dir=source_dir,
     )
 
 

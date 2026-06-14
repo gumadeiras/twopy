@@ -1,6 +1,6 @@
 # Loading recordings
 
-The **Load** tab is the first tab on the right `twopy` sidebar. You can also pass a path on the command line. Load-tab actions prepare selected recordings in a background worker, show a modeless progress dialog, and apply napari layers on the Qt thread as each recording is ready. **Cancel pending** stops queued recordings after the current recording finishes.
+The **Load** tab is the first tab on the right `twopy` sidebar. You can also pass a path on the command line. Load-tab actions prepare selected recordings in a background worker, show a modeless progress dialog, and apply napari layers on the Qt thread as each recording is ready. The progress dialog shows a scrollable queue with each selected recording's `.../YYYY/MM_DD/HH_MM_SS` label, the active recording split into root, genotype, stimulus, and date/time fields, and a batch progress bar. **Cancel pending** stops queued recordings after the current recording finishes.
 
 ## From the command line
 
