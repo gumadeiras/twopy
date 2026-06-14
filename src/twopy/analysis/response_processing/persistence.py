@@ -64,13 +64,14 @@ class PersistedResponseProcessing:
     """Response-processing audit data loaded from HDF5.
 
     Inputs: one ``response_processing`` HDF5 group.
-    Outputs: typed options plus optional normalization factors and ROI
-    correlation scores.
+    Outputs: typed options plus optional factors, ROI correlation scores, and a
+        warning when an old file uses a setting twopy no longer uses.
     """
 
     options: ResponseProcessingOptions
     normalization_factors: RoiNormalizationFactors | None
     correlation_scores: RoiCorrelationScores | None
+    load_warning: str | None = None
 
 
 def write_response_processing_group(
@@ -159,14 +160,17 @@ def read_response_processing_group(group: h5py.Group) -> PersistedResponseProces
     Returns:
         Typed processing options plus optional correlation scores.
     """
+    normalization_options, normalization_load_warning = (
+        _read_normalization_options(
+            group["normalization"],
+        )
+        if "normalization" in group
+        else (NormalizationOptions(), None)
+    )
     options = ResponseProcessingOptions(
         smoothing=_read_smoothing_options(group["smoothing"]),
         low_pass=_read_low_pass_options(group["low_pass"]),
-        normalization=(
-            _read_normalization_options(group["normalization"])
-            if "normalization" in group
-            else NormalizationOptions()
-        ),
+        normalization=normalization_options,
         correlation_filter=_read_correlation_filter_options(
             group["correlation_filter"],
         ),
@@ -178,7 +182,11 @@ def read_response_processing_group(group: h5py.Group) -> PersistedResponseProces
                 group["normalization"],
                 options=options.normalization,
             )
-            if "normalization" in group and "factors" in group["normalization"]
+            if (
+                "normalization" in group
+                and "factors" in group["normalization"]
+                and options.normalization.method != "none"
+            )
             else None
         ),
         correlation_scores=(
@@ -186,6 +194,7 @@ def read_response_processing_group(group: h5py.Group) -> PersistedResponseProces
             if "correlation_scores" in group
             else None
         ),
+        load_warning=normalization_load_warning,
     )
 
 
@@ -215,16 +224,35 @@ def _read_low_pass_options(group: h5py.Group) -> LowPassFilterOptions:
     )
 
 
-def _read_normalization_options(group: h5py.Group) -> NormalizationOptions:
-    """Read normalization settings from one HDF5 group."""
-    return NormalizationOptions(
-        method=require_string_choice(
-            plain_hdf5_attr_value(group.attrs["method"], scalar_only=True),
-            name="response_processing normalization method",
-            allowed=_NORMALIZATION_METHODS,
+def _read_normalization_options(
+    group: h5py.Group,
+) -> tuple[NormalizationOptions, str | None]:
+    """Read normalization settings and report old settings twopy no longer uses."""
+    raw_method = plain_hdf5_attr_value(group.attrs["method"], scalar_only=True)
+    if raw_method == "epoch_peak":
+        return (
+            NormalizationOptions(
+                method="none",
+                epoch_number=_optional_int_from_attr(group.attrs["epoch_number"]),
+                epoch_name=_optional_text_from_attr(group.attrs["epoch_name"]),
+            ),
+            (
+                "This saved analysis used old positive-peak normalization. "
+                "Twopy is showing the saved responses as stored. Recompute to use "
+                "strongest-response normalization."
+            ),
+        )
+    return (
+        NormalizationOptions(
+            method=require_string_choice(
+                raw_method,
+                name="response_processing normalization method",
+                allowed=_NORMALIZATION_METHODS,
+            ),
+            epoch_number=_optional_int_from_attr(group.attrs["epoch_number"]),
+            epoch_name=_optional_text_from_attr(group.attrs["epoch_name"]),
         ),
-        epoch_number=_optional_int_from_attr(group.attrs["epoch_number"]),
-        epoch_name=_optional_text_from_attr(group.attrs["epoch_name"]),
+        None,
     )
 
 

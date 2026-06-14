@@ -4,6 +4,8 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+import h5py
+
 from tests.napari_support import (
     Any,
     BackgroundCorrectedRoiTraces,
@@ -823,6 +825,71 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
             np.testing.assert_array_equal(
                 roi_label_image_from_layer(viewer.labels[0]),
                 np.array([[1, 0], [0, 0]], dtype=np.int64),
+            )
+            response_widget.shutdown()
+
+    def test_reload_saved_analysis_warns_for_old_peak_normalization(self) -> None:
+        """Confirm old normalization settings load with a clear status message.
+
+        Inputs: saved analysis output whose normalization method uses the old
+            positive-peak setting.
+        Outputs: reloading shows stored responses, disables normalization, and
+            explains that the old setting was not restored.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording_path = _write_converted_recording(root)
+            save_analysis_outputs(
+                root / "analysis_outputs.h5",
+                grouped_responses=_tiny_grouped_responses(),
+                response_processing_options=ResponseProcessingOptions(
+                    normalization=NormalizationOptions(
+                        method="epoch_abs_peak",
+                        epoch_number=1,
+                    ),
+                ),
+            )
+            with h5py.File(root / "analysis_outputs.h5", "r+") as h5_file:
+                h5_file["response_processing/normalization"].attrs["method"] = (
+                    "epoch_peak"
+                )
+            save_roi_set(
+                make_roi_set(
+                    np.array([[[True, False], [False, False]]], dtype=np.bool_),
+                    labels=("roi_0001",),
+                ),
+                root / "rois.h5",
+            )
+            viewer = _FakeViewer()
+            opened = open_recording_in_napari(recording_path, viewer=viewer)
+            response_widget = cast(Any, opened.response_plot_widget)
+
+            response_widget.reload()
+
+            self.assertIn(
+                "old positive-peak normalization",
+                response_widget._update_status_label.text(),
+            )
+            self.assertEqual(
+                response_widget._response_processing_options.normalization.method,
+                "none",
+            )
+
+            save_analysis_outputs(
+                root / "analysis_outputs.h5",
+                grouped_responses=_tiny_grouped_responses(),
+                response_processing_options=ResponseProcessingOptions(
+                    normalization=NormalizationOptions(
+                        method="epoch_abs_peak",
+                        epoch_number=1,
+                    ),
+                ),
+            )
+            response_widget.reload()
+
+            self.assertEqual(
+                response_widget._update_status_label.text(),
+                "Reloaded saved analysis.",
             )
             response_widget.shutdown()
 

@@ -250,6 +250,61 @@ class PersistenceTest(unittest.TestCase):
                     np.array([True, False]),
                 )
 
+    def test_loads_old_epoch_peak_normalization_as_disabled(self) -> None:
+        """Confirm old saved normalization settings do not block reload.
+
+        Inputs: an analysis file whose normalization method uses the old name.
+        Outputs: normalization controls are disabled and a warning explains why.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            h5_path = root / "analysis_outputs.h5"
+            save_analysis_outputs(
+                h5_path,
+                grouped_responses=group_delta_f_over_f_by_epoch(
+                    self._dff(),
+                    (EpochFrameWindow(FrameWindow(0, 0, 2, "gray"), 1, "Gray"),),
+                    data_rate_hz=2.0,
+                ),
+                response_processing_options=ResponseProcessingOptions(
+                    normalization=NormalizationOptions(
+                        method="epoch_abs_peak",
+                        epoch_number=1,
+                        epoch_name="Gray",
+                    ),
+                ),
+                normalization_factors=RoiNormalizationFactors(
+                    roi_labels=("roi_1", "roi_2"),
+                    factors=np.array([2.0, 4.0], dtype=np.float64),
+                    epoch_number=1,
+                    epoch_name="Gray",
+                ),
+            )
+            with h5py.File(h5_path, "r+") as h5_file:
+                h5_file["response_processing/normalization"].attrs["method"] = (
+                    "epoch_peak"
+                )
+
+            loaded = load_analysis_outputs(h5_path)
+
+            self.assertIsNotNone(loaded.response_processing_options)
+            if loaded.response_processing_options is not None:
+                self.assertEqual(
+                    loaded.response_processing_options.normalization.method,
+                    "none",
+                )
+                self.assertEqual(
+                    loaded.response_processing_options.normalization.epoch_number,
+                    1,
+                )
+            self.assertIsNone(loaded.normalization_factors)
+            self.assertIsNotNone(loaded.load_warning)
+            if loaded.load_warning is not None:
+                self.assertIn(
+                    "old positive-peak normalization",
+                    loaded.load_warning,
+                )
+
     def test_csv_requires_grouped_responses(self) -> None:
         """Confirm response CSV is not written without response groups.
 

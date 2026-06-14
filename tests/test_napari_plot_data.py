@@ -78,6 +78,21 @@ class NapariPlotDataTest(unittest.TestCase):
 
         self.assertEqual(filtered.visible_roi_indices, (0,))
 
+    def test_filter_response_plot_data_rois_keeps_load_warning(self) -> None:
+        """Confirm ROI filtering keeps warnings from loaded analysis files."""
+        filtered = filter_response_plot_data_rois(
+            replace(
+                two_roi_response_plot_data_with_correlation_scores(),
+                load_warning="Old normalization setting was disabled.",
+            ),
+            (1,),
+        )
+
+        self.assertEqual(
+            filtered.load_warning,
+            "Old normalization setting was disabled.",
+        )
+
     def test_response_plot_data_summarizes_epoch_roi_mean_and_sem(self) -> None:
         """Confirm plotting data has one mean and SEM trace per ROI.
 

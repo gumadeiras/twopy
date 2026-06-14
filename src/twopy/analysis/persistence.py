@@ -101,7 +101,8 @@ class LoadedAnalysisOutputs:
     """Analysis objects loaded from one twopy analysis HDF5 file.
 
     Inputs: one file written by ``save_analysis_outputs``.
-    Outputs: optional ROI, trace, dF/F, window, and response objects.
+    Outputs: optional ROI, trace, dF/F, window, response objects, and a warning
+        when an old file uses a setting twopy no longer uses.
 
     Groups are optional because scripts can save only the products they have
     computed. Missing groups load as ``None`` or an empty window tuple.
@@ -117,6 +118,7 @@ class LoadedAnalysisOutputs:
     response_processing_options: ResponseProcessingOptions | None
     normalization_factors: RoiNormalizationFactors | None
     correlation_scores: RoiCorrelationScores | None
+    load_warning: str | None = None
 
 
 def save_analysis_outputs(
@@ -341,6 +343,11 @@ def load_analysis_outputs(path: Path) -> LoadedAnalysisOutputs:
             ),
             correlation_scores=(
                 response_processing.correlation_scores
+                if response_processing is not None
+                else None
+            ),
+            load_warning=(
+                response_processing.load_warning
                 if response_processing is not None
                 else None
             ),

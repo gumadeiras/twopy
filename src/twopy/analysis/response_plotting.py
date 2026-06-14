@@ -80,6 +80,8 @@ class ResponsePlotData:
         correlation_window_stop_default_seconds: Optional default QC stop time.
         visible_roi_indices: Optional ROI rows to show initially while keeping all
             ROI data available.
+        load_warning: Optional warning when an old file uses a setting twopy no
+            longer uses.
 
     Returns:
         Immutable response plot view model with no GUI object references.
@@ -93,6 +95,7 @@ class ResponsePlotData:
     correlation_scores: RoiCorrelationScores | None = None
     correlation_window_stop_default_seconds: float | None = None
     visible_roi_indices: tuple[int, ...] | None = None
+    load_warning: str | None = None
 
 
 def response_plot_data_from_grouped(
@@ -105,6 +108,7 @@ def response_plot_data_from_grouped(
     response_processing_options: ResponseProcessingOptions | None = None,
     correlation_scores: RoiCorrelationScores | None = None,
     correlation_window_stop_default_seconds: float | None = None,
+    load_warning: str | None = None,
 ) -> ResponsePlotData:
     """Summarize grouped responses into mean and SEM traces for plotting.
 
@@ -122,6 +126,8 @@ def response_plot_data_from_grouped(
         correlation_scores: Optional ROI-level correlation QC scores.
         correlation_window_stop_default_seconds: Optional default stop time for
             enabling Plot-tab correlation QC.
+        load_warning: Optional warning when an old file uses a setting twopy no
+            longer uses.
 
     Returns:
         Plot-ready data with one item per stimulus epoch type.
@@ -162,6 +168,7 @@ def response_plot_data_from_grouped(
         response_processing_options=response_processing_options,
         correlation_scores=correlation_scores,
         correlation_window_stop_default_seconds=correlation_window_stop_default_seconds,
+        load_warning=load_warning,
     )
 
 
@@ -215,6 +222,7 @@ def filter_response_plot_data_rois(
             plot_data.visible_roi_indices,
             keep_indices,
         ),
+        load_warning=plot_data.load_warning,
     )
 
 

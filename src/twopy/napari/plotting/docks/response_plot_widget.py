@@ -965,6 +965,8 @@ class _ResponsePlotWidget(QWidget):
         self._processing_options_widget.set_correlation_window_stop_default(
             plot_data.correlation_window_stop_default_seconds,
         )
+        if plot_data.load_warning is not None:
+            self._update_status_label.setText(plot_data.load_warning)
         self._sync_plot_state(reset_axes=reset_axes)
         self._render_plots()
 
@@ -1002,6 +1004,8 @@ class _ResponsePlotWidget(QWidget):
         self.set_response_plot_data(result, reset_axes=True)
         if roi_error is not None:
             self._update_status_label.setText(f"Reloaded saved analysis; {roi_error}")
+        elif result.load_warning is None:
+            self._update_status_label.setText("Reloaded saved analysis.")
 
     def _reload_saved_rois(self) -> str | None:
         """Replace the active Labels layer with the saved ROI HDF5 file."""

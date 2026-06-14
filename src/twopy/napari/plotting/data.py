@@ -296,6 +296,7 @@ def _response_plot_data_from_outputs(
         correlation_window_stop_default_seconds=_correlation_stop_default_from_outputs(
             outputs,
         ),
+        load_warning=outputs.load_warning,
     )
 
 
