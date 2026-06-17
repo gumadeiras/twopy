@@ -18,6 +18,7 @@
 
 ### Fixes
 
+- Added spacing between the napari recording-load queue rows and scrollbar, and tightened the queue column so large batches waste less space.
 - Kept old saved analyses with positive-peak normalization loadable by disabling the old normalization setting and showing a clear reload warning.
 - Made napari watershed ROI generation apply **Min pixels** inside the displayed alignment-valid crop, preventing edge ROIs that are large full-frame but undersized in the editable ROIs tab.
 

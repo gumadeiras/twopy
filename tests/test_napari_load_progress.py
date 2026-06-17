@@ -131,8 +131,8 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
         """Confirm large queues expose a visible vertical scrollbar.
 
         Inputs: a 20-recording batch.
-        Outputs: the queue scroll area always reserves a vertical scrollbar and
-        suppresses horizontal scrolling.
+        Outputs: the queue scroll area always reserves a vertical scrollbar,
+        suppresses horizontal scrolling, and leaves room between rows and bar.
         """
         _ = QApplication.instance() or QApplication([])
         dialog = RecordingLoadProgressDialog(
@@ -152,6 +152,11 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
             dialog._queue_scroll.layoutDirection(),
             Qt.LayoutDirection.LeftToRight,
         )
+        body = dialog._queue_scroll.widget()
+        assert body is not None
+        body_layout = body.layout()
+        assert body_layout is not None
+        self.assertGreaterEqual(body_layout.contentsMargins().right(), 8)
 
     def test_dialog_minimum_width_fits_both_panels(self) -> None:
         """Confirm panel minimum widths cannot overlap at default size.
@@ -173,7 +178,7 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
             dialog.minimumWidth() - margins.left() - margins.right() - layout.spacing()
         )
 
-        self.assertGreaterEqual(available_width, 1120)
+        self.assertGreaterEqual(available_width, 1060)
 
     def test_active_path_uses_metadata_style_fields(self) -> None:
         """Confirm the active recording path is split like the Metadata tab.

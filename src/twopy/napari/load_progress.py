@@ -34,7 +34,7 @@ from twopy.napari.display_paths import (
 __all__ = ["RecordingLoadProgressDialog"]
 
 _MINIMUM_DIALOG_HEIGHT = 460
-_QUEUE_WIDTH = 560
+_QUEUE_WIDTH = 500
 _ACTIVE_WIDTH = 560
 _HORIZONTAL_MARGIN = 18
 _PANEL_SPACING = 16
@@ -42,6 +42,7 @@ _MINIMUM_DIALOG_WIDTH = (
     _QUEUE_WIDTH + _ACTIVE_WIDTH + 2 * _HORIZONTAL_MARGIN + _PANEL_SPACING
 )
 _ROW_HEIGHT = 34
+_QUEUE_SCROLLBAR_GUTTER = 8
 _SELECTED_COUNT_WIDTH = 104
 
 
@@ -198,8 +199,8 @@ class RecordingLoadProgressDialog(QDialog):
         layout = QHBoxLayout()
         layout.setContentsMargins(_HORIZONTAL_MARGIN, 16, _HORIZONTAL_MARGIN, 16)
         layout.setSpacing(_PANEL_SPACING)
-        layout.addWidget(self._queue_panel(), 3)
-        layout.addWidget(self._active_panel(), 2)
+        layout.addWidget(self._queue_panel(), 2)
+        layout.addWidget(self._active_panel(), 3)
         return layout
 
     def _queue_panel(self) -> QWidget:
@@ -226,7 +227,7 @@ class RecordingLoadProgressDialog(QDialog):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         body = QWidget()
         body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setContentsMargins(0, 0, _QUEUE_SCROLLBAR_GUTTER, 0)
         body_layout.setSpacing(5)
         for row in self._queue_rows:
             body_layout.addWidget(row.frame)
