@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.3.2 - 2026-06-17
+
 ### Changes
 
 - Made the napari recording-load progress dialog show a dense scrollable queue, source recording identity, the converted folder currently being read, and the read route so large cached batches are easier to monitor.
