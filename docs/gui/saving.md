@@ -24,7 +24,7 @@ With `analysis_caching: true` (the default), twopy saves locally first and then 
 | --- | --- | --- |
 | **Save recording view** | `exports/` | The current recording view as an image |
 | **Save ROI view** | `exports/` | The ROI Labels layer view |
-| **Save recording ROI overlay** | `exports/plots_with_rois/` | Recording with the ROI overlay |
+| **Save recording ROI overlay** | `exports/recording_roi_overlay/` | Recording with the ROI overlay |
 | **Save plots** | `exports/plots/` | Per-epoch response plot figures |
 | **Save plots with ROIs** | `exports/plots_with_rois/` | Paired ROI-overlay + response figures |
 | **Save heatmaps** | `exports/response_heatmaps/` | The visible heatmaps as PDF + PNG |

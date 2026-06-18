@@ -4,6 +4,8 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from types import SimpleNamespace
+
 from qtpy.QtWidgets import QSizePolicy
 
 from tests.napari_support import (
@@ -41,7 +43,9 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
+from twopy.converted import RecordingData
 from twopy.napari.output_routing import NapariOutputRoute
+from twopy.napari.plotting.export import current_recording_image
 from twopy.napari.plotting.panels import SidebarTextLabel
 
 
@@ -201,6 +205,28 @@ class NapariExportTest(NapariAdapterTestCase):
 
         self.assertEqual(len(fig.axes), 2)
         np.testing.assert_allclose(fig.axes[1].get_yticks(), (-0.2, 0.0, 0.2))
+
+    def test_recording_export_uses_visible_mean_image_when_movie_hidden(self) -> None:
+        """Confirm recording exports match the visible image layer.
+
+        Inputs: one hidden aligned-movie layer and one visible mean-image layer.
+        Outputs: exported image data comes from the visible mean image.
+        """
+        mean_image = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+        movie_frame = np.array([[9.0, 9.0], [9.0, 9.0]], dtype=np.float64)
+        viewer = SimpleNamespace(
+            layers={
+                "mean image": SimpleNamespace(data=mean_image, visible=True),
+                "aligned movie": SimpleNamespace(data=movie_frame, visible=False),
+            }
+        )
+
+        image = current_recording_image(
+            viewer=viewer,
+            recording=cast(RecordingData, object()),
+        )
+
+        np.testing.assert_array_equal(image, mean_image)
 
     def test_response_plot_export_draws_epoch_marker(self) -> None:
         """Confirm exported response plots show the coarse epoch top rail.

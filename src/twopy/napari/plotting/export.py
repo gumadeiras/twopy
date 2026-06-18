@@ -388,12 +388,18 @@ def current_recording_image(
     Returns:
         Two-dimensional display-coordinate image.
     """
-    movie_layer = _layer_by_name(viewer, "aligned movie")
+    movie_layer = _visible_layer_by_name(viewer, "aligned movie")
     if movie_layer is not None:
         data = np.asarray(cast(NapariLayerWithData, movie_layer).data)
         if data.ndim == 3:
             index = current_step_index(viewer, step_count=data.shape[0])
             return cast(npt.NDArray[np.float64], data[index, :, :])
+        if data.ndim == 2:
+            return cast(npt.NDArray[np.float64], data)
+
+    mean_layer = _visible_layer_by_name(viewer, "mean image")
+    if mean_layer is not None:
+        data = np.asarray(cast(NapariLayerWithData, mean_layer).data)
         if data.ndim == 2:
             return cast(npt.NDArray[np.float64], data)
 
@@ -948,3 +954,11 @@ def _layer_by_name(viewer: object | None, name: str) -> object | None:
         if getattr(layer, "name", None) == name:
             return layer
     return None
+
+
+def _visible_layer_by_name(viewer: object | None, name: str) -> object | None:
+    """Return a named layer only when napari is currently showing it."""
+    layer = _layer_by_name(viewer, name)
+    if layer is None or not bool(getattr(layer, "visible", True)):
+        return None
+    return layer

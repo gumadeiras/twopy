@@ -6,6 +6,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- Made napari recording-view exports use the visible mean image when the aligned movie layer is hidden, so ROI overlays match the image shown in the viewer.
+
 ## 0.3.7 - 2026-06-18
 
 ### Fixes
