@@ -92,6 +92,25 @@ class PackagingTest(unittest.TestCase):
                 self.assertEqual(exit_context.exception.code, 0)
                 self.assertEqual(output.getvalue().strip(), f"twopy {version('twopy')}")
 
+    def test_twopy_cli_help_shows_config_and_clean_groups(self) -> None:
+        """Confirm root help names the real command and setup path."""
+        output = StringIO()
+
+        with (
+            self.assertRaises(SystemExit) as exit_context,
+            redirect_stdout(output),
+        ):
+            parse_launch_args(["--help"])
+
+        text = output.getvalue()
+        self.assertEqual(exit_context.exception.code, 0)
+        self.assertIn("usage: twopy [PATH] [options]", text)
+        self.assertIn("twopy config setup", text)
+        self.assertIn("movie preview options:", text)
+        self.assertIn("--movie-start", text)
+        self.assertNotIn("__main__.py", text)
+        self.assertNotIn("recording_data_path", text)
+
     def test_twopy_config_command_parses_setup(self) -> None:
         """Confirm ``twopy config setup`` reaches the config command path."""
         args = parse_launch_args(["config", "setup"])

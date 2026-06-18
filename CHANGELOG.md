@@ -9,6 +9,7 @@
 ### Changes
 
 - Made the packaged napari app icon use macOS safe-area padding, include sized PNG representations, and ship an ICNS companion so Qt and macOS can choose a crisp Dock and window icon.
+- Made `twopy --help` show the real `twopy` command name, config setup commands, examples, and grouped recording-path versus movie-preview options.
 - Reduced twopy launcher startup import work while keeping the empty napari app layout assembled before the first window draw.
 
 ## 0.3.3 - 2026-06-18

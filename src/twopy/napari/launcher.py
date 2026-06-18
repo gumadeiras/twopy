@@ -11,7 +11,7 @@ analysis workflows belong in dedicated helpers that the controls call.
 from __future__ import annotations
 
 import sys
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -191,6 +191,7 @@ def _build_config_parser() -> ArgumentParser:
     config_parser = ArgumentParser(
         prog="twopy config",
         description="Show or create the twopy config file.",
+        formatter_class=RawDescriptionHelpFormatter,
     )
     config_subparsers = config_parser.add_subparsers(dest="config_command")
     setup_parser = config_subparsers.add_parser(
@@ -215,52 +216,68 @@ def _build_parser() -> ArgumentParser:
         Configured argument parser.
     """
     parser = ArgumentParser(
-        description="Launch napari for a twopy-converted recording.",
+        prog="twopy",
+        usage="%(prog)s [PATH] [options]\n       %(prog)s config [setup]",
+        description="Open twopy's napari app for two-photon recordings.",
+        epilog=(
+            "Examples:\n"
+            "  twopy\n"
+            "  twopy /path/to/source-or-converted-recording\n"
+            "  twopy config setup\n\n"
+            "Config commands:\n"
+            "  twopy config        Show and validate the active config file.\n"
+            "  twopy config setup  Create an editable config template."
+        ),
+        formatter_class=RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
+    common_options = parser.add_argument_group("common options")
+    common_options.add_argument(
         "-v",
         "--version",
         action="version",
         version=f"twopy {__version__}",
         help="Print the current twopy package version and exit.",
     )
-    parser.add_argument(
+    recording_options = parser.add_argument_group("recording path")
+    recording_options.add_argument(
         "recording_data_path",
         nargs="?",
+        metavar="PATH",
         type=Path,
         help=(
-            "Path to a source recording, converted folder, or recording_data.h5. "
-            "If omitted, twopy checks the current directory and ./twopy output, "
-            "then opens an empty viewer if neither exists."
+            "Optional path to a source recording folder, converted folder, or "
+            "recording_data.h5. Omit this to open the app and choose from the "
+            "Load tab."
         ),
     )
-    parser.add_argument(
+    recording_options.add_argument(
         "--roi-file-to-load",
         dest="roi_file_to_load",
         type=Path,
         default=None,
-        help="Optional existing ROI HDF5 file to load into the Labels layer.",
+        help="Existing ROI HDF5 file to load into the Labels layer.",
     )
-    parser.add_argument(
+    recording_options.add_argument(
         "--roi-save-file",
         dest="roi_save_file",
         type=Path,
         default=None,
-        help="Optional ROI HDF5 output path for saved ROIs and analysis.",
+        help="ROI HDF5 output path for saved ROIs and analysis.",
     )
-    parser.add_argument(
+    movie_options = parser.add_argument_group("movie preview options")
+    movie_options.add_argument(
         "--movie-start",
         type=int,
         default=0,
         help="First frame for the movie preview.",
     )
-    parser.add_argument(
+    movie_options.add_argument(
         "--movie-end",
         type=int,
         default=None,
         help="Last frame for the movie preview. Defaults to the final frame.",
     )
-    parser.add_argument(
+    movie_options.add_argument(
         "--no-movie",
         action="store_true",
         help="Skip loading movie preview frames and show only the mean image.",
