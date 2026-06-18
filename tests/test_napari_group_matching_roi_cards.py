@@ -153,10 +153,11 @@ class GroupMatchingRoiCardTest(unittest.TestCase):
         chips = [
             button
             for button in card.findChildren(QPushButton, "selected_roi_chip")
-            if button.text() == "x  ROI 2"
+            if button.text() == "ROI 2"
         ]
         self.assertEqual(len(chips), 1)
-        self.assertIn("#d62728", chips[0].styleSheet())
+        self.assertFalse(chips[0].icon().isNull())
+        self.assertNotIn("#d62728", chips[0].styleSheet())
         self.assertEqual(chips[0].toolTip(), "Remove ROI 2")
         self.assertEqual(chips[0].accessibleName(), "Remove ROI 2")
 

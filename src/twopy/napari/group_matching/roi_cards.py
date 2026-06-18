@@ -13,7 +13,7 @@ from typing import cast
 
 import numpy as np
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QColor, QMouseEvent
+from qtpy.QtGui import QColor, QIcon, QMouseEvent, QPainter, QPixmap
 from qtpy.QtWidgets import (
     QComboBox,
     QFrame,
@@ -228,10 +228,10 @@ class RoiRecordingCard(QFrame):
         visible_rois = self._selected_rois[:VISIBLE_SELECTED_ROI_CHIPS]
         for index, roi_label in enumerate(visible_rois):
             roi_id = roi_label_display_id(roi_label)
-            button = QPushButton(f"x  ROI {roi_id}")
+            button = QPushButton(f"ROI {roi_id}")
             button.setObjectName("selected_roi_chip")
             button.setFixedHeight(22)
-            button.setStyleSheet("color: #d62728;")
+            button.setIcon(_remove_roi_icon())
             button.setToolTip(f"Remove ROI {roi_id}")
             button.setAccessibleName(f"Remove ROI {roi_id}")
             button.clicked.connect(
@@ -423,6 +423,17 @@ def _trace_label_style(color: QColor) -> str:
         "border-radius: 3px;"
         "}"
     )
+
+
+def _remove_roi_icon() -> QIcon:
+    """Return a small red remove marker for selected-ROI chips."""
+    pixmap = QPixmap(14, 14)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setPen(QColor("#d62728"))
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "x")
+    painter.end()
+    return QIcon(pixmap)
 
 
 def roi_label_value(roi_label: str | None) -> int | None:
