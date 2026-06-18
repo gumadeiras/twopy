@@ -32,6 +32,15 @@ class VersionCheckTest(unittest.TestCase):
         self.assertIsNotNone(notice)
         assert notice is not None
         self.assertEqual(notice.command, PIP_UPDATE_COMMAND)
+        self.assertEqual(
+            notice.text,
+            (
+                "Update available!\n"
+                "Latest version is 0.3.3.\n"
+                "To update, run:\n"
+                "python -m pip install -U twopy"
+            ),
+        )
 
     def test_same_or_older_release_returns_no_notice(self) -> None:
         """Confirm current installs do not show an update command."""
@@ -83,6 +92,24 @@ class VersionCheckTest(unittest.TestCase):
             self.assertIsNotNone(notice)
             assert notice is not None
             self.assertEqual(notice.command, PIP_UPDATE_COMMAND)
+
+    def test_fresh_current_cache_still_checks_for_new_release(self) -> None:
+        """Confirm a same-version cache does not hide a same-day release."""
+        with temporary_directory() as temp_dir:
+            state_file = Path(temp_dir) / "state.json"
+            now = datetime(2026, 6, 18, 12, tzinfo=UTC)
+            _write_cache(state_file, checked_at=now, latest_version="0.3.5")
+
+            notice = check_for_update(
+                current_version="0.3.5",
+                now=now + timedelta(hours=1),
+                state_file=state_file,
+                fetch_latest=lambda: PublishedVersion(version="0.3.6"),
+            )
+
+            self.assertIsNotNone(notice)
+            assert notice is not None
+            self.assertEqual(notice.latest_version, "0.3.6")
 
     def test_stale_cache_is_used_when_network_fails(self) -> None:
         """Confirm old cache still helps when PyPI is unreachable."""

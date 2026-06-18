@@ -6,6 +6,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- Fixed the napari update notice so a fresh same-version cache does not hide a newer release published later the same day, and made the notice show the latest version, print to the terminal, and include a copyable update command.
+
 ## 0.3.6 - 2026-06-18
 
 ### Changes

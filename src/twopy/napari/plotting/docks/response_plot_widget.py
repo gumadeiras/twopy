@@ -583,11 +583,12 @@ class _ResponsePlotWidget(QWidget):
         """Show the copyable update command when a newer release is known."""
         if notice is None:
             return
-        self._update_notice_label.setText(notice.command)
+        self._update_notice_label.setText(notice.text)
+        print(notice.text, flush=True)
         if self._viewer is not None:
             refresh_empty_viewer_message(
                 self._viewer,
-                update_command=notice.command,
+                update_command=notice.text,
             )
 
     def _ignore_update_notice_error(self, _error: Exception) -> None:

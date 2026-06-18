@@ -294,11 +294,18 @@ def _test_environment() -> dict[str, str]:
         Environment variables for unittest subprocesses.
 
     Napari and Qt tests should measure widgets without opening desktop windows
-    or taking focus from the developer's active app.
+    or taking focus from the developer's active app. Test subprocesses must
+    import the working tree before any installed twopy package.
     """
     from tests.gui_environment import headless_gui_environment
 
-    return headless_gui_environment(os.environ)
+    env = headless_gui_environment(os.environ)
+    source_paths = (str(REPO_ROOT / "src"), str(REPO_ROOT))
+    existing_pythonpath = env.get("PYTHONPATH")
+    if existing_pythonpath:
+        source_paths += (existing_pythonpath,)
+    env["PYTHONPATH"] = os.pathsep.join(source_paths)
+    return env
 
 
 def _git_text(*args: str) -> str:

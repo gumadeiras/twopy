@@ -19,6 +19,45 @@ twopy publishes to PyPI through GitHub Actions Trusted Publishing. No PyPI API t
 7. Publish the release.
 8. Approve the `pypi` deployment.
 
+Use the full pushed commit SHA when creating the release. Short SHAs can be rejected by the GitHub release API.
+
+```sh
+version="<release-version>"
+sha="$(git rev-parse HEAD)"
+git push origin HEAD:refs/heads/main
+
+gh release create "$version" \
+  --target "$sha" \
+  --title "$version" \
+  --notes-file RELEASE_NOTES.md
+```
+
+If the publish workflow waits for the `pypi` environment, approve the pending deployment with the numeric environment id returned by GitHub. The API needs raw JSON so the id is sent as an integer.
+
+```sh
+gh run list --workflow publish-to-pypi.yml --limit 5
+gh api repos/gumadeiras/twopy/actions/runs/<run_id>/pending_deployments
+
+gh api --method POST \
+  repos/gumadeiras/twopy/actions/runs/<run_id>/pending_deployments \
+  --input - <<'EOF'
+{"environment_ids":[<environment_id>],"state":"approved","comment":"Release <version>"}
+EOF
+```
+
+After the workflow succeeds, PyPI JSON can lag briefly. Verify the public version after a short wait.
+
+```sh
+python - <<'PY'
+import json
+from urllib.request import urlopen
+
+with urlopen("https://pypi.org/pypi/twopy/json", timeout=20) as response:
+    data = json.load(response)
+print(data["info"]["version"])
+PY
+```
+
 ## Changelog Rules
 
 - Every release must update `CHANGELOG.md` before the release tag is created.

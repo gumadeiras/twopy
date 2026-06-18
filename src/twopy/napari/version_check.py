@@ -1,7 +1,7 @@
 """Check whether PyPI has a newer twopy release for the napari app.
 
 Inputs: installed twopy version, PyPI JSON metadata, and local UI cache.
-Outputs: an optional copyable update command for the Metadata tab.
+Outputs: an optional copyable update notice for the Metadata tab.
 
 The app only tells users how to update. It does not choose or run an
 environment manager, because users may launch twopy from pip, conda, or another
@@ -97,13 +97,23 @@ class UpdateNotice:
         latest_version: Newer version available from the package index.
         command: Update command shown to the user.
 
-    The Metadata tab shows only ``command`` so twopy does not assume how the
-    user's Python environment is managed.
+    The Metadata tab shows text the user can copy. The command stays plain so
+    twopy does not assume how the user's Python environment is managed.
     """
 
     current_version: str
     latest_version: str
     command: str = PIP_UPDATE_COMMAND
+
+    @property
+    def text(self) -> str:
+        """Return the copyable user-facing update notice."""
+        return (
+            "Update available!\n"
+            f"Latest version is {self.latest_version}.\n"
+            "To update, run:\n"
+            f"{self.command}"
+        )
 
 
 def check_for_update(
@@ -131,9 +141,9 @@ def check_for_update(
         Update notice, or ``None`` when twopy is current or the check cannot
         prove that a newer final release exists.
 
-    A fresh cache avoids one network request per launch. If PyPI is unreachable
-    and an older cache already proves a newer version exists, twopy can still
-    show the update command.
+    A fresh cache avoids one network request per launch only after it has
+    already seen a newer version. If PyPI is unreachable and an older cache
+    proves a newer version exists, twopy can still show the update command.
     """
     checked_now = _utc(now)
     cache = read_version_check_cache(state_file=state_file)
@@ -261,7 +271,7 @@ def _cache_is_fresh(
         latest = Version(cache.latest_version)
     except InvalidVersion:
         return False
-    if latest < current:
+    if latest <= current:
         return False
     return now - checked_at <= max_age
 

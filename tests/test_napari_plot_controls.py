@@ -57,7 +57,12 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             SidebarTextLabel(analysis_text),
             SidebarTextLabel("ROI output: /very/long/path/to/rois.h5"),
             SidebarTextLabel("Saved analysis."),
-            SidebarTextLabel("python -m pip install -U twopy"),
+            SidebarTextLabel(
+                "Update available!\n"
+                "Latest version is 0.3.6.\n"
+                "To update, run:\n"
+                "python -m pip install -U twopy",
+            ),
         )
 
         tab = response_metadata_tab(
