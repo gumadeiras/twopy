@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.3.4 - 2026-06-18
+
 ### Changes
 
 - Made the packaged napari app icon use macOS safe-area padding, include sized PNG representations, and ship an ICNS companion so Qt and macOS can choose a crisp Dock and window icon.
