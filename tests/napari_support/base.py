@@ -420,12 +420,23 @@ class _FakeViewer:
         """
         self.images: list[_FakeLayer] = []
         self.labels: list[_FakeLayer] = []
-        self.layers = SimpleNamespace(selection=SimpleNamespace(active=None))
+        self.layer_clear_calls = 0
+        self.layers = SimpleNamespace(
+            selection=SimpleNamespace(active=None),
+            clear=self._clear_layers,
+        )
         self.window = _FakeWindow()
         self.dims = _FakeDims()
         self.welcome_screen = _FakeWelcomeScreen()
         self.text_overlay = _FakeTextOverlay()
         self.reset_view_calls: list[dict[str, object]] = []
+
+    def _clear_layers(self) -> None:
+        """Clear fake layer collections like napari's LayerList.clear."""
+        self.layer_clear_calls += 1
+        self.images.clear()
+        self.labels.clear()
+        self.layers.selection.active = None
 
     def add_image(self, data: object, *, name: str, **kwargs: object) -> object:
         """Record an image layer request.

@@ -269,6 +269,27 @@ def remove_loaded_recording_layers(
         _remove_layer(viewer, layer)
 
 
+def _clear_all_viewer_layers(viewer: object) -> None:
+    """Clear every viewer layer because twopy owns the layer stack."""
+    layer_collection = getattr(viewer, "layers", None)
+    clear = getattr(layer_collection, "clear", None)
+    if callable(clear):
+        clear()
+        return
+
+    for collection_name in ("images", "labels"):
+        collection = getattr(viewer, collection_name, None)
+        if isinstance(collection, list):
+            collection.clear()
+
+    selection = getattr(layer_collection, "selection", None)
+    if selection is not None and hasattr(selection, "active"):
+        try:
+            cast(_LayerSelection, selection).active = None
+        except (AttributeError, TypeError):
+            return
+
+
 def record_loaded_view(
     state: NapariSessionState,
     *,
@@ -444,7 +465,7 @@ def unload_loaded_recording(state: NapariSessionState, index: int) -> None:
 
 
 def unload_all_loaded_recordings(state: NapariSessionState) -> None:
-    """Unload every recording and remove all owned layers from napari.
+    """Unload every recording and clear all twopy-owned layers from napari.
 
     Args:
         state: Mutable napari session state.
@@ -454,8 +475,7 @@ def unload_all_loaded_recordings(state: NapariSessionState) -> None:
     """
     if len(state.loaded_recordings) == 0:
         return
-    for loaded_recording in state.loaded_recordings:
-        remove_loaded_recording_layers(state.viewer, loaded_recording)
+    _clear_all_viewer_layers(state.viewer)
     state.loaded_recordings.clear()
     clear_matching_state = getattr(
         state.group_matching_panel,

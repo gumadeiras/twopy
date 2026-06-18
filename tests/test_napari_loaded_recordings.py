@@ -850,6 +850,7 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
 
             unload_buttons["Unload all"].click()
 
+            self.assertEqual(viewer.layer_clear_calls, 1)
             self.assertEqual(loaded_list.count(), 0)
             self.assertFalse(sidebar_buttons["Open Group Matching"].isEnabled())
             self.assertFalse(sidebar_buttons["Reconvert selected"].isEnabled())
