@@ -6,6 +6,10 @@
 
 ## Unreleased
 
+### Fixes
+
+- Removed the duplicate **Update** heading from the empty napari update notice.
+
 ## 0.3.8 - 2026-06-18
 
 ### Fixes

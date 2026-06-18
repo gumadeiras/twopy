@@ -479,6 +479,10 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
 
         self.assertEqual(
             viewer.text_overlay.text,
+            f"{EMPTY_VIEWER_MESSAGE}\n\npython -m pip install -U twopy",
+        )
+        self.assertEqual(
+            viewer.text_overlay.text,
             empty_viewer_message(update_command="python -m pip install -U twopy"),
         )
         hide_empty_viewer_message(viewer)

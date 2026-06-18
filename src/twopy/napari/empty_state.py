@@ -135,13 +135,13 @@ def empty_viewer_message(*, update_command: str | None = None) -> str:
     """Return the empty-viewer text for the current update state."""
     if not update_command:
         return _BASE_EMPTY_VIEWER_MESSAGE
-    return f"{_BASE_EMPTY_VIEWER_MESSAGE}\n\nUpdate\n{update_command}"
+    return f"{_BASE_EMPTY_VIEWER_MESSAGE}\n\n{update_command}"
 
 
 def _is_empty_viewer_message(text: str) -> bool:
     """Return whether text is owned by twopy's empty-recording overlay."""
     return text == EMPTY_VIEWER_MESSAGE or text.startswith(
-        f"{EMPTY_VIEWER_MESSAGE}\n\nUpdate\n"
+        f"{EMPTY_VIEWER_MESSAGE}\n\n"
     )
 
 
