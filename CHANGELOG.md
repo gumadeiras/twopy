@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.3.3 - 2026-06-18
+
 ### Changes
 
 - Updated the packaged twopy app icon artwork.
