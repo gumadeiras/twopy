@@ -425,6 +425,7 @@ class _FakeViewer:
         self.dims = _FakeDims()
         self.welcome_screen = _FakeWelcomeScreen()
         self.text_overlay = _FakeTextOverlay()
+        self.reset_view_calls: list[dict[str, object]] = []
 
     def add_image(self, data: object, *, name: str, **kwargs: object) -> object:
         """Record an image layer request.
@@ -465,6 +466,20 @@ class _FakeViewer:
         )
         self.labels.append(layer)
         return layer
+
+    def reset_view(
+        self,
+        *,
+        margin: float = 0.05,
+        reset_camera_angle: bool = True,
+    ) -> None:
+        """Record a camera reset request."""
+        self.reset_view_calls.append(
+            {
+                "margin": margin,
+                "reset_camera_angle": reset_camera_angle,
+            },
+        )
 
 
 class _FakeColorLayer:

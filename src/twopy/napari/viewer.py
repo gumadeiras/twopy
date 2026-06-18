@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
+from qtpy.QtCore import QTimer
 
 from twopy._version import __version__
 from twopy.napari.empty_state import (
@@ -367,6 +368,11 @@ def add_prepared_recording_to_viewer(
             metadata=prepared.layer_metadata,
         )
         set_labels_brush_size(roi_layer, brush_size=6)
+
+    QTimer.singleShot(
+        0,
+        lambda: viewer.reset_view(margin=0.05, reset_camera_angle=False),
+    )
 
     from twopy.napari.types import NapariRecordingView
 

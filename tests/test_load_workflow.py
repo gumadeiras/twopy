@@ -115,6 +115,15 @@ class _Viewer:
         self.labels.append(layer)
         return layer
 
+    def reset_view(
+        self,
+        *,
+        margin: float = 0.05,
+        reset_camera_angle: bool = True,
+    ) -> None:
+        """Accept the recording-view camera fit request."""
+        del margin, reset_camera_angle
+
 
 @dataclass
 class _State:

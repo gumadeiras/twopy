@@ -31,6 +31,7 @@ from tests.napari_support import (
     np,
     open_recording_in_napari,
     patch,
+    process_qt_events_until,
     roi_label_image_from_layer,
     save_napari_label_rois,
     save_roi_set,
@@ -733,6 +734,7 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
                 viewer=viewer,
                 movie_frame_range=(0, 1),
             )
+            process_qt_events_until(lambda: len(viewer.reset_view_calls) == 1)
 
             self.assertIs(opened.viewer, viewer)
             self.assertEqual(opened.recording.movie.shape, (3, 2, 2))
@@ -750,6 +752,10 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             self.assertEqual(viewer.images[1].contrast_limits_range, (0.0, 7.0))
             self.assertEqual(np.asarray(viewer.images[1].data).shape, (2, 2, 2))
             self.assertEqual(len(viewer.labels), 1)
+            self.assertEqual(
+                viewer.reset_view_calls,
+                [{"margin": 0.05, "reset_camera_angle": False}],
+            )
             np.testing.assert_array_equal(
                 np.unique(np.asarray(viewer.labels[0].data)),
                 np.array([0, 3, 4]),

@@ -80,6 +80,24 @@ class NapariViewer(Protocol):
         """
         ...
 
+    def reset_view(
+        self,
+        *,
+        margin: float = 0.05,
+        reset_camera_angle: bool = True,
+    ) -> None:
+        """Fit visible layers into the current viewer canvas.
+
+        Args:
+            margin: Fractional padding around visible layer extents.
+            reset_camera_angle: Whether to reset camera orientation as well as
+                zoom and pan.
+
+        Returns:
+            None.
+        """
+        ...
+
 
 class NapariLayerWithData(Protocol):
     """Small protocol for napari layers that expose array-like data.
