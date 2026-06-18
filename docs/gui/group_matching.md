@@ -51,7 +51,7 @@ Buttons (left column):
 
 The **Saved groups** table lists matched groups for the current FOV (Group ID, ROIs, Note) and shows five rows at a time. Selecting a row restores its ROI selections and note; clicking the selected row again clears the table.
 
-**Plot settings** in the left column hold response-row toggles, plot size, epoch visibility (gray / grey / interleave rows hidden by default), smoothing, and normalization. Click the colored ROI trace chips above the plots to toggle each selected ROI trace.
+**Plot settings** in the left column hold response-row toggles, plot size, epoch visibility (gray / grey / interleave rows hidden by default), smoothing, and normalization. Click the colored ROI trace chips above the plots to toggle each selected ROI trace. The chip area shows up to five rows at a time, then scrolls.
 
 ## Notes and outputs
 

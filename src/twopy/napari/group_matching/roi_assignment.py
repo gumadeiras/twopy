@@ -108,6 +108,7 @@ _ROI_CONTROL_HEIGHT = ROI_CONTROL_HEIGHT
 _FOV_FILTER_POPUP_MIN_WIDTH = 128
 _ROI_TABLE_VISIBLE_ROWS = 5
 _ROI_TABLE_ROW_HEIGHT = 24
+_SELECTED_ROI_LEGEND_VISIBLE_ROWS = 5
 
 
 class RoiAssignmentView(QWidget):
@@ -177,6 +178,16 @@ class RoiAssignmentView(QWidget):
         self._legend_layout.setContentsMargins(0, 0, 0, 0)
         self._legend_layout.setSpacing(6)
         self._legend_widget.setLayout(self._legend_layout)
+        self._legend_scroll = _scroll_area_for_widget(
+            self._legend_widget,
+            object_name="roi_assignment_selected_rois_scroll",
+            horizontal_policy=Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+            vertical_policy=Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+        )
+        self._legend_scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         self._response_strip = ResponsePreviewStrip(
             "roi_response_preview",
             trace_alpha=_ROI_TRACE_ALPHA,
@@ -328,7 +339,7 @@ class RoiAssignmentView(QWidget):
         selected_rois_panel.setContentsMargins(0, 0, 0, 0)
         selected_rois_panel.setSpacing(5)
         selected_rois_panel.addWidget(self._response_status)
-        selected_rois_panel.addWidget(self._legend_widget)
+        selected_rois_panel.addWidget(self._legend_scroll)
         roi_response_panel = QVBoxLayout()
         roi_response_panel.setContentsMargins(0, 0, 0, 0)
         roi_response_panel.addWidget(self._roi_response_scroll)
@@ -589,8 +600,10 @@ class RoiAssignmentView(QWidget):
         )
         self._update_selected_rois_section_title()
         if len(self._selected_responses) == 0:
+            self._legend_scroll.setVisible(False)
             self._show_response_status("Choose ROIs to compare responses.")
             return
+        self._legend_scroll.setVisible(True)
         response_preview.add_response_legend(
             self._legend_layout,
             self._selected_responses,
@@ -598,6 +611,7 @@ class RoiAssignmentView(QWidget):
             set_visible=self._set_response_visible,
             max_width=max(1, self._right_content.width() - 48),
         )
+        self._fit_selected_rois_legend_scroll()
         visible_responses = tuple(
             response
             for response in self._selected_responses
@@ -649,6 +663,27 @@ class RoiAssignmentView(QWidget):
         """Show the Selected ROIs status text without changing cached plots."""
         self._response_status.setText(text)
         self._response_status.setVisible(True)
+
+    def _fit_selected_rois_legend_scroll(self) -> None:
+        """Show at most five rows of selected-ROI chips before scrolling."""
+        row_count = self._legend_layout.rowCount()
+        visible_rows = min(row_count, _SELECTED_ROI_LEGEND_VISIBLE_ROWS)
+        if visible_rows == 0:
+            self._legend_scroll.setFixedHeight(0)
+            return
+        row_height = 0
+        for row_index in range(visible_rows):
+            item = self._legend_layout.itemAtPosition(row_index, 0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                row_height = max(row_height, widget.sizeHint().height())
+        spacing = max(0, self._legend_layout.spacing())
+        height = (
+            row_height * visible_rows
+            + spacing * (visible_rows - 1)
+            + 2 * self._legend_scroll.frameWidth()
+        )
+        self._legend_scroll.setFixedHeight(height)
 
     def _fit_response_scroll_heights(self) -> None:
         """Keep response scroll areas tall enough for their visible plot strips."""

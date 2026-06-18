@@ -728,6 +728,47 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             if row_layout is not None:
                 self.assertEqual(row_layout.count(), 1)
 
+    def test_group_matching_selected_roi_buttons_scroll_after_five_rows(
+        self,
+    ) -> None:
+        """Confirm many selected-ROI chips do not grow the section forever.
+
+        Inputs: six selected ROI responses forced to wrap one per row.
+        Outputs: the selected-ROI chip scroll area is shorter than its content
+        and uses a vertical scrollbar when needed.
+        """
+        _ = QApplication.instance() or QApplication([])
+        view = group_matching_roi.RoiAssignmentView(
+            state=SimpleNamespace(loaded_recordings=[]),
+            fov_groups={},
+            current_rois={},
+            output_path=Path("roi_matches.csv"),
+            on_output_path_changed=lambda _path: None,
+            on_back=lambda: None,
+        )
+        view._right_content.resize(120, 200)
+        view._selected_responses = tuple(
+            group_matching_response_preview.SelectedRoiResponse(
+                recording_path=Path(f"/recordings/2026/06_11/16_4{index}_00"),
+                roi_label=f"roi_{index + 1:04d}",
+                plot_data=_tiny_response_plot_data(),
+                color=QColor("#1f77b4"),
+            )
+            for index in range(6)
+        )
+
+        view._render_response_preview()
+
+        self.assertEqual(view._legend_layout.rowCount(), 6)
+        self.assertEqual(
+            view._legend_scroll.verticalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+        )
+        self.assertLess(
+            view._legend_scroll.maximumHeight(),
+            view._legend_widget.sizeHint().height(),
+        )
+
     def test_group_matching_card_overlays_use_recording_dates(self) -> None:
         """Confirm FOV and ROI card overlays show date plus recording minute.
 
