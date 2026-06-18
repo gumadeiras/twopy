@@ -6,8 +6,11 @@
 
 ## Unreleased
 
+## 0.3.8 - 2026-06-18
+
 ### Fixes
 
+- Made Load tab **Unload all** clear the napari layer stack in one operation, reducing long freezes when many recordings are loaded.
 - Made napari recording-view exports use the visible mean image when the aligned movie layer is hidden, so ROI overlays match the image shown in the viewer.
 
 ## 0.3.7 - 2026-06-18
