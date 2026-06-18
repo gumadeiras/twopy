@@ -6,6 +6,11 @@
 
 ## Unreleased
 
+### Changes
+
+- Made the packaged napari app icon use macOS safe-area padding, include sized PNG representations, and ship an ICNS companion so Qt and macOS can choose a crisp Dock and window icon.
+- Reduced twopy launcher startup import work while keeping the empty napari app layout assembled before the first window draw.
+
 ## 0.3.3 - 2026-06-18
 
 ### Changes

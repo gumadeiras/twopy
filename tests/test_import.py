@@ -23,6 +23,27 @@ class ImportTest(unittest.TestCase):
         """
         self.assertEqual(twopy.__version__, version("twopy"))
 
+    def test_top_level_all_exports_resolve(self) -> None:
+        """Confirm every public top-level name resolves at runtime.
+
+        Inputs: imported twopy module.
+        Outputs: a passing assertion when every ``__all__`` name is importable.
+        """
+        missing = [name for name in twopy.__all__ if not hasattr(twopy, name)]
+
+        self.assertEqual(missing, [])
+
+    def test_top_level_lazy_exports_are_listed_by_dir(self) -> None:
+        """Confirm introspection can see lazy top-level names before access.
+
+        Inputs: imported twopy module.
+        Outputs: a passing assertion when public lazy names appear in ``dir``.
+        """
+        names = dir(twopy)
+
+        self.assertIn("__version__", names)
+        self.assertIn("make_roi_set", names)
+
     def test_top_level_import_leaves_gui_modules_lazy(self) -> None:
         """Confirm script imports do not import napari, Qt, or matplotlib.
 

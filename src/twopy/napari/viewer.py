@@ -8,40 +8,33 @@ This module owns viewer/layer creation only. It does not query the database,
 read source MATLAB/TIFF files, or perform analysis.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
 
 from twopy._version import __version__
-from twopy.converted import ConvertedMovie, RecordingData, load_converted_recording
-from twopy.napari.controls import add_twopy_magicgui_controls
-from twopy.napari.display import display_metadata_for_spatial_crop
 from twopy.napari.empty_state import (
     hide_empty_viewer_message,
     show_empty_viewer_message,
 )
-from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
-from twopy.napari.output_routing import NapariOutputRoute
-from twopy.napari.plotting import (
-    add_twopy_response_plot_widget,
-    create_twopy_response_options_widget,
-)
 from twopy.napari.protocols import NapariViewer
-from twopy.napari.roi import resolve_roi_save_file, roi_label_image_for_display
-from twopy.napari.trial_timeline import (
-    TrialTimelineController,
-    movie_frame_metadata,
-)
-from twopy.napari.types import NapariRecordingView
-from twopy.roi import RoiSet
-from twopy.spatial import SpatialCrop
+
+if TYPE_CHECKING:
+    from twopy.converted import ConvertedMovie, RecordingData
+    from twopy.napari.output_routing import NapariOutputRoute
+    from twopy.napari.types import NapariRecordingView
+    from twopy.roi import RoiSet
+    from twopy.spatial import SpatialCrop
 
 APPLICATION_TITLE = f"twopy {__version__}"
 APPLICATION_ICON_RESOURCE = "assets/twopy-app-icon.png"
+APPLICATION_ICON_SIZES = (16, 32, 64, 128, 256, 512)
 
 __all__ = [
     "APPLICATION_ICON_RESOURCE",
@@ -172,6 +165,14 @@ def open_recording_in_napari(
     response_options_widget = None
     trial_timeline_controller = None
     if add_controls:
+        from twopy.napari.controls import add_twopy_magicgui_controls
+        from twopy.napari.plotting import (
+            add_twopy_response_plot_widget,
+            create_twopy_response_options_widget,
+        )
+        from twopy.napari.roi import resolve_roi_save_file
+        from twopy.napari.trial_timeline import TrialTimelineController
+
         trial_timeline_controller = TrialTimelineController(resolved_viewer)
         resolved_roi_save_file = resolve_roi_save_file(
             recording_data_path=recording.path,
@@ -205,6 +206,8 @@ def open_recording_in_napari(
         twopy_sidebar_widget = control_docks.sidebar_widget
         twopy_sidebar_dock = control_docks.sidebar_dock_widget
         trial_timeline_controller.set_context(recording, movie_layer)
+
+    from twopy.napari.types import NapariRecordingView
 
     return NapariRecordingView(
         viewer=resolved_viewer,
@@ -247,6 +250,11 @@ def prepare_recording_view_data(
     GUI callers run this function in a worker while preserving Qt's main-thread
     ownership of napari layer objects.
     """
+    from twopy.converted import load_converted_recording
+    from twopy.napari.display import display_metadata_for_spatial_crop
+    from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
+    from twopy.napari.roi import roi_label_image_for_display
+
     recording = load_converted_recording(recording_data_path, movie_path=movie_path)
     display_crop = recording.alignment_valid_crop
     layer_metadata = display_metadata_for_spatial_crop(display_crop)
@@ -333,6 +341,8 @@ def add_prepared_recording_to_viewer(
         if prepared.movie_contrast_limits is None or prepared.movie_frame_span is None:
             msg = "Prepared movie data must include contrast limits and frame span."
             raise ValueError(msg)
+        from twopy.napari.trial_timeline import movie_frame_metadata
+
         movie_layer = viewer.add_image(
             prepared.movie,
             name=movie_layer_name,
@@ -357,6 +367,8 @@ def add_prepared_recording_to_viewer(
             metadata=prepared.layer_metadata,
         )
         set_labels_brush_size(roi_layer, brush_size=6)
+
+    from twopy.napari.types import NapariRecordingView
 
     return NapariRecordingView(
         viewer=viewer,
@@ -393,11 +405,17 @@ def create_viewer() -> NapariViewer:
 
 
 def _set_application_icon(viewer: NapariViewer) -> None:
+    from qtpy.QtCore import QSize
     from qtpy.QtGui import QIcon
     from qtpy.QtWidgets import QApplication
 
-    icon_path = files("twopy.napari").joinpath(APPLICATION_ICON_RESOURCE)
-    icon = QIcon(str(icon_path))
+    asset_root = files("twopy.napari")
+    icon = QIcon(str(asset_root.joinpath(APPLICATION_ICON_RESOURCE)))
+    for size in APPLICATION_ICON_SIZES:
+        icon.addFile(
+            str(asset_root.joinpath(f"assets/twopy-app-icon-{size}.png")),
+            QSize(size, size),
+        )
     application = QApplication.instance()
     if isinstance(application, QApplication):
         application.setWindowIcon(icon)

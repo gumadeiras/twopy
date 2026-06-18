@@ -26,6 +26,7 @@ from twopy.config import (
 )
 
 if TYPE_CHECKING:
+    from twopy.napari.protocols import NapariViewer
     from twopy.napari.types import NapariRecordingView
 
 __all__ = ["launch_napari", "main"]
@@ -76,8 +77,6 @@ def launch_napari(
     point creates a first-launch config template before calling this function;
     direct Python callers should run ``twopy config setup`` first.
     """
-    from twopy.filenames import ROI_FILENAME
-    from twopy.napari.controls import add_twopy_magicgui_controls
     from twopy.napari.loading import resolve_or_convert_launch_recording
     from twopy.napari.viewer import create_viewer, open_recording_in_napari
 
@@ -85,32 +84,7 @@ def launch_napari(
     movie_range = (int(movie_start_frame), movie_end_frame) if load_movie else None
     viewer = create_viewer()
     if resolved_recording is None:
-        from twopy.napari.plotting import (
-            add_twopy_response_plot_widget,
-            create_twopy_response_options_widget,
-        )
-        from twopy.napari.trial_timeline import TrialTimelineController
-
-        response_plot_widget, _response_plot_dock = add_twopy_response_plot_widget(
-            viewer,
-            recording=None,
-        )
-        response_options_widget = create_twopy_response_options_widget(
-            response_plot_widget,
-        )
-        trial_timeline_controller = TrialTimelineController(viewer)
-        add_twopy_magicgui_controls(
-            viewer,
-            roi_labels_layer=None,
-            roi_save_file=(
-                roi_save_file.expanduser()
-                if roi_save_file is not None
-                else Path.cwd() / ROI_FILENAME
-            ),
-            response_plot_widget=response_plot_widget,
-            response_options_widget=response_options_widget,
-            trial_timeline_controller=trial_timeline_controller,
-        )
+        _install_empty_launch_controls(viewer, roi_save_file=roi_save_file)
         view = None
     else:
         paths = resolved_recording.paths
@@ -128,6 +102,59 @@ def launch_napari(
 
     napari.run()
     return view
+
+
+def _install_empty_launch_controls(
+    viewer: NapariViewer, *, roi_save_file: Path | None
+) -> None:
+    """Add empty-viewer controls before napari starts drawing.
+
+    Args:
+        viewer: Empty napari viewer receiving twopy docks.
+        roi_save_file: Optional ROI output path for later saved analysis.
+
+    Returns:
+        None.
+
+    The empty app should appear with its full layout in one pass. Installing
+    docks before ``napari.run()`` avoids a visible layout shift after the window
+    appears.
+    """
+    from twopy.filenames import ROI_FILENAME
+    from twopy.napari.controls import add_twopy_magicgui_controls
+    from twopy.napari.plotting import (
+        add_twopy_response_plot_widget,
+        create_twopy_response_options_widget,
+    )
+    from twopy.napari.trial_timeline import TrialTimelineController
+
+    response_plot_widget, response_plot_dock = add_twopy_response_plot_widget(
+        viewer,
+        recording=None,
+    )
+    response_options_widget = create_twopy_response_options_widget(
+        response_plot_widget,
+    )
+    trial_timeline_controller = TrialTimelineController(viewer)
+    control_docks = add_twopy_magicgui_controls(
+        viewer,
+        roi_labels_layer=None,
+        roi_save_file=(
+            roi_save_file.expanduser()
+            if roi_save_file is not None
+            else Path.cwd() / ROI_FILENAME
+        ),
+        response_plot_widget=response_plot_widget,
+        response_options_widget=response_options_widget,
+        trial_timeline_controller=trial_timeline_controller,
+    )
+    vars(viewer)["_twopy_empty_launch_controls"] = (
+        response_plot_widget,
+        response_plot_dock,
+        response_options_widget,
+        trial_timeline_controller,
+        control_docks,
+    )
 
 
 def parse_launch_args(args: Sequence[str] | None = None) -> Namespace:

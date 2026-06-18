@@ -38,7 +38,7 @@ Repository = "https://github.com/gumadeiras/twopy"
 where = ["src"]
 
 [tool.setuptools.package-data]
-twopy = ["calibrations/*.csv", "config.example.yml", "napari/assets/*.png"]
+twopy = ["calibrations/*.csv", "config.example.yml", "napari/assets/*.icns", "napari/assets/*.png"]
 
 [tool.ruff]
 line-length = 88
