@@ -421,8 +421,9 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
         """Confirm the launcher brands the top-level napari window.
 
         Inputs: patched napari Viewer constructor.
-        Outputs: viewer construction receives the twopy name and version.
+        Outputs: viewer construction receives the twopy name, version, and icon.
         """
+        _ = QApplication.instance() or QApplication([])
         viewer = _FakeViewer()
 
         with patch("napari.Viewer", return_value=viewer) as viewer_constructor:
@@ -436,6 +437,10 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
         self.assertTrue(viewer.text_overlay.text.startswith(f"{APPLICATION_TITLE}\n"))
         self.assertTrue(viewer.text_overlay.visible)
         self.assertEqual(viewer.text_overlay.position, "top_center")
+        icon = viewer.window._qt_window.window_icon
+        self.assertIsNotNone(icon)
+        assert icon is not None
+        self.assertFalse(icon.isNull())
 
     def test_empty_viewer_message_only_clears_twopy_text(self) -> None:
         """Confirm hiding the empty message leaves other overlay owners alone.

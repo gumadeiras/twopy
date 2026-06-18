@@ -9,6 +9,7 @@ read source MATLAB/TIFF files, or perform analysis.
 """
 
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -40,8 +41,10 @@ from twopy.roi import RoiSet
 from twopy.spatial import SpatialCrop
 
 APPLICATION_TITLE = f"twopy {__version__}"
+APPLICATION_ICON_RESOURCE = "assets/twopy-app-icon.png"
 
 __all__ = [
+    "APPLICATION_ICON_RESOURCE",
     "APPLICATION_TITLE",
     "PreparedNapariRecordingViewData",
     "add_prepared_recording_to_viewer",
@@ -384,8 +387,23 @@ def create_viewer() -> NapariViewer:
     import napari
 
     viewer = cast(NapariViewer, napari.Viewer(title=APPLICATION_TITLE))
+    _set_application_icon(viewer)
     show_empty_viewer_message(viewer)
     return viewer
+
+
+def _set_application_icon(viewer: NapariViewer) -> None:
+    from qtpy.QtGui import QIcon
+    from qtpy.QtWidgets import QApplication
+
+    icon_path = files("twopy.napari").joinpath(APPLICATION_ICON_RESOURCE)
+    icon = QIcon(str(icon_path))
+    application = QApplication.instance()
+    if isinstance(application, QApplication):
+        application.setWindowIcon(icon)
+    qt_window = getattr(viewer.window, "_qt_window", None)
+    if qt_window is not None and hasattr(qt_window, "setWindowIcon"):
+        qt_window.setWindowIcon(icon)
 
 
 def set_labels_brush_size(layer: object, *, brush_size: int) -> None:

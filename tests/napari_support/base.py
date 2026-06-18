@@ -30,7 +30,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 from napari.layers import Labels
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QCloseEvent, QColor
+from qtpy.QtGui import QCloseEvent, QColor, QIcon
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -317,6 +317,7 @@ class _FakeQtWindow:
     """Small Qt-window-shaped object for dock resize tests."""
 
     resize_calls: list[_FakeResizeCall]
+    window_icon: QIcon | None
 
     def __init__(self) -> None:
         """Create an empty fake Qt window.
@@ -325,6 +326,7 @@ class _FakeQtWindow:
         Outputs: fake window with no resize calls.
         """
         self.resize_calls: list[_FakeResizeCall] = []
+        self.window_icon = None
 
     def resizeDocks(
         self,
@@ -345,6 +347,10 @@ class _FakeQtWindow:
         self.resize_calls.append(
             _FakeResizeCall(docks=docks, sizes=sizes, orientation=orientation)
         )
+
+    def setWindowIcon(self, icon: QIcon) -> None:
+        """Record the icon assigned to the fake top-level window."""
+        self.window_icon = icon
 
 
 def _combo_texts(combo: QComboBox) -> tuple[str, ...]:

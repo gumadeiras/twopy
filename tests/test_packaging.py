@@ -49,6 +49,23 @@ class PackagingTest(unittest.TestCase):
         self.assertTrue((repo_root / "src" / "twopy" / "config.example.yml").is_file())
         self.assertIn("database_path:", config_template_text())
 
+    def test_twopy_napari_icon_is_packaged(self) -> None:
+        """Confirm the app icon used at launch is included in package data."""
+        repo_root = Path(__file__).parents[1]
+        pyproject_path = repo_root / "pyproject.toml"
+        with pyproject_path.open("rb") as pyproject_file:
+            pyproject = tomllib.load(pyproject_file)
+
+        self.assertTrue(
+            (
+                repo_root / "src" / "twopy" / "napari" / "assets" / "twopy-app-icon.png"
+            ).is_file()
+        )
+        self.assertIn(
+            "napari/assets/*.png",
+            pyproject["tool"]["setuptools"]["package-data"]["twopy"],
+        )
+
     def test_twopy_cli_prints_version_aliases(self) -> None:
         """Confirm version flags report package metadata.
 
