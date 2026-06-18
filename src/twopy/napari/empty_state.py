@@ -85,10 +85,10 @@ def show_empty_viewer_message(
     overlay.text = empty_viewer_message(update_command=update_command)
     overlay.visible = True
     overlay.position = "top_center"
-    overlay.font_size = 13
-    overlay.color = "white"
-    overlay.box = True
-    overlay.box_color = (0.0, 0.0, 0.0, 0.65)
+    overlay.font_size = 18
+    overlay.color = "#c8cdd3"
+    overlay.box = False
+    overlay.box_color = (0.0, 0.0, 0.0, 0.0)
 
 
 def hide_empty_viewer_message(viewer: object) -> None:

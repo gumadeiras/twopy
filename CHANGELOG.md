@@ -6,6 +6,10 @@
 
 ## Unreleased
 
+### Changes
+
+- Styled twopy's empty napari message like napari canvas text, with no dark box around the launch instructions.
+
 ## 0.3.5 - 2026-06-18
 
 ### Fixes

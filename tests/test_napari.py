@@ -442,6 +442,9 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
         self.assertTrue(viewer.text_overlay.text.startswith(f"{APPLICATION_TITLE}\n"))
         self.assertTrue(viewer.text_overlay.visible)
         self.assertEqual(viewer.text_overlay.position, "top_center")
+        self.assertEqual(viewer.text_overlay.font_size, 18)
+        self.assertEqual(viewer.text_overlay.color, "#c8cdd3")
+        self.assertFalse(viewer.text_overlay.box)
         icon = viewer.window._qt_window.window_icon
         self.assertIsNotNone(icon)
         assert icon is not None
