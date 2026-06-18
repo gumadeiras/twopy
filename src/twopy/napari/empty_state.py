@@ -15,15 +15,17 @@ from twopy._version import __version__
 __all__ = [
     "EMPTY_VIEWER_MESSAGE",
     "hide_empty_viewer_message",
+    "refresh_empty_viewer_message",
     "show_empty_viewer_message",
 ]
 
-EMPTY_VIEWER_MESSAGE = (
+_BASE_EMPTY_VIEWER_MESSAGE = (
     f"twopy {__version__}\n\n"
     "Getting Started\n\n"
     "Search or load recordings manually\n"
     "using the Load tab on the right."
 )
+EMPTY_VIEWER_MESSAGE = _BASE_EMPTY_VIEWER_MESSAGE
 
 
 class _WelcomeScreen(Protocol):
@@ -56,11 +58,15 @@ class _TextOverlay(Protocol):
     box_color: object
 
 
-def show_empty_viewer_message(viewer: object) -> None:
+def show_empty_viewer_message(
+    viewer: object, *, update_command: str | None = None
+) -> None:
     """Show twopy's empty-recording message on a napari viewer.
 
     Args:
         viewer: Napari viewer or test double.
+        update_command: Optional pip command shown when a newer twopy release is
+            known.
 
     Returns:
         None.
@@ -76,7 +82,7 @@ def show_empty_viewer_message(viewer: object) -> None:
     overlay = _text_overlay(viewer)
     if overlay is None:
         return
-    overlay.text = EMPTY_VIEWER_MESSAGE
+    overlay.text = empty_viewer_message(update_command=update_command)
     overlay.visible = True
     overlay.position = "top_center"
     overlay.font_size = 13
@@ -98,10 +104,45 @@ def hide_empty_viewer_message(viewer: object) -> None:
     other overlay owner are left untouched.
     """
     overlay = _text_overlay(viewer)
-    if overlay is None or overlay.text != EMPTY_VIEWER_MESSAGE:
+    if overlay is None or not _is_empty_viewer_message(overlay.text):
         return
     overlay.text = ""
     overlay.visible = False
+
+
+def refresh_empty_viewer_message(
+    viewer: object,
+    *,
+    update_command: str | None,
+) -> None:
+    """Update twopy's empty-recording message when it already owns the overlay.
+
+    Args:
+        viewer: Napari viewer or test double.
+        update_command: Optional pip command shown when a newer twopy release is
+            known.
+
+    Returns:
+        None.
+    """
+    overlay = _text_overlay(viewer)
+    if overlay is None or not _is_empty_viewer_message(overlay.text):
+        return
+    overlay.text = empty_viewer_message(update_command=update_command)
+
+
+def empty_viewer_message(*, update_command: str | None = None) -> str:
+    """Return the empty-viewer text for the current update state."""
+    if not update_command:
+        return _BASE_EMPTY_VIEWER_MESSAGE
+    return f"{_BASE_EMPTY_VIEWER_MESSAGE}\n\nUpdate\n{update_command}"
+
+
+def _is_empty_viewer_message(text: str) -> bool:
+    """Return whether text is owned by twopy's empty-recording overlay."""
+    return text == EMPTY_VIEWER_MESSAGE or text.startswith(
+        f"{EMPTY_VIEWER_MESSAGE}\n\nUpdate\n"
+    )
 
 
 def _welcome_screen(viewer: object) -> _WelcomeScreen | None:

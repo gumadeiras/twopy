@@ -49,7 +49,9 @@ from twopy.napari.controls import NapariControlState
 from twopy.napari.custom_tab import CustomWorkflowPanel, _parameter_widget
 from twopy.napari.empty_state import (
     EMPTY_VIEWER_MESSAGE,
+    empty_viewer_message,
     hide_empty_viewer_message,
+    refresh_empty_viewer_message,
 )
 from twopy.napari.plotting.docks.response_plot_widget import (
     _custom_workflow_display_result,
@@ -457,6 +459,39 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
         self.assertEqual(viewer.text_overlay.text, "existing HUD")
         self.assertTrue(viewer.text_overlay.visible)
 
+    def test_empty_viewer_message_can_show_update_command(self) -> None:
+        """Confirm update notices extend only twopy's empty canvas text."""
+        viewer = _FakeViewer()
+        viewer.text_overlay.text = EMPTY_VIEWER_MESSAGE
+        viewer.text_overlay.visible = True
+
+        refresh_empty_viewer_message(
+            viewer,
+            update_command="python -m pip install -U twopy",
+        )
+
+        self.assertEqual(
+            viewer.text_overlay.text,
+            empty_viewer_message(update_command="python -m pip install -U twopy"),
+        )
+        hide_empty_viewer_message(viewer)
+        self.assertEqual(viewer.text_overlay.text, "")
+        self.assertFalse(viewer.text_overlay.visible)
+
+    def test_empty_viewer_update_does_not_replace_other_overlay_text(self) -> None:
+        """Confirm update notices do not replace another overlay owner."""
+        viewer = _FakeViewer()
+        viewer.text_overlay.text = "existing HUD"
+        viewer.text_overlay.visible = True
+
+        refresh_empty_viewer_message(
+            viewer,
+            update_command="python -m pip install -U twopy",
+        )
+
+        self.assertEqual(viewer.text_overlay.text, "existing HUD")
+        self.assertTrue(viewer.text_overlay.visible)
+
     def test_cleared_recording_selection_restores_empty_viewer_message(self) -> None:
         """Confirm no-recording selection brings back the twopy empty canvas.
 
@@ -600,7 +635,7 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             self.assertIn("Recording", group_titles)
             self.assertIn("Microscope", group_titles)
             self.assertIn("Outputs", group_titles)
-            self.assertNotIn("Status", group_titles)
+            self.assertIn("Status", group_titles)
             self.assertIn("Plot", group_titles)
             self.assertIn("Smoothing", group_titles)
             np.testing.assert_array_equal(

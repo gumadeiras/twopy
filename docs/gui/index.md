@@ -23,14 +23,14 @@ Run `twopy` (optionally with a recording path) and napari opens with four docks 
 - **Center — viewer layers**: before you load data, twopy shows a short Load-tab prompt; after loading, this area shows `mean image`, optional `aligned movie`, and an editable `rois` Labels layer.
 - **Bottom — `twopy trial timeline`**: shows stimulus epochs across the recording. Click or drag the rail to seek the movie; gray / interleave epochs render as neutral gray. The viewer HUD reports the current trial and epoch.
 
-If no recording is loaded yet, the docks still appear and the center viewer shows the twopy prompt. Pick one from the **Load** tab to populate them.
+If no recording is loaded yet, the docks still appear and the center viewer shows the twopy prompt. When PyPI has a newer twopy release, this prompt also shows `python -m pip install -U twopy`. Pick a recording from the **Load** tab to populate the viewer.
 
 ## Where each task lives
 
 | I want to... | Tab or window |
 | --- | --- |
 | Find and open recordings | [**Load** tab](loading.md) |
-| Look at acquisition info and save paths | **Metadata** tab |
+| Look at acquisition info, save paths, and update notices | **Metadata** tab |
 | Draw ROIs or generate them automatically | [**ROIs** tab](rois.md) |
 | Change response window, dF/F, smoothing, heatmaps | [**Plot** tab](plots.md) |
 | Hide stimulus epochs from plots | **Epochs** tab |

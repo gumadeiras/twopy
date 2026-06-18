@@ -14,7 +14,7 @@ from collections.abc import Callable
 from concurrent.futures import CancelledError, Future
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import UTC, date, datetime
 from os import chdir, environ
 from pathlib import Path
 from threading import Event
@@ -192,7 +192,11 @@ from twopy.napari.responses import (
 )
 from twopy.napari.roi import remove_roi_label_values_from_layer
 from twopy.napari.sidebar import TWOPY_SIDEBAR_MINIMUM_WIDTH
-from twopy.napari.state import write_last_recording_folder
+from twopy.napari.state import (
+    VersionCheckCache,
+    write_last_recording_folder,
+    write_version_check_cache,
+)
 from twopy.napari.text import counted_noun
 from twopy.napari.trial_timeline import (
     TRIAL_TIMELINE_DOCK_NAME,
@@ -737,6 +741,12 @@ class NapariAdapterTestCase(unittest.TestCase):
         self._previous_config_file = environ.get(CONFIG_ENV_VAR)
         environ["TWOPY_NAPARI_STATE_FILE"] = str(
             Path(self._state_temp_dir.name) / "napari_state.json",
+        )
+        write_version_check_cache(
+            VersionCheckCache(
+                checked_at=datetime.now(UTC).isoformat(),
+                latest_version=__version__,
+            ),
         )
         config_root = Path(self._config_temp_dir.name)
         config_path = config_root / "config.yml"

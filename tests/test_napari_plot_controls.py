@@ -56,6 +56,8 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             SidebarTextLabel("Microscope: scan settings"),
             SidebarTextLabel(analysis_text),
             SidebarTextLabel("ROI output: /very/long/path/to/rois.h5"),
+            SidebarTextLabel("Saved analysis."),
+            SidebarTextLabel("python -m pip install -U twopy"),
         )
 
         tab = response_metadata_tab(
@@ -63,6 +65,8 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             microscope_summary_label=labels[1],
             analysis_output_label=labels[2],
             roi_output_label=labels[3],
+            status_label=labels[4],
+            update_notice_label=labels[5],
         )
 
         self.assertIsInstance(tab, QScrollArea)

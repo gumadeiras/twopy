@@ -72,6 +72,7 @@ from twopy.custom import (
 )
 from twopy.filenames import EXPORTS_DIRNAME
 from twopy.napari.custom_tab import CustomWorkflowPanel
+from twopy.napari.empty_state import refresh_empty_viewer_message
 from twopy.napari.interactive import LiveResponseController
 from twopy.napari.latest_worker import LatestWorker
 from twopy.napari.output_routing import NapariOutputRoute, recording_output_route
@@ -134,6 +135,7 @@ from twopy.napari.roi import (
     remove_roi_label_values_from_layer,
     set_roi_label_image_on_layer,
 )
+from twopy.napari.version_check import UpdateNotice, check_for_update
 from twopy.pixel_calibration import load_pixel_calibrations
 from twopy.pixel_calibration_profiles import (
     DEFAULT_PIXEL_CALIBRATION_PROFILE_PATH,
@@ -208,6 +210,13 @@ class _ResponsePlotWidget(QWidget):
             on_value_error=self._show_response_map_value_error,
             on_exception=self._show_response_map_exception,
         )
+        self._update_notice_worker = LatestWorker[UpdateNotice | None](
+            thread_name_prefix="twopy-version-check",
+            on_result=self._show_update_notice,
+            on_value_error=self._ignore_update_notice_error,
+            on_exception=self._ignore_update_notice_error,
+            debounce_ms=0,
+        )
         config = load_config()
         self._pixel_calibrations = load_pixel_calibrations(
             config.pixel_calibration_path
@@ -265,6 +274,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path_label = options_panel.analysis_path_label
         self._roi_save_path_label = options_panel.roi_save_path_label
         self._update_status_label = options_panel.update_status_label
+        self._update_notice_label = options_panel.update_notice_label
         self._export_status_label = options_panel.export_status_label
         self._reload_saved_button = options_panel.reload_saved_button
         self._plot_options_layout = options_panel.plot_options_layout
@@ -295,6 +305,7 @@ class _ResponsePlotWidget(QWidget):
             "Custom",
         )
         self._add_default_plot_display_options()
+        self._schedule_update_notice_check()
 
     def options_widget(self) -> object:
         """Return the response-options widget owned by this plot widget.
@@ -344,6 +355,7 @@ class _ResponsePlotWidget(QWidget):
         self._sync_futures.clear()
         self._sync_executor.shutdown(wait=True, cancel_futures=True)
         self._response_map_worker.shutdown()
+        self._update_notice_worker.shutdown()
         self._live_controller.shutdown()
         self._recording = None
         self._roi_labels_layer = None
@@ -562,6 +574,25 @@ class _ResponsePlotWidget(QWidget):
         files. Explicit analysis saves remain separate from plot previews.
         """
         self._live_controller.update_now()
+
+    def _schedule_update_notice_check(self) -> None:
+        """Check for a newer twopy release without blocking napari."""
+        self._update_notice_worker.schedule(check_for_update)
+
+    def _show_update_notice(self, notice: UpdateNotice | None) -> None:
+        """Show the copyable update command when a newer release is known."""
+        if notice is None:
+            return
+        self._update_notice_label.setText(notice.command)
+        if self._viewer is not None:
+            refresh_empty_viewer_message(
+                self._viewer,
+                update_command=notice.command,
+            )
+
+    def _ignore_update_notice_error(self, _error: Exception) -> None:
+        """Keep network and package-index failures out of the user workflow."""
+        return
 
     def create_generated_rois(self, options: RoiGenerationOptions) -> None:
         """Replace the active Labels layer with generated ROIs.

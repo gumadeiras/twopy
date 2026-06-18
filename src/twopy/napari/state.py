@@ -9,19 +9,41 @@ decisions, and missing or corrupt state simply falls back to defaults.
 
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 __all__ = [
     "read_last_recording_csv_folder",
     "read_last_recording_folder",
+    "read_version_check_cache",
     "recording_folder_for_state",
+    "VersionCheckCache",
     "write_last_recording_csv_folder",
     "write_last_recording_folder",
+    "write_version_check_cache",
 ]
 
 STATE_FILE_ENV_VAR = "TWOPY_NAPARI_STATE_FILE"
 LAST_RECORDING_FOLDER_KEY = "last_recording_folder"
 LAST_RECORDING_CSV_FOLDER_KEY = "last_recording_csv_folder"
+VERSION_CHECKED_AT_KEY = "version_check_checked_at"
+VERSION_LATEST_VERSION_KEY = "version_check_latest_version"
+
+
+@dataclass(frozen=True)
+class VersionCheckCache:
+    """Cached package-version lookup stored in local napari state.
+
+    Args:
+        checked_at: UTC ISO timestamp for the latest completed lookup.
+        latest_version: Latest package version reported by the package index.
+
+    The cache keeps launch-time update notices fast and quiet. It is UI state,
+    not analysis data, so malformed or missing values are ignored.
+    """
+
+    checked_at: str
+    latest_version: str
 
 
 def read_last_recording_folder(*, state_file: Path | None = None) -> Path | None:
@@ -80,6 +102,49 @@ def write_last_recording_csv_folder(
         None.
     """
     _write_folder(LAST_RECORDING_CSV_FOLDER_KEY, folder, state_file)
+
+
+def read_version_check_cache(
+    *,
+    state_file: Path | None = None,
+) -> VersionCheckCache | None:
+    """Read the last completed package-version lookup.
+
+    Args:
+        state_file: Optional state file override for tests.
+
+    Returns:
+        Cached lookup fields, or ``None`` when no complete cache exists.
+    """
+    data = _read_state_data(state_file)
+    checked_at = data.get(VERSION_CHECKED_AT_KEY)
+    latest_version = data.get(VERSION_LATEST_VERSION_KEY)
+    if not (isinstance(checked_at, str) and isinstance(latest_version, str)):
+        return None
+    return VersionCheckCache(
+        checked_at=checked_at,
+        latest_version=latest_version,
+    )
+
+
+def write_version_check_cache(
+    cache: VersionCheckCache,
+    *,
+    state_file: Path | None = None,
+) -> None:
+    """Store the latest completed package-version lookup.
+
+    Args:
+        cache: Lookup fields to store.
+        state_file: Optional state file override for tests.
+
+    Returns:
+        None.
+    """
+    data = _read_state_data(state_file)
+    data[VERSION_CHECKED_AT_KEY] = cache.checked_at
+    data[VERSION_LATEST_VERSION_KEY] = cache.latest_version
+    _write_state_data(data, state_file)
 
 
 def recording_folder_for_state(selected_path: Path, recording_data_path: Path) -> Path:

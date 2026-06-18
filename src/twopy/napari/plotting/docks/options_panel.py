@@ -12,7 +12,7 @@ widget focus on state transitions and plot rendering instead of Qt assembly.
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from qtpy.QtWidgets import QLabel, QPushButton, QTabWidget, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QPushButton, QTabWidget, QVBoxLayout, QWidget
 
 from twopy.analysis.dff_options import DeltaFOverFOptions
 from twopy.analysis.response_maps import ResponseMapOptions
@@ -55,6 +55,7 @@ class ResponseOptionsPanel:
         analysis_path_label: Metadata-tab label showing the analysis output path.
         roi_save_path_label: Metadata-tab label showing the ROI output path.
         update_status_label: Metadata-tab label showing save or processing status.
+        update_notice_label: Metadata-tab label showing the update command.
         export_status_label: Export-tab label showing save/export action status.
         reload_saved_button: Load-tab button that reloads persisted response
             outputs.
@@ -80,7 +81,8 @@ class ResponseOptionsPanel:
     microscope_summary_label: SidebarTextLabel
     analysis_path_label: SidebarTextLabel
     roi_save_path_label: SidebarTextLabel
-    update_status_label: QLabel
+    update_status_label: SidebarTextLabel
+    update_notice_label: SidebarTextLabel
     export_status_label: SidebarTextLabel
     reload_saved_button: QPushButton
     plot_options_layout: QVBoxLayout
@@ -149,8 +151,8 @@ def create_response_options_panel(
     microscope_summary_label = SidebarTextLabel("No microscope metadata.")
     analysis_path_label = SidebarTextLabel(f"Analysis output: {DEFAULT_PATH_TEXT}")
     roi_save_path_label = SidebarTextLabel(f"ROI output: {DEFAULT_PATH_TEXT}")
-    update_status_label = QLabel("")
-    update_status_label.setWordWrap(True)
+    update_status_label = SidebarTextLabel("")
+    update_notice_label = SidebarTextLabel("")
     export_status_label = SidebarTextLabel("Exports save beside the recording.")
 
     plot_options_layout = QVBoxLayout()
@@ -205,6 +207,8 @@ def create_response_options_panel(
             microscope_summary_label=microscope_summary_label,
             analysis_output_label=analysis_path_label,
             roi_output_label=roi_save_path_label,
+            status_label=update_status_label,
+            update_notice_label=update_notice_label,
         ),
         "Metadata",
     )
@@ -227,6 +231,7 @@ def create_response_options_panel(
         analysis_path_label=analysis_path_label,
         roi_save_path_label=roi_save_path_label,
         update_status_label=update_status_label,
+        update_notice_label=update_notice_label,
         export_status_label=export_status_label,
         reload_saved_button=reload_saved_button,
         plot_options_layout=plot_options_layout,

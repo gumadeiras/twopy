@@ -133,6 +133,8 @@ def response_metadata_tab(
     microscope_summary_label: SidebarTextLabel,
     analysis_output_label: SidebarTextLabel,
     roi_output_label: SidebarTextLabel,
+    status_label: SidebarTextLabel,
+    update_notice_label: SidebarTextLabel,
 ) -> QWidget:
     """Create the tab that shows selected-recording metadata.
 
@@ -142,6 +144,8 @@ def response_metadata_tab(
         microscope_summary_label: Label showing microscope acquisition fields.
         analysis_output_label: Label showing the analysis output path.
         roi_output_label: Label showing the ROI output path.
+        status_label: Label showing the latest app action or update command.
+        update_notice_label: Label showing the copyable update command.
 
     Returns:
         Scrollable Qt widget for the Metadata tab.
@@ -153,6 +157,7 @@ def response_metadata_tab(
     layout.addWidget(
         _metadata_group("Outputs", analysis_output_label, roi_output_label),
     )
+    layout.addWidget(_metadata_group("Status", status_label, update_notice_label))
     layout.addStretch(1)
     return scrolling_tab(layout)
 
