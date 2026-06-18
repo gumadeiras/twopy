@@ -118,7 +118,7 @@ class RoiAssignmentView(QWidget):
         *,
         state: GroupMatchingState,
         fov_groups: dict[Path, str],
-        current_rois: dict[Path, str],
+        current_rois: dict[Path, tuple[str, ...]],
         output_path: Path,
         on_output_path_changed: Callable[[Path], None],
         on_back: Callable[[], None],
@@ -142,7 +142,7 @@ class RoiAssignmentView(QWidget):
         self._cards: list[RoiRecordingCard] = []
         self._card_grid_rows = 0
         self._card_grid_columns = 0
-        self._hidden_response_recordings: set[Path] = set()
+        self._hidden_responses: set[response_preview.SelectedRoiKey] = set()
         self._selected_responses: tuple[response_preview.SelectedRoiResponse, ...] = ()
         self._selected_group_dirty = False
         self._normalization_options = NormalizationOptions()
@@ -545,7 +545,7 @@ class RoiAssignmentView(QWidget):
             card = RoiRecordingCard(
                 recording=recording,
                 fov_group_id=self._fov_groups.get(recording_path, ""),
-                selected_roi=self._current_rois.get(recording_path, ""),
+                selected_rois=self._current_rois.get(recording_path, ()),
                 trace_color=_trace_color(index),
                 on_selection_changed=self._handle_roi_selection_changed,
             )
@@ -584,8 +584,8 @@ class RoiAssignmentView(QWidget):
     def _render_response_preview(self) -> None:
         """Redraw cached ROI response previews without recomputing responses."""
         clear_layout(self._legend_layout)
-        self._hidden_response_recordings.intersection_update(
-            {response.recording_path for response in self._selected_responses},
+        self._hidden_responses.intersection_update(
+            {response.key for response in self._selected_responses},
         )
         self._update_selected_rois_section_title()
         if len(self._selected_responses) == 0:
@@ -594,17 +594,17 @@ class RoiAssignmentView(QWidget):
         response_preview.add_response_legend(
             self._legend_layout,
             self._selected_responses,
-            hidden_recordings=self._hidden_response_recordings,
+            hidden_responses=self._hidden_responses,
             set_visible=self._set_response_visible,
             max_width=max(1, self._right_content.width() - 48),
         )
         visible_responses = tuple(
             response
             for response in self._selected_responses
-            if response.recording_path not in self._hidden_response_recordings
+            if response.key not in self._hidden_responses
         )
         if len(visible_responses) == 0:
-            self._show_response_status("All selected recording traces are hidden.")
+            self._show_response_status("All selected ROI traces are hidden.")
             return
         combined = response_preview.combined_response_plot_data(visible_responses)
         if combined is None:
@@ -663,12 +663,16 @@ class RoiAssignmentView(QWidget):
             self._mean_response_strip.visible_width_hint(),
         )
 
-    def _set_response_visible(self, recording_path: Path, visible: bool) -> None:
-        """Show or hide one selected recording in the shared response preview."""
+    def _set_response_visible(
+        self,
+        key: response_preview.SelectedRoiKey,
+        visible: bool,
+    ) -> None:
+        """Show or hide one selected ROI trace in the shared response preview."""
         if visible:
-            self._hidden_response_recordings.discard(recording_path)
+            self._hidden_responses.discard(key)
         else:
-            self._hidden_response_recordings.add(recording_path)
+            self._hidden_responses.add(key)
         self._render_response_preview()
 
     def _set_response_panel_visibility(self, _checked: bool | None = None) -> None:
@@ -771,7 +775,7 @@ class RoiAssignmentView(QWidget):
 
     def add_match_group(self) -> None:
         """Append current selected ROIs as a new matched cell group."""
-        selected_rois = self._selected_rois_by_recording()
+        selected_rois = self._selected_roi_rows()
         if len(selected_rois) == 0:
             self._status_label.setText("Choose at least one ROI before adding a group.")
             return
@@ -797,7 +801,7 @@ class RoiAssignmentView(QWidget):
         if group_cell_id is None:
             self._status_label.setText("Select a saved group before overwriting.")
             return
-        selected_rois = self._selected_rois_by_recording()
+        selected_rois = self._selected_roi_rows()
         if len(selected_rois) == 0:
             self._status_label.setText("Choose at least one ROI before saving a group.")
             return
@@ -888,7 +892,7 @@ class RoiAssignmentView(QWidget):
         """Clear selected ROIs in the current FOV filter."""
         self._clear_group_table_selection()
         for card in self._cards:
-            card.set_selected_roi("")
+            card.set_selected_rois(())
             self._current_rois.pop(card.recording_path, None)
         self._selected_group_dirty = False
         self._status_label.setText("Cleared ROI selection.")
@@ -966,14 +970,22 @@ class RoiAssignmentView(QWidget):
             selected_fov != "" and self._fov_groups.get(recording_path) == selected_fov
         )
 
-    def _selected_rois_by_recording(self) -> dict[Path, str]:
-        """Return selected non-empty ROI labels keyed by visible recording."""
-        selected: dict[Path, str] = {}
+    def _selected_rois_by_recording(self) -> dict[Path, tuple[str, ...]]:
+        """Return selected ROI labels keyed by visible recording."""
+        selected: dict[Path, tuple[str, ...]] = {}
         for card in self._cards:
-            roi_label = card.selected_roi_label()
-            if roi_label is not None:
-                selected[card.recording_path] = roi_label
+            roi_labels = card.selected_roi_labels()
+            if len(roi_labels) > 0:
+                selected[card.recording_path] = roi_labels
         return selected
+
+    def _selected_roi_rows(self) -> tuple[tuple[Path, str], ...]:
+        """Return selected recording path and ROI label pairs."""
+        rows: list[tuple[Path, str]] = []
+        for card in self._cards:
+            for roi_label in card.selected_roi_labels():
+                rows.append((card.recording_path, roi_label))
+        return tuple(rows)
 
     def _sync_current_rois_from_cards(self) -> None:
         """Mirror current visible selector state into the shared popup state."""
@@ -1044,11 +1056,11 @@ class RoiAssignmentView(QWidget):
 
     def _group_summary(self, rows: tuple[ManualRoiMatchRow, ...]) -> str:
         """Return a compact recording-to-ROI summary for one saved group."""
-        rows_by_path = {row.recording_path.expanduser(): row for row in rows}
+        rows_by_path = _roi_labels_by_recording(rows)
         parts: list[str] = []
         for card in self._cards:
-            row = rows_by_path.get(card.recording_path)
-            roi_label = row.roi_label if row is not None else "none"
+            roi_labels = rows_by_path.get(card.recording_path, [])
+            roi_label = ", ".join(roi_labels) if len(roi_labels) > 0 else "none"
             parts.append(
                 f"{format_recording_minute_label(card.recording_path)}: {roi_label}",
             )
@@ -1057,10 +1069,10 @@ class RoiAssignmentView(QWidget):
     def _restore_selected_group(self) -> None:
         """Restore ROI selectors from the currently selected saved group row."""
         group_cell_id = self._selected_group_cell_id()
-        self._hidden_response_recordings.clear()
+        self._hidden_responses.clear()
         if group_cell_id is None:
             for card in self._cards:
-                card.set_selected_roi("")
+                card.set_selected_rois(())
                 self._current_rois.pop(card.recording_path, None)
             self._set_note_text("")
             self._selected_group_dirty = False
@@ -1071,11 +1083,9 @@ class RoiAssignmentView(QWidget):
         if group is None:
             self._update_selected_rois_section_title()
             return
-        rois_by_path = {
-            row.recording_path.expanduser(): row.roi_label for row in group.rows
-        }
+        rois_by_path = _roi_labels_by_recording(group.rows)
         for card in self._cards:
-            card.set_selected_roi(rois_by_path.get(card.recording_path, ""))
+            card.set_selected_rois(tuple(rois_by_path.get(card.recording_path, ())))
         self._set_note_text(group.note)
         self._selected_group_dirty = False
         self._status_label.setText(f"Loaded saved group {group_cell_id}.")
@@ -1139,27 +1149,25 @@ class RoiAssignmentView(QWidget):
         """Return response data for card ROIs selected in the popup."""
         responses: list[response_preview.SelectedRoiResponse] = []
         for card in self._cards:
-            roi_label = card.selected_roi_label()
-            if roi_label is None:
-                continue
-            try:
-                plot_data = response_preview.selected_roi_response_plot_data(
-                    card.recording,
-                    roi_label,
-                    cache=self._response_cache,
-                    normalization_options=self._normalization_options,
-                    smoothing_options=self._smoothing_options,
+            for roi_label in card.selected_roi_labels():
+                try:
+                    plot_data = response_preview.selected_roi_response_plot_data(
+                        card.recording,
+                        roi_label,
+                        cache=self._response_cache,
+                        normalization_options=self._normalization_options,
+                        smoothing_options=self._smoothing_options,
+                    )
+                except ValueError:
+                    continue
+                responses.append(
+                    response_preview.SelectedRoiResponse(
+                        recording_path=card.recording_path,
+                        roi_label=roi_label,
+                        plot_data=plot_data,
+                        color=card.trace_color,
+                    ),
                 )
-            except ValueError:
-                continue
-            responses.append(
-                response_preview.SelectedRoiResponse(
-                    recording_path=card.recording_path,
-                    roi_label=roi_label,
-                    plot_data=plot_data,
-                    color=card.trace_color,
-                ),
-            )
         return tuple(responses)
 
 
@@ -1174,6 +1182,18 @@ def _trace_color(index: int) -> QColor:
         QColor("#17becf"),
     )
     return colors[index % len(colors)]
+
+
+def _roi_labels_by_recording(
+    rows: tuple[ManualRoiMatchRow, ...],
+) -> dict[Path, list[str]]:
+    """Return ROI labels grouped by expanded recording path."""
+    rois_by_path: dict[Path, list[str]] = {}
+    for row in rows:
+        rois_by_path.setdefault(row.recording_path.expanduser(), []).append(
+            row.roi_label,
+        )
+    return rois_by_path
 
 
 def _epoch_names_for_recordings(

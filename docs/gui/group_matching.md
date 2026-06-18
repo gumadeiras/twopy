@@ -31,7 +31,7 @@ The layout mirrors stage 1 inside the same tight popup frame: a vertical-only le
 
 The **FOV** dropdown shows compact numeric FOV ids while preserving the saved `fov_#` values internally.
 
-Each ROI card stacks a colored ROI chip plus a numeric ROI dropdown above the mean image, which carries the same recording-id and FOV-id overlay used by FOV cards. Click an ROI in the mean-image overlay to select it; click the selected ROI again to return that card to **No ROI**. The dropdown stays available for precise selection. Cards wrap to fit as many per row as the window allows.
+Each ROI card stacks a colored ROI chip plus a numeric ROI dropdown above the mean image, which carries the same recording-id and FOV-id overlay used by FOV cards. Click an ROI in the mean-image overlay to add it to the card; click a selected ROI again to remove only that ROI. The dropdown stays available for precise selection and toggles the chosen ROI the same way. Cards wrap to fit as many per row as the window allows.
 
 Above the cards:
 
@@ -42,7 +42,7 @@ Buttons (left column):
 
 - **Load ROI CSV** — load an existing match table.
 - **Browse save path** — choose where new match edits go.
-- **Add new group** — append the currently selected non-empty ROIs as a new `group_cell_id` in `roi_matches.csv`. Recordings left at *No ROI* are omitted from the group.
+- **Add new group** — append the currently selected non-empty ROIs as a new `group_cell_id` in `roi_matches.csv`. A recording can contribute more than one separate ROI row. Recordings left with no selected ROI are omitted from the group.
 - **Overwrite selected group** — replace the selected saved row with the current selection and note.
 - **Remove selected group** — delete that row from the CSV.
 - **Clear ROI selection** — reset card selectors without deleting saved rows.
@@ -51,7 +51,7 @@ Buttons (left column):
 
 The **Saved groups** table lists matched groups for the current FOV (Group ID, ROIs, Note) and shows five rows at a time. Selecting a row restores its ROI selections and note; clicking the selected row again clears the table.
 
-**Plot settings** in the left column hold response-row toggles, plot size, epoch visibility (gray / grey / interleave rows hidden by default), smoothing, and normalization. Click the colored recording chips above the plots to toggle that recording's trace.
+**Plot settings** in the left column hold response-row toggles, plot size, epoch visibility (gray / grey / interleave rows hidden by default), smoothing, and normalization. Click the colored ROI trace chips above the plots to toggle each selected ROI trace.
 
 ## Notes and outputs
 
@@ -60,7 +60,7 @@ Notes on FOV cards write to the CSV `note` column for that recording row. The RO
 CSV files written:
 
 - `fov_groups.csv` — recording → FOV id, plus per-recording notes.
-- `roi_matches.csv` — one row per recording in a `group_cell_id`, with FOV id, ROI number, status, and note. Rows with `status="matched"` are the same visually assigned cell across recordings; `status="unmatched"` records reviewed singletons so downstream code can distinguish them from unreviewed ROIs.
+- `roi_matches.csv` — one row per selected ROI in a `group_cell_id`, with FOV id, recording path, ROI number, status, and note. Rows with `status="matched"` are the same visually assigned cell across recordings; `status="unmatched"` records reviewed singletons so downstream code can distinguish them from unreviewed ROIs.
 
 ### A macOS Qt message you can ignore
 

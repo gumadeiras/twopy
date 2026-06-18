@@ -143,7 +143,7 @@ def make_manual_fov_group_rows(
 
 
 def make_manual_roi_match_rows(
-    recording_rois: Mapping[Path, str],
+    recording_rois: Sequence[tuple[Path, str]],
     *,
     group_cell_id: int,
     fov_group_id: str = "",
@@ -153,7 +153,9 @@ def make_manual_roi_match_rows(
     """Create validated match-table rows for one user decision.
 
     Args:
-        recording_rois: Mapping from recording path to ROI label.
+        recording_rois: Recording path and ROI label pairs selected for one
+            group. A recording can appear more than once when multiple ROIs
+            from that recording belong in the group.
         group_cell_id: Positive cell-group identifier for this decision.
         fov_group_id: Optional user-facing FOV group identifier.
         status: Decision status for every emitted row.
@@ -172,16 +174,27 @@ def make_manual_roi_match_rows(
         raise ValueError(msg)
 
     rows: list[ManualRoiMatchRow] = []
+    seen: set[tuple[Path, str]] = set()
     for recording_path, roi_label in sorted(
-        recording_rois.items(),
-        key=lambda item: str(item[0]),
+        recording_rois,
+        key=lambda item: (str(item[0]), item[1]),
     ):
+        validated_path = _validate_recording_path(recording_path)
+        validated_roi = _validate_roi_label(roi_label)
+        key = (validated_path, validated_roi)
+        if key in seen:
+            msg = (
+                "Manual ROI match rows cannot repeat the same recording and "
+                f"ROI label: {validated_path} {validated_roi}."
+            )
+            raise ValueError(msg)
+        seen.add(key)
         rows.append(
             ManualRoiMatchRow(
                 fov_group_id=fov_group_id,
                 group_cell_id=group_cell_id,
-                recording_path=_validate_recording_path(recording_path),
-                roi_label=_validate_roi_label(roi_label),
+                recording_path=validated_path,
+                roi_label=validated_roi,
                 status=status,
                 note=note,
             ),
@@ -225,7 +238,7 @@ def matched_manual_roi_groups(
 
 def add_manual_roi_match_group(
     rows: Sequence[ManualRoiMatchRow],
-    recording_rois: Mapping[Path, str],
+    recording_rois: Sequence[tuple[Path, str]],
     *,
     fov_group_id: str,
     note: str = "",
@@ -234,7 +247,7 @@ def add_manual_roi_match_group(
 
     Args:
         rows: Existing manual ROI match rows.
-        recording_rois: Mapping from recording path to selected ROI label.
+        recording_rois: Selected recording path and ROI label pairs.
         fov_group_id: FOV id for the new matched group.
         note: Optional note copied to every new row.
 
@@ -255,7 +268,7 @@ def add_manual_roi_match_group(
 
 def replace_manual_roi_match_group(
     rows: Sequence[ManualRoiMatchRow],
-    recording_rois: Mapping[Path, str],
+    recording_rois: Sequence[tuple[Path, str]],
     *,
     fov_group_id: str,
     group_cell_id: int,
@@ -265,7 +278,7 @@ def replace_manual_roi_match_group(
 
     Args:
         rows: Existing manual ROI match rows.
-        recording_rois: Replacement recording-to-ROI selections.
+        recording_rois: Replacement recording path and ROI label pairs.
         fov_group_id: FOV id containing the group.
         group_cell_id: Existing group id to replace.
         note: Optional note copied to every replacement row.

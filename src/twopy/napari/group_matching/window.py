@@ -112,7 +112,7 @@ class GroupMatchingPanel(QWidget):
         self._state = state
         self._fov_groups: dict[Path, str] = {}
         self._fov_notes: dict[Path, str] = {}
-        self._current_rois: dict[Path, str] = {}
+        self._current_rois: dict[Path, tuple[str, ...]] = {}
         self._csv_paths = GroupMatchingCsvPaths.default()
         self._theme_style_refreshing = False
         self._stack = QStackedWidget()

@@ -358,17 +358,17 @@ loaded_fov_rows = load_manual_fov_group_rows(fov_path)
 match_path = Path("/path/to/roi_matches.csv")
 existing_rows = load_manual_roi_match_rows(match_path) if match_path.exists() else ()
 rows = make_manual_roi_match_rows(
-    {
-        Path("/recordings/first"): "roi_0004",
-        Path("/recordings/second"): "roi_0012",
-    },
+    (
+        (Path("/recordings/first"), "roi_0004"),
+        (Path("/recordings/second"), "roi_0012"),
+    ),
     group_cell_id=next_group_cell_id(existing_rows),
     fov_group_id="fov_1",
 )
 append_manual_roi_match_rows(match_path, rows)
 ```
 
-Rows sharing a `group_cell_id` with `status="matched"` are the same visually assigned cell across recordings. Save reviewed singletons with `status="unmatched"` so downstream analysis can tell unreviewed ROIs apart from ROIs you intentionally left unmatched.
+Rows sharing a `group_cell_id` with `status="matched"` are the same visually assigned cell across recordings. A recording can appear more than once in the same group when you select multiple separate ROIs from that recording. Save reviewed singletons with `status="unmatched"` so downstream analysis can tell unreviewed ROIs apart from ROIs you intentionally left unmatched.
 
 ## Open napari from Python
 

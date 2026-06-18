@@ -36,7 +36,10 @@ from twopy.napari.roi import roi_label_image_from_layer_for_recording
 from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.text import counted_noun
 
+SelectedRoiKey = tuple[Path, str]
+
 __all__ = [
+    "SelectedRoiKey",
     "SelectedRoiResponse",
     "add_response_legend",
     "combined_response_plot_data",
@@ -57,6 +60,11 @@ class SelectedRoiResponse:
     roi_label: str
     plot_data: ResponsePlotData
     color: QColor
+
+    @property
+    def key(self) -> SelectedRoiKey:
+        """Return the visibility key for this selected ROI trace."""
+        return (self.recording_path, self.roi_label)
 
 
 def selected_roi_response_plot_data(
@@ -184,11 +192,11 @@ def selected_response_visibility_status(
     """Return the Selected ROIs summary for the current trace visibility."""
     if visible_count == total_count:
         if total_count == 1:
-            return "Showing the selected recording trace."
-        selected_traces = counted_noun(total_count, "selected recording trace")
+            return "Showing the selected ROI trace."
+        selected_traces = counted_noun(total_count, "selected ROI trace")
         return f"Showing all {selected_traces}."
-    total_traces = counted_noun(total_count, "selected recording trace")
-    hidden_traces = counted_noun(total_count - visible_count, "recording trace")
+    total_traces = counted_noun(total_count, "selected ROI trace")
+    hidden_traces = counted_noun(total_count - visible_count, "ROI trace")
     return f"Showing {visible_count} of {total_traces}; {hidden_traces} hidden."
 
 
@@ -261,18 +269,18 @@ def add_response_legend(
     layout: QGridLayout,
     selected_responses: tuple[SelectedRoiResponse, ...],
     *,
-    hidden_recordings: set[Path],
-    set_visible: Callable[[Path, bool], None],
+    hidden_responses: set[SelectedRoiKey],
+    set_visible: Callable[[SelectedRoiKey, bool], None],
     max_width: int,
 ) -> None:
-    """Add clickable color toggles for overlaid recording traces."""
+    """Add clickable color toggles for overlaid selected-ROI traces."""
     row_index = 0
     row_width = 0
     spacing = max(0, layout.spacing())
     available_width = max(120, max_width)
     row_layout = _new_response_legend_row(layout, row_index, spacing)
     for response in selected_responses:
-        visible = response.recording_path not in hidden_recordings
+        visible = response.key not in hidden_responses
         recording_label = format_recording_minute_label(response.recording_path)
         button = QPushButton(
             f"{recording_label} - ROI {roi_label_display_id(response.roi_label)}",
@@ -281,7 +289,7 @@ def add_response_legend(
         button.setChecked(visible)
         button.setStyleSheet(trace_button_style(response.color, visible=visible))
         button.clicked.connect(
-            lambda checked, path=response.recording_path: set_visible(path, checked),
+            lambda checked, key=response.key: set_visible(key, checked),
         )
         button_width = button.sizeHint().width()
         button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)

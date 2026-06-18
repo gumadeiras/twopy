@@ -677,8 +677,8 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         group_matching_response_preview.add_response_legend(
             layout,
             selected_responses,
-            hidden_recordings=set(),
-            set_visible=lambda _path, _visible: None,
+            hidden_responses=set(),
+            set_visible=lambda _key, _visible: None,
             max_width=1000,
         )
 
@@ -713,8 +713,8 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         group_matching_response_preview.add_response_legend(
             narrow_layout,
             selected_responses,
-            hidden_recordings=set(),
-            set_visible=lambda _path, _visible: None,
+            hidden_responses=set(),
+            set_visible=lambda _key, _visible: None,
             max_width=320,
         )
         self.assertEqual(narrow_layout.count(), 2)
@@ -768,7 +768,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
             roi_card = RoiRecordingCard(
                 recording=loaded,
                 fov_group_id="fov_1",
-                selected_roi="roi_0001",
+                selected_rois=("roi_0001",),
                 trace_color=QColor("#1f77b4"),
                 on_selection_changed=lambda: None,
             )
@@ -1088,7 +1088,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertFalse(view._response_status.isHidden())
         self.assertEqual(
             view._response_status.text(),
-            "Showing the selected recording trace.",
+            "Showing the selected ROI trace.",
         )
         plot_scrolls = (
             (view._roi_response_scroll, view._response_strip),
@@ -1178,17 +1178,17 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertFalse(view._response_status.isHidden())
         self.assertEqual(
             view._response_status.text(),
-            "Showing all 2 selected recording traces.",
+            "Showing all 2 selected ROI traces.",
         )
 
-        view._hidden_response_recordings.add(second_path)
+        view._hidden_responses.add((second_path, "roi_0002"))
 
         view._render_response_preview()
 
         self.assertFalse(view._response_status.isHidden())
         self.assertEqual(
             view._response_status.text(),
-            "Showing 1 of 2 selected recording traces; 1 recording trace hidden.",
+            "Showing 1 of 2 selected ROI traces; 1 ROI trace hidden.",
         )
 
     def test_group_matching_saved_group_selection_resets_hidden_traces(self) -> None:
@@ -1224,12 +1224,12 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
                 on_back=lambda: None,
             )
             view._fov_filter.addItem("1", "fov_1")
-            view._hidden_response_recordings.add(recording_path)
+            view._hidden_responses.add((recording_path, "roi_0001"))
             view._refresh_group_table()
 
             view._group_table.selectRow(0)
 
-        self.assertEqual(view._hidden_response_recordings, set())
+        self.assertEqual(view._hidden_responses, set())
 
     def test_group_matching_style_uses_active_qt_palette(self) -> None:
         """Confirm Group Matching colors follow the current Qt theme.
@@ -1307,7 +1307,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
                 data=np.full((12, 12), 2, dtype=np.int64),
                 options={},
             ),
-            roi_label="roi_0002",
+            roi_labels=("roi_0002",),
             selected_color=selected_color,
             contrast_percentile=100.0,
         )
@@ -1317,6 +1317,76 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertLessEqual(abs(pixel_color.red() - selected_color.red()), 1)
         self.assertLessEqual(abs(pixel_color.green() - selected_color.green()), 1)
         self.assertLessEqual(abs(pixel_color.blue() - selected_color.blue()), 1)
+
+    def test_group_matching_same_recording_roi_responses_use_recording_color(
+        self,
+    ) -> None:
+        """Confirm same-recording ROI traces use the recording color.
+
+        Inputs: one ROI assignment card with two selected ROI labels from the
+        same recording.
+        Outputs: selected-response data keeps both ROI keys and assigns the
+        card trace color to each selected ROI.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            recording = load_converted_recording(_write_converted_recording(root))
+            loaded = LoadedNapariRecording(
+                recording=recording,
+                output_route=NapariOutputRoute(
+                    local_root=root,
+                    publish_root=root,
+                ),
+                roi_save_file=root / "rois.h5",
+                mean_image_layer=_FakeLayer(
+                    "mean",
+                    np.ones((2, 2), dtype=np.float64),
+                    {},
+                ),
+                movie_layer=None,
+                roi_labels_layer=_FakeLayer(
+                    "rois",
+                    np.array([[1, 2], [0, 0]], dtype=np.int64),
+                    {},
+                ),
+            )
+            view = group_matching_roi.RoiAssignmentView(
+                state=SimpleNamespace(loaded_recordings=[]),
+                fov_groups={},
+                current_rois={},
+                output_path=root / "roi_matches.csv",
+                on_output_path_changed=lambda _path: None,
+                on_back=lambda: None,
+            )
+            view._cards = [
+                RoiRecordingCard(
+                    recording=loaded,
+                    fov_group_id="fov_1",
+                    selected_rois=("roi_0001", "roi_0002"),
+                    trace_color=QColor("#1f77b4"),
+                    on_selection_changed=lambda: None,
+                ),
+            ]
+
+            with patch.object(
+                group_matching_response_preview,
+                "selected_roi_response_plot_data",
+                return_value=_tiny_response_plot_data(),
+            ):
+                responses = view._selected_response_data()
+
+        self.assertEqual(
+            tuple(response.key for response in responses),
+            (
+                (recording.source_session_dir, "roi_0001"),
+                (recording.source_session_dir, "roi_0002"),
+            ),
+        )
+        self.assertEqual(
+            tuple(response.color.name() for response in responses),
+            ("#1f77b4", "#1f77b4"),
+        )
 
     def test_group_matching_selected_roi_response_uses_full_frame_labels(self) -> None:
         """Confirm selected ROI plots analyze full-frame labels from cropped UI data.

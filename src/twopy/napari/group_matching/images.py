@@ -50,16 +50,16 @@ def mean_image_roi_overlay_pixmap(
     *,
     mean_image_layer: object,
     roi_labels_layer: object | None,
-    roi_label: str | None,
+    roi_labels: tuple[str, ...],
     selected_color: QColor,
     contrast_percentile: float,
 ) -> QPixmap | None:
-    """Return a mean-image preview with one selected ROI highlighted.
+    """Return a mean-image preview with selected ROIs highlighted.
 
     Args:
         mean_image_layer: Napari mean-image layer.
         roi_labels_layer: Napari Labels layer for the same displayed crop.
-        roi_label: ``roi_####`` label to highlight, or ``None`` for no overlay.
+        roi_labels: ``roi_####`` labels to highlight.
         selected_color: Color used for the selected ROI mask and matching trace.
         contrast_percentile: Upper percentile used as the white point.
 
@@ -72,7 +72,11 @@ def mean_image_roi_overlay_pixmap(
     if image is None:
         return None
     rgba = _grayscale_rgba(image, contrast_percentile=contrast_percentile)
-    label_value = _roi_label_value(roi_label)
+    label_values = tuple(
+        label_value
+        for label_value in (_roi_label_value(roi_label) for roi_label in roi_labels)
+        if label_value is not None
+    )
     labels = _layer_image(roi_labels_layer)
     roi_centers: tuple[tuple[int, float, float], ...] = ()
     if labels is not None and labels.shape == image.shape:
@@ -81,7 +85,7 @@ def mean_image_roi_overlay_pixmap(
         _blend_roi_masks(
             rgba,
             integer_labels,
-            selected_label=label_value,
+            selected_labels=label_values,
             selected_color=selected_color,
         )
     pixmap = _rgba_pixmap(rgba, size=ROI_PREVIEW_SIZE)
@@ -89,7 +93,7 @@ def mean_image_roi_overlay_pixmap(
         pixmap,
         roi_centers=roi_centers,
         image_shape=image.shape,
-        selected_label=label_value,
+        selected_labels=label_values,
     )
     return pixmap
 
@@ -166,14 +170,15 @@ def _blend_roi_masks(
     rgba: np.ndarray,
     labels: np.ndarray,
     *,
-    selected_label: int | None,
+    selected_labels: tuple[int, ...],
     selected_color: QColor,
 ) -> None:
     """Blend all ROI masks into the preview, emphasizing the selected mask."""
+    selected = set(selected_labels)
     roi_values = tuple(
         int(value)
         for value in np.unique(labels)
-        if int(value) > 0 and int(value) != selected_label
+        if int(value) > 0 and int(value) not in selected
     )
     for roi_value in roi_values:
         _blend_mask_color(
@@ -182,7 +187,7 @@ def _blend_roi_masks(
             color=(31, 180, 190),
             alpha=0.28,
         )
-    if selected_label is not None:
+    for selected_label in selected_labels:
         selected_mask = labels == selected_label
         rgba[selected_mask, 0] = selected_color.red()
         rgba[selected_mask, 1] = selected_color.green()
@@ -228,7 +233,7 @@ def _draw_roi_numbers(
     *,
     roi_centers: tuple[tuple[int, float, float], ...],
     image_shape: tuple[int, ...],
-    selected_label: int | None,
+    selected_labels: tuple[int, ...],
 ) -> None:
     """Draw ROI numbers at scaled ROI centroids on top of a preview pixmap."""
     if len(roi_centers) == 0 or len(image_shape) < 2:
@@ -244,13 +249,14 @@ def _draw_roi_numbers(
         painter.setFont(font)
         x_scale = pixmap.width() / width
         y_scale = pixmap.height() / height
+        selected = set(selected_labels)
         for label_value, x_center, y_center in roi_centers:
             text = str(label_value)
             x = int(round(x_center * x_scale))
             y = int(round(y_center * y_scale))
             foreground = (
                 QColor(255, 246, 230)
-                if label_value == selected_label
+                if label_value in selected
                 else QColor(215, 255, 255)
             )
             painter.setPen(QColor(0, 0, 0))

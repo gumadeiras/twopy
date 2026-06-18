@@ -2,7 +2,7 @@
 
 Inputs: one loaded napari recording, FOV assignment text, ROI Labels data, and
 a trace color.
-Outputs: a fixed-size card that lets users pick one ROI for the selected FOV group.
+Outputs: a fixed-size card that lets users pick ROIs for the selected FOV group.
 
 The card owns the per-recording selector and image preview. The ROI assignment
 view owns saved groups, response previews, and CSV persistence.
@@ -17,8 +17,10 @@ from qtpy.QtGui import QColor, QMouseEvent
 from qtpy.QtWidgets import (
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -43,8 +45,9 @@ __all__ = [
 ]
 
 ROI_CARD_WIDTH = THUMBNAIL_SIZE + 24
-ROI_CARD_HEIGHT = THUMBNAIL_SIZE + 58
+ROI_CARD_HEIGHT = THUMBNAIL_SIZE + 92
 ROI_CONTROL_HEIGHT = 28
+VISIBLE_SELECTED_ROI_CHIPS = 4
 
 
 class _RoiPreviewLabel(QLabel):
@@ -84,7 +87,7 @@ class RoiRecordingCard(QFrame):
         *,
         recording: LoadedNapariRecording,
         fov_group_id: str,
-        selected_roi: str,
+        selected_rois: tuple[str, ...],
         trace_color: QColor,
         on_selection_changed: Callable[[], None],
     ) -> None:
@@ -94,6 +97,8 @@ class RoiRecordingCard(QFrame):
         self._recording_label = format_recording_minute_label(self.recording_path)
         self.recording = recording
         self.trace_color = trace_color
+        self._on_selection_changed = on_selection_changed
+        self._selected_rois: tuple[str, ...] = ()
         self._image_label = _RoiPreviewLabel(self._toggle_roi_at_preview_point)
         self._image_label.setObjectName("roi_preview_image")
         fov_id = fov_group_display_id(fov_group_id)
@@ -107,15 +112,11 @@ class RoiRecordingCard(QFrame):
         self._trace_label.setFixedSize(42, ROI_CONTROL_HEIGHT)
         self._trace_label.setStyleSheet(_trace_label_style(trace_color))
 
-        self._roi_selector.addItem("No ROI", "")
+        self._roi_selector.addItem("Add ROI", "")
         for roi_label in roi_labels_from_layer_data(recording.roi_labels_layer):
             self._roi_selector.addItem(roi_label_display_id(roi_label), roi_label)
-        if selected_roi:
-            index = self._roi_selector.findData(selected_roi)
-            if index >= 0:
-                self._roi_selector.setCurrentIndex(index)
         self._roi_selector.currentIndexChanged.connect(
-            lambda _index: self._refresh_after_selection_change(on_selection_changed),
+            lambda _index: self._handle_selector_change(),
         )
 
         controls = QHBoxLayout()
@@ -127,6 +128,14 @@ class RoiRecordingCard(QFrame):
         controls_widget.setFixedWidth(THUMBNAIL_SIZE)
         controls_widget.setLayout(controls)
 
+        self._chips_widget = QWidget()
+        self._chips_layout = QGridLayout()
+        self._chips_layout.setContentsMargins(0, 0, 0, 0)
+        self._chips_layout.setHorizontalSpacing(4)
+        self._chips_layout.setVerticalSpacing(4)
+        self._chips_widget.setFixedWidth(THUMBNAIL_SIZE)
+        self._chips_widget.setLayout(self._chips_layout)
+
         image_stack = image_overlay_stack(
             self._image_label,
             self._overlay_label,
@@ -137,50 +146,115 @@ class RoiRecordingCard(QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
         layout.addWidget(controls_widget, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self._chips_widget, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(image_stack, 0, Qt.AlignmentFlag.AlignHCenter)
         self.setLayout(layout)
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setObjectName("roi_assignment_card")
         self.setFixedSize(ROI_CARD_WIDTH, ROI_CARD_HEIGHT)
+        self.set_selected_rois(selected_rois)
         self.refresh_preview()
 
-    def selected_roi_label(self) -> str | None:
-        """Return the currently selected ROI label."""
-        data = self._roi_selector.currentData()
-        if not isinstance(data, str) or data == "":
-            return None
-        return data
+    def selected_roi_labels(self) -> tuple[str, ...]:
+        """Return the currently selected ROI labels."""
+        return self._selected_rois
 
-    def set_selected_roi(self, roi_label: str) -> None:
-        """Set the selected ROI label without emitting intermediate updates."""
-        self._roi_selector.blockSignals(True)
-        try:
-            index = 0 if roi_label == "" else self._roi_selector.findData(roi_label)
-            self._roi_selector.setCurrentIndex(index if index >= 0 else 0)
-        finally:
-            self._roi_selector.blockSignals(False)
+    def set_selected_rois(self, roi_labels: tuple[str, ...]) -> None:
+        """Set selected ROI labels without emitting intermediate updates."""
+        valid_labels = [
+            roi_label
+            for roi_label in roi_labels
+            if self._roi_selector.findData(roi_label) >= 0
+        ]
+        self._selected_rois = tuple(dict.fromkeys(valid_labels))
+        self._reset_selector()
+        self._refresh_chips()
         self.refresh_preview()
 
     def refresh_preview(self) -> None:
         """Refresh selected-ROI image and response previews."""
-        roi_label = self.selected_roi_label()
         pixmap = mean_image_roi_overlay_pixmap(
             mean_image_layer=self.recording.mean_image_layer,
             roi_labels_layer=self.recording.roi_labels_layer,
-            roi_label=roi_label,
+            roi_labels=self._selected_rois,
             selected_color=self.trace_color,
             contrast_percentile=100.0,
         )
         if pixmap is not None:
             self._image_label.setPixmap(pixmap)
 
-    def _refresh_after_selection_change(self, callback: Callable[[], None]) -> None:
-        """Refresh the ROI image and shared response plot after selection."""
+    def _handle_selector_change(self) -> None:
+        """Toggle the chosen dropdown ROI and reset the selector."""
+        data = self._roi_selector.currentData()
+        if not isinstance(data, str) or data == "":
+            return
+        self._toggle_roi(data)
+        self._reset_selector()
+        self._refresh_chips()
         self.refresh_preview()
-        callback()
+        self._on_selection_changed()
+
+    def _reset_selector(self) -> None:
+        """Return the dropdown to its add-ROI prompt."""
+        self._roi_selector.blockSignals(True)
+        try:
+            self._roi_selector.setCurrentIndex(0)
+        finally:
+            self._roi_selector.blockSignals(False)
+
+    def _toggle_roi(self, roi_label: str) -> None:
+        """Add or remove one ROI label from this recording card."""
+        if roi_label in self._selected_rois:
+            self._selected_rois = tuple(
+                selected for selected in self._selected_rois if selected != roi_label
+            )
+            return
+        self._selected_rois = (*self._selected_rois, roi_label)
+
+    def _refresh_chips(self) -> None:
+        """Redraw the selected-ROI chips under the dropdown."""
+        while self._chips_layout.count() > 0:
+            item = self._chips_layout.takeAt(0)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        if len(self._selected_rois) == 0:
+            label = QLabel("No ROIs selected")
+            label.setObjectName("selected_roi_empty")
+            self._chips_layout.addWidget(label, 0, 0)
+            return
+        visible_rois = self._selected_rois[:VISIBLE_SELECTED_ROI_CHIPS]
+        for index, roi_label in enumerate(visible_rois):
+            roi_id = roi_label_display_id(roi_label)
+            button = QPushButton(f"x  ROI {roi_id}")
+            button.setObjectName("selected_roi_chip")
+            button.setFixedHeight(22)
+            button.setStyleSheet("color: #d62728;")
+            button.setToolTip(f"Remove ROI {roi_id}")
+            button.setAccessibleName(f"Remove ROI {roi_id}")
+            button.clicked.connect(
+                lambda _checked, label=roi_label: self._remove_roi(label),
+            )
+            self._chips_layout.addWidget(button, index // 2, index % 2)
+        hidden_count = len(self._selected_rois) - len(visible_rois)
+        if hidden_count > 0:
+            label = QLabel(f"+{hidden_count} more")
+            label.setObjectName("selected_roi_overflow")
+            self._chips_layout.addWidget(label, 2, 0, 1, 2)
+
+    def _remove_roi(self, roi_label: str) -> None:
+        """Remove one chip-selected ROI and refresh the card."""
+        self._selected_rois = tuple(
+            selected for selected in self._selected_rois if selected != roi_label
+        )
+        self._refresh_chips()
+        self.refresh_preview()
+        self._on_selection_changed()
 
     def _toggle_roi_at_preview_point(self, x: int, y: int) -> None:
-        """Select or clear the ROI under one preview-image click.
+        """Toggle the ROI under one preview-image click.
 
         Args:
             x: Horizontal click coordinate in preview-label pixels.
@@ -189,9 +263,8 @@ class RoiRecordingCard(QFrame):
         Returns:
             None.
 
-        Clicking an unselected ROI chooses it. Clicking the already selected ROI
-        returns the card to ``No ROI`` so quick visual review does not require
-        opening the dropdown.
+        Clicking an unselected ROI adds it. Clicking a selected ROI removes it
+        so quick visual review does not require opening the dropdown.
         """
         pixmap = self._image_label.pixmap()
         if pixmap is None or pixmap.isNull():
@@ -207,10 +280,10 @@ class RoiRecordingCard(QFrame):
         )
         if clicked_roi is None:
             return
-        next_roi = "" if self.selected_roi_label() == clicked_roi else clicked_roi
-        index = 0 if next_roi == "" else self._roi_selector.findData(next_roi)
-        if index >= 0:
-            self._roi_selector.setCurrentIndex(index)
+        self._toggle_roi(clicked_roi)
+        self._refresh_chips()
+        self.refresh_preview()
+        self._on_selection_changed()
 
 
 def roi_labels_from_layer_data(layer: object | None) -> tuple[str, ...]:

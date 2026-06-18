@@ -742,25 +742,24 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             for selector in roi_selectors:
                 self.assertEqual(selector.currentData(), "")
             group_table.selectRow(0)
-            roi_selectors = [
-                combo
-                for combo in group_matching_widget.findChildren(QComboBox)
-                if combo.objectName() == "roi_selector"
-            ]
+            roi_cards = sorted(
+                group_matching_widget.findChildren(group_matching_roi.RoiRecordingCard),
+                key=lambda card: str(card.recording_path),
+            )
             self.assertEqual(
-                {selector.currentData() for selector in roi_selectors},
-                {"roi_0001", "roi_0002"},
+                [card.selected_roi_labels() for card in roi_cards],
+                [("roi_0001",), ("roi_0002",)],
             )
             self.assertEqual(roi_note_edit.text(), "strong match")
             group_table.clearSelection()
-            for selector in roi_selectors:
-                self.assertEqual(selector.currentData(), "")
+            for card in roi_cards:
+                self.assertEqual(card.selected_roi_labels(), ())
             self.assertEqual(
                 cast(QGroupBox, first_section).title(),
                 "Selected ROIs",
             )
             group_table.selectRow(0)
-            roi_selectors[1].setCurrentIndex(0)
+            roi_cards[1].set_selected_rois(())
             roi_note_edit.setText("first only")
             roi_buttons["Overwrite selected group"].click()
             match_rows = load_manual_roi_match_rows(match_path)
@@ -774,6 +773,11 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             self.assertEqual(match_rows[0].note, "first only")
             self.assertEqual(roi_note_edit.text(), "")
 
+            roi_selectors = [
+                combo
+                for combo in group_matching_widget.findChildren(QComboBox)
+                if combo.objectName() == "roi_selector"
+            ]
             roi_selectors[1].setCurrentIndex(1)
             roi_note_edit.setText("second group")
             roi_buttons["Add new group"].click()

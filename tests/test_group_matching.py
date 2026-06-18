@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path
 
 from tests.tempdir import temporary_directory
-
 from twopy import (
+    ManualRoiMatchRow,
     add_manual_roi_match_group,
     append_manual_roi_match_rows,
     load_manual_fov_group_rows,
@@ -24,7 +24,6 @@ from twopy import (
     save_manual_fov_group_rows,
     save_manual_roi_match_rows,
 )
-from twopy.analysis.group_matching import ManualRoiMatchRow
 
 
 class GroupMatchingTests(unittest.TestCase):
@@ -67,10 +66,10 @@ class GroupMatchingTests(unittest.TestCase):
         with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "roi_matches.csv"
             rows = make_manual_roi_match_rows(
-                {
-                    Path("/recordings/a"): "roi_0002",
-                    Path("/recordings/b"): "roi_0010",
-                },
+                (
+                    (Path("/recordings/a"), "roi_0002"),
+                    (Path("/recordings/b"), "roi_0010"),
+                ),
                 group_cell_id=3,
                 fov_group_id="fov_1",
             )
@@ -89,13 +88,13 @@ class GroupMatchingTests(unittest.TestCase):
         with temporary_directory() as temp_dir:
             path = Path(temp_dir) / "roi_matches.csv"
             first_rows = make_manual_roi_match_rows(
-                {Path("/recordings/a"): "roi_0001"},
+                ((Path("/recordings/a"), "roi_0001"),),
                 group_cell_id=1,
                 status="unmatched",
             )
             save_manual_roi_match_rows(first_rows, path)
             second_rows = make_manual_roi_match_rows(
-                {Path("/recordings/b"): "roi_0004"},
+                ((Path("/recordings/b"), "roi_0004"),),
                 group_cell_id=next_group_cell_id(first_rows),
                 status="unmatched",
             )
@@ -115,7 +114,45 @@ class GroupMatchingTests(unittest.TestCase):
         """
         with self.assertRaisesRegex(ValueError, "roi_label"):
             make_manual_roi_match_rows(
-                {Path("/recordings/a"): ""},
+                ((Path("/recordings/a"), ""),),
+                group_cell_id=1,
+            )
+
+    def test_manual_roi_match_rows_allow_multiple_rois_per_recording(self) -> None:
+        """Confirm one group can include separate ROIs from the same recording.
+
+        Inputs: two ROI labels for one recording path.
+        Outputs: two separate rows with the same recording path.
+        """
+        rows = make_manual_roi_match_rows(
+            (
+                (Path("/recordings/a"), "roi_0001"),
+                (Path("/recordings/a"), "roi_0002"),
+            ),
+            group_cell_id=1,
+            fov_group_id="fov_1",
+        )
+
+        self.assertEqual(
+            tuple((row.recording_path, row.roi_label) for row in rows),
+            (
+                (Path("/recordings/a"), "roi_0001"),
+                (Path("/recordings/a"), "roi_0002"),
+            ),
+        )
+
+    def test_manual_roi_match_rows_reject_duplicate_recording_roi_pair(self) -> None:
+        """Confirm exact duplicate ROI selections fail before CSV writing.
+
+        Inputs: the same recording path and ROI label twice.
+        Outputs: clear ``ValueError`` explaining the duplicate pair.
+        """
+        with self.assertRaisesRegex(ValueError, "cannot repeat"):
+            make_manual_roi_match_rows(
+                (
+                    (Path("/recordings/a"), "roi_0001"),
+                    (Path("/recordings/a"), "roi_0001"),
+                ),
                 group_cell_id=1,
             )
 
@@ -126,7 +163,7 @@ class GroupMatchingTests(unittest.TestCase):
         Outputs: appended rows use the next id and shared note.
         """
         first = make_manual_roi_match_rows(
-            {Path("/recordings/a"): "roi_0001"},
+            ((Path("/recordings/a"), "roi_0001"),),
             group_cell_id=1,
             fov_group_id="fov_1",
             note="first",
@@ -134,10 +171,10 @@ class GroupMatchingTests(unittest.TestCase):
 
         rows, group_cell_id = add_manual_roi_match_group(
             first,
-            {
-                Path("/recordings/a"): "roi_0002",
-                Path("/recordings/b"): "roi_0004",
-            },
+            (
+                (Path("/recordings/a"), "roi_0002"),
+                (Path("/recordings/b"), "roi_0004"),
+            ),
             fov_group_id="fov_1",
             note="second",
         )
@@ -161,19 +198,19 @@ class GroupMatchingTests(unittest.TestCase):
         """
         rows = (
             *make_manual_roi_match_rows(
-                {Path("/recordings/a"): "roi_0001"},
+                ((Path("/recordings/a"), "roi_0001"),),
                 group_cell_id=1,
                 fov_group_id="fov_1",
                 note="same",
             ),
             *make_manual_roi_match_rows(
-                {Path("/recordings/b"): "roi_0002"},
+                ((Path("/recordings/b"), "roi_0002"),),
                 group_cell_id=2,
                 fov_group_id="fov_1",
                 status="unmatched",
             ),
             *make_manual_roi_match_rows(
-                {Path("/recordings/c"): "roi_0003"},
+                ((Path("/recordings/c"), "roi_0003"),),
                 group_cell_id=3,
                 fov_group_id="fov_2",
             ),
@@ -196,22 +233,22 @@ class GroupMatchingTests(unittest.TestCase):
         Outputs: only the selected matched group is replaced.
         """
         target = make_manual_roi_match_rows(
-            {
-                Path("/recordings/a"): "roi_0001",
-                Path("/recordings/b"): "roi_0002",
-            },
+            (
+                (Path("/recordings/a"), "roi_0001"),
+                (Path("/recordings/b"), "roi_0002"),
+            ),
             group_cell_id=1,
             fov_group_id="fov_1",
             note="old",
         )
         other_fov = make_manual_roi_match_rows(
-            {Path("/recordings/c"): "roi_0003"},
+            ((Path("/recordings/c"), "roi_0003"),),
             group_cell_id=1,
             fov_group_id="fov_2",
             note="other",
         )
         reviewed = make_manual_roi_match_rows(
-            {Path("/recordings/d"): "roi_0004"},
+            ((Path("/recordings/d"), "roi_0004"),),
             group_cell_id=1,
             fov_group_id="fov_1",
             status="unmatched",
@@ -220,7 +257,7 @@ class GroupMatchingTests(unittest.TestCase):
 
         rows = replace_manual_roi_match_group(
             (*target, *other_fov, *reviewed),
-            {Path("/recordings/a"): "roi_0005"},
+            ((Path("/recordings/a"), "roi_0005"),),
             fov_group_id="fov_1",
             group_cell_id=1,
             note="new",
@@ -241,12 +278,12 @@ class GroupMatchingTests(unittest.TestCase):
         Outputs: selected matched rows are removed and unrelated rows remain.
         """
         target = make_manual_roi_match_rows(
-            {Path("/recordings/a"): "roi_0001"},
+            ((Path("/recordings/a"), "roi_0001"),),
             group_cell_id=1,
             fov_group_id="fov_1",
         )
         unrelated = make_manual_roi_match_rows(
-            {Path("/recordings/b"): "roi_0002"},
+            ((Path("/recordings/b"), "roi_0002"),),
             group_cell_id=1,
             fov_group_id="fov_2",
         )
@@ -295,11 +332,11 @@ class GroupMatchingTests(unittest.TestCase):
         Outputs: clear validation errors before rows are created or queried.
         """
         rows = make_manual_roi_match_rows(
-            {Path("/recordings/a"): "roi_0001"},
+            ((Path("/recordings/a"), "roi_0001"),),
             group_cell_id=1,
             fov_group_id="fov_1",
         )
-        recording_rois = {Path("/recordings/a"): "roi_0002"}
+        recording_rois = ((Path("/recordings/a"), "roi_0002"),)
 
         with self.assertRaisesRegex(ValueError, "FOV"):
             matched_manual_roi_groups(rows, fov_group_id="")

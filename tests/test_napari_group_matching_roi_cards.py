@@ -12,7 +12,7 @@ from typing import cast
 import numpy as np
 from qtpy.QtCore import QEvent, QPointF, Qt
 from qtpy.QtGui import QColor, QMouseEvent
-from qtpy.QtWidgets import QApplication, QComboBox, QLabel
+from qtpy.QtWidgets import QApplication, QComboBox, QLabel, QPushButton
 
 from twopy.napari.group_matching.roi_cards import (
     RoiRecordingCard,
@@ -59,16 +59,16 @@ class GroupMatchingRoiCardTest(unittest.TestCase):
             "roi_0002",
         )
 
-    def test_preview_click_toggles_roi_selector(self) -> None:
-        """Confirm clicking the selected ROI clears the card selector.
+    def test_preview_click_toggles_multiple_rois(self) -> None:
+        """Confirm preview clicks toggle independent ROI selections.
 
-        Inputs: one ROI card with a single ROI mask in the rendered preview.
-        Outputs: first click selects the ROI, second click returns the dropdown
-        to ``No ROI``, and background clicks leave selection unchanged.
+        Inputs: one ROI card with two ROI masks in the rendered preview.
+        Outputs: clicks add each ROI, then remove only the clicked selected ROI.
         """
         app = QApplication.instance() or QApplication([])
         labels = np.zeros((10, 20), dtype=np.int64)
         labels[0, 5] = 2
+        labels[1, 10] = 3
         callback_count = 0
 
         def count_selection_change() -> None:
@@ -78,7 +78,7 @@ class GroupMatchingRoiCardTest(unittest.TestCase):
         card = RoiRecordingCard(
             recording=_loaded_recording(labels),
             fov_group_id="fov_1",
-            selected_roi="",
+            selected_rois=(),
             trace_color=QColor("#1f77b4"),
             on_selection_changed=count_selection_change,
         )
@@ -95,24 +95,105 @@ class GroupMatchingRoiCardTest(unittest.TestCase):
             x=55,
             y=60,
         )
-        self.assertEqual(selector.currentData(), "roi_0002")
+        self.assertEqual(card.selected_roi_labels(), ("roi_0002",))
+        self.assertEqual(selector.currentData(), "")
         self.assertEqual(callback_count, 1)
+
+        _send_left_click(
+            image_label,
+            x=110,
+            y=75,
+        )
+        self.assertEqual(card.selected_roi_labels(), ("roi_0002", "roi_0003"))
+        self.assertEqual(callback_count, 2)
 
         _send_left_click(
             image_label,
             x=55,
             y=60,
         )
-        self.assertEqual(selector.currentData(), "")
-        self.assertEqual(callback_count, 2)
+        self.assertEqual(card.selected_roi_labels(), ("roi_0003",))
+        self.assertEqual(callback_count, 3)
 
         _send_left_click(
             image_label,
             x=0,
             y=0,
         )
-        self.assertEqual(selector.currentData(), "")
-        self.assertEqual(callback_count, 2)
+        self.assertEqual(card.selected_roi_labels(), ("roi_0003",))
+        self.assertEqual(callback_count, 3)
+
+    def test_selected_roi_chip_removes_roi_and_notifies_parent(self) -> None:
+        """Confirm chip removal updates card state and emits one change.
+
+        Inputs: one ROI card restored with two selected ROIs.
+        Outputs: clicking the first chip removes only that ROI and calls the
+        parent selection-change callback.
+        """
+        app = QApplication.instance() or QApplication([])
+        labels = np.zeros((10, 20), dtype=np.int64)
+        labels[0, 5] = 2
+        labels[1, 10] = 3
+        callback_count = 0
+
+        def count_selection_change() -> None:
+            nonlocal callback_count
+            callback_count += 1
+
+        card = RoiRecordingCard(
+            recording=_loaded_recording(labels),
+            fov_group_id="fov_1",
+            selected_rois=("roi_0002", "roi_0003"),
+            trace_color=QColor("#1f77b4"),
+            on_selection_changed=count_selection_change,
+        )
+        card.show()
+        app.processEvents()
+
+        chips = [
+            button
+            for button in card.findChildren(QPushButton, "selected_roi_chip")
+            if button.text() == "x  ROI 2"
+        ]
+        self.assertEqual(len(chips), 1)
+        self.assertIn("#d62728", chips[0].styleSheet())
+        self.assertEqual(chips[0].toolTip(), "Remove ROI 2")
+        self.assertEqual(chips[0].accessibleName(), "Remove ROI 2")
+
+        chips[0].click()
+
+        self.assertEqual(card.selected_roi_labels(), ("roi_0003",))
+        self.assertEqual(callback_count, 1)
+
+    def test_selected_roi_chips_show_overflow_summary(self) -> None:
+        """Confirm crowded cards show a compact overflow count.
+
+        Inputs: one ROI card restored with five selected ROIs.
+        Outputs: four removable chips are visible and the fifth ROI is counted
+        in a compact overflow label.
+        """
+        app = QApplication.instance() or QApplication([])
+        labels = np.arange(1, 7, dtype=np.int64).reshape(2, 3)
+        card = RoiRecordingCard(
+            recording=_loaded_recording(labels),
+            fov_group_id="fov_1",
+            selected_rois=(
+                "roi_0001",
+                "roi_0002",
+                "roi_0003",
+                "roi_0004",
+                "roi_0005",
+            ),
+            trace_color=QColor("#1f77b4"),
+            on_selection_changed=lambda: None,
+        )
+        card.show()
+        app.processEvents()
+
+        self.assertEqual(len(card.findChildren(QPushButton, "selected_roi_chip")), 4)
+        overflow = card.findChild(QLabel, "selected_roi_overflow")
+        assert overflow is not None
+        self.assertEqual(overflow.text(), "+1 more")
 
 
 class _FakeLayer:
