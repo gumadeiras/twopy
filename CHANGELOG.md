@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.3.6 - 2026-06-18
+
 ### Changes
 
 - Made napari fit each loaded recording into the available canvas after the movie and ROI layers are added.
