@@ -398,7 +398,10 @@ def create_viewer() -> NapariViewer:
     """
     import napari
 
-    viewer = cast(NapariViewer, napari.Viewer(title=APPLICATION_TITLE))
+    viewer = cast(
+        NapariViewer,
+        napari.Viewer(title=APPLICATION_TITLE, show_welcome_screen=False),
+    )
     _set_application_icon(viewer)
     show_empty_viewer_message(viewer)
     return viewer

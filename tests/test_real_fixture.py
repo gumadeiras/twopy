@@ -11,8 +11,8 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from tests.tempdir import temporary_directory
 
+from tests.tempdir import temporary_directory
 from twopy import analyze_recording_responses, load_converted_recording, load_roi_set
 from twopy.analysis.persistence import load_analysis_outputs
 from twopy.analysis.response_processing import (

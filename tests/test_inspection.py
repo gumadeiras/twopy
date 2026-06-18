@@ -11,8 +11,8 @@ from zipfile import ZipFile
 
 import scipy.io
 import tifffile
-from tests.tempdir import temporary_directory
 
+from tests.tempdir import temporary_directory
 from twopy.inspection import inspect_recording_files
 
 

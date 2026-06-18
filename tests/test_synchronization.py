@@ -7,8 +7,8 @@ Outputs: detected events and high-resolution events paired to imaging frames.
 import unittest
 
 import numpy as np
-from tests.recording_data import minimal_recording_data
 
+from tests.recording_data import minimal_recording_data
 from twopy import (
     detect_photodiode_events,
     detect_recording_photodiode_events,

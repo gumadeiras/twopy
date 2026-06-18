@@ -9,8 +9,8 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-from tests.tempdir import temporary_directory
 
+from tests.tempdir import temporary_directory
 from twopy.hdf5_utils import (
     decode_hdf5_string,
     plain_hdf5_attr_value,

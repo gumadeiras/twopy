@@ -8,9 +8,9 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+
 from tests.converted_files import write_converted_recording_files
 from tests.tempdir import temporary_directory
-
 from twopy.analysis.trials import EpochFrameWindow, FrameWindow
 from twopy.conversion.types import FrameCountAudit
 from twopy.converted import ConvertedMovie, RecordingData, load_converted_recording

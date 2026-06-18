@@ -6,6 +6,13 @@
 
 ## Unreleased
 
+## 0.3.5 - 2026-06-18
+
+### Fixes
+
+- Fixed the napari update notice after testing an older twopy install, so a fresh local cache from a newer install cannot hide a newer PyPI release.
+- Fixed the empty napari launch screen so twopy's Getting Started message is not covered by napari's default welcome text.
+
 ## 0.3.4 - 2026-06-18
 
 ### Changes

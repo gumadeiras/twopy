@@ -7,8 +7,8 @@ Outputs: one audited timing boundary for native analysis callers.
 import unittest
 
 import numpy as np
-from tests.recording_data import minimal_recording_data
 
+from tests.recording_data import minimal_recording_data
 from twopy.analysis.timing import resolve_recording_timing
 from twopy.analysis.trials import EpochFrameWindow
 from twopy.converted import RecordingData

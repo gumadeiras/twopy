@@ -9,11 +9,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
+
+import twopy.response_roi_extraction as response_roi_extraction
 from tests.converted_files import write_aligned_movie_file
 from tests.recording_data import minimal_recording_data
 from tests.tempdir import temporary_directory
-
-import twopy.response_roi_extraction as response_roi_extraction
 from twopy import (
     EpochFrameWindow,
     FrameWindow,

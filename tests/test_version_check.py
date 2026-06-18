@@ -122,6 +122,24 @@ class VersionCheckTest(unittest.TestCase):
 
             self.assertIsNone(notice)
 
+    def test_fresh_cache_older_than_install_checks_network(self) -> None:
+        """Confirm downgraded installs do not trust an older fresh cache."""
+        with temporary_directory() as temp_dir:
+            state_file = Path(temp_dir) / "state.json"
+            now = datetime(2026, 6, 18, 12, tzinfo=UTC)
+            _write_cache(state_file, checked_at=now, latest_version="0.3.2")
+
+            notice = check_for_update(
+                current_version="0.3.3",
+                now=now + timedelta(hours=1),
+                state_file=state_file,
+                fetch_latest=lambda: PublishedVersion(version="0.3.4"),
+            )
+
+            self.assertIsNotNone(notice)
+            assert notice is not None
+            self.assertEqual(notice.latest_version, "0.3.4")
+
     def test_fetch_pypi_published_version_validates_response_shape(self) -> None:
         """Confirm PyPI JSON parsing accepts only expected string fields."""
         response = _FakeResponse(

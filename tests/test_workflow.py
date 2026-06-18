@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+
 from tests.converted_files import write_converted_recording_files
 from tests.tempdir import temporary_directory
-
 from twopy import (
     analyze_recording_responses,
     compute_recording_responses,

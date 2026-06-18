@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 
 from tests.tempdir import temporary_directory
-
 from twopy.session import discover_session_files
 
 

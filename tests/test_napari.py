@@ -433,7 +433,10 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
 
         self.assertIs(created, viewer)
         self.assertEqual(APPLICATION_TITLE, f"twopy {__version__}")
-        viewer_constructor.assert_called_once_with(title=APPLICATION_TITLE)
+        viewer_constructor.assert_called_once_with(
+            title=APPLICATION_TITLE,
+            show_welcome_screen=False,
+        )
         self.assertFalse(viewer.welcome_screen.visible)
         self.assertEqual(viewer.text_overlay.text, EMPTY_VIEWER_MESSAGE)
         self.assertTrue(viewer.text_overlay.text.startswith(f"{APPLICATION_TITLE}\n"))

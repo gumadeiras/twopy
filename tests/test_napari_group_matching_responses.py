@@ -20,7 +20,6 @@ from tests.napari_support import (
     temporary_directory,
     unittest,
 )
-
 from twopy.napari.group_matching.responses import SelectedRoiResponseCache
 
 

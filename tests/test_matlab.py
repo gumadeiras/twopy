@@ -9,8 +9,8 @@ from pathlib import Path
 
 import h5py
 import scipy.io
-from tests.tempdir import temporary_directory
 
+from tests.tempdir import temporary_directory
 from twopy.matlab import MatlabHdf5Group, inspect_mat_file, load_mat_file
 
 

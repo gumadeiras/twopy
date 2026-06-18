@@ -9,7 +9,6 @@ from datetime import date
 from pathlib import Path
 
 from tests.tempdir import temporary_directory
-
 from twopy import (
     DEFAULT_PIXEL_CALIBRATION_PATH,
     PixelCalibrationRow,

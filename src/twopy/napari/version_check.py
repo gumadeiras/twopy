@@ -137,7 +137,12 @@ def check_for_update(
     """
     checked_now = _utc(now)
     cache = read_version_check_cache(state_file=state_file)
-    if _cache_is_fresh(cache, now=checked_now, max_age=max_age):
+    if _cache_is_fresh(
+        cache,
+        now=checked_now,
+        max_age=max_age,
+        current_version=current_version,
+    ):
         return _notice_from_cache(current_version, cache)
 
     try:
@@ -243,12 +248,20 @@ def _cache_is_fresh(
     *,
     now: datetime,
     max_age: timedelta,
+    current_version: str,
 ) -> bool:
     """Return whether the cache is young enough to skip a network check."""
     if cache is None:
         return False
     checked_at = _parse_cached_datetime(cache.checked_at)
     if checked_at is None:
+        return False
+    try:
+        current = Version(current_version)
+        latest = Version(cache.latest_version)
+    except InvalidVersion:
+        return False
+    if latest < current:
         return False
     return now - checked_at <= max_age
 

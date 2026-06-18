@@ -735,6 +735,7 @@ class NapariAdapterTestCase(unittest.TestCase):
         Inputs: none.
         Outputs: isolated state and config paths for GUI tests.
         """
+        self._qt_application = QApplication.instance() or QApplication([])
         self._state_temp_dir = temporary_directory()
         self._config_temp_dir = temporary_directory()
         self._previous_state_file = environ.get("TWOPY_NAPARI_STATE_FILE")

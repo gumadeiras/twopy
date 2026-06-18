@@ -7,8 +7,8 @@ Outputs: per-frame epoch labels and stimulus-labeled frame windows.
 import unittest
 
 import numpy as np
-from tests.recording_data import minimal_recording_data
 
+from tests.recording_data import minimal_recording_data
 from twopy.analysis.epoch_mapping import interpolate_stimulus_epochs_to_frame_windows
 from twopy.converted import RecordingData
 

@@ -8,8 +8,8 @@ metadata.
 import unittest
 
 import numpy as np
-from tests.recording_data import minimal_recording_data
 
+from tests.recording_data import minimal_recording_data
 from twopy import classify_recording_photodiode_events
 from twopy.converted import RecordingData
 from twopy.synchronization import (

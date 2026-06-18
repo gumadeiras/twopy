@@ -9,7 +9,6 @@ import unittest
 from pathlib import Path
 
 from tests.tempdir import temporary_directory
-
 from twopy import find_recordings, finite_mean_and_sem
 from twopy.api import finite_mean_and_sem as api_finite_mean_and_sem
 

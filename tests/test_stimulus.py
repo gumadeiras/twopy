@@ -7,8 +7,8 @@ Outputs: assertions that stable column names map to per-``stimtype`` meanings.
 import unittest
 
 import numpy as np
-from tests.recording_data import minimal_recording_data
 
+from tests.recording_data import minimal_recording_data
 from twopy.converted import RecordingData
 from twopy.stimulus import map_stimulus_specific_column
 

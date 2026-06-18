@@ -9,8 +9,8 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-from tests.tempdir import temporary_directory
 
+from tests.tempdir import temporary_directory
 from twopy.parity import load_saved_analysis_last_roi
 
 

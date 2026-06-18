@@ -234,7 +234,7 @@ def load_converted_recording(
         if len(movie_shape) != 3:
             msg = f"aligned movie shape must have 3 dimensions: {movie_shape}"
             raise ValueError(msg)
-        movie_shape_3d = cast(tuple[int, int, int], movie_shape)
+        movie_shape_3d = movie_shape
 
         recording = RecordingData(
             path=data_path,

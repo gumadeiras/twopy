@@ -7,8 +7,8 @@ Outputs: dF/F values with high-motion frames marked as NaN.
 import unittest
 
 import numpy as np
-from tests.recording_data import minimal_recording_data
 
+from tests.recording_data import minimal_recording_data
 from twopy import apply_motion_artifact_mask_to_delta_f_over_f
 from twopy.analysis.dff import RoiDeltaFOverF
 from twopy.converted import RecordingData

@@ -9,7 +9,6 @@ import unittest
 from pathlib import Path
 
 from tests.tempdir import temporary_directory
-
 from twopy.config import TwopyConfig
 from twopy.database import (
     ExperimentSearchFilters,

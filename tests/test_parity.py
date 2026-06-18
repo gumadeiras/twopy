@@ -8,10 +8,10 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+
 from tests.converted_files import write_aligned_movie_file
 from tests.recording_data import minimal_recording_data
 from tests.tempdir import temporary_directory
-
 from twopy.analysis.trials import FrameWindow
 from twopy.converted import RecordingData
 from twopy.parity import (
