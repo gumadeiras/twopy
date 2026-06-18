@@ -45,10 +45,16 @@ from twopy.custom import (
     CustomWorkflow,
     WorkflowDiscoveryResult,
 )
+from twopy.napari.controls import NapariControlState
 from twopy.napari.custom_tab import CustomWorkflowPanel, _parameter_widget
+from twopy.napari.empty_state import (
+    EMPTY_VIEWER_MESSAGE,
+    hide_empty_viewer_message,
+)
 from twopy.napari.plotting.docks.response_plot_widget import (
     _custom_workflow_display_result,
 )
+from twopy.napari.session import select_loaded_recording
 
 
 class CoreNapariAdapterTest(NapariAdapterTestCase):
@@ -425,6 +431,47 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
         self.assertIs(created, viewer)
         self.assertEqual(APPLICATION_TITLE, f"twopy {__version__}")
         viewer_constructor.assert_called_once_with(title=APPLICATION_TITLE)
+        self.assertFalse(viewer.welcome_screen.visible)
+        self.assertEqual(viewer.text_overlay.text, EMPTY_VIEWER_MESSAGE)
+        self.assertTrue(viewer.text_overlay.text.startswith(f"{APPLICATION_TITLE}\n"))
+        self.assertTrue(viewer.text_overlay.visible)
+        self.assertEqual(viewer.text_overlay.position, "top_center")
+
+    def test_empty_viewer_message_only_clears_twopy_text(self) -> None:
+        """Confirm hiding the empty message leaves other overlay owners alone.
+
+        Inputs: fake viewer whose text overlay belongs to another feature.
+        Outputs: unchanged text and visibility after hiding twopy's message.
+        """
+        viewer = _FakeViewer()
+        viewer.text_overlay.text = "existing HUD"
+        viewer.text_overlay.visible = True
+
+        hide_empty_viewer_message(viewer)
+
+        self.assertEqual(viewer.text_overlay.text, "existing HUD")
+        self.assertTrue(viewer.text_overlay.visible)
+
+    def test_cleared_recording_selection_restores_empty_viewer_message(self) -> None:
+        """Confirm no-recording selection brings back the twopy empty canvas.
+
+        Inputs: empty loaded-recording state after the Load tab clears a view.
+        Outputs: napari welcome hidden and twopy empty text shown.
+        """
+        viewer = _FakeViewer()
+        state = NapariControlState(
+            viewer=viewer,
+            roi_labels_layer=None,
+            roi_save_file=Path("rois.h5"),
+            recording=None,
+            response_plot_widget=None,
+        )
+
+        select_loaded_recording(state, None)
+
+        self.assertFalse(viewer.welcome_screen.visible)
+        self.assertEqual(viewer.text_overlay.text, EMPTY_VIEWER_MESSAGE)
+        self.assertTrue(viewer.text_overlay.visible)
 
     def test_opens_empty_roi_labels_layer_by_default(self) -> None:
         """Confirm new recordings open with an editable empty ROI layer.
@@ -436,6 +483,8 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             root = Path(temp_dir)
             recording_path = _write_converted_recording(root)
             viewer = _FakeViewer()
+            viewer.text_overlay.text = EMPTY_VIEWER_MESSAGE
+            viewer.text_overlay.visible = True
 
             opened = open_recording_in_napari(recording_path, viewer=viewer)
 
@@ -467,6 +516,8 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
             self.assertEqual(viewer.images[0].options["gamma"], 1.3)
             self.assertEqual(viewer.images[0].options["contrast_limits"], (4.3, 7.0))
             self.assertEqual(viewer.images[0].contrast_limits_range, (4.0, 7.0))
+            self.assertEqual(viewer.text_overlay.text, "")
+            self.assertFalse(viewer.text_overlay.visible)
             self.assertEqual(viewer.window.dock_widgets[0].name, "twopy responses")
             self.assertEqual(viewer.window.dock_widgets[0].area, "top")
             self.assertEqual(viewer.window._qt_window.resize_calls[0].sizes, [345])

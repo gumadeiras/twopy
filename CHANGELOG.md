@@ -8,6 +8,7 @@
 
 ### Changes
 
+- Replaced napari's generic empty-viewer welcome text with a versioned twopy Getting Started message that points users to the Load tab before a recording is open.
 - Made Group Matching ROI assignment allow multiple separate ROIs from the same recording in one saved cell group, with one CSV row and one response trace per selected ROI. The manual ROI match helper APIs now take `(recording_path, roi_label)` pairs instead of a recording-to-ROI mapping.
 - Made Group Matching selected-ROI chips use a red leading `x` with remove tooltip text.
 - Made same-recording ROI response traces reuse that recording's assigned hue.

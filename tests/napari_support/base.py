@@ -413,6 +413,7 @@ class _FakeViewer:
         self.layers = SimpleNamespace(selection=SimpleNamespace(active=None))
         self.window = _FakeWindow()
         self.dims = _FakeDims()
+        self.welcome_screen = _FakeWelcomeScreen()
         self.text_overlay = _FakeTextOverlay()
 
     def add_image(self, data: object, *, name: str, **kwargs: object) -> object:
@@ -544,6 +545,13 @@ class _FakeDims:
         self.current_step = tuple(values)
         self.point = tuple(values)
         self.events.current_step.emit()
+
+
+@dataclass
+class _FakeWelcomeScreen:
+    """Small napari welcome overlay stand-in."""
+
+    visible: bool = True
 
 
 @dataclass

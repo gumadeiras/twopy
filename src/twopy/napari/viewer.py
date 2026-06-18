@@ -19,6 +19,10 @@ from twopy._version import __version__
 from twopy.converted import ConvertedMovie, RecordingData, load_converted_recording
 from twopy.napari.controls import add_twopy_magicgui_controls
 from twopy.napari.display import display_metadata_for_spatial_crop
+from twopy.napari.empty_state import (
+    hide_empty_viewer_message,
+    show_empty_viewer_message,
+)
 from twopy.napari.movie import exclusive_stop, resolve_movie_frame_range
 from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting import (
@@ -303,6 +307,7 @@ def add_prepared_recording_to_viewer(
     Returns:
         Napari view object with created layers and loaded recording metadata.
     """
+    hide_empty_viewer_message(viewer)
     recording = prepared.recording
     mean_image = prepared.mean_image
     mean_layer = viewer.add_image(
@@ -378,7 +383,9 @@ def create_viewer() -> NapariViewer:
     """
     import napari
 
-    return cast(NapariViewer, napari.Viewer(title=APPLICATION_TITLE))
+    viewer = cast(NapariViewer, napari.Viewer(title=APPLICATION_TITLE))
+    show_empty_viewer_message(viewer)
+    return viewer
 
 
 def set_labels_brush_size(layer: object, *, brush_size: int) -> None:

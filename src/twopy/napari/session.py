@@ -24,6 +24,10 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.converted import RecordingData
+from twopy.napari.empty_state import (
+    hide_empty_viewer_message,
+    show_empty_viewer_message,
+)
 from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting import refresh_response_plot_widget
 from twopy.napari.protocols import NapariViewer
@@ -337,9 +341,14 @@ def select_loaded_recording(
                 movie_layer=None,
             )
         render_loaded_recordings_panel(state)
+        if len(state.loaded_recordings) == 0:
+            show_empty_viewer_message(state.viewer)
+        else:
+            hide_empty_viewer_message(state.viewer)
         return
 
     selected = state.loaded_recordings[index]
+    hide_empty_viewer_message(state.viewer)
     state.selected_recording_index = index
     state.recording = selected.recording
     state.output_route = selected.output_route
