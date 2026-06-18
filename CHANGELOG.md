@@ -8,6 +8,7 @@
 
 ### Changes
 
+- Updated the packaged twopy app icon artwork.
 - Made the twopy napari launcher set a packaged twopy app icon on the Qt application and top-level viewer window.
 - Replaced napari's generic empty-viewer welcome text with a versioned twopy Getting Started message that points users to the Load tab before a recording is open.
 - Made Group Matching ROI assignment allow multiple separate ROIs from the same recording in one saved cell group, with one CSV row and one response trace per selected ROI. The manual ROI match helper APIs now take `(recording_path, roi_label)` pairs instead of a recording-to-ROI mapping.
