@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.3.9 - 2026-07-08
+
 ### Features
 
 - Added a napari Metadata-tab Motion section that summarizes alignment crop size, removed border pixels, movement magnitude, and high-motion frames with an inline x/y movement plot.
