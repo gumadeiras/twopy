@@ -199,6 +199,11 @@ def _write_alignment_crop_group(
     crop_group.attrs["over_moved_frame_count"] = alignment_crop.over_moved_frame_count
     crop_group.attrs["motion_threshold_pixels"] = alignment_crop.motion_threshold_pixels
     crop_group.create_dataset(
+        "alignment_offset_pixels",
+        data=alignment_crop.alignment_offset_pixels,
+        compression="gzip",
+    )
+    crop_group.create_dataset(
         "alignment_shift_pixels",
         data=alignment_crop.alignment_shift_pixels,
         compression="gzip",

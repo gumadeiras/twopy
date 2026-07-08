@@ -38,6 +38,7 @@ def minimal_recording_data(
     high_res_pd: npt.NDArray[np.float64] | None = None,
     mean_image: npt.NDArray[np.float64] | None = None,
     alignment_valid_crop: SpatialCrop | None = None,
+    alignment_offset_pixels: npt.NDArray[np.float64] | None = None,
     alignment_shift_pixels: npt.NDArray[np.float64] | None = None,
     motion_artifact_mask: npt.NDArray[np.bool_] | None = None,
     acquisition_frame_count: int | None = None,
@@ -61,6 +62,7 @@ def minimal_recording_data(
         high_res_pd: Optional high-resolution photodiode vector.
         mean_image: Optional mean image for display or analysis helpers.
         alignment_valid_crop: Optional valid crop for aligned movie frames.
+        alignment_offset_pixels: Optional per-frame x/y alignment offsets.
         alignment_shift_pixels: Optional per-frame alignment shifts.
         motion_artifact_mask: Optional per-frame motion artifact mask.
         acquisition_frame_count: Optional acquisition metadata frame count for
@@ -89,6 +91,11 @@ def minimal_recording_data(
         np.zeros(frame_count, dtype=np.float64)
         if alignment_shift_pixels is None
         else alignment_shift_pixels
+    )
+    alignment_offset_pixels = (
+        np.zeros((frame_count, 2), dtype=np.float64)
+        if alignment_offset_pixels is None
+        else alignment_offset_pixels
     )
     motion_artifact_mask = (
         np.zeros(frame_count, dtype=np.bool_)
@@ -135,6 +142,7 @@ def minimal_recording_data(
             if alignment_valid_crop is None
             else alignment_valid_crop
         ),
+        alignment_offset_pixels=alignment_offset_pixels,
         alignment_shift_pixels=alignment_shift_pixels,
         motion_artifact_mask=motion_artifact_mask,
         frame_counts=FrameCountAudit(

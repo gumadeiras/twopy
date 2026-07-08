@@ -275,6 +275,7 @@ class _ResponsePlotWidget(QWidget):
         self._roi_save_path_label = options_panel.roi_save_path_label
         self._update_status_label = options_panel.update_status_label
         self._update_notice_label = options_panel.update_notice_label
+        self._motion_summary_widget = options_panel.motion_summary_widget
         self._export_status_label = options_panel.export_status_label
         self._reload_saved_button = options_panel.reload_saved_button
         self._plot_options_layout = options_panel.plot_options_layout
@@ -496,6 +497,7 @@ class _ResponsePlotWidget(QWidget):
         self._analysis_path_label.setText(f"Analysis output: {DEFAULT_PATH_TEXT}")
         self._roi_save_path_label.setText(f"ROI output: {DEFAULT_PATH_TEXT}")
         self._update_status_label.setText("")
+        self._motion_summary_widget.set_recording(None)
         self._export_status_label.setText("Exports save beside the recording.")
         self._reset_empty_option_tabs()
         self._set_status("No recording loaded.")
@@ -528,6 +530,7 @@ class _ResponsePlotWidget(QWidget):
         self._recording = recording
         self._output_route = output_route or recording_output_route(recording)
         self._roi_generation_widget.set_recording(recording)
+        self._motion_summary_widget.set_recording(recording)
         self._analysis_path = resolved_analysis_path(None, recording)
         epoch_names = stimulus_epoch_names_by_number(recording)
         self._delta_f_over_f_options_widget.set_epoch_choices(

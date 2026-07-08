@@ -27,6 +27,7 @@ from twopy.napari.plotting.export_controls import (
     ResponseExportState,
     create_response_export_tab,
 )
+from twopy.napari.plotting.motion_summary import MotionSummaryWidget
 from twopy.napari.plotting.normalization_options import NormalizationOptionsWidget
 from twopy.napari.plotting.panels import (
     SidebarTextLabel,
@@ -56,6 +57,7 @@ class ResponseOptionsPanel:
         roi_save_path_label: Metadata-tab label showing the ROI output path.
         update_status_label: Metadata-tab label showing save or processing status.
         update_notice_label: Metadata-tab label showing the update command.
+        motion_summary_widget: Metadata-tab widget showing alignment movement.
         export_status_label: Export-tab label showing save/export action status.
         reload_saved_button: Load-tab button that reloads persisted response
             outputs.
@@ -83,6 +85,7 @@ class ResponseOptionsPanel:
     roi_save_path_label: SidebarTextLabel
     update_status_label: SidebarTextLabel
     update_notice_label: SidebarTextLabel
+    motion_summary_widget: MotionSummaryWidget
     export_status_label: SidebarTextLabel
     reload_saved_button: QPushButton
     plot_options_layout: QVBoxLayout
@@ -153,6 +156,7 @@ def create_response_options_panel(
     roi_save_path_label = SidebarTextLabel(f"ROI output: {DEFAULT_PATH_TEXT}")
     update_status_label = SidebarTextLabel("")
     update_notice_label = SidebarTextLabel("")
+    motion_summary_widget = MotionSummaryWidget()
     export_status_label = SidebarTextLabel("Exports save beside the recording.")
 
     plot_options_layout = QVBoxLayout()
@@ -209,6 +213,7 @@ def create_response_options_panel(
             roi_output_label=roi_save_path_label,
             status_label=update_status_label,
             update_notice_label=update_notice_label,
+            motion_summary_widget=motion_summary_widget,
         ),
         "Metadata",
     )
@@ -232,6 +237,7 @@ def create_response_options_panel(
         roi_save_path_label=roi_save_path_label,
         update_status_label=update_status_label,
         update_notice_label=update_notice_label,
+        motion_summary_widget=motion_summary_widget,
         export_status_label=export_status_label,
         reload_saved_button=reload_saved_button,
         plot_options_layout=plot_options_layout,

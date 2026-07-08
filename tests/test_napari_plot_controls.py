@@ -4,6 +4,9 @@ Inputs: shared fake napari state and tiny response data.
 Outputs: assertions for plot-control behavior.
 """
 
+from dataclasses import replace
+
+from qtpy.QtGui import QPixmap
 from qtpy.QtWidgets import QSizePolicy, QStyleOptionViewItem
 
 from tests.napari_support import (
@@ -31,12 +34,19 @@ from tests.napari_support import (
     ResponseProcessingOptionsWidget,
     ResponseWindowOptions,
     ResponseWindowOptionsWidget,
+    SpatialCrop,
     cast,
     create_response_plot_widget,
+    np,
     plot_display_options_group,
     unittest,
 )
-from twopy.napari.plotting.panels import SidebarTextLabel, response_metadata_tab
+from tests.recording_data import minimal_recording_data
+from twopy.napari.plotting.motion_summary import MotionSummaryWidget
+from twopy.napari.plotting.panels import (
+    SidebarTextLabel,
+    response_metadata_tab,
+)
 
 
 class NapariPlotControlsTest(NapariAdapterTestCase):
@@ -105,6 +115,171 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             labels[2].heightForWidth(400),
         )
         self.assertFalse(hasattr(labels[2], "verticalScrollBar"))
+
+    def test_motion_summary_uses_metadata_tab_width(self) -> None:
+        """Confirm Motion metadata stays inside the fixed sidebar width.
+
+        Inputs: a recording with a crop, signed x/y movement, and one bad frame.
+        Outputs: summary text reports crop/motion metrics, and the plot can shrink
+        with the Metadata tab instead of widening the sidebar.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = MotionSummaryWidget()
+        recording = minimal_recording_data(
+            movie_shape=(4, 5, 6),
+            alignment_valid_crop=SpatialCrop(
+                axis0_start=1,
+                axis0_stop=4,
+                axis1_start=2,
+                axis1_stop=5,
+                original_shape=(5, 6),
+                source="alignment_valid_crop",
+            ),
+            alignment_offset_pixels=np.array(
+                [[0.0, 0.0], [1.0, -1.0], [3.0, 0.0], [2.0, 1.0]],
+                dtype=np.float64,
+            ),
+            alignment_shift_pixels=np.array([0.0, 1.0, 3.0, 2.0]),
+            motion_artifact_mask=np.array([False, False, True, False]),
+        )
+
+        widget.set_recording(recording)
+
+        self.assertEqual(widget.title(), "Motion")
+        labels = widget.findChildren(SidebarTextLabel)
+        self.assertEqual(len(labels), 1)
+        self.assertIn("Visible crop: 3 x 3 px from a 6 x 5 px frame", labels[0].text())
+        self.assertIn(
+            "Removed border: left 2 px, right 1 px, top 1 px, bottom 1 px",
+            labels[0].text(),
+        )
+        self.assertIn("high-motion 1/4 frames", labels[0].text())
+        self.assertIn(
+            "Plot: left-right movement in blue, up-down movement in yellow",
+            labels[0].text(),
+        )
+        layout = widget.layout()
+        if layout is None:
+            self.fail("Motion summary is missing a layout")
+        plot_item = layout.itemAt(1)
+        if plot_item is None:
+            self.fail("Motion summary is missing a plot item")
+        plot = plot_item.widget()
+        if plot is None:
+            self.fail("Motion summary is missing a plot")
+        self.assertEqual(plot.minimumWidth(), 1)
+        self.assertEqual(
+            plot.sizePolicy().horizontalPolicy(),
+            QSizePolicy.Policy.Ignored,
+        )
+        offset_pixels = cast(Any, plot)._values
+        np.testing.assert_array_equal(
+            offset_pixels,
+            np.array([[0.0, 0.0], [1.0, -1.0], [3.0, 0.0], [2.0, 1.0]]),
+        )
+
+    def test_motion_summary_falls_back_to_total_movement(self) -> None:
+        """Confirm old recordings show magnitude-only movement information.
+
+        Inputs: a recording without signed x/y alignment offsets.
+        Outputs: summary text asks for reconversion and plot uses total movement.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = MotionSummaryWidget()
+        recording = replace(
+            minimal_recording_data(
+                movie_shape=(3, 5, 6),
+                alignment_shift_pixels=np.array([0.0, 2.0, 1.0], dtype=np.float64),
+                motion_artifact_mask=np.array([False, True, False]),
+            ),
+            alignment_offset_pixels=None,
+        )
+
+        widget.set_recording(recording)
+
+        labels = widget.findChildren(SidebarTextLabel)
+        self.assertEqual(len(labels), 1)
+        self.assertIn(
+            "Reconvert this recording to see independent x/y pixel movement",
+            labels[0].text(),
+        )
+        layout = widget.layout()
+        if layout is None:
+            self.fail("Motion summary is missing a layout")
+        plot_item = layout.itemAt(1)
+        if plot_item is None:
+            self.fail("Motion summary is missing a plot item")
+        plot = plot_item.widget()
+        if plot is None:
+            self.fail("Motion summary is missing a plot")
+        np.testing.assert_array_equal(
+            cast(Any, plot)._values,
+            np.array([[0.0], [2.0], [1.0]], dtype=np.float64),
+        )
+
+    def test_motion_summary_plot_renders_motion_data(self) -> None:
+        """Confirm the inline Motion plot paints real movement data.
+
+        Inputs: a Motion widget with finite and non-finite x/y movement values.
+        Outputs: the plot renders without crashing after values are sanitized.
+        """
+        _ = QApplication.instance() or QApplication([])
+        widget = MotionSummaryWidget()
+        recording = minimal_recording_data(
+            movie_shape=(4, 5, 6),
+            alignment_offset_pixels=np.array(
+                [[0.0, 0.0], [np.nan, 1.0], [np.inf, -1.0], [2.0, 0.0]],
+                dtype=np.float64,
+            ),
+            alignment_shift_pixels=np.array([0.0, np.nan, np.inf, 2.0]),
+            motion_artifact_mask=np.array([False, True, False, False]),
+        )
+        widget.set_recording(recording)
+        labels = widget.findChildren(SidebarTextLabel)
+        self.assertEqual(len(labels), 1)
+        self.assertIn("95% of frames moved <= 1.90 px", labels[0].text())
+        self.assertIn("max 2.00 px", labels[0].text())
+        layout = widget.layout()
+        if layout is None:
+            self.fail("Motion summary is missing a layout")
+        plot_item = layout.itemAt(1)
+        if plot_item is None:
+            self.fail("Motion summary is missing a plot item")
+        plot = plot_item.widget()
+        if plot is None:
+            self.fail("Motion summary is missing a plot")
+
+        plot.resize(300, 120)
+        pixmap = QPixmap(plot.size())
+        pixmap.fill()
+        plot.render(pixmap)
+
+        self.assertFalse(pixmap.isNull())
+
+    def test_loaded_recording_updates_metadata_motion_summary(self) -> None:
+        """Confirm response-widget loading routes motion metadata to the tab.
+
+        Inputs: a response widget and one recording with nonzero x/y movement.
+        Outputs: the Metadata-tab Motion section reflects the loaded recording.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        recording = minimal_recording_data(
+            movie_shape=(3, 4, 4),
+            alignment_offset_pixels=np.array(
+                [[0.0, 0.0], [2.0, -1.0], [1.0, 1.0]],
+                dtype=np.float64,
+            ),
+            alignment_shift_pixels=np.array([0.0, 2.24, 1.41], dtype=np.float64),
+            motion_artifact_mask=np.array([False, True, False]),
+        )
+
+        response_widget.load_recording(recording)
+
+        motion_widget = response_widget._motion_summary_widget
+        labels = motion_widget.findChildren(SidebarTextLabel)
+        self.assertEqual(len(labels), 1)
+        self.assertIn("high-motion 1/3 frames", labels[0].text())
 
     def test_plot_tab_option_sections_have_expected_order(self) -> None:
         """Confirm the Plot tab presents response options in workflow order.

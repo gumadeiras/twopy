@@ -41,6 +41,10 @@ class RealDataFixtureTest(unittest.TestCase):
         self.assertEqual(recording.stimulus_data.shape, (120, 35))
         self.assertEqual(recording.frame_counts.aligned_movie_frames, 60)
         self.assertEqual(recording.frame_counts.imaging_res_pd_minus_movie, 0)
+        np.testing.assert_array_equal(
+            recording.alignment_offset_pixels,
+            np.zeros((60, 2), dtype=np.float64),
+        )
         self.assertAlmostEqual(float(recording.mean_image.mean()), 20.735185185185188)
         self.assertAlmostEqual(float(recording.movie.read_frames(0, 1).max()), 472.0)
 

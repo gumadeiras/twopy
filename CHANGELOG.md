@@ -6,6 +6,14 @@
 
 ## Unreleased
 
+### Features
+
+- Added a napari Metadata-tab Motion section that summarizes alignment crop size, removed border pixels, movement magnitude, and high-motion frames with an inline x/y movement plot.
+
+### Changes
+
+- Converted `recording_data.h5` files now store signed x/y alignment offsets under `movie/alignment_valid_crop/alignment_offset_pixels`; older converted files still load with a total-movement plot and a reconversion tip.
+
 ### Fixes
 
 - Removed the duplicate **Update** heading from the empty napari update notice.

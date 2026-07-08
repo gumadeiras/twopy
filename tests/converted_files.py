@@ -60,6 +60,7 @@ def write_converted_recording_files(
     stimulus_specific_columns_json: str = "{}",
     imaging_res_pd: npt.NDArray[np.float64] | None = None,
     high_res_pd: npt.NDArray[np.float64] | None = None,
+    alignment_offset_pixels: npt.NDArray[np.float64] | None = None,
     alignment_shift_pixels: npt.NDArray[np.float64] | None = None,
     motion_artifact_mask: npt.NDArray[np.bool_] | None = None,
     frame_counts: FrameCountAudit | None = None,
@@ -80,6 +81,7 @@ def write_converted_recording_files(
         stimulus_specific_columns_json: JSON metadata for stimulus-specific slots.
         imaging_res_pd: Optional imaging-resolution photodiode vector.
         high_res_pd: Optional high-resolution photodiode vector.
+        alignment_offset_pixels: Optional per-frame signed x/y offsets.
         alignment_shift_pixels: Optional per-frame alignment shifts.
         motion_artifact_mask: Optional per-frame motion mask.
         frame_counts: Optional frame-count audit metadata override.
@@ -149,6 +151,14 @@ def write_converted_recording_files(
         crop_group.attrs["axis1_start"] = resolved_crop.axis1_start
         crop_group.attrs["axis1_stop"] = resolved_crop.axis1_stop
         crop_group.attrs["original_shape"] = resolved_crop.original_shape
+        crop_group.create_dataset(
+            "alignment_offset_pixels",
+            data=(
+                np.zeros((frame_count, 2), dtype=np.float64)
+                if alignment_offset_pixels is None
+                else alignment_offset_pixels
+            ),
+        )
         crop_group.create_dataset(
             "alignment_shift_pixels",
             data=(

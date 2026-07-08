@@ -135,6 +135,7 @@ def response_metadata_tab(
     roi_output_label: SidebarTextLabel,
     status_label: SidebarTextLabel,
     update_notice_label: SidebarTextLabel,
+    motion_summary_widget: QWidget | None = None,
 ) -> QWidget:
     """Create the tab that shows selected-recording metadata.
 
@@ -146,6 +147,7 @@ def response_metadata_tab(
         roi_output_label: Label showing the ROI output path.
         status_label: Label showing the latest app action or update command.
         update_notice_label: Label showing the copyable update command.
+        motion_summary_widget: Optional section showing alignment movement.
 
     Returns:
         Scrollable Qt widget for the Metadata tab.
@@ -158,6 +160,8 @@ def response_metadata_tab(
         _metadata_group("Outputs", analysis_output_label, roi_output_label),
     )
     layout.addWidget(_metadata_group("Status", status_label, update_notice_label))
+    if motion_summary_widget is not None:
+        layout.addWidget(motion_summary_widget)
     layout.addStretch(1)
     return scrolling_tab(layout)
 

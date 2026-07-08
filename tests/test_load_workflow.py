@@ -642,6 +642,7 @@ def _recording(recording_data_path: Path) -> RecordingData:
         high_res_pd=np.zeros(3, dtype=np.float64),
         mean_image=np.zeros((2, 2), dtype=np.float64),
         alignment_valid_crop=crop,
+        alignment_offset_pixels=np.zeros((3, 2), dtype=np.float64),
         alignment_shift_pixels=np.zeros(3, dtype=np.float64),
         motion_artifact_mask=np.zeros(3, dtype=np.bool_),
         frame_counts=FrameCountAudit(

@@ -62,6 +62,10 @@ class ConversionTest(unittest.TestCase):
             self.assertEqual(loaded.alignment_crop.alignment_frame_start, 0)
             self.assertEqual(loaded.alignment_crop.alignment_frame_stop, 2)
             np.testing.assert_array_equal(
+                loaded.alignment_crop.alignment_offset_pixels,
+                np.zeros((3, 2), dtype=np.float64),
+            )
+            np.testing.assert_array_equal(
                 loaded.alignment_crop.motion_artifact_mask,
                 np.array([False, False, False]),
             )
@@ -227,6 +231,31 @@ class ConversionTest(unittest.TestCase):
             self.assertEqual(loaded.alignment_crop.crop.axis1_stop, 3)
             self.assertEqual(loaded.alignment_crop.x_cutoff_pixels, 2)
             self.assertEqual(loaded.alignment_crop.y_cutoff_pixels, 1)
+            np.testing.assert_array_equal(
+                loaded.alignment_crop.alignment_offset_pixels,
+                np.array([[2.0, 1.0], [-2.0, -1.0], [0.0, 0.0]]),
+            )
+
+    def test_rejects_alignment_text_shorter_than_movie(self) -> None:
+        """Confirm per-frame alignment arrays cannot be shorter than the movie.
+
+        Inputs: a source recording with three movie frames but two alignment
+            rows.
+        Outputs: conversion loading raises before HDF5 writing can persist
+            malformed movement metadata.
+        """
+        with temporary_directory() as temp_dir:
+            session_dir = Path(temp_dir)
+            self._write_session(
+                session_dir,
+                alignment_data=np.zeros((2, 6), dtype=np.float64),
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "at least one row per aligned movie frame",
+            ):
+                load_source_conversion_inputs(session_dir)
 
     def test_converts_recording_to_twopy_hdf5(self) -> None:
         """Confirm conversion writes twopy-owned datasets and mean image.
@@ -291,6 +320,10 @@ class ConversionTest(unittest.TestCase):
                 self.assertEqual(
                     h5_file["movie/alignment_valid_crop"].attrs["alignment_frame_stop"],
                     2,
+                )
+                np.testing.assert_array_equal(
+                    h5_file["movie/alignment_valid_crop/alignment_offset_pixels"][()],
+                    np.zeros((3, 2), dtype=np.float64),
                 )
                 np.testing.assert_array_equal(
                     h5_file["movie/alignment_valid_crop/alignment_shift_pixels"][()],

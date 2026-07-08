@@ -67,6 +67,12 @@ def load_alignment_valid_crop(
             f"[{frame_start}, {frame_stop}) for {alignment.shape[0]} rows"
         )
         raise ValueError(msg)
+    if alignment.shape[0] < aligned_movie.shape[0]:
+        msg = (
+            "Alignment text must have at least one row per aligned movie frame: "
+            f"{alignment.shape[0]} rows for {aligned_movie.shape[0]} frames"
+        )
+        raise ValueError(msg)
 
     alignment_window = alignment[frame_start:frame_stop, :]
     line_scan = _is_line_scan(acquisition)
@@ -79,9 +85,13 @@ def load_alignment_valid_crop(
         source_x_pixel_count=source_spatial_shape[0],
         line_scan=line_scan,
     )
-    alignment_shift_pixels = _alignment_shift_pixels(
-        alignment[: aligned_movie.shape[0], :],
+    full_alignment = alignment[: aligned_movie.shape[0], :]
+    alignment_offset_pixels = _alignment_offset_pixels(
+        full_alignment,
         line_scan=line_scan,
+    )
+    alignment_shift_pixels = _alignment_shift_pixels(
+        full_alignment, line_scan=line_scan
     )
     motion_artifact_mask = alignment_shift_pixels > motion_threshold_pixels
     kept_alignment, over_moved_count = _remove_over_moved_alignment_rows(
@@ -103,6 +113,7 @@ def load_alignment_valid_crop(
         y_cutoff_pixels=y_cutoff,
         over_moved_frame_count=over_moved_count,
         motion_threshold_pixels=motion_threshold_pixels,
+        alignment_offset_pixels=alignment_offset_pixels,
         alignment_shift_pixels=alignment_shift_pixels,
         motion_artifact_mask=motion_artifact_mask,
     )
@@ -210,6 +221,27 @@ def _alignment_shift_pixels(
     if line_scan:
         return np.abs(alignment[:, 0])
     return np.sqrt(alignment[:, 0] ** 2 + alignment[:, 1] ** 2)
+
+
+def _alignment_offset_pixels(
+    alignment: npt.NDArray[np.float64],
+    *,
+    line_scan: bool,
+) -> npt.NDArray[np.float64]:
+    """Return signed x/y alignment offsets in pixels.
+
+    Args:
+        alignment: Alignment table with x/y offset columns.
+        line_scan: Whether this recording is a line scan.
+
+    Returns:
+        Array shaped ``(frames, 2)`` with x then y offsets.
+    """
+    offsets = np.zeros((alignment.shape[0], 2), dtype=np.float64)
+    offsets[:, 0] = alignment[:, 0]
+    if not line_scan:
+        offsets[:, 1] = alignment[:, 1]
+    return offsets
 
 
 def _alignment_crop_from_offsets(

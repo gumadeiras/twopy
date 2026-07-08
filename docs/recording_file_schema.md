@@ -432,7 +432,7 @@ The converted `recording_data.h5` file contains:
 
 - `movie`: attributes pointing to the separate aligned movie file and dataset.
 - `movie/mean_image`: uncompressed mean image generated during conversion in Python image order matching MATLAB display, with `spatial_orientation=matlab_display`. This is one image, so compression is unnecessary complexity.
-- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from stimulus-bounded alignment offsets and mapped into the converted Python image axes. The converted aligned movie stays full-frame; analysis code uses this crop when it should ignore invalid motion-border pixels.
+- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from stimulus-bounded alignment offsets and mapped into the converted Python image axes. The converted aligned movie stays full-frame; analysis code uses this crop when it should ignore invalid motion-border pixels. The group stores `alignment_shift_pixels` as the total movement magnitude per frame and `motion_artifact_mask` as the high-motion frame mask. New converted files also store `alignment_offset_pixels` as one signed `[x, y]` row per movie frame.
 - `metadata`: selected acquisition fields as HDF5 attributes.
 - `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case twopy field names such as `rig_name`, `run_number`, `fly_id`, and `rig_temperature`.
 - `stimulus/data`: numeric stimulus data.

@@ -69,6 +69,10 @@ class ConvertedRecordingTest(unittest.TestCase):
             self.assertEqual(recording.alignment_valid_crop.shape, (1, 2))
             self.assertEqual(recording.alignment_valid_crop.axis0_start, 1)
             np.testing.assert_array_equal(
+                recording.alignment_offset_pixels,
+                np.array([[0.0, 0.0], [3.0, -5.0], [0.0, 0.0]]),
+            )
+            np.testing.assert_array_equal(
                 recording.alignment_shift_pixels,
                 np.array([0.0, 6.0, 0.0]),
             )
@@ -99,6 +103,28 @@ class ConvertedRecordingTest(unittest.TestCase):
             np.testing.assert_array_equal(
                 batches[0][2],
                 np.arange(8, dtype=np.float64).reshape(2, 2, 2),
+            )
+
+    def test_loads_older_converted_recording_without_alignment_offsets(self) -> None:
+        """Confirm old converted files can still load for magnitude-only motion.
+
+        Inputs: a converted recording whose x/y alignment-offset dataset is
+            missing.
+        Outputs: loaded recording keeps total movement data and marks x/y
+            offsets unavailable.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            self._write_converted_recording(root)
+            with h5py.File(root / "recording_data.h5", "r+") as h5_file:
+                del h5_file["movie/alignment_valid_crop/alignment_offset_pixels"]
+
+            recording = load_converted_recording(root / "recording_data.h5")
+
+            self.assertIsNone(recording.alignment_offset_pixels)
+            np.testing.assert_array_equal(
+                recording.alignment_shift_pixels,
+                np.array([0.0, 6.0, 0.0]),
             )
 
     def test_rejects_missing_movie_file(self) -> None:
@@ -296,6 +322,26 @@ class ConvertedRecordingTest(unittest.TestCase):
             ):
                 load_converted_recording(root / "recording_data.h5")
 
+    def test_rejects_alignment_offset_shape_mismatch(self) -> None:
+        """Confirm x/y alignment offsets stay one row per movie frame.
+
+        Inputs: Converted recording where the signed alignment-offset array is
+            missing one frame.
+        Outputs: clear validation error before motion plots read it.
+        """
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            write_converted_recording_files(
+                root,
+                alignment_offset_pixels=np.zeros((2, 2), dtype=np.float64),
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "alignment_offset_pixels must have x/y values",
+            ):
+                load_converted_recording(root / "recording_data.h5")
+
     def _write_converted_recording(self, root: Path) -> None:
         """Write both converted HDF5 files for a small recording.
 
@@ -340,6 +386,7 @@ class ConvertedRecordingTest(unittest.TestCase):
             high_res_pd=recording.high_res_pd,
             mean_image=recording.mean_image,
             alignment_valid_crop=recording.alignment_valid_crop,
+            alignment_offset_pixels=recording.alignment_offset_pixels,
             alignment_shift_pixels=recording.alignment_shift_pixels,
             motion_artifact_mask=recording.motion_artifact_mask,
             frame_counts=recording.frame_counts,
@@ -415,6 +462,7 @@ class ConvertedRecordingTest(unittest.TestCase):
                 np.array([0.0, 1.0, 0.0]) if imaging_res_pd is None else imaging_res_pd
             ),
             high_res_pd=np.array([0.0, 1.0, 0.0, 1.0, 0.0]),
+            alignment_offset_pixels=np.array([[0.0, 0.0], [3.0, -5.0], [0.0, 0.0]]),
             alignment_shift_pixels=np.array([0.0, 6.0, 0.0]),
             motion_artifact_mask=np.array([False, True, False]),
             frame_counts=FrameCountAudit(

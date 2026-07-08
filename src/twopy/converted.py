@@ -159,8 +159,8 @@ class RecordingData:
 
     Inputs: twopy-converted HDF5 files.
     Outputs: metadata dictionaries, stimulus arrays with column names,
-    photodiode vectors, mean image, frame-count audit values, and a lazy movie
-    reader.
+    photodiode vectors, mean image, alignment crop and motion arrays,
+    frame-count audit values, and a lazy movie reader.
 
     This object is the analysis-facing representation of one converted
     recording. It deliberately excludes source MATLAB/TIFF ownership.
@@ -181,6 +181,7 @@ class RecordingData:
     high_res_pd: npt.NDArray[np.float64]
     mean_image: npt.NDArray[np.float64]
     alignment_valid_crop: SpatialCrop
+    alignment_offset_pixels: npt.NDArray[np.float64] | None
     alignment_shift_pixels: npt.NDArray[np.float64]
     motion_artifact_mask: npt.NDArray[np.bool_]
     frame_counts: FrameCountAudit
@@ -278,6 +279,7 @@ def load_converted_recording(
                 ndim=2,
             ),
             alignment_valid_crop=_read_alignment_valid_crop(h5_file),
+            alignment_offset_pixels=_read_alignment_offset_pixels(h5_file),
             alignment_shift_pixels=require_float64_array(
                 h5_file["movie/alignment_valid_crop/alignment_shift_pixels"][()],
                 name="movie/alignment_valid_crop/alignment_shift_pixels",
@@ -438,6 +440,15 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
             "alignment_valid_crop original shape must match movie spatial shape; "
             f"got {recording.alignment_valid_crop.original_shape} and "
             f"{recording.movie.shape[1:]}"
+        )
+        raise ValueError(msg)
+    if (
+        recording.alignment_offset_pixels is not None
+        and recording.alignment_offset_pixels.shape != (frame_count, 2)
+    ):
+        msg = (
+            "alignment_offset_pixels must have x/y values for each movie frame; "
+            f"got {recording.alignment_offset_pixels.shape} for {frame_count} frames"
         )
         raise ValueError(msg)
     if recording.alignment_shift_pixels.shape != (frame_count,):
@@ -709,6 +720,27 @@ def _read_alignment_valid_crop(h5_file: h5py.File) -> SpatialCrop:
             _read_int_tuple_attr(group, "original_shape"),
         ),
         source=_read_str_attr(group, "source"),
+    )
+
+
+def _read_alignment_offset_pixels(
+    h5_file: h5py.File,
+) -> npt.NDArray[np.float64] | None:
+    """Read optional signed x/y alignment offsets from converted HDF5.
+
+    Args:
+        h5_file: Open ``recording_data.h5`` file.
+
+    Returns:
+        Per-frame x/y offsets, or ``None`` for older converted files.
+    """
+    dataset_name = "movie/alignment_valid_crop/alignment_offset_pixels"
+    if dataset_name not in h5_file:
+        return None
+    return require_float64_array(
+        h5_file[dataset_name][()],
+        name=dataset_name,
+        ndim=2,
     )
 
 

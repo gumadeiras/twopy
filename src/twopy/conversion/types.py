@@ -255,6 +255,7 @@ class AlignmentCropAudit:
     y_cutoff_pixels: int
     over_moved_frame_count: int
     motion_threshold_pixels: float
+    alignment_offset_pixels: npt.NDArray[np.float64]
     alignment_shift_pixels: npt.NDArray[np.float64]
     motion_artifact_mask: npt.NDArray[np.bool_]
 

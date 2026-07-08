@@ -39,6 +39,8 @@ Reopens a session list you previously wrote with **Save loaded list**. When the 
 
 Each loaded recording shows as a row below the load buttons. Click a row to make it the active recording (the one the plot dock and ROIs tab read from); twopy also selects that recording's `rois` Labels layer in napari and sets the paint label to the first unused ROI number so hand edits go to a new ROI on the same recording.
 
+The **Metadata** tab updates for the active recording. Its **Motion** section shows the alignment-valid crop size, removed border pixels, total movement, high-motion frame count, and a movement-over-time plot. New converted recordings show left-right movement in blue and up-down movement in yellow. Older converted recordings without x/y movement data still load and show total movement with a tip to reconvert the recording to see independent x/y pixel movement.
+
 Buttons under the list (disabled until at least one recording is loaded):
 
 - **Save loaded list** — write a CSV of source paths for the currently loaded recordings, with `recording_data_path` pointing at the final `analysis_output` HDF5 when that path can be resolved.
