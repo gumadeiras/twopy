@@ -188,7 +188,7 @@ class CustomWorkflowPanel(QScrollArea):
         self._description_label.setText(workflow.description)
         source = workflow.source_path
         self._version_label.setText(
-            f"version {workflow.version}; source {source}",
+            f"version {workflow.version}. Source {source}",
         )
         self._refresh_parameter_controls(workflow, current_values={})
 
@@ -307,7 +307,7 @@ class CustomWorkflowPanel(QScrollArea):
             f"{error.path}: {error.message}" for error in self._discovery_result.errors
         )
         self._status_label.setText(
-            f"Loaded {workflow_count} custom workflows; rejected {error_count}.\n"
+            f"Loaded {workflow_count} custom workflows. Rejected {error_count}.\n"
             f"{error_lines}"
         )
 

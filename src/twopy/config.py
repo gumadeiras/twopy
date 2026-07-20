@@ -423,8 +423,8 @@ def resolve_analysis_output_dir(config: TwopyConfig, recording_dir: Path) -> Pat
     match = data_path_match(config, source_dir)
     if match is None:
         msg = (
-            f"Recording {source_dir} is not inside configured data_paths; "
-            "cannot mirror analysis output directory"
+            f"Recording {source_dir} is not inside configured data_paths. "
+            "Cannot mirror analysis output directory"
         )
         raise ValueError(msg)
 
@@ -462,7 +462,7 @@ def resolve_analysis_work_dir(config: TwopyConfig, recording_dir: Path) -> Path:
         recording_dir: Source recording folder being analyzed.
 
     Returns:
-        Local cache directory when ``analysis_caching`` is true; otherwise the
+        Local cache directory when ``analysis_caching`` is true. Otherwise the
         configured output directory.
 
     The work directory is where converted HDF5, ROIs, and analysis outputs are

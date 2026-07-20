@@ -211,7 +211,7 @@ def _parameter_mapping(values: object) -> dict[str, object]:
     checked: dict[str, object] = {}
     for key, value in values.items():
         if not isinstance(key, str):
-            msg = f"Workflow parameter names must be strings; got {key!r}."
+            msg = f"Workflow parameter names must be strings. Got {key!r}."
             raise ValueError(msg)
         checked[key] = value
     return checked

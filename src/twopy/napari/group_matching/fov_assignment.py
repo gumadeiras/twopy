@@ -663,7 +663,7 @@ def _section_with_layout(title: str, layout: QLayout) -> QGroupBox:
 
 
 def _selected_dialog_path(dialog: QFileDialog) -> Path | None:
-    """Return the accepted file dialog path, or ``None`` when cancelled."""
+    """Return the accepted file dialog path, or ``None`` when canceled."""
     if dialog.exec() != QFileDialog.DialogCode.Accepted:
         return None
     selected_files = dialog.selectedFiles()

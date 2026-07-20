@@ -4,7 +4,7 @@ Inputs: converted recording metadata, ROI-generation options, and calibration
 rows.
 Outputs: movie-coordinate label images plus user-facing status text.
 
-The response dock owns UI lifecycle; this module owns the generation decision
+The response dock owns UI lifecycle. This module owns the generation decision
 tree so it can be tested without napari widgets.
 """
 

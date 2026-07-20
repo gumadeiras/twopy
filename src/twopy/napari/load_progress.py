@@ -400,7 +400,7 @@ class RecordingLoadProgressDialog(QDialog):
         """Ask the controller to skip queued recordings after the active load."""
         self._cancel_pending = True
         self._cancel_button.setEnabled(False)
-        self._hint.setText("Finishing current recording; pending loads cancelled.")
+        self._hint.setText("Finishing current recording. Pending loads canceled.")
         self._refresh_queue_rows(
             completed_count=self._completed_count,
             active_index=self._active_index_for_progress(

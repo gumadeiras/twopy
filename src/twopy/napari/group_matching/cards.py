@@ -120,8 +120,8 @@ def fov_group_display_id(fov_group_id: str) -> str:
             as ``"none"``.
 
     Returns:
-        Numeric suffix when the stored id follows the normal ``fov_N`` shape;
-        otherwise the original text.
+        Numeric suffix when the stored id follows the normal ``fov_N`` shape.
+        The function returns the original text for other shapes.
     """
     suffix = fov_group_id.removeprefix("fov_")
     return suffix if suffix.isdecimal() else fov_group_id

@@ -929,15 +929,15 @@ class _ResponsePlotWidget(QWidget):
             try:
                 result = future.result()
             except Exception as error:
-                status_text = f"Saved locally; sync failed: {error}"
+                status_text = f"Saved locally. Sync failed: {error}"
                 continue
             self._record_cache_sync(sync_plan)
             if len(result.copied_paths) == 0:
-                status_text = "Saved locally; sync already current"
+                status_text = "Saved locally. Sync already current"
                 continue
             copied_count = len(result.copied_paths)
             status_text = (
-                f"Saved locally; synced {copied_count} files to {result.publish_root}"
+                f"Saved locally. Synced {copied_count} files to {result.publish_root}"
             )
         if len(self._sync_futures) == 0:
             self._sync_timer.stop()
@@ -1038,7 +1038,7 @@ class _ResponsePlotWidget(QWidget):
         roi_error = self._reload_saved_rois()
         self.set_response_plot_data(result, reset_axes=True)
         if roi_error is not None:
-            self._update_status_label.setText(f"Reloaded saved analysis; {roi_error}")
+            self._update_status_label.setText(f"Reloaded saved analysis. {roi_error}")
         elif result.load_warning is None:
             self._update_status_label.setText("Reloaded saved analysis.")
 
@@ -1128,7 +1128,7 @@ class _ResponsePlotWidget(QWidget):
     def _set_response_map_options(self, options: ResponseMapOptions) -> None:
         self._response_map_options = options
         self._schedule_response_map_refresh()
-        self._update_status_label.setText("Heatmap settings updated; recomputing.")
+        self._update_status_label.setText("Heatmap settings updated. Recomputing.")
 
     def _set_response_map_shared_limits(self, shared_limits: bool) -> None:
         self._response_map_shared_limits = shared_limits
@@ -1317,7 +1317,7 @@ class _ResponsePlotWidget(QWidget):
             None.
 
         The ROI checkboxes already define which ROIs are selected for plotting.
-        This action reuses that state and edits only the Labels layer; response
+        This action reuses that state and edits only the Labels layer. Response
         recomputation remains owned by the live controller.
         """
         selected_label_values = self._selected_roi_label_values()

@@ -442,7 +442,7 @@ def labels_for_recording_image(
         Label image with the same shape as the exported recording image.
 
     The viewer shows the alignment-valid crop. Older sessions or manually
-    created layers may still contain a full-frame display label image; in that
+    created layers may still contain a full-frame display label image. In that
     case export crops it before drawing so ROIs outside the valid display area
     cannot expand the figure beyond the recording image.
     """

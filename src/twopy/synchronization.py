@@ -105,7 +105,7 @@ def detect_photodiode_events(
             ``min + threshold_fraction * range``.
         threshold_fraction: Signal-range fraction used when ``threshold`` is
             omitted. Defaults to the lab analysis convention, 0.3.
-        polarity: ``above`` detects samples greater than threshold; ``below``
+        polarity: ``above`` detects samples greater than threshold. ``below``
             detects samples less than threshold.
         minimum_width_samples: Drop events shorter than this width.
         merge_gap_samples: Merge neighboring events separated by this many

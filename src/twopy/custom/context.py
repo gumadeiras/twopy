@@ -491,12 +491,12 @@ class CustomRunContext:
         """
         matrix = np.asarray(values)
         if matrix.ndim != 2:
-            msg = f"Matrix CSV values must be two-dimensional; got {matrix.shape}"
+            msg = f"Matrix CSV values must be two-dimensional. Got {matrix.shape}"
             raise ValueError(msg)
         if matrix.shape[0] != len(row_labels):
             msg = (
-                "Matrix row count must match row labels; "
-                f"got {matrix.shape[0]} rows and {len(row_labels)} labels"
+                "Matrix row count must match row labels. "
+                f"Got {matrix.shape[0]} rows and {len(row_labels)} labels"
             )
             raise ValueError(msg)
         resolved_column_labels = _matrix_column_labels(
@@ -564,7 +564,7 @@ def _validate_column_lengths(
     """Confirm all table columns match the expected row count."""
     for name, values in columns.items():
         if len(values) != row_count:
-            msg = f"Column {name!r} has {len(values)} rows; expected {row_count} rows"
+            msg = f"Column {name!r} has {len(values)} rows. Expected {row_count} rows"
             raise ValueError(msg)
 
 
@@ -580,8 +580,8 @@ def _matrix_column_labels(
     labels = tuple(column_labels)
     if len(labels) != column_count:
         msg = (
-            "Matrix column label count must match matrix columns; "
-            f"got {len(labels)} labels and {column_count} columns"
+            "Matrix column label count must match matrix columns. "
+            f"Got {len(labels)} labels and {column_count} columns"
         )
         raise ValueError(msg)
     if any(label == "" for label in labels):

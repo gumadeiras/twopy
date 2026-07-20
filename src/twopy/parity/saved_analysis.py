@@ -5,7 +5,7 @@ Outputs: typed NumPy arrays that tests or audit scripts can compare to twopy
 outputs.
 
 This module is read-only. It does not make source MATLAB files part of the
-twopy analysis path; it exists only to compare twopy-owned converted analysis
+twopy analysis path. It exists only to compare twopy-owned converted analysis
 against previous saved outputs when those files are available.
 """
 

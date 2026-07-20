@@ -5,7 +5,7 @@ Outputs: a small Qt list panel plus helper functions for selecting and
 unloading recordings.
 
 This module owns GUI session bookkeeping only. It does not load files or compute
-responses; it records which viewer layers belong to which loaded recording so
+responses. It records which viewer layers belong to which loaded recording so
 the controls can switch context cleanly.
 """
 

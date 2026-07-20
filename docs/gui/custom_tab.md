@@ -16,7 +16,7 @@ If you change workflow files on disk, click **Reload workflows** to rescan witho
 
 twopy writes workflow metadata next to non-HDF5 outputs (`*.twopy-workflow.yml` sidecars) and inside HDF5 outputs (a `twopy_workflow` group). With analysis caching on, custom outputs sync to `analysis_output` through the same path **Save ROIs + analysis** uses.
 
-Invalid workflows (missing metadata, bad type annotations, unknown roles, …) are listed in the tab's status text but kept out of the dropdown so you can fix them without restarting.
+The status text lists invalid workflows, such as workflows with missing metadata, incorrect type annotations, or unknown roles. The dropdown does not show them. Thus, you can correct them without a restart.
 
 ## Built-in workflows
 
@@ -30,7 +30,7 @@ Computes a direction-selectivity index (DSI) for the visible ROIs by default.
 - **Window start (s)** / **Window end (s)** — epoch-relative metric window. Capped to the shorter of the preferred and null epoch durations.
 - **Rectify** option zeroes negative responses before computing DSI.
 
-The result is a three-decimal per-ROI DSI table. Rows at or above the **DSI show threshold** are highlighted, and only the passing ROIs stay selected in the response plot and ROIs tab — without replacing the plot data. The threshold defaults to `0.1`.
+The result is a per-ROI DSI table with three decimal places. Rows at or above **DSI show threshold** are highlighted. Only these ROIs stay selected in the response plot and the ROIs tab. The plot data does not change. The default threshold is `0.1`.
 
 ### Response kernels
 
@@ -38,14 +38,14 @@ Fits temporal kernels from random-noise stimulus epochs.
 
 - **Stimulus** — `olfaction` or `vision`. Defaults from converted rig metadata: `OdorRig` selects olfaction, anything else selects vision.
 - **Baseline epoch** — gray / interleave epoch excluded from the fit.
-- Selected non-baseline epochs are grouped by unique name; only complete regular stimulus streams are kept. Segments with irregular sample times are skipped (and counted) so display-timing hitches stay visible.
+- twopy groups selected non-baseline epochs by unique name. It keeps only complete, regular stimulus streams. It skips and counts segments with irregular sample times. Thus, display-timing problems stay visible.
 
 For olfaction, the workflow writes one CSV per kernel stream:
 
 - `response_kernels_group_<index>_epochs_<numbers>_<epoch_name>_ipsi.csv`
 - `response_kernels_group_<index>_epochs_<numbers>_<epoch_name>_contra.csv`
 
-Raw left and right LED-activation streams are derived from the stimulus column (`0=left`, `1=both`, `2=right`, `3=blank`) and mapped to ipsi / contra using the recording's hemisphere metadata. A manual override is available for audits.
+twopy gets the raw left and right LED-activation streams from the stimulus column (`0=left`, `1=both`, `2=right`, `3=blank`). It uses the recording hemisphere to map the streams to ipsi and contra. You can override this mapping for an audit.
 
 For vision, the workflow writes one CSV per kernel stream interpreted as signed contrast:
 
@@ -63,6 +63,6 @@ custom_workflow_paths:
   - /Volumes/magic/clarklab/shared/twopy_workflows
 ```
 
-Folders are scanned for top-level `.py` files. Helper modules can sit beside workflow files; prefix their filenames with `_` to keep them out of the dropdown.
+twopy scans folders for top-level `.py` files. Helper modules can be next to workflow files. Start a helper file name with `_` to keep it out of the dropdown.
 
 To learn the file shape, see [Writing custom workflows](../writing_custom_workflows.md) and the reference example at `examples/custom_workflows/reference_showcase.py`.

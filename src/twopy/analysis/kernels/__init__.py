@@ -2,7 +2,7 @@
 
 Inputs: converted stimulus tables plus ROI response traces computed by twopy.
 Outputs: per-ROI temporal kernels on the stimulus sample clock. Olfactory
-recordings expose left/right and ipsi/contra kernels; visual recordings expose
+recordings expose left/right and ipsi/contra kernels. Visual recordings expose
 one contrast kernel.
 
 This package keeps reverse-correlation analysis native to twopy data. It does
@@ -65,7 +65,7 @@ class StimulusKernelOptions:
             epochs and applies ``discard_first_stimulus_epoch``.
         num_stim_past: Number of stimulus samples before a response sample.
         num_stim_future: Number of stimulus samples after a response sample.
-        method: Fitting method. ``"ols"`` solves a least-squares design matrix;
+        method: Fitting method. ``"ols"`` solves a least-squares design matrix.
             ``"xcorr"`` computes reverse correlation.
         hemisphere: Recording hemisphere used to map raw left/right streams to
             ipsi/contra. ``None`` reads the value from converted recording
@@ -93,7 +93,7 @@ class RecordingKernelFit:
     Args:
         roi_labels: Labels for the fitted ROI rows.
         time_seconds: Kernel sample times. Negative times are future stimulus
-            samples; positive times are stimulus samples before the response.
+            samples. Positive times are stimulus samples before the response.
         stimulus_modality: Sensory modality used to interpret the stimulus.
         stimulus_column: Converted stimulus column used for fitting.
         epoch_names: Unique readable epoch names fitted independently.
@@ -347,6 +347,6 @@ def _validate_options(options: StimulusKernelOptions) -> None:
         raise ValueError(msg)
     if options.hemisphere is not None and options.hemisphere not in {"left", "right"}:
         msg = (
-            f"hemisphere must be 'left', 'right', or None; got {options.hemisphere!r}."
+            f"hemisphere must be 'left', 'right', or None. Got {options.hemisphere!r}."
         )
         raise ValueError(msg)

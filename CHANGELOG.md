@@ -2,9 +2,13 @@
 
 ## Known Problems
 
-- When multiple recordings with different movie lengths are loaded in napari, the main frame slider is bounded by the longest loaded movie because napari computes dimensions from all layers, including hidden ones; switching the selected recording updates twopy's colored trial timeline but does not make the main slider selected-recording-specific.
+- When loaded movies have different lengths, the main napari frame slider uses the longest movie. napari calculates dimensions from all layers, including hidden layers. A recording selection updates the colored twopy timeline, but the main slider does not change to that recording length.
 
 ## Unreleased
+
+### Changes
+
+- Revised documentation, app messages, docstrings, and comments to use ASD-STE100 Simplified Technical English.
 
 ## 0.3.9 - 2026-07-08
 

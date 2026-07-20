@@ -150,7 +150,7 @@ def _stimtype_to_text(value: object) -> str:
     """
     if isinstance(value, int | float | str):
         return str(int(value))
-    msg = f"stimtype must be an int-like scalar; got {value!r}"
+    msg = f"stimtype must be an int-like scalar. Got {value!r}"
     raise TypeError(msg)
 
 

@@ -86,7 +86,7 @@ class ResponseMapOptions:
     finite response across all epochs has magnitude 1. The original dF/F divisor
     is stored on ``ResponseMapData``.
 
-    Pixel mode is the default because it preserves spatial detail; its default
+    Pixel mode is the default because it preserves spatial detail. Its default
     two-pixel Gaussian smoothing reduces isolated noisy pixels without changing
     the saved analysis contract. Window mode is useful when users want explicit
     block averaging before dF/F. Window size and stride are constrained by the
@@ -110,7 +110,7 @@ class EpochResponseMap:
         epoch_number: One-based stimulus epoch number.
         response_values: Movie-coordinate signed response map for the displayed
             crop. Values are normalized by ``ResponseMapData.response_scale``
-            after epoch averaging; multiply by that scale to recover the
+            after epoch averaging. Multiply by that scale to recover the
             original dF/F magnitude.
         trial_count: Number of trials averaged into the map.
     """
@@ -165,7 +165,7 @@ def compute_recording_response_maps(
 
     This reads the converted aligned movie for the valid crop, not microscope
     source MAT/TIFF files. Callers can pass explicit epoch windows for tests or
-    audits; normal workflows let twopy derive photodiode-aligned windows from
+    audits. Normal workflows let twopy derive photodiode-aligned windows from
     converted synchronization metadata.
     """
     resolved_options = options or ResponseMapOptions()
@@ -398,20 +398,20 @@ def _require_response_map_shapes(map_data: ResponseMapData) -> None:
     """Require heatmap spatial arrays to match their recorded crop."""
     if map_data.mean_image.ndim != 2:
         msg = (
-            f"response heatmap mean_image must be 2-D; got {map_data.mean_image.shape}"
+            f"response heatmap mean_image must be 2-D. Got {map_data.mean_image.shape}"
         )
         raise ValueError(msg)
     if map_data.mean_image.shape != map_data.spatial_crop.shape:
         msg = (
-            "response heatmap mean_image shape must match spatial_crop shape; "
-            f"got {map_data.mean_image.shape} and {map_data.spatial_crop.shape}"
+            "response heatmap mean_image shape must match spatial_crop shape. "
+            f"Got {map_data.mean_image.shape} and {map_data.spatial_crop.shape}"
         )
         raise ValueError(msg)
     for epoch in map_data.epochs:
         if epoch.response_values.shape != map_data.mean_image.shape:
             msg = (
                 "response heatmap response_values shape must match mean_image "
-                f"shape; got {epoch.response_values.shape} for "
+                f"shape. Got {epoch.response_values.shape} for "
                 f"{epoch.epoch_name!r} and {map_data.mean_image.shape}"
             )
             raise ValueError(msg)
@@ -454,22 +454,22 @@ def _validate_options(options: ResponseMapOptions, shape: tuple[int, int]) -> No
         or options.pixel_smoothing_sigma < 0
     ):
         msg = (
-            "pixel_smoothing_sigma must be finite and nonnegative; "
-            f"got {options.pixel_smoothing_sigma}"
+            "pixel_smoothing_sigma must be finite and nonnegative. "
+            f"Got {options.pixel_smoothing_sigma}"
         )
         raise ValueError(msg)
     if options.window_size_pixels < 1:
-        msg = f"window_size_pixels must be positive; got {options.window_size_pixels}"
+        msg = f"window_size_pixels must be positive. Got {options.window_size_pixels}"
         raise ValueError(msg)
     if options.window_stride_pixels < 1:
         msg = (
-            f"window_stride_pixels must be positive; got {options.window_stride_pixels}"
+            f"window_stride_pixels must be positive. Got {options.window_stride_pixels}"
         )
         raise ValueError(msg)
     if options.window_stride_pixels > options.window_size_pixels:
         msg = (
-            "window_stride_pixels cannot exceed window_size_pixels; "
-            f"got {options.window_stride_pixels} > {options.window_size_pixels}"
+            "window_stride_pixels cannot exceed window_size_pixels. "
+            f"Got {options.window_stride_pixels} > {options.window_size_pixels}"
         )
         raise ValueError(msg)
     if options.window_size_pixels > min(shape):
@@ -482,14 +482,14 @@ def _validate_options(options: ResponseMapOptions, shape: tuple[int, int]) -> No
         options.baseline_sample_seconds <= 0
     ):
         msg = (
-            "baseline_sample_seconds must be finite and positive; "
-            f"got {options.baseline_sample_seconds}"
+            "baseline_sample_seconds must be finite and positive. "
+            f"Got {options.baseline_sample_seconds}"
         )
         raise ValueError(msg)
     if not 0.0 <= options.foreground_percentile <= 100.0:
         msg = (
-            "foreground_percentile must be between 0 and 100; "
-            f"got {options.foreground_percentile}"
+            "foreground_percentile must be between 0 and 100. "
+            f"Got {options.foreground_percentile}"
         )
         raise ValueError(msg)
 

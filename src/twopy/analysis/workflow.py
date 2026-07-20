@@ -4,7 +4,7 @@ Inputs: a converted recording, ROI masks, and analysis parameters.
 Outputs: computed traces, dF/F, grouped responses, and saved analysis files.
 
 This module wires together existing twopy analysis helpers. It does not read
-source microscope files; callers must convert recordings before using it.
+source microscope files. Callers must convert recordings before using it.
 """
 
 from collections.abc import Callable, Sequence
@@ -179,13 +179,13 @@ def analyze_recording_responses(
             baseline context into the stimulus.
         response_post_window_seconds: Seconds after each stimulus window to
             include in grouped responses. The default is zero so persisted
-            summaries keep their epoch-window meaning; plotting code can add
+            summaries keep their epoch-window meaning. Plotting code can add
             visual context separately from saved dF/F and epoch windows.
         response_window_auto: Optional provenance flag recording whether the
             response window was selected by automatic GUI settings.
         response_processing_options: Optional smoothing, low-pass, and
             correlation-QC settings to apply after dF/F. Signal filters are
-            applied to continuous dF/F before grouping; correlation QC is
+            applied to continuous dF/F before grouping. Correlation QC is
             applied to grouped responses.
 
     Returns:

@@ -350,7 +350,7 @@ def summarize_roi_response_trials(
     for trial in trials:
         _validate_grouped_response_trial(trial, roi_labels)
     if data_rate_hz <= 0:
-        msg = f"data_rate_hz must be positive; got {data_rate_hz}"
+        msg = f"data_rate_hz must be positive. Got {data_rate_hz}"
         raise ValueError(msg)
 
     trial_tuple = tuple(trials)
@@ -426,7 +426,7 @@ def validate_grouped_roi_responses(grouped: GroupedRoiResponses) -> None:
     misaligned time, frame, or ROI axes.
     """
     if not np.isfinite(grouped.data_rate_hz) or grouped.data_rate_hz <= 0:
-        msg = f"data_rate_hz must be positive; got {grouped.data_rate_hz}"
+        msg = f"data_rate_hz must be positive. Got {grouped.data_rate_hz}"
         raise ValueError(msg)
     for trial in grouped.trials:
         _validate_grouped_response_trial(trial, grouped.roi_labels)
@@ -438,33 +438,33 @@ def _validate_grouped_response_trial(
 ) -> None:
     """Validate one grouped response trial against shared ROI labels."""
     if not np.issubdtype(trial.values.dtype, np.floating):
-        msg = f"trial values must have floating dtype; got {trial.values.dtype}"
+        msg = f"trial values must have floating dtype. Got {trial.values.dtype}"
         raise ValueError(msg)
     if not np.issubdtype(trial.frame_numbers.dtype, np.integer):
         msg = (
-            "trial frame_numbers must have integer dtype; "
-            f"got {trial.frame_numbers.dtype}"
+            "trial frame_numbers must have integer dtype. "
+            f"Got {trial.frame_numbers.dtype}"
         )
         raise ValueError(msg)
     if not np.issubdtype(trial.time_seconds.dtype, np.floating):
         msg = (
-            "trial time_seconds must have floating dtype; "
-            f"got {trial.time_seconds.dtype}"
+            "trial time_seconds must have floating dtype. "
+            f"Got {trial.time_seconds.dtype}"
         )
         raise ValueError(msg)
     if trial.values.ndim != 2:
-        msg = f"trial values must have shape (frames, rois); got {trial.values.shape}"
+        msg = f"trial values must have shape (frames, rois). Got {trial.values.shape}"
         raise ValueError(msg)
     if trial.frame_numbers.ndim != 1:
         msg = (
-            "trial frame_numbers must be one-dimensional; "
-            f"got {trial.frame_numbers.shape}"
+            "trial frame_numbers must be one-dimensional. "
+            f"Got {trial.frame_numbers.shape}"
         )
         raise ValueError(msg)
     if trial.time_seconds.ndim != 1:
         msg = (
-            "trial time_seconds must be one-dimensional; "
-            f"got {trial.time_seconds.shape}"
+            "trial time_seconds must be one-dimensional. "
+            f"Got {trial.time_seconds.shape}"
         )
         raise ValueError(msg)
     if trial.values.shape[0] == 0:
@@ -529,7 +529,7 @@ def _validate_grouping_inputs(
         None.
     """
     if dff.values.ndim != 2:
-        msg = f"dF/F values must have shape (frames, rois); got {dff.values.shape}"
+        msg = f"dF/F values must have shape (frames, rois). Got {dff.values.shape}"
         raise ValueError(msg)
     if dff.values.shape[1] != len(dff.labels):
         msg = (
@@ -538,13 +538,13 @@ def _validate_grouping_inputs(
         )
         raise ValueError(msg)
     if data_rate_hz <= 0:
-        msg = f"data_rate_hz must be positive; got {data_rate_hz}"
+        msg = f"data_rate_hz must be positive. Got {data_rate_hz}"
         raise ValueError(msg)
     if pre_window_seconds < 0:
-        msg = f"pre_window_seconds must be nonnegative; got {pre_window_seconds}"
+        msg = f"pre_window_seconds must be nonnegative. Got {pre_window_seconds}"
         raise ValueError(msg)
     if post_window_seconds < 0:
-        msg = f"post_window_seconds must be nonnegative; got {post_window_seconds}"
+        msg = f"post_window_seconds must be nonnegative. Got {post_window_seconds}"
         raise ValueError(msg)
     for epoch_window in epoch_windows:
         window = epoch_window.window

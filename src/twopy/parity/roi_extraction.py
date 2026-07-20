@@ -50,7 +50,7 @@ def psycho5_grid_pixel_size(
     scripts do not depend on lab-local MATLAB system configuration.
     """
     if image_axis1_size <= 0:
-        msg = f"image_axis1_size must be positive; got {image_axis1_size}"
+        msg = f"image_axis1_size must be positive. Got {image_axis1_size}"
         raise ValueError(msg)
     pixel_size = np.floor(
         micron_grid_size
@@ -60,7 +60,7 @@ def psycho5_grid_pixel_size(
     )
     resolved = int(pixel_size)
     if resolved <= 0:
-        msg = f"psycho5 grid pixel size must be positive; got {resolved}"
+        msg = f"psycho5 grid pixel size must be positive. Got {resolved}"
         raise ValueError(msg)
     return resolved
 
@@ -87,7 +87,7 @@ def psycho5_grid_roi_label_image(
     """
     axis0_length, axis1_length = _validated_spatial_shape(spatial_shape)
     if pixel_grid_size <= 0:
-        msg = f"pixel_grid_size must be positive; got {pixel_grid_size}"
+        msg = f"pixel_grid_size must be positive. Got {pixel_grid_size}"
         raise ValueError(msg)
 
     label_image = np.zeros((axis0_length, axis1_length), dtype=np.int64)
@@ -194,7 +194,7 @@ def _psycho5_segment_peak(
 
     psycho5 multiplies the image by one segment mask, then takes the first
     maximum in MATLAB column-major order. That means zero-valued pixels outside
-    the segment can win when all in-segment values are negative; this function
+    the segment can win when all in-segment values are negative. This function
     preserves that source behavior instead of correcting it.
     """
     segment_image = image * (preseg == label)
@@ -245,7 +245,7 @@ def _validated_image(image: npt.ArrayLike) -> npt.NDArray[np.float64]:
     """
     values = np.asarray(image, dtype=np.float64)
     if values.ndim != 2:
-        msg = f"psycho5 ROI image must be two-dimensional; got {values.shape}"
+        msg = f"psycho5 ROI image must be two-dimensional. Got {values.shape}"
         raise ValueError(msg)
     if values.size == 0:
         msg = "psycho5 ROI image cannot be empty"
@@ -297,6 +297,6 @@ def _validated_spatial_shape(spatial_shape: tuple[int, int]) -> tuple[int, int]:
         Validated shape tuple.
     """
     if len(spatial_shape) != 2 or spatial_shape[0] <= 0 or spatial_shape[1] <= 0:
-        msg = f"psycho5 ROI spatial shape must be positive 2-D; got {spatial_shape}"
+        msg = f"psycho5 ROI spatial shape must be positive 2-D. Got {spatial_shape}"
         raise ValueError(msg)
     return spatial_shape

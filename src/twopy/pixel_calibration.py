@@ -216,7 +216,7 @@ def resolve_pixel_size_um(
         msg = (
             f"Pixel calibration zoom {requested_zoom} is outside measured "
             f"range [{lower_bound}, {upper_bound}] for rig={rig!r}, "
-            f"mode={mode!r}, scanner={scanner!r}; set allow_extrapolation=True "
+            f"mode={mode!r}, scanner={scanner!r}. Set allow_extrapolation=True "
             "to use the nearest two measured zooms"
         )
         raise ValueError(msg)
@@ -540,7 +540,7 @@ def _required_date(
     except ValueError as error:
         msg = (
             f"Pixel calibration {path}:{line_number} has invalid {key!r}: "
-            f"{value!r}; expected YYYY-MM-DD"
+            f"{value!r}. Expected YYYY-MM-DD"
         )
         raise ValueError(msg) from error
 
@@ -556,7 +556,7 @@ def _positive_float(key: str, value: float) -> float:
         The validated value.
     """
     if not math.isfinite(value) or value <= 0:
-        msg = f"{key} must be a finite positive number; got {value!r}"
+        msg = f"{key} must be a finite positive number. Got {value!r}"
         raise ValueError(msg)
     return value
 

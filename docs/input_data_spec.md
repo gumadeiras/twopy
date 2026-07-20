@@ -37,7 +37,7 @@ Do not treat TIFF `XResolution` / `YResolution` as microscope pixel size. Physic
 
 ## Timing contract
 
-Imaging and stimulus presentation run on separate computers with separate clocks and different frame rates. The imaging computer records the movie and photodiode signals; the stimulus computer presents stimuli and flashes the photodiode at key timepoints (stimulus start, trial transitions, stimulus end).
+Imaging and stimulus presentation use separate computers, clocks, and frame rates. The imaging computer records the movie and photodiode signals. The stimulus computer presents stimuli. It flashes the photodiode at stimulus start, trial transitions, and stimulus end.
 
 Response analysis must align stimulus events to imaging frames through the photodiode signal. **Nominal frame rates are not enough.**
 
@@ -55,7 +55,7 @@ Analysis runs on twopy-owned converted HDF5 files, not directly on source MAT / 
 
 Conversion writes:
 
-- `recording_data.h5` — acquisition metadata, frame-count audit data, run metadata, stimulus data and labels, stimulus parameters, stimulus-function lookup data, stimulus-specific column metadata, photodiode signals, synchronization metadata, mean image in Python image order matching MATLAB display, and alignment-valid crop bounds.
+- `recording_data.h5` — acquisition metadata, frame-count audit data, and run metadata. It also contains stimulus data, labels, parameters, function lookup data, and column metadata. It contains photodiode signals, synchronization metadata, the mean image in Python image order, and alignment-valid crop bounds.
 - `aligned_movie.h5` — the aligned movie in `movie/aligned`, stored in Python image order matching MATLAB display and kept separate because the movie dominates file size.
 - ROI HDF5 files — twopy-owned ROI masks and labels in the same Python image order as the converted movie, independent from napari.
 

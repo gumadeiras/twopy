@@ -76,7 +76,7 @@ def extract_rois_from_image(
 
     Args:
         image: Two-dimensional movie-coordinate image. Grid extraction only
-            uses the shape; watershed extraction uses intensities.
+            uses the shape. Watershed extraction uses intensities.
         config: Extraction method and parameters.
 
     Returns:
@@ -251,7 +251,7 @@ def _grid_masks(
     """
     grid_size = config.grid_size_pixels
     if grid_size <= 0:
-        msg = f"grid_size_pixels must be positive; got {grid_size}"
+        msg = f"grid_size_pixels must be positive. Got {grid_size}"
         raise ValueError(msg)
 
     label_image = np.zeros(image.shape, dtype=np.int64)
@@ -282,11 +282,11 @@ def _watershed_masks(
     """
     min_pixels = config.watershed_min_pixels
     if min_pixels <= 0:
-        msg = f"watershed_min_pixels must be positive; got {min_pixels}"
+        msg = f"watershed_min_pixels must be positive. Got {min_pixels}"
         raise ValueError(msg)
     sigma = config.watershed_smoothing_sigma
     if sigma < 0:
-        msg = f"watershed_smoothing_sigma cannot be negative; got {sigma}"
+        msg = f"watershed_smoothing_sigma cannot be negative. Got {sigma}"
         raise ValueError(msg)
 
     working = image - np.min(image)
@@ -452,7 +452,7 @@ def _validated_image(image: npt.ArrayLike) -> npt.NDArray[np.float64]:
     """
     values = np.asarray(image, dtype=np.float64)
     if values.ndim != 2:
-        msg = f"ROI extraction image must be two-dimensional; got {values.shape}"
+        msg = f"ROI extraction image must be two-dimensional. Got {values.shape}"
         raise ValueError(msg)
     if values.size == 0:
         msg = "ROI extraction image cannot be empty"
@@ -473,7 +473,7 @@ def _validated_spatial_shape(spatial_shape: tuple[int, int]) -> tuple[int, int]:
         Validated shape tuple.
     """
     if len(spatial_shape) != 2 or spatial_shape[0] <= 0 or spatial_shape[1] <= 0:
-        msg = f"ROI extraction spatial shape must be positive 2-D; got {spatial_shape}"
+        msg = f"ROI extraction spatial shape must be positive 2-D. Got {spatial_shape}"
         raise ValueError(msg)
     return spatial_shape
 
@@ -489,7 +489,7 @@ def _validated_positive_float(key: str, value: float) -> float:
         Validated float value.
     """
     if not math.isfinite(value) or value <= 0:
-        msg = f"{key} must be a finite positive number; got {value!r}"
+        msg = f"{key} must be a finite positive number. Got {value!r}"
         raise ValueError(msg)
     return value
 

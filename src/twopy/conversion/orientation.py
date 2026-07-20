@@ -37,7 +37,7 @@ def orient_source_array_to_twopy(
     """
     array = np.asarray(values)
     if array.ndim not in (2, 3):
-        msg = f"Expected a 2D image or 3D movie block; got {array.shape}"
+        msg = f"Expected a 2D image or 3D movie block. Got {array.shape}"
         raise ValueError(msg)
     return np.swapaxes(array, -1, -2)
 
@@ -54,7 +54,7 @@ def twopy_shape_from_source_movie_shape(
         ``(frames, y, x)`` shape for stored Python image data.
     """
     if len(source_shape) != 3:
-        msg = f"Source movie shape must have 3 dimensions; got {tuple(source_shape)}"
+        msg = f"Source movie shape must have 3 dimensions. Got {tuple(source_shape)}"
         raise ValueError(msg)
     return (int(source_shape[0]), int(source_shape[2]), int(source_shape[1]))
 
@@ -73,8 +73,8 @@ def twopy_spatial_shape_from_source_spatial_shape(
     """
     if len(source_spatial_shape) != 2:
         msg = (
-            "Source spatial shape must have 2 dimensions; "
-            f"got {tuple(source_spatial_shape)}"
+            "Source spatial shape must have 2 dimensions. "
+            f"Got {tuple(source_spatial_shape)}"
         )
         raise ValueError(msg)
     return (int(source_spatial_shape[1]), int(source_spatial_shape[0]))

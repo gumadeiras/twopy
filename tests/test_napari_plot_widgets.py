@@ -1229,7 +1229,7 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
         self.assertFalse(view._response_status.isHidden())
         self.assertEqual(
             view._response_status.text(),
-            "Showing 1 of 2 selected ROI traces; 1 ROI trace hidden.",
+            "Showing 1 of 2 selected ROI traces. 1 ROI trace hidden.",
         )
 
     def test_group_matching_saved_group_selection_resets_hidden_traces(self) -> None:

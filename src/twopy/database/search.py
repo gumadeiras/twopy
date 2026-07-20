@@ -197,7 +197,7 @@ def find_database_experiment_for_recording_path(
         Matching database experiment, or ``None`` when no row matches.
 
     The microscope folder itself does not contain fly-eye metadata. The lab
-    database stores that mandatory recording metadata in ``fly.eye``; this
+    database stores that mandatory recording metadata in ``fly.eye``. This
     helper resolves the converted recording's source path back to that row.
     """
     candidates = _candidate_database_relative_paths(config, recording_dir)
@@ -268,7 +268,7 @@ def database_hemisphere_for_recording_path(
     if normalized not in {"left", "right"}:
         msg = (
             f"Database fly.eye for recording {recording_dir} must be "
-            f"'left' or 'right'; got {experiment.hemisphere!r}."
+            f"'left' or 'right'. Got {experiment.hemisphere!r}."
         )
         raise ValueError(msg)
     return normalized

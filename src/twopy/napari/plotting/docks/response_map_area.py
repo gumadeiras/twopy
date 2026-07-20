@@ -46,7 +46,7 @@ class ResponseMapArea:
         A scroll area plus methods for status and heatmap rendering.
 
     Heatmap panels cache one rendered Qt image per epoch. Changing computation
-    options replaces the cached data; changing epoch visibility or plot size
+    options replaces the cached data. Changing epoch visibility or plot size
     reuses the existing widgets. Shared display limits repaint the cached image
     from the same computed ``ResponseMapData`` without recomputing dF/F maps.
     """

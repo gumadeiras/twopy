@@ -198,7 +198,7 @@ def _remove_over_moved_alignment_rows(
     kept = alignment[~over_moved, :]
     if kept.size == 0:
         msg = (
-            "Alignment-valid crop cannot be computed; all alignment rows moved too far"
+            "Alignment-valid crop cannot be computed. All alignment rows moved too far"
         )
         raise ValueError(msg)
     return kept, int(np.count_nonzero(over_moved))
@@ -330,7 +330,7 @@ def _source_movie_spatial_shape(aligned_movie: AlignedMovieSource) -> tuple[int,
         ``(source_x, source_y)`` spatial shape.
     """
     if len(aligned_movie.shape) != 3:
-        msg = f"Aligned movie must be 3D; got {aligned_movie.shape}"
+        msg = f"Aligned movie must be 3D. Got {aligned_movie.shape}"
         raise ValueError(msg)
     return (aligned_movie.shape[1], aligned_movie.shape[2])
 

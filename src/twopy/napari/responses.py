@@ -212,7 +212,7 @@ def response_analysis_request_from_selected_label_image(
     instead of turning every selected binary mask into ``roi_0001``.
     """
     if label_value <= 0:
-        msg = f"Selected ROI label must be positive; got {label_value}"
+        msg = f"Selected ROI label must be positive. Got {label_value}"
         raise ValueError(msg)
     labels = np.asarray(label_image, dtype=np.int64)
     mask = labels == int(label_value)

@@ -160,7 +160,7 @@ def classify_recording_photodiode_events(
     here until we add protocol-specific classification rules for them.
     """
     if long_flash_factor <= 1.0:
-        msg = f"long_flash_factor must be greater than 1; got {long_flash_factor}"
+        msg = f"long_flash_factor must be greater than 1. Got {long_flash_factor}"
         raise ValueError(msg)
 
     flash_segments = _stimulus_flash_segments(
@@ -273,7 +273,7 @@ def _validate_event_and_flash_counts(
         None.
     """
     if len(paired_events) < 2:
-        msg = f"At least two photodiode events are required; got {len(paired_events)}"
+        msg = f"At least two photodiode events are required. Got {len(paired_events)}"
         raise ValueError(msg)
     if len(paired_events) != len(flash_segments):
         msg = (
@@ -407,8 +407,8 @@ def _validate_window_contract(
     """
     if stop_event.imaging_frame <= start_event.imaging_frame:
         msg = (
-            "Classified event frames must be increasing; "
-            f"got {start_event.imaging_frame} then {stop_event.imaging_frame}"
+            "Classified event frames must be increasing. "
+            f"Got {start_event.imaging_frame} then {stop_event.imaging_frame}"
         )
         raise ValueError(msg)
     if epoch_run.start_row != start_event.stimulus_flash_start_row:

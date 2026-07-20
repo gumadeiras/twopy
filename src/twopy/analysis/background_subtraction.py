@@ -5,7 +5,7 @@ Outputs: raw ROI traces, estimated background traces, corrected traces, and
 method metadata.
 
 This module owns analysis-time background correction. ROI storage and raw ROI
-trace extraction stay in ``twopy.roi``; dF/F and trial analysis can consume the
+trace extraction stay in ``twopy.roi``. dF/F and trial analysis can use the
 auditable outputs produced here.
 """
 
@@ -243,8 +243,8 @@ def _validate_background_method(method: BackgroundCorrectionMethod) -> None:
     }
     if method not in allowed_methods:
         msg = (
-            f"Unknown background correction method {method!r}; "
-            f"supported methods: {', '.join(sorted(allowed_methods))}"
+            f"Unknown background correction method {method!r}. "
+            f"Supported methods: {', '.join(sorted(allowed_methods))}"
         )
         raise ValueError(msg)
 
@@ -722,7 +722,7 @@ def _crop_roi_masks_for_domain(
     if outside.size:
         msg = (
             "ROI pixels fall outside the selected spatial domain "
-            f"{spatial_crop.source}; affected ROI indices: {outside.tolist()}"
+            f"{spatial_crop.source}. Affected ROI indices: {outside.tolist()}"
         )
         raise ValueError(msg)
     return cropped_masks
@@ -759,7 +759,7 @@ def _validate_percentile(percentile: float) -> None:
     rule at the extremes.
     """
     if not 0.0 < percentile < 100.0:
-        msg = f"Background percentile must be between 0 and 100; got {percentile}"
+        msg = f"Background percentile must be between 0 and 100. Got {percentile}"
         raise ValueError(msg)
 
 
@@ -808,7 +808,7 @@ def _resolve_roi_y_stripe_radius(
     """
     radius = max(1, round(row_count / 20)) if local_y_radius is None else local_y_radius
     if radius < 0:
-        msg = f"local_y_radius must be nonnegative; got {radius}"
+        msg = f"local_y_radius must be nonnegative. Got {radius}"
         raise ValueError(msg)
     return radius
 
@@ -831,7 +831,7 @@ def _resolve_stripe_y_height(
         max(1, round(row_count / 20)) if stripe_y_height is None else stripe_y_height
     )
     if height <= 0:
-        msg = f"stripe_y_height must be positive; got {height}"
+        msg = f"stripe_y_height must be positive. Got {height}"
         raise ValueError(msg)
     return height
 
@@ -912,8 +912,8 @@ def _roi_y_stripe_background_pixel_indices(
         msg = (
             "ROI y-stripe P% background subtraction needs unlabeled background "
             "pixels outside all ROIs in the selected spatial domain. The current "
-            "ROI masks cover every pixel, which is common for dense grid ROIs; "
-            "use shared y-stripe P% or leave unlabeled background pixels."
+            "ROI masks cover every pixel, which is common for dense grid ROIs. "
+            "Use shared y-stripe P% or leave unlabeled background pixels."
         )
         raise ValueError(msg)
 
@@ -930,7 +930,7 @@ def _roi_y_stripe_background_pixel_indices(
             msg = (
                 f"ROI {roi_index} has no local background candidates within "
                 f"{local_y_radius} rows. ROI y-stripe P% only uses unlabeled "
-                "pixels outside all ROIs; increase the local y radius, use "
+                "pixels outside all ROIs. Increase the local y radius, use "
                 "shared y-stripe P%, or leave unlabeled background pixels near "
                 "this ROI."
             )

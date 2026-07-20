@@ -108,7 +108,7 @@ def make_roi_set(
     """
     bool_masks = np.asarray(masks, dtype=np.bool_)
     if bool_masks.ndim != 3:
-        msg = f"ROI masks must have shape (rois, y, x); got {bool_masks.shape}"
+        msg = f"ROI masks must have shape (rois, y, x). Got {bool_masks.shape}"
         raise ValueError(msg)
     if bool_masks.shape[0] == 0:
         msg = "ROI masks must contain at least one ROI"
@@ -117,7 +117,7 @@ def make_roi_set(
     pixel_counts = bool_masks.reshape(bool_masks.shape[0], -1).sum(axis=1)
     if np.any(pixel_counts == 0):
         empty_indices = np.where(pixel_counts == 0)[0].tolist()
-        msg = f"ROI masks cannot be empty; empty ROI indices: {empty_indices}"
+        msg = f"ROI masks cannot be empty. Empty ROI indices: {empty_indices}"
         raise ValueError(msg)
 
     resolved_labels = labels
@@ -457,7 +457,7 @@ def validate_trace_statistic(statistic: TraceStatistic) -> None:
     untyped scripts from producing mean traces with misleading metadata.
     """
     if statistic != "mean":
-        msg = f"Unknown trace statistic {statistic!r}; supported statistics: mean"
+        msg = f"Unknown trace statistic {statistic!r}. Supported statistics: mean"
         raise ValueError(msg)
 
 
@@ -472,7 +472,7 @@ def _integer_label_image(label_image: npt.ArrayLike) -> npt.NDArray[np.int64]:
     """
     values = np.asarray(label_image, dtype=np.float64)
     if values.ndim != 2:
-        msg = f"ROI label image must be two-dimensional; got {values.shape}"
+        msg = f"ROI label image must be two-dimensional. Got {values.shape}"
         raise ValueError(msg)
 
     finite = np.isfinite(values)

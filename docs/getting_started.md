@@ -4,7 +4,7 @@ This page takes you from a blank machine to a saved analysis. It should take abo
 
 ## 1. Install twopy
 
-The examples use [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html); any conda-compatible tool works.
+The examples use [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html). You can use any conda-compatible tool.
 
 ```sh
 micromamba create -n twopy -c conda-forge python=3.13 pip -y
@@ -25,7 +25,7 @@ Create an editable config template:
 twopy config setup
 ```
 
-twopy prints the path it wrote. On macOS and Linux the default is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. If you launch `twopy` before a config exists, it creates the same template, prints the path, and stops so you can edit it.
+twopy prints the path that it wrote. The default path on macOS and Linux is `~/.config/twopy/config.yml`. On Windows, the path is under `%APPDATA%\twopy\config.yml`. If the config does not exist, twopy creates the template and prints its path. Then, twopy stops so you can edit it.
 
 Check which config twopy will use and validate it:
 
@@ -36,10 +36,10 @@ twopy config
 The main keys you usually edit:
 
 - `database_path` — folder holding the lab SQLite database files.
-- `data_paths` — list of folders that contain microscope recording folders. twopy checks them in order; the first one that has the recording wins.
+- `data_paths` — list of folders that contain microscope recordings. twopy checks the folders in order. It uses the first folder that contains the recording.
 - `analysis_output` — where saved analyses end up. Use `source` to write into each recording's own `twopy/` folder, or a folder path to mirror the recording tree under it.
 - `analysis_caching` — keep `true` for normal use. twopy converts and writes locally first, then copies converted HDF5 files and saved analysis files to `analysis_output`.
-- `analysis_cache_max_gb` — maximum local analysis-cache size. The default is `33`; twopy removes old cache entries after writes only when their files already exist in the final output folder.
+- `analysis_cache_max_gb` — maximum local analysis-cache size. The default is `33`. After writes, twopy removes old entries only if their files are in the final output folder.
 
 `config.yml` is private to your machine and is never committed. For source checkouts, a local `./config.yml` still works and takes precedence over the user config file.
 
@@ -77,7 +77,7 @@ When the recording loads, napari shows the mean image, an optional aligned movie
 2. Pick a label number and use the paint tool to draw a cell.
 3. The top **twopy responses** dock updates as soon as your edit is committed.
 
-If you want generated ROIs instead of hand-drawn ones, the **ROIs** tab can make a pixel grid, a micron grid, or a watershed segmentation from the mean image. See [Drawing and generating ROIs](gui/rois.md).
+To generate ROIs, use the **ROIs** tab. It can make a pixel grid, a micron grid, or watershed segments from the mean image. See [Draw and generate ROIs](gui/rois.md).
 
 ## 6. Save the analysis
 

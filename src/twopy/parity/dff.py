@@ -5,7 +5,7 @@ object.
 Outputs: computed twopy dF/F, saved traces, and simple error metrics.
 
 This module is an audit layer. It does not make saved-analysis files part of
-normal analysis; it only checks whether twopy analysis over converted objects
+normal analysis. It only checks whether twopy analysis over converted objects
 matches prior saved outputs for the same ROI masks and frame windows.
 """
 
@@ -182,8 +182,8 @@ def saved_analysis_epoch_windows(
     epoch_index = epoch_number - 1
     if epoch_index < 0 or epoch_index >= len(saved_analysis.epoch_start_times):
         msg = (
-            f"Saved analysis has {len(saved_analysis.epoch_start_times)} epochs; "
-            f"cannot read epoch {epoch_number}"
+            f"Saved analysis has {len(saved_analysis.epoch_start_times)} epochs. "
+            f"Cannot read epoch {epoch_number}"
         )
         raise ValueError(msg)
 
@@ -238,7 +238,7 @@ def _saved_trace_values(
     ):
         msg = (
             f"Saved analysis has {len(saved_analysis.time_by_rois_initial)} "
-            f"trace matrices; cannot read index {saved_trace_index}"
+            f"trace matrices. Cannot read index {saved_trace_index}"
         )
         raise ValueError(msg)
     values = np.asarray(
@@ -246,7 +246,7 @@ def _saved_trace_values(
         dtype=np.float64,
     )
     if values.ndim != 2:
-        msg = f"Saved trace matrix must have shape (frames, rois); got {values.shape}"
+        msg = f"Saved trace matrix must have shape (frames, rois). Got {values.shape}"
         raise ValueError(msg)
     return values
 

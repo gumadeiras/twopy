@@ -96,7 +96,7 @@ def _integer_label_image(label_image: npt.NDArray[np.float64]) -> npt.NDArray[np
     """
     values = np.asarray(label_image, dtype=np.float64)
     if values.ndim != 2:
-        msg = f"Saved ROI mask must be two-dimensional; got {values.shape}"
+        msg = f"Saved ROI mask must be two-dimensional. Got {values.shape}"
         raise ValueError(msg)
 
     finite = np.isfinite(values)
@@ -140,6 +140,6 @@ def _label_image_in_movie_coordinates(
 
     msg = (
         "Saved ROI mask shape must match the movie frame or alignment-valid "
-        f"crop; got {label_image.shape}, movie={movie_shape}, crop={crop.shape}"
+        f"crop. Got {label_image.shape}, movie={movie_shape}, crop={crop.shape}"
     )
     raise ValueError(msg)

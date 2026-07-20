@@ -4,7 +4,7 @@ Inputs: optional lab-generated reference outputs.
 Outputs: small typed objects for comparison scripts and tests.
 
 Normal twopy analysis should not import this package. Analysis starts from
-converted twopy objects; parity helpers only read prior outputs to check that
+converted twopy objects. Parity helpers only read prior outputs to check that
 the converted-object analysis matches historical results when needed.
 """
 

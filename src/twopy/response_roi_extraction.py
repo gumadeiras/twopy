@@ -5,8 +5,8 @@ response-scoring parameters.
 Outputs: full-frame ``RoiSet`` objects plus auditable response score images.
 
 This module keeps response-driven ROI discovery separate from the existing
-mean-image watershed path. The watershed step is only the spatial partitioner;
-the image being segmented is built from pixel responses, repeatability, and
+mean-image watershed path. The watershed step is only the spatial partitioner.
+The image being segmented is built from pixel responses, repeatability, and
 local response coherence.
 """
 
@@ -384,8 +384,8 @@ def _response_watershed_scores(
     """Compute amplitude, reliability, coherence, and combined score maps."""
     if trial_responses.ndim != 3:
         msg = (
-            "trial responses must have shape (trials, axis0, axis1); "
-            f"got {trial_responses.shape}"
+            "trial responses must have shape (trials, axis0, axis1). "
+            f"Got {trial_responses.shape}"
         )
         raise ValueError(msg)
     if trial_responses.shape[0] < 2:
@@ -697,47 +697,47 @@ def _validate_common_options(
 ) -> None:
     """Validate response-watershed scalar options."""
     if not np.isfinite(frame_rate) or frame_rate <= 0:
-        msg = f"data_rate_hz must be a finite positive number; got {frame_rate}"
+        msg = f"data_rate_hz must be a finite positive number. Got {frame_rate}"
         raise ValueError(msg)
     if not np.isfinite(baseline_sample_seconds) or baseline_sample_seconds <= 0:
         msg = (
-            "baseline_sample_seconds must be a finite positive number; "
-            f"got {baseline_sample_seconds}"
+            "baseline_sample_seconds must be a finite positive number. "
+            f"Got {baseline_sample_seconds}"
         )
         raise ValueError(msg)
     response_start, response_stop = response_window_seconds
     if not np.isfinite(response_start) or response_start < 0:
         msg = (
-            "response window start must be finite and nonnegative; "
-            f"got {response_start}"
+            "response window start must be finite and nonnegative. "
+            f"Got {response_start}"
         )
         raise ValueError(msg)
     if response_stop is not None and (
         not np.isfinite(response_stop) or response_stop <= response_start
     ):
         msg = (
-            "response window stop must be greater than start or None; "
-            f"got {response_window_seconds}"
+            "response window stop must be greater than start or None. "
+            f"Got {response_window_seconds}"
         )
         raise ValueError(msg)
     if score_smoothing_sigma < 0:
-        msg = f"score_smoothing_sigma cannot be negative; got {score_smoothing_sigma}"
+        msg = f"score_smoothing_sigma cannot be negative. Got {score_smoothing_sigma}"
         raise ValueError(msg)
     for name, value in (
         ("minimum_score_percentile", minimum_score_percentile),
         ("within_roi_percentile", within_roi_percentile),
     ):
         if not 0.0 <= value <= 100.0:
-            msg = f"{name} must be between 0 and 100; got {value}"
+            msg = f"{name} must be between 0 and 100. Got {value}"
             raise ValueError(msg)
     if min_pixels <= 0:
-        msg = f"min_pixels must be positive; got {min_pixels}"
+        msg = f"min_pixels must be positive. Got {min_pixels}"
         raise ValueError(msg)
     if max_pixels is not None and max_pixels < min_pixels:
-        msg = f"max_pixels must be at least min_pixels; got {max_pixels}"
+        msg = f"max_pixels must be at least min_pixels. Got {max_pixels}"
         raise ValueError(msg)
     if closing_radius < 0:
-        msg = f"closing_radius cannot be negative; got {closing_radius}"
+        msg = f"closing_radius cannot be negative. Got {closing_radius}"
         raise ValueError(msg)
     if response_statistic not in {"mean", "peak"}:
         msg = f"Unknown response statistic: {response_statistic!r}"

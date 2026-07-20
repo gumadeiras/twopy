@@ -66,6 +66,6 @@ PY
 - Use user-facing language whenever possible. Describe what changed for people using twopy, not repository maintenance.
 - Use these sections when they apply: `Features`, `Fixes`, and `Changes`.
 - Omit empty sections.
-- Do not include release chores such as README screenshots, release guide moves, publishing mechanics, or package-upload status unless the change affects how users install or use twopy.
+- Do not include release tasks such as README screenshots, release guide moves, publication mechanics, or package-upload status. Include them only if they affect users.
 
-The release workflow checks that the tag matches `pyproject.toml`, builds the wheel and source distribution, checks package metadata, and publishes to PyPI after the `pypi` environment approval.
+The release workflow checks that the tag matches `pyproject.toml`. It builds the wheel and source distribution and checks package metadata. After `pypi` environment approval, it publishes to PyPI.

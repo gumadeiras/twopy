@@ -48,13 +48,13 @@ SYNCHRONIZATION_MODEL = {
     "imaging_clock": "imaging computer",
     "stimulus_clock": "stimulus presentation computer",
     "clock_relationship": (
-        "independent computers with different frame rates; align by photodiode, "
+        "independent computers with different frame rates. Align by photodiode, "
         "not by nominal frame counts alone"
     ),
     "sync_signal": "photodiode",
     "event_encoding": (
         "stimulus computer flashes the photodiode at start, trial transitions, "
-        "and end; flash pattern or duration identifies the event type"
+        "and end. Flash pattern or duration identifies the event type"
     ),
     "analysis_rule": (
         "decode photodiode events before assigning imaging frames to stimulus "

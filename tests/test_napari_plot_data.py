@@ -366,7 +366,7 @@ class NapariPlotDataTest(unittest.TestCase):
 def _require_response_plot_data(result: ResponsePlotData | str) -> ResponsePlotData:
     """Return loaded plot data when a scenario requires analysis output."""
     if not isinstance(result, ResponsePlotData):
-        raise AssertionError(f"expected response plot data; got {result!r}")
+        raise AssertionError(f"Expected response plot data. Got {result!r}")
     return result
 
 

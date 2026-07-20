@@ -169,8 +169,8 @@ def run(
     )
     return CustomResult(
         message=(
-            f"Computed DSI for {len(rois.labels)} ROIs; "
-            f"showing {len(visible_roi_indices)} above absolute threshold."
+            f"Computed DSI for {len(rois.labels)} ROIs. "
+            f"Showing {len(visible_roi_indices)} above absolute threshold."
         ),
         tables=(
             CustomTable(

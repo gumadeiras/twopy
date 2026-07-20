@@ -296,7 +296,7 @@ def split_traces_by_frame_windows(
     Raises:
         ValueError: If a window falls outside the trace frame range.
 
-    This function only slices; it does not compute response metrics. Keeping
+    This function only slices. It does not compute response metrics. Keeping
     those steps separate makes later baseline and trial logic auditable.
     """
     responses: list[WindowedRoiResponse] = []
@@ -352,7 +352,7 @@ def _resolve_window_labels(
     if labels is None:
         return tuple(f"window_{index + 1:04d}" for index in range(window_count))
     if len(labels) != window_count:
-        msg = f"Expected {window_count} labels; got {len(labels)}"
+        msg = f"Expected {window_count} labels. Got {len(labels)}"
         raise ValueError(msg)
     return tuple(labels)
 

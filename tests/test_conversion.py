@@ -1107,7 +1107,7 @@ class ConversionTest(unittest.TestCase):
 
         Returns:
             Three stimulus rows. The first three columns are time, stimulus
-            frame number, and epoch number; later columns are zero placeholders.
+            frame number, and epoch number. Later columns are zero placeholders.
         """
         data = np.zeros((3, column_count), dtype=np.float64)
         data[:, 0:3] = np.array(

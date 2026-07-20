@@ -6,7 +6,7 @@ Outputs: processed response objects plus optional quality-control scores.
 
 This package is GUI-independent. It owns the math and validates option values
 for response smoothing, low-pass filtering, and correlation-based response
-quality control. Workflow code decides when to call it; persistence code decides
+quality control. Workflow code decides when to call it. Persistence code decides
 how to save the resulting audit trail.
 """
 

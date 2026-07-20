@@ -58,7 +58,7 @@ def launch_napari(
     Args:
         recording_data_path: Optional path to a source recording, converted
             folder, or ``recording_data.h5``. When omitted, twopy opens the
-            current directory or ``./twopy`` recording if one exists; otherwise
+            current directory or ``./twopy`` recording if one exists. Otherwise
             it opens an empty viewer with folder-based recording selection.
         roi_file_to_load: Optional saved ROI HDF5 path to reopen.
         roi_save_file: Optional ROI output path used when saving ROIs and
@@ -74,8 +74,8 @@ def launch_napari(
 
     This launcher may convert source data before opening napari, but all
     analysis still starts from converted HDF5 files. The command-line entry
-    point creates a first-launch config template before calling this function;
-    direct Python callers should run ``twopy config setup`` first.
+    point creates a first-launch config template before calling this function.
+    Direct Python callers should run ``twopy config setup`` first.
     """
     from twopy.napari.loading import resolve_or_convert_launch_recording
     from twopy.napari.viewer import create_viewer, open_recording_in_napari

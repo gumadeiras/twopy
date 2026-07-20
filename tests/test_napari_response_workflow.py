@@ -580,7 +580,7 @@ class NapariResponseWorkflowTest(NapariAdapterTestCase):
             self.assertIn(f"Output: {output_dir / 'rois.h5'}", labels_text)
             self.assertIn(f"Saved 1 ROI locally to {root}", labels_text)
             self.assertIn(
-                f"syncing to {output_dir}",
+                f"Syncing to {output_dir}",
                 response_widget._export_status_label.text(),
             )
             response_widget.shutdown()

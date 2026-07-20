@@ -8,7 +8,7 @@ Two-photon imaging analysis tool for the Clark Lab output format.
 
 twopy lets you open two-photon recordings, draw ROIs, plot responses in real time, process and analyze them, and save them.
 
-When you first load a recording, twopy converts it to HDF5 files that it owns. Those files include the aligned movie, mean image, stimulus tables, photodiode signals, and recording metadata. Analysis and the GUI both work from the converted files, so the original source files remain separate from twopy's outputs. By default, converted recordings and interactive analysis outputs are cached locally under `~/.cache/twopy/recordings` for speed; saving ROIs and analysis copies the changed output files back to the configured `analysis_output` location in the background.
+When you first load a recording, twopy converts it to HDF5 files that it owns. These files contain the aligned movie, mean image, stimulus tables, photodiode signals, and recording metadata. Analysis and the GUI use only the converted files. Thus, the original source files stay separate from twopy outputs. By default, twopy uses `~/.cache/twopy/recordings` as a local cache. When you save ROIs and analysis, twopy copies changed files to `analysis_output` in the background.
 
 ## Install
 
@@ -32,7 +32,7 @@ Create the config template in your user folder:
 twopy config setup
 ```
 
-twopy prints the config path it wrote. On macOS and Linux the default is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. Edit that file with your database, data, and output paths before launching twopy. If you launch `twopy` before a config exists, twopy creates the same template, prints the path, and stops so you can edit it.
+twopy prints the config path that it wrote. The default path on macOS and Linux is `~/.config/twopy/config.yml`. On Windows, the path is under `%APPDATA%\twopy\config.yml`. Before you start twopy, add your database, data, and output paths to that file. If the config does not exist, twopy creates the template and prints its path. Then, twopy stops so you can edit it.
 
 Validate the active config and show its path and file contents:
 

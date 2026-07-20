@@ -2,23 +2,23 @@
 
 ROIs live in the `rois` Labels layer of the viewer. You can paint them by hand or let twopy generate them.
 
-twopy draws and shows ROIs on the *alignment-valid crop* — the part of every frame that stays in-field after motion correction. When you save or run analysis, the ROIs are converted back to full-frame coordinates automatically. You can ignore this; it just means response updates only work while the active Labels layer matches the displayed crop.
+twopy draws ROIs on the *alignment-valid crop*. This is the part of each frame that stays in the field after motion correction. When you save or run analysis, twopy changes the ROIs to full-frame coordinates. Response updates work only when the active Labels layer matches the displayed crop.
 
 ## Draw by hand
 
 1. Select the `rois` layer in the layer list.
 2. Pick the paint tool in the napari layer controls (top-left).
 3. Set the `label` number before painting each cell so each ROI gets its own number.
-4. Edit existing ROIs with the same tool; commit the edit (release the mouse) and the response plots update.
+4. Edit existing ROIs with the same tool. Release the mouse to finish the edit and update the response plots.
 
 ## Generate from the ROIs tab
 
 The **ROIs** tab has a **Create ROIs** section with a **Mode** dropdown:
 
 - **manual** — leaves the layer alone for hand-drawing.
-- **grid** — square template ROIs covering the crop. Choose **Units = pixels** for an exact pixel width, or **Units = microns** to convert from a physical width using the pixel calibration registry. Micron mode prefills known calibration fields (rig, mode, scanner, zoom) from converted metadata; if a field is missing it is left unselected rather than guessed.
+- **grid** — square template ROIs that cover the crop. Select **Units = pixels** for an exact pixel width. Select **Units = microns** to use a physical width and the pixel calibration registry. Micron mode fills known rig, mode, scanner, and zoom fields from converted metadata. If a field is missing, it stays unselected.
 - **watershed** — segments bright structures from the displayed mean-image crop. Tune **Min pixels** and **Smoothing** (sigma). **Min pixels** uses the same displayed crop pixels shown in the **area (px)** column.
-- **response watershed** — segments stimulus-locked pixel responses from photodiode-aligned epoch windows. Tune **Response min pixels** and **Response smoothing**. **Fill response holes** is on by default; **Response closing** adds an opt-in conservative binary close for tiny same-basin gaps.
+- **response watershed** — makes segments from stimulus-locked pixel responses in photodiode-aligned epoch windows. Adjust **Response min pixels** and **Response smoothing**. **Fill response holes** is on by default. **Response closing** can close small gaps in the same basin.
 
 Click **Create ROIs** to replace the contents of the `rois` Labels layer with the generated mask set.
 
@@ -31,7 +31,7 @@ The ROIs tab also shows a per-ROI table:
 - **Merge Selected** combines the checked rows into the first checked ROI label, then updates response plots from the combined mask.
 - **Remove Selected** drops the checked rows from the Labels layer outright.
 
-For dense grids that cover the whole crop, prefer **shared y-stripe P%** background correction (in the [Plot tab](plots.md)) over **ROI y-stripe P%** — the latter needs dim unlabeled local background pixels. It also stops before dF/F when local pixels are brighter than the ROI baseline, because that means the selected band is not valid additive background.
+For dense grids, use **shared y-stripe P%** background correction in the [Plot tab](plots.md). **ROI y-stripe P%** needs dim, unlabeled local background pixels. It stops before dF/F if local pixels are brighter than the ROI baseline. In this condition, the selected band is not valid additive background.
 
 ## Persistence
 

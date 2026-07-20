@@ -7,7 +7,7 @@ The **Export** tab on the right `twopy` sidebar holds every save and export acti
 Click **Save ROIs + analysis** to save the active recording's ROIs and the full response analysis. twopy writes the following files beside the current local converted recording:
 
 - `rois.h5` — the ROI masks.
-- `analysis_outputs.h5` — the ROI masks used for the analysis, dF/F traces, grouped responses, the response window / dF/F / smoothing / normalization / QC settings, per-ROI scale factors, and QC scores.
+- `analysis_outputs.h5` — the ROI masks, dF/F traces, grouped responses, per-ROI scale factors, and QC scores. It also contains the response window, dF/F, smoothing, normalization, and QC settings.
 - `response_heatmaps.h5` — the heatmap data shown in the Heatmaps tab.
 - `exports/csvs/response_summary_trials.csv` — per-trial flat table.
 - `exports/csvs/response_summary_grouped.csv` — per-epoch grouped table.
@@ -16,7 +16,7 @@ The save uses the same response window, smoothing, and normalization values you 
 
 ### Cache sync
 
-With `analysis_caching: true` (the default), twopy saves locally first and then copies the converted HDF5 files and changed analysis files to the final output folder in a background worker. The final output folder is normally `analysis_output`; if you manually load a source recording outside `data_paths`, twopy copies files to that recording's `twopy/` folder, and if you manually load a converted folder outside `data_paths`, twopy saves directly in that selected converted folder. The **Metadata** tab shows the full local and final output paths plus whether the copy succeeded or failed. When export PDFs and PNGs are copied, twopy deletes the local cache copies after the destination copy succeeds.
+With `analysis_caching: true`, twopy saves locally first. This is the default setting. A background worker copies changed analysis files and converted HDF5 files to the final output folder. This folder is usually `analysis_output`. A manual source load outside `data_paths` uses the recording `twopy/` folder. A manual converted load outside `data_paths` uses the selected folder. The **Metadata** tab shows the local path, final path, and copy result. After a successful PDF or PNG copy, twopy deletes the local cache copy.
 
 ## Image and plot exports
 

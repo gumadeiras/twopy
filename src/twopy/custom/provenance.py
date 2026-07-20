@@ -158,8 +158,8 @@ def validate_custom_result(
         and result.roi_set.masks.shape[1:] != expected_roi_shape
     ):
         msg = (
-            "CustomResult.roi_set masks must match the full movie frame shape; "
-            f"got {result.roi_set.masks.shape[1:]}, expected {expected_roi_shape}"
+            "CustomResult.roi_set masks must match the full movie frame shape. "
+            f"Got {result.roi_set.masks.shape[1:]}, expected {expected_roi_shape}"
         )
         raise ValueError(msg)
     if result.response_plot_data is not None:
@@ -250,7 +250,7 @@ def _validate_output_file_path(path: Path, *, output_dir: Path) -> None:
     if _is_relative_to(resolved, output_root):
         return
     msg = (
-        f"Custom workflow result files must be written below ctx.output_dir; got {path}"
+        f"Custom workflow result files must be written below ctx.output_dir. Got {path}"
     )
     raise ValueError(msg)
 
@@ -271,7 +271,7 @@ def _validate_line_plot(plot: CustomLinePlot) -> None:
         msg = "CustomLinePlot.y_label must not be blank."
         raise ValueError(msg)
     if plot.x.ndim != 1:
-        msg = f"CustomLinePlot.x must be one-dimensional; got {plot.x.shape}"
+        msg = f"CustomLinePlot.x must be one-dimensional. Got {plot.x.shape}"
         raise ValueError(msg)
     series_count = _validate_line_plot_y(plot)
     _validate_line_plot_colors(plot.colors, series_count=series_count)
@@ -298,7 +298,7 @@ def _validate_line_plot_y(plot: CustomLinePlot) -> int:
             msg = "CustomLinePlot labels must match the number of y rows."
             raise ValueError(msg)
         return int(plot.y.shape[0])
-    msg = f"CustomLinePlot.y must be one- or two-dimensional; got {plot.y.shape}"
+    msg = f"CustomLinePlot.y must be one- or two-dimensional. Got {plot.y.shape}"
     raise ValueError(msg)
 
 
@@ -313,7 +313,7 @@ def _validate_line_plot_colors(
         raise ValueError(msg)
     for color in colors:
         if not _is_hex_color(color):
-            msg = f"CustomLinePlot colors must be #RRGGBB strings; got {color!r}."
+            msg = f"CustomLinePlot colors must be #RRGGBB strings. Got {color!r}."
             raise ValueError(msg)
 
 
@@ -334,8 +334,8 @@ def _validate_line_plot_bands(
     for band in bands:
         if band.series_index < 0 or band.series_index >= series_count:
             msg = (
-                "CustomLineBand.series_index must point at a plot series; "
-                f"got {band.series_index} for {series_count} series"
+                "CustomLineBand.series_index must point at a plot series. "
+                f"Got {band.series_index} for {series_count} series"
             )
             raise ValueError(msg)
         if band.lower.ndim != 1 or band.upper.ndim != 1:

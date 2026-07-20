@@ -44,7 +44,7 @@ def nan_aware_moving_average(
     whose whole window is NaN remain NaN.
     """
     if window_frames < 1:
-        msg = f"window_frames must be at least 1; got {window_frames}"
+        msg = f"window_frames must be at least 1. Got {window_frames}"
         raise ValueError(msg)
     matrix, was_1d = _as_frame_channel_matrix(values)
     if window_frames == 1:
@@ -155,7 +155,7 @@ def _as_frame_channel_matrix(
         return array.reshape(-1, 1), True
     if array.ndim == 2:
         return array, False
-    msg = f"response values must be 1D or 2D; got shape {array.shape}"
+    msg = f"response values must be 1D or 2D. Got shape {array.shape}"
     raise ValueError(msg)
 
 
@@ -208,20 +208,20 @@ def _validate_low_pass_parameters(
 ) -> None:
     """Validate Butterworth filter parameters."""
     if sample_rate_hz <= 0:
-        msg = f"sample_rate_hz must be positive; got {sample_rate_hz}"
+        msg = f"sample_rate_hz must be positive. Got {sample_rate_hz}"
         raise ValueError(msg)
     if cutoff_hz <= 0:
-        msg = f"cutoff_hz must be positive; got {cutoff_hz}"
+        msg = f"cutoff_hz must be positive. Got {cutoff_hz}"
         raise ValueError(msg)
     nyquist_hz = sample_rate_hz / 2.0
     if cutoff_hz >= nyquist_hz:
         msg = (
-            "cutoff_hz must be below Nyquist; "
-            f"got {cutoff_hz} Hz for {sample_rate_hz} Hz data"
+            "cutoff_hz must be below Nyquist. "
+            f"Got {cutoff_hz} Hz for {sample_rate_hz} Hz data"
         )
         raise ValueError(msg)
     if order < 1:
-        msg = f"order must be at least 1; got {order}"
+        msg = f"order must be at least 1. Got {order}"
         raise ValueError(msg)
 
 
@@ -232,18 +232,18 @@ def _validate_savgol_parameters(
 ) -> None:
     """Validate Savitzky-Golay smoothing parameters."""
     if window_frames < 1:
-        msg = f"window_frames must be at least 1; got {window_frames}"
+        msg = f"window_frames must be at least 1. Got {window_frames}"
         raise ValueError(msg)
     if window_frames % 2 == 0:
-        msg = f"window_frames must be odd for Savitzky-Golay; got {window_frames}"
+        msg = f"window_frames must be odd for Savitzky-Golay. Got {window_frames}"
         raise ValueError(msg)
     if polynomial_order < 0:
-        msg = f"polynomial_order must be non-negative; got {polynomial_order}"
+        msg = f"polynomial_order must be non-negative. Got {polynomial_order}"
         raise ValueError(msg)
     if polynomial_order >= window_frames:
         msg = (
-            "polynomial_order must be below window_frames; "
-            f"got {polynomial_order} and {window_frames}"
+            "polynomial_order must be below window_frames. "
+            f"Got {polynomial_order} and {window_frames}"
         )
         raise ValueError(msg)
 

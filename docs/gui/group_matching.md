@@ -8,7 +8,7 @@ The window has two stages: **FOV assignment** first, then **ROI assignment**. Yo
 
 Goal: group recordings that share a field of view.
 
-The left column has a compact, vertical-only scroll of controls; the right side is filled with large mean-image cards (one per loaded recording). Each card overlays the recording id and current FOV id on the image, has a vertical contrast slider beside it, and a free-text **Note** below it for audit annotations.
+The left column has a compact vertical list of controls. The right side has one large mean-image card for each loaded recording. Each card shows the recording ID and current FOV ID on the image. It has a vertical contrast slider and an audit **Note** field.
 
 Buttons in the left column:
 
@@ -21,17 +21,17 @@ Buttons in the left column:
 - **Save FOV groups** — write `fov_groups.csv` and stay on this view.
 - **Save and continue to ROI assignment** — save and switch to stage 2.
 
-The **Current FOV groups** table lists every assigned id with left-aligned headers and shows four rows at a time. Clicking a row re-selects those cards so you can edit the group; clicking the selected row again (or **Select none**) clears the table and card selection.
+The **Current FOV groups** table lists each assigned ID and shows four rows at a time. Its headers align to the left. Click a row to select its cards and edit the group. Click the row again, or click **Select none**, to clear the selection.
 
 ## Stage 2 — ROI assignment
 
 Goal: identify the same cell across recordings that share a FOV.
 
-The layout mirrors stage 1 inside the same tight popup frame: a vertical-only left column for file controls, FOV filter, response settings, and finish actions; a fixed right workspace where the two response previews sit side by side, scroll sideways without vertical clipping, and leave the ROI cards to scroll vertically.
+Stage 2 uses the same popup layout as stage 1. The left column contains file controls, the FOV filter, response settings, and finish actions. The fixed right workspace contains two side-by-side response previews. The previews scroll horizontally. The ROI cards scroll vertically.
 
 The **FOV** dropdown shows compact numeric FOV ids while preserving the saved `fov_#` values internally.
 
-Each ROI card stacks a colored ROI chip plus a numeric ROI dropdown above the mean image, which carries the same recording-id and FOV-id overlay used by FOV cards. Click an ROI in the mean-image overlay to add it to the card; click a selected ROI again to remove only that ROI. The dropdown stays available for precise selection and toggles the chosen ROI the same way. Cards wrap to fit as many per row as the window allows.
+Each ROI card has a colored ROI marker and a numeric ROI dropdown above the mean image. The image shows the recording ID and FOV ID. Click an ROI in the image to add it to the card. Click the selected ROI again to remove it. The dropdown gives the same selection action. Cards wrap to use the available window width.
 
 Above the cards:
 
@@ -49,7 +49,7 @@ Buttons (left column):
 - **Back to FOV assignment** — return to stage 1 without closing.
 - **Save and close** — save edits to the selected group and close.
 
-The **Saved groups** table lists matched groups for the current FOV (Group ID, ROIs, Note) and shows five rows at a time. Selecting a row restores its ROI selections and note; clicking the selected row again clears the table.
+The **Saved groups** table lists matched groups for the current FOV. It shows Group ID, ROIs, Note, and five rows at a time. Select a row to restore its ROI selections and note. Click the selected row again to clear the selection.
 
 **Plot settings** in the left column hold response-row toggles, plot size, epoch visibility (gray / grey / interleave rows hidden by default), smoothing, and normalization. Click the colored ROI trace chips above the plots to toggle each selected ROI trace. The chip area shows up to five rows at a time, then scrolls.
 
@@ -60,7 +60,7 @@ Notes on FOV cards write to the CSV `note` column for that recording row. The RO
 CSV files written:
 
 - `fov_groups.csv` — recording → FOV id, plus per-recording notes.
-- `roi_matches.csv` — one row per selected ROI in a `group_cell_id`, with FOV id, recording path, ROI number, status, and note. Rows with `status="matched"` are the same visually assigned cell across recordings; `status="unmatched"` records reviewed singletons so downstream code can distinguish them from unreviewed ROIs.
+- `roi_matches.csv` — one row for each selected ROI in a `group_cell_id`. Each row has the FOV ID, recording path, ROI number, status, and note. Rows with `status="matched"` identify the same visual cell across recordings. `status="unmatched"` identifies reviewed single ROIs. Thus, later code can separate them from unreviewed ROIs.
 
 ### A macOS Qt message you can ignore
 

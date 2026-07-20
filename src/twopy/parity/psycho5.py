@@ -282,7 +282,7 @@ def _psycho5_interleave_epoch_numbers(
     if interleave_epoch_number is None:
         return psycho5_default_interleave_epoch_numbers(recording)
     if interleave_epoch_number < 1:
-        msg = f"interleave_epoch_number must be positive; got {interleave_epoch_number}"
+        msg = f"interleave_epoch_number must be positive. Got {interleave_epoch_number}"
         raise ValueError(msg)
     return (interleave_epoch_number,)
 
@@ -292,8 +292,8 @@ def _single_interleave_epoch_number(epoch_numbers: Sequence[int]) -> int:
     resolved = tuple(epoch_numbers)
     if len(resolved) != 1:
         msg = (
-            "psycho5 noTrueInterleave parity needs one scalar interleave epoch; "
-            f"got {resolved}"
+            "psycho5 noTrueInterleave parity needs one scalar interleave epoch. "
+            f"Got {resolved}"
         )
         raise ValueError(msg)
     return resolved[0]
@@ -313,17 +313,17 @@ def _epoch_numbers_from_source_value(value: object, *, name: str) -> tuple[int, 
             raise ValueError(msg)
         return epoch_numbers
 
-    msg = f"{name} must be an epoch number or list of epoch numbers; got {value!r}"
+    msg = f"{name} must be an epoch number or list of epoch numbers. Got {value!r}"
     raise ValueError(msg)
 
 
 def _source_epoch_number(value: object, *, name: str) -> int:
     """Validate one one-based epoch number from source metadata."""
     if isinstance(value, bool) or not isinstance(value, int | float):
-        msg = f"{name} entries must be numeric epoch numbers; got {value!r}"
+        msg = f"{name} entries must be numeric epoch numbers. Got {value!r}"
         raise ValueError(msg)
     epoch_number = int(value)
     if epoch_number < 1 or float(value) != float(epoch_number):
-        msg = f"{name} entries must be positive integer epoch numbers; got {value!r}"
+        msg = f"{name} entries must be positive integer epoch numbers. Got {value!r}"
         raise ValueError(msg)
     return epoch_number

@@ -106,7 +106,7 @@ def refresh_cached_analysis_outputs(
 
     When called outside the napari launcher, missing config or disabled caching
     means there is no cache refresh to do. HDF5 files needed by the GUI are
-    pulled down; CSV and image exports are regenerated from saved analysis when
+    pulled down. CSV and image exports are regenerated from saved analysis when
     needed.
     """
     try:

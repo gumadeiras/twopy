@@ -1069,7 +1069,7 @@ class RoiAssignmentView(QWidget):
         try:
             # macOS Qt accessibility can log a table-cache warning if Hover
             # Text or another AX client reads rows during this rebuild. Qt
-            # refreshes that cache itself; saved ROI rows are not corrupt.
+            # refreshes that cache itself. Saved ROI rows are not corrupt.
             self._group_table.setRowCount(0)
             for row_index, group in enumerate(groups):
                 self._group_table.insertRow(row_index)
@@ -1309,7 +1309,7 @@ def _clear_nested_layout(layout: QLayout) -> None:
 
 
 def _selected_dialog_path(dialog: QFileDialog) -> Path | None:
-    """Return the accepted file dialog path, or ``None`` when cancelled."""
+    """Return the accepted file dialog path, or ``None`` when canceled."""
     if dialog.exec() != QFileDialog.DialogCode.Accepted:
         return None
     selected_files = dialog.selectedFiles()

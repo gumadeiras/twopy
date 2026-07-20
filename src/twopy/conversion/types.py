@@ -90,7 +90,7 @@ class AlignedMovieSource:
             context="frame range for mean image",
         )
         if chunk_frames < 1:
-            msg = f"chunk_frames must be at least 1; got {chunk_frames}"
+            msg = f"chunk_frames must be at least 1. Got {chunk_frames}"
             raise ValueError(msg)
 
         spatial_shape = self.shape[1:]
@@ -291,7 +291,7 @@ class ConvertedRecording:
     Outputs: HDF5 paths plus mean-image frame range and movie shape.
 
     Later analysis modules should accept these converted HDF5 paths, not source
-    MATLAB file paths. ``path`` points at the small recording data file;
+    MATLAB file paths. ``path`` points at the small recording data file.
     ``movie_path`` points at the large aligned movie file.
     """
 

@@ -10,4 +10,4 @@ Contents:
 - `aligned_movie.h5`: frames `54:114` and spatial crop `axis0=[6, 30)`, `axis1=[9, 33)` from the converted aligned movie.
 - `rois.h5`: three small ROI masks drawn on the cropped fixture frame.
 
-The fixture is intentionally tiny. It is not a scientific analysis output; it is a regression fixture that keeps loader, ROI, workflow, and napari adapter tests anchored to real pixel values without committing a full recording.
+The fixture is intentionally small. It is not a scientific analysis output. It gives real pixel values to loader, ROI, workflow, and napari adapter tests. Thus, the repository does not need a full recording.

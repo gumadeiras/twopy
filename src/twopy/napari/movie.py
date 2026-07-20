@@ -32,10 +32,10 @@ def resolve_movie_frame_range(
         Inclusive ``(start, end)`` movie frame range.
     """
     if start_frame < 0:
-        msg = f"movie_start_frame must be at least 0; got {start_frame}"
+        msg = f"movie_start_frame must be at least 0. Got {start_frame}"
         raise ValueError(msg)
     if frame_count < 1:
-        msg = f"movie must have at least 1 frame; got {frame_count}"
+        msg = f"movie must have at least 1 frame. Got {frame_count}"
         raise ValueError(msg)
 
     last_frame = frame_count - 1
@@ -49,11 +49,11 @@ def resolve_movie_frame_range(
     if resolved_end < start_frame:
         msg = (
             "movie_end_frame must be greater than or equal to "
-            f"movie_start_frame; got {resolved_end} < {start_frame}"
+            f"movie_start_frame. Got {resolved_end} < {start_frame}"
         )
         raise ValueError(msg)
     if resolved_end > last_frame:
-        msg = f"movie_end_frame must be at most {last_frame}; got {resolved_end}"
+        msg = f"movie_end_frame must be at most {last_frame}. Got {resolved_end}"
         raise ValueError(msg)
     return (start_frame, resolved_end)
 

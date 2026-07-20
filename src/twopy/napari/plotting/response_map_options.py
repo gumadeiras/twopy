@@ -53,7 +53,7 @@ class ResponseMapOptionsWidget(QWidget):
     settings, and ``shared_limits()`` for display-only color scaling.
 
     The widget intentionally exposes only usable controls. Pixel mode shows
-    Gaussian sigma; window mode shows preset, square size, and stride. The
+    Gaussian sigma. Window mode shows preset, square size, and stride. The
     shared-limits checkbox is display-only and does not trigger heatmap
     recomputation.
     """

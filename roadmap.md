@@ -24,7 +24,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - DB query access modes: direct mounted DB query or local cached DB copies with metadata and SHA-256 change checks.
 - Configured database access mode with `copy` as the default.
 - Configured analysis output paths with source-folder and mirrored-output-root modes.
-- Napari save/export routing keeps local cache folders and final output folders explicit, copies manual source loads outside `data_paths` to the source `twopy/` folder, saves manual converted-folder loads outside `data_paths` in the selected folder, and queues concurrent background copies instead of canceling earlier saves.
+- Napari save and export routes show the local cache folder and final output folder. Manual source loads outside `data_paths` use the source `twopy/` folder. Manual converted loads use the selected folder. Concurrent background copies wait in a queue.
 - MATLAB file inspection and loading layer for older MAT files and HDF5-backed MAT files.
 - MATLAB SciPy loading code simplified so inspect and load paths share one visible-variable reader.
 - Source-to-twopy HDF5 conversion for acquisition metadata, stimulus parameters, stimulus data, photodiode signals, mean image, and a separate aligned movie file.
@@ -47,8 +47,8 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - GUI-independent `twopy.analysis` package for analysis-time modules.
 - ROI background-corrected trace extraction with raw, background, and corrected arrays kept side by side for audit.
 - Implemented four ROI background modes: no correction, global movie percentile subtraction, shared y-stripe percentile subtraction, and ROI y-stripe percentile subtraction.
-- Global movie percentile background correction defaults to the saved alignment-valid crop, validates full-frame ROI masks against that crop, and streams only the selected crop from HDF5 for lower I/O.
-- Analysis trace extraction with `method="none"` also honors the selected spatial domain; lower-level ROI trace extraction remains the full-frame raw primitive.
+- Global movie percentile background correction uses the saved alignment-valid crop by default. It checks full-frame ROI masks and streams only the selected HDF5 crop.
+- Analysis trace extraction with `method="none"` also uses the selected spatial domain. Low-level ROI trace extraction stays as the raw full-frame function.
 - Trial/frame-window response helpers live in `twopy.analysis.trials`.
 - Stimulus epoch runs from `stimulus/data` can be mapped onto photodiode-aligned imaging-frame windows when their counts agree.
 - Stimulus epoch values can also be interpolated onto stimulus-bounded imaging frames from converted `stimulus/data`, without requiring equal high-res and imaging-res photodiode event counts.
@@ -61,51 +61,51 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Classified stimulus timing cross-checks paired photodiode events against `stimulus/data` `photodiode_flash` segments and positive epoch runs before producing frame windows when flash segments match epoch boundaries.
 - Frame-window response objects for splitting ROI traces by explicit imaging frame boundaries.
 - ROI dF/F responses can be grouped by epoch and trial, with one response matrix per trial and spreadsheet-friendly time-series CSV rows.
-- Analysis outputs can be persisted to one inspectable HDF5 file containing ROI masks, fluorescence/background traces, dF/F arrays, epoch windows, and grouped responses, with optional trial-level and epoch-grouped CSV response time series under `exports/csvs/`.
+- One inspectable HDF5 file can store analysis outputs. It contains ROI masks, fluorescence and background traces, dF/F arrays, epoch windows, and grouped responses. Optional trial and epoch CSV time series are in `exports/csvs/`.
 - Script-facing response workflow loads a converted recording and ROI set, runs trace extraction, dF/F, response grouping, and persistence in one call.
 - Persisted analysis HDF5 files can be reloaded into typed twopy analysis objects.
 - Small committed real-data regression fixture derived from the example converted recording, with loader and response-workflow tests over real pixel values.
 - Core ROI helpers convert between integer label images and ROI masks, so napari label edits and scripts use the same ROI HDF5 format.
-- GUI-independent native ROI extraction can create deterministic grid ROIs and watershed-style bright-structure ROIs from movie-coordinate images, with optional boolean region masks that keep ROIs by center of mass.
-- Response-watershed ROI extraction can generate full-frame ROI masks from selected stimulus windows by combining per-pixel response amplitude, local response coherence, and split-half epoch-profile reliability before watershed segmentation.
-- Pixel-size calibration is represented as a tracked plain dated CSV registry. Native code resolves exact measured values by rig/mode/scanner/zoom, interpolates within the same group in pixels-per-micron space for missing in-range zooms, and exposes a micron-grid ROI helper without coupling calibration to napari or workflow lifecycle.
-- Calibration profile inference is split from pixel-size resolution: converted metadata supplies zoom, direct rig/scanner/mode fields when present, and tracked ScanImage config mappings fill known historical mode/scanner gaps, while UI dropdowns remain the fallback for ambiguous or unmeasured profiles.
-- The napari ROIs tab has an explicit ROI mode selector. Manual Labels drawing is the default, grid mode can create labels from pixel sizes or calibrated micron sizes, watershed mode can create labels from the converted mean image, and response watershed can create labels from repeatable stimulus-locked pixel responses.
-- Thin napari adapter loads a converted recording mean image, optional bounded movie preview, editable ROI Labels layer, and saves edited label images through the core ROI module.
+- Native ROI extraction does not need the GUI. It can make deterministic grid ROIs and watershed ROIs from movie-coordinate images. Optional Boolean region masks keep ROIs by center of mass.
+- Response-watershed ROI extraction combines response amplitude, local coherence, and split-half reliability for each pixel. Then, it makes full-frame ROI masks from selected stimulus windows.
+- A tracked, dated CSV registry contains pixel-size calibration. Native code uses exact measured values or interpolates values inside the same rig, mode, and scanner group. A micron-grid helper does not depend on napari or workflow state.
+- Pixel-size resolution and calibration-profile selection are separate. Converted metadata supplies zoom and available rig, scanner, and mode fields. Tracked ScanImage mappings fill known gaps. UI dropdowns resolve ambiguous or unmeasured profiles.
+- The napari **ROIs** tab has a ROI mode selector. Manual Labels drawing is the default. Grid mode uses pixel or calibrated micron sizes. Watershed modes use the mean image or repeatable stimulus-locked responses.
+- The thin napari adapter loads the mean image, optional movie preview, and editable ROI Labels layer. The core ROI module saves edited labels.
 - Initial magicgui dock panel for napari can start from an empty napari window and load a converted recording automatically after folder selection.
 - Napari Load Recording control accepts a converted output folder or source recording folder, auto-detects `recording_data.h5`, `aligned_movie.h5`, and `rois.h5`, and always loads the full movie.
 - Napari controls use intuitive ROI file labels and no frame-range control in the Load tab.
-- Napari has a compact top response plotting dock and one tabbed right-side `twopy` dock with Load, Metadata, Plot, ROIs, Epochs, and Export tabs; it can reload persisted analysis outputs from Load or update plots from the current Labels ROIs through the core analysis workflow. Plots now lay out horizontally with square panels, use saved per-trial response time vectors, match ROI trace colors to the Labels layer, share axes, preserve two seconds before stimulus onset, extend two seconds after stimulus offset when gray interleave frames exist, hide gray epochs by default, sort epochs by epoch number, draw thicker dashed zero-reference lines, and expose ROI/epoch visibility plus manual axis controls in scrollable option panels; the ROI selection list shows each ROI's plot color beside its name, and deselecting an ROI also hides that ROI in the napari Labels overlay without editing label pixels.
-- Napari has a Custom tab for built-in and trusted local Python workflows from `custom_workflow_paths`. Direction selectivity ships as a native workflow with recording epoch dropdowns, metric window controls, optional response rectification, an absolute-DSI plot threshold, and a direct ROI DSI table preview. Response kernels ships as a native workflow that fits random-noise temporal filters from current ROI dF/F traces, uses a Stimulus dropdown to select olfactory antenna activation or visual contrast, defaults that dropdown from converted rig metadata, chooses the default converted stimulus column automatically, maps ipsi/contra from recording hemisphere metadata for olfaction, writes one CSV matrix per unique epoch name and kernel stream, and plots per-ROI plus mean kernels. The workflow system supports sibling helper imports, rejects incomplete workflows and invalid outputs, renders supported dataclass parameters as controls, runs against converted recordings through one shared script-and-GUI runner, exposes converted metadata through a stable context API, records workflow id/version/source hash with outputs, and syncs custom outputs through the analysis-output cache path.
+- Napari has a compact top response dock and a tabbed right `twopy` sidebar. The sidebar contains Load, Metadata, Plot, ROIs, Epochs, and Export. Plots use square horizontal panels, shared axes, ROI colors, visibility controls, and manual axis controls. They keep stimulus context and can reload saved analysis. ROI visibility also controls the Labels overlay without a change to label pixels.
+- Napari has a **Custom** tab for built-in and trusted local workflows from `custom_workflow_paths`. Native workflows calculate direction selectivity and random-noise response kernels. The workflow system checks inputs and outputs, makes controls from supported dataclass parameters, and uses one script and GUI runner. It records workflow source information and copies outputs through the analysis cache route.
 - Napari recording controls show the loaded path tail instead of `default` after a selection.
-- Napari sessions can keep multiple recordings loaded at once. A Loaded Recordings panel lists loaded paths, switches response options to the selected recording, can save the loaded list to a reusable CSV, and unloads the selected recording with its associated image/movie/ROI layers. Selecting a loaded recording also makes that recording's layers visible and hides layers from the other loaded recordings.
-- Napari has a staged display-filling Group Matching window launched from the Load tab for manual group-analysis setup. Users first group loaded recordings by FOV from large selectable mean-image cards with translucent overlaid recording labels and vertical per-card contrast sliders, using a compact vertical-only scrollable left control column, four-row current-FOV group table, compact FOV ID step controls, and wide vertical-scroll card workspace, then finalize into a FOV-filtered ROI assignment workspace with a matching compact left control column, numeric FOV ID filter, Selected ROIs chip panel, separate ROI-response and combined-response plot sections, fixed-size responsive ROI cards with overlaid recording/FOV labels and inline numeric ROI/color controls, five-row resizable saved-group table, epoch-aware plot settings, shared response plots with size-aware text, and plain `roi_matches.csv` persistence.
+- Napari sessions can contain multiple recordings. The **Loaded Recordings** panel lists paths, selects the active recording, saves reusable CSV lists, and unloads recordings. A selection shows its layers and hides the other recording layers.
+- The Load tab opens a two-stage **Group Matching** window. First, users group recording mean images by FOV. Then, they assign ROIs inside each FOV. The window has image cards, response previews, shared plot settings, notes, and CSV storage.
 - Core manual group-analysis helpers can save, load, append, validate, and assign ids for FOV grouping and ROI match CSV tables independent of napari.
-- Napari response plotting code is scoped under `twopy.napari.plotting` with separate modules for plot data, response heatmap data, option controls, drawing widgets, docks, and recording-level heatmap HDF5 persistence.
-- Response heatmaps compute ROI-independent movie-level signed dF/F maps from photodiode-aligned epoch windows, support pixel smoothing and square-window averaging modes, persist normalized maps with an audit `response_scale`, and use robust 95th-percentile display color limits that can be shared across epochs.
-- Response heatmaps omit gray/interleave and first-frame epoch windows that lack a preceding local baseline, and napari rebuilds heatmaps from option edits in a background worker.
-- Napari response options now include a Plot-size control and an Export tab that saves recording views, ROI views, recording/ROI overlays, per-epoch response plots, response heatmaps, and two-column ROI-overlay/response figures as PDF and PNG with Illustrator-editable PDF text and vector ROI/trace paths where possible. Each export action writes into its own subfolder under `exports/`. ROI image exports use pixel-edge ROI outlines and the same cropped display area as the recording view, including when an older full-frame Labels layer is still present in napari.
+- `twopy.napari.plotting` contains separate modules for plot data, heatmap data, controls, widgets, docks, and heatmap HDF5 storage.
+- Response heatmaps calculate signed, ROI-independent dF/F maps from photodiode-aligned epoch windows. They support pixel smoothing and square-window averaging. Saved normalized maps include `response_scale` for audits. Display color limits use a robust shared or per-epoch 95th percentile.
+- Response heatmaps omit gray, interleave, and first-frame windows without a local baseline. A background worker recalculates heatmaps after option changes.
+- Napari response options include plot-size controls and an **Export** tab. It saves recording views, ROI views, overlays, response plots, and heatmaps as PDF and PNG. PDF text and vector paths stay editable when possible. Each export type uses its own `exports/` subfolder. ROI exports use pixel-edge outlines and the displayed crop.
 - Napari ROI Labels layers open with 50 percent opacity and additive blending so ROI masks remain visible over the mean image and movie.
 - Napari image layers set initial display contrast without narrowing the full contrast slider range. Mean images open at 50 percent opacity with gamma 1.3, and movie previews open with additive blending.
 - Conversion stores aligned movies and mean images in Python image order matching MATLAB display, with source `alignedMovie.mat` spatial axes mapped once at the source boundary. Napari displays stored arrays directly, and y-stripe background subtraction operates along stored rows.
-- Napari ROI editing is crop-native end to end. Response updates and saved analysis require the active Labels layer to match the displayed alignment-valid crop, then persist or analyze full-frame ROI masks with zeros outside that crop.
-- Napari ROI and epoch visibility controls operate on already-computed response data. ROI checkbox changes repaint already visible plot widgets without rebuilding the plot layout, epoch checkbox changes explicitly hide/show cached epoch panels, and bulk select-all/select-none actions redraw once instead of once per checkbox.
-- Napari epoch visibility controls use displayed row indices instead of display text, so selecting and deselecting epochs is idempotent even if labels repeat or gray interleave epochs start hidden by default.
+- Napari ROI editing uses the displayed crop. Response updates and saved analysis require a Labels layer that matches the alignment-valid crop. Full-frame ROI masks contain zeros outside the crop.
+- Napari ROI and epoch visibility controls use calculated response data. ROI changes repaint visible plots. Epoch changes show or hide cached panels. Bulk actions redraw only one time.
+- Napari epoch visibility controls use displayed row indices. Thus, repeated labels and hidden gray epochs do not change the wrong item.
 - Napari Save ROIs + analysis persists ROI and analysis files without replacing the current in-memory plot preview.
-- ROI visibility controls dim existing label values without making future newly drawn label numbers transparent or forcing them to share one fallback color, so users can keep adding ROIs after filtering plots.
-- Napari movie-frame range changes reuse the resolved recording path even when the visible path field is shortened, and response options are split into Metadata, Plot, ROIs, Epochs, and Export tabs.
-- Napari can show photodiode-aligned trial structure while scrolling the movie stack with a compact bottom timeline rail that renders gray/grey/interleave epochs as neutral gray and a viewer HUD for the current trial and epoch.
-- Response post-processing settings are wired through the core workflow, analysis persistence, and napari Plot tab: smoothing and low-pass filtering run on continuous dF/F before grouping, while correlation QC scores grouped responses and saves the selected settings plus ROI inclusion scores. Smoothing supports moving-average and Savitzky-Golay methods, with Savitzky-Golay defaulting to a seven-frame second-order local fit.
+- ROI visibility controls dim existing labels but do not make new labels transparent. New labels do not share one fallback color. Users can add ROIs after they filter plots.
+- Movie-frame range changes use the resolved recording path when the visible path is short. Response options are in Metadata, Plot, ROIs, Epochs, and Export.
+- A bottom timeline shows photodiode-aligned trials while the movie moves. Gray and interleave epochs use neutral gray. The viewer HUD shows the current trial and epoch.
+- Response processing connects to the core workflow, saved analysis, and the napari **Plot** tab. Smoothing and low-pass filters use continuous dF/F before grouping. Correlation QC scores grouped responses and saves settings and ROI inclusion scores. Smoothing supports moving-average and Savitzky-Golay methods.
 - Napari correlation QC defaults its optional stop time to the shortest plotted epoch duration so the first enabled stop window is epoch-bounded rather than zero-width.
-- Napari Plot tab now exposes dF/F analysis settings before smoothing: background mode, gray interleave baseline epoch, interleave span, fit mode, and motion masking all feed live previews and saved analysis. Dropdown labels are concise and user-facing, and interleave choices use the recording's epoch names, defaulting to names that contain gray, grey, or interleave before falling back to epoch 1.
+- The napari **Plot** tab shows dF/F settings before smoothing. Background mode, baseline epoch, interleave span, fit mode, and motion mask control previews and saved analysis. Interleave choices use recording epoch names. Names with gray, grey, or interleave have priority over epoch 1.
 - Script workflows and the napari Plot tab can use `baseline_mode="no_baseline_epoch"` to fit dF/F over one continuous span from a selected first epoch onward.
 - Parity helpers can run psycho5-style `noTrueInterleave` comparisons without adding psycho5 APIs to normal analysis.
-- Napari Plot tab now exposes response-window settings before dF/F: Auto keeps the default gray-interleave context, manual pre/post seconds are capped by the known gray/interleave epoch duration, and Save ROIs + analysis uses the same resolved window as live previews.
-- Live Plot-tab recomputes now share the saved-plot post-stimulus context rule, so changing dF/F or processing settings does not shrink gray-interleave response plots by two seconds.
+- The napari **Plot** tab shows response-window settings before dF/F. Auto keeps the default gray-interleave context. Manual seconds cannot exceed the known epoch duration. **Save ROIs + analysis** and live previews use the same window.
+- Live **Plot** tab calculations use the saved-plot rule for post-stimulus context. Thus, setting changes do not shorten gray-interleave response plots.
 - Launch script for opening napari from a converted output directory, a source recording directory, or an explicit `recording_data.h5` path. When a source recording has no converted twopy files yet, napari runs conversion first and then opens the converted HDF5 files.
 - `twopy` terminal command registered as the application launcher for napari.
 - Conversion now stores stimulus-run metadata from `runDetails.mat` with snake_case twopy field names such as `rig_name`.
-- Conversion stores one code-derived label per stimulus data column using the backed-up MATLAB writer as source of truth: time, stimulus frame, epoch, ten closed-loop slots, twenty stimulus-specific slots, photodiode flash, and the trailing empty field.
+- Conversion stores one code-derived label for each stimulus data column. The backed-up MATLAB writer is the source. Labels cover time, frame, epoch, closed-loop slots, stimulus-specific slots, photodiode flash, and the final empty field.
 - Documented how stimulus-specific data slots are decoded from `stimtype` through `filebackup/paramfiles/stimulus_lookup.txt` and the backed-up stimulus functions.
 - Conversion reads `stimulusData/filebackup.zip` and stores per-`stimtype` stimulus-specific slot metadata in `recording_data.h5`.
 - Public stimulus helper maps stable `stimulus_specific_*` column names to per-`stimtype` source expressions and readable names.
@@ -113,32 +113,33 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Read-only `twopy.parity` loader for selected `savedAnalysis/*.mat` `lastRoi` fields needed by parity checks: ROI masks, epoch lists, epoch windows, and saved ROI traces.
 - Parity adapter converts saved ROI label images into full-frame twopy `RoiSet` objects for audit comparisons.
 - Parity-only psycho5 ROI extraction helpers preserve grid label ordering and watershed border-fill behavior for comparing native twopy ROI discovery against historical MATLAB outputs.
-- Parity dF/F comparator runs the normal twopy analysis path over converted data, using saved ROI masks and saved interleave windows, then reports numeric error against saved trace matrices.
+- The parity dF/F comparator runs normal twopy analysis on converted data. It uses saved ROI masks and interleave windows. Then, it reports numeric error against saved trace matrices.
 - Real example recording inspected successfully: 24 files, 13 MATLAB files, raw TIFF shape `(8334, 127, 256)`.
-- Real example recording converted successfully to `twopy/recording_data.h5` and `twopy/aligned_movie.h5`; current converted files store movie and mean-image spatial axes in Python image order matching MATLAB display.
+- The real example recording converted to `twopy/recording_data.h5` and `twopy/aligned_movie.h5`. Converted movies and mean images use Python image order that matches MATLAB display.
 - Real example conversion produced an alignment-valid crop from source alignment offsets. Current crop bounds are stored in Python image axes, with axis 0 as displayed y/rows and axis 1 as displayed x/columns.
-- Real example converted recording loaded successfully with current schema; ROI trace smoke test produced shape `(5, 1)`, photodiode detection found 101 high-resolution and 101 imaging-resolution events, and event pairing produced 100 frame windows.
+- The real converted example loaded with the current schema. The ROI trace smoke test produced shape `(5, 1)`. Photodiode detection found 101 events in each signal. Event pairing produced 100 frame windows.
 - Real example shared photodiode timing used threshold `6.54609375`, found 101 high-resolution events, and interpolated stimulus epochs onto frames `[54, 3963)` with 100 epoch windows.
 - Real example converted motion artifact mask contains 0 high-motion frames under the current threshold.
 - Real example `savedAnalysis/` loader read saved ROI mask shape `(244, 109)` and saved trace shape `(3909, 1221)` from a prior analysis file.
 - Real example dF/F parity comparison against `WatershedRoiExtraction_28_12_10_17_10_23.mat` matched 1,221 saved ROI traces over 3,909 frames with mean absolute error `1.84e-10` and median ROI correlation `1.0`.
 - Real example photodiode classification found 1 stimulus start event, 99 trial transition events, 1 stimulus end event, and 100 classified stimulus windows.
-- Native response timing now resolves through one `resolve_recording_timing(...)` boundary that consumes classified stimulus windows when the boundary-flash classifier applies and keeps interpolation for recordings without that boundary-flash contract.
+- Native response timing uses one `resolve_recording_timing(...)` boundary. It uses classified stimulus windows when the boundary-flash classifier applies. Other recordings use interpolation.
 - Real database query matched the example recording in both `experimentLog.db` and `experimentInitLog.db` with `stimulusPresentationId=20005` and `fly=10923`.
 - Real filtered API query matched the example recording with date `2023-10-17`, genotype `gh146`, stimulus `combo_stim_singles=3s_blank=3s_intensity=20`, sensor `g6f`, cell type `ALPN`, hemisphere `right`, and person `Harsh`.
 - Response analysis now has an in-memory computation API separate from the script-facing persistence API, so GUI previews do not write HDF5 files.
-- Napari Labels ROI edits can trigger debounced live response updates. The live path copies ROI labels from the active cropped viewer layer, streams movie frames through the normal analysis helper, and discards stale worker results after newer ROI edits.
-- Napari display defaults now favor inspection: mean image contrast starts 10% above the data minimum, movie preview contrast is estimated from 10 deterministic random frames sampled outside the first and last 10% of the recording, ROI Labels use additive blending with brush size 6, and live response updates are triggered by committed paint/data edits rather than display-refresh events during mouse movement.
-- Napari response controls now keep Search database, Load manually, and Reload saved analysis on Load, show path/status labels on Metadata, and put Save ROIs + analysis in Export.
-- Napari no longer has a separate Save ROIs dock; ROI persistence happens through the single Save ROIs + analysis action to avoid duplicate save paths.
+- Napari Labels edits can start delayed live-response updates. The live path copies labels from the active cropped layer and streams movie frames. It discards old worker results after a newer edit.
+- Napari display defaults support inspection. Mean-image contrast starts 10 percent above the minimum. Movie-preview contrast uses 10 deterministic sample frames. ROI Labels use additive blending and brush size 6. Completed paint and data edits start live-response updates.
+- The Load tab contains **Search database**, **Load manually**, and **Reload saved analysis**. Metadata shows paths and status. Export contains **Save ROIs + analysis**.
+- Napari has no separate Save ROIs dock. The single **Save ROIs + analysis** action prevents duplicate save paths.
 - Napari response options now show recording identity as root, genotype, stimulus, and recording time instead of full raw paths. Analysis, ROI, and export statuses show compact `./twopy/...` output folders.
-- Napari ROI and epoch visibility controls use displayed row indices, so duplicate display names or duplicate epoch metadata cannot toggle, cache, or restore the wrong plotted item.
-- Tests for config loading, MATLAB inspection/loading, recording inspection, database filtering/copy-cache behavior, conversion, converted-recording loading, ROI storage/extraction/discovery, photodiode synchronization and classification, response windows, persistence, workflow orchestration, response post-processing, napari loading/plotting/live ROI updates, real-data fixtures, stimulus metadata helpers, valid sessions, optional `savedAnalysis/`, missing files, and ambiguous raw TIFF movies.
+- Napari ROI and epoch visibility controls use displayed row indices. Thus, duplicate names or metadata cannot change, cache, or restore the wrong plot item.
+- Tests cover config, MATLAB files, recordings, database access, conversion, ROIs, photodiode timing, response analysis, persistence, workflows, napari, and real-data fixtures. They also cover missing files, ambiguous TIFF movies, and optional `savedAnalysis/`.
+- Documentation and user-facing messages use ASD-STE100 Simplified Technical English.
 
 ## Next
 
 - Add protocol-specific photodiode classifiers for recordings with extra within-epoch alignment flashes.
-- Add napari database search and recording selection using the typed database helpers, then hand selected recordings to the existing convert/load, Labels ROI, analysis, persistence, and response-inspection workflow.
+- Add napari database search and recording selection with typed database helpers. Then, send selected recordings to the existing conversion, Labels ROI, analysis, persistence, and inspection workflow.
 - Group or facet responses by recording and stimulus metadata beyond the current epoch, trial, and ROI groupings.
 - Build downstream group-analysis loaders that consume `fov_groups.csv` and `roi_matches.csv` alongside per-recording analysis outputs for matched-cell and pooled-ROI summaries.
 
@@ -146,18 +147,18 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 
 - GUI: napari.
 - Napari implementation stays inside this repo for now, structured as reusable `twopy.napari` helpers that a future plugin can wrap with menus/widgets.
-- Napari control panels start with magicgui; move to custom widgets or plugin packaging only when the workflow needs it.
-- Current napari workflow: source or converted path selection, optional conversion, converted data load, Labels ROI editing, live response preview, persisted analysis reload, export, and response inspection. Remaining napari workflow work is database-backed recording search and selection.
+- Napari control panels start with magicgui. Move to custom widgets or plugin packages only when the workflow needs them.
+- Current napari workflow: select a path, convert if necessary, load data, edit Labels ROIs, inspect responses, reload analysis, and export. Database recording search and selection are not complete.
 - Primary ROI interaction in napari uses Labels layers because they directly represent the pixel masks used by analysis.
-- Cross-recording group analysis starts with human-authored FOV and ROI CSV decision tables; automatic alignment or candidate scoring can assist later but should not be required for correctness.
+- Cross-recording group analysis starts with manual FOV and ROI CSV decision tables. Automatic alignment or candidate scores can help, but correctness must not require them.
 - Python: 3.13.
 - Environment: micromamba env named `twopy`.
-- Core modules stay GUI-independent; napari code calls core modules.
-- Recording acquisition metadata should be loaded from `imageDescription.mat`; raw TIFF metadata is for audit or raw interleaved frame access.
+- Core modules stay GUI-independent. napari code calls core modules.
+- Load recording acquisition metadata from `imageDescription.mat`. Use raw TIFF metadata for audits or raw interleaved frame access.
 - Converted data format: HDF5 with gzip compression.
 - Converted aligned movie is stored in its own HDF5 file because it usually dominates file size.
 - Source MATLAB and raw TIFF files are conversion inputs only. Analysis and processing operate on converted twopy HDF5 files.
-- Source-output ownership is explicit: `twopy.conversion` may read microscope MAT/TIFF/text/ZIP files, `twopy.analysis` uses converted twopy data only, and `twopy.parity` is isolated read-only comparison code for prior `savedAnalysis/` outputs.
+- Source-output ownership is explicit. `twopy.conversion` can read source microscope files. `twopy.analysis` uses only converted twopy data. `twopy.parity` is isolated, read-only comparison code for old `savedAnalysis/` outputs.
 - Imaging and stimulus presentation run on separate clocks. Response analysis must align stimulus events to imaging frames through photodiode decoding, not nominal frame rates alone.
 - Default photodiode event thresholding uses the lab convention `min + 0.3 * (max - min)`. Explicit thresholds remain available for audits.
 - More than two long photodiode flashes is ambiguous and should fail loudly rather than silently choosing one.
@@ -165,7 +166,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - The converted aligned movie and ROI masks stay full-frame in Python image order matching MATLAB display. Crop-domain analysis uses saved crop metadata instead of duplicating cropped movie or mean image datasets.
 - Background correction must be explicit and auditable. Store raw traces, background estimates, corrected traces, and method metadata rather than only the final corrected values.
 - MATLAB-parity background subtraction requires the same spatial crop/mask contract as the source analysis path, not only the same percentile rule.
-- dF/F defaults to the robust exponential fit mode. It keeps the shared tau bound but does not use the source log-amplitude upper bound because that bound depends on the first baseline sample and can become invalid or overly restrictive when that sample is small, nonpositive, or noisy. Use `source_bounds` only for audit comparisons.
+- dF/F uses the robust exponential fit mode by default. It keeps the shared tau bound. It does not use the source log-amplitude upper bound. That bound can be invalid when the first baseline sample is small, nonpositive, or noisy. Use `source_bounds` only for audit comparisons.
 - Code style: simple, typed, documented, and tested.
-- `savedAnalysis/`: optional; only present after prior MATLAB analysis.
-- Roadmap maintenance: update with completed progress and explicit decisions; keep it high signal and low noise.
+- `savedAnalysis/`: optional. It is present only after prior MATLAB analysis.
+- Roadmap maintenance: record completed work and explicit decisions. Keep the roadmap useful and concise.

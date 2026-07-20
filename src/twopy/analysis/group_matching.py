@@ -588,7 +588,7 @@ def _validate_status(status: ManualRoiMatchStatus) -> ManualRoiMatchStatus:
 def _validate_group_cell_id(group_cell_id: int) -> int:
     """Return a positive group-cell id."""
     if group_cell_id < 1:
-        msg = f"Manual ROI group_cell_id must be positive; got {group_cell_id}."
+        msg = f"Manual ROI group_cell_id must be positive. Got {group_cell_id}."
         raise ValueError(msg)
     return group_cell_id
 

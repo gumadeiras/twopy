@@ -1,6 +1,6 @@
 # twopy Tutorial
 
-This guide walks through a basic twopy session: install the app, launch it, open a recording, draw ROIs, turn on Savitzky-Golay smoothing, save the analysis and ROI file, then export response plots.
+This guide shows a basic twopy session. You install and start the app, open a recording, draw ROIs, and apply Savitzky-Golay smoothing. Then, you save the analysis and export response plots.
 
 ## Install twopy
 
@@ -55,13 +55,11 @@ After loading, twopy adds `mean image`, optional `aligned movie`, and editable `
 
 Select the `rois` Labels layer in the layer list. Use the Labels paint tool to draw each ROI. Give each cell a different label number by changing `label` in the left layer-controls panel before painting the next ROI.
 
-Use `Save ROIs` in the left `twopy save ROIs` panel when you only want to save the ROI masks without running the full response analysis.
-
 ![Drawing ROIs in the rois Labels layer](docs/assets/tutorial/02-draw-rois.png)
 
 ## Turn On Savitzky-Golay Smoothing
 
-Open the right-side `twopy response options` dock and choose the `Plot` tab. In the `Smoothing` section:
+Open the `Plot` tab in the right `twopy` sidebar. In the `Smoothing` section:
 
 1. Set `Method` to `savgol`.
 2. Set `Window` to an odd frame count, such as `7`.
@@ -99,7 +97,7 @@ Open the `Export` tab. Use:
 - `Save plots with ROIs` for ROI-overlay plus response figures.
 - `Save recording view`, `Save ROI view`, or `Save recording ROI overlay` for image-only exports.
 
-Plot exports are written under `exports/plots/`; overlay exports are written under `exports/plots_with_rois/`.
+twopy writes plot exports to `exports/plots/`. It writes overlay exports to `exports/plots_with_rois/`.
 
 ![Exporting response plots](docs/assets/tutorial/05-export-plots.png)
 

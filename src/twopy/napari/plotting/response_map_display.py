@@ -9,7 +9,7 @@ figures.
 
 Display scaling clips outliers without changing saved heatmap data. The signed
 color range is the 95th percentile of finite absolute response values. With
-shared limits enabled, the percentile pool is all loaded epochs; with shared
+shared limits enabled, the percentile pool is all loaded epochs. With shared
 limits disabled, the pool is only the epoch being drawn. The colorbar still
 labels the semantic direction as ``-``, ``0``, ``+`` because the numeric limit is
 display-only and may differ between epochs.
@@ -49,7 +49,7 @@ def display_response_values(
 
     Returns:
         Response values clipped to the robust signed display range. The returned
-        array remains in persisted response units; callers pass the matching
+        array remains in persisted response units. Callers pass the matching
         ``display_response_limit`` to the colormap.
     """
     response = epoch.response_values

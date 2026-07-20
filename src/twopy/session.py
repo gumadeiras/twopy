@@ -164,7 +164,7 @@ def _find_one_file(session_dir: Path, pattern: str, label: str) -> Path:
         joined = ", ".join(str(path) for path in matches) if matches else "none"
         msg = (
             f"Expected exactly one {label} matching {pattern!r} in "
-            f"{session_dir}; found {len(matches)}: {joined}"
+            f"{session_dir}. Found {len(matches)}: {joined}"
         )
         raise ValueError(msg)
 

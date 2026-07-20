@@ -3,7 +3,7 @@
 Inputs: grouped trial responses with explicit relative time vectors.
 Outputs: ROI-level correlation scores and inclusion masks.
 
-The functions here score response consistency; they do not delete raw data.
+The functions here score response consistency. They do not delete raw data.
 Callers can use the inclusion mask for plotting or summaries while preserving
 the scores as an audit trail.
 """
@@ -179,7 +179,7 @@ def _validate_correlation_inputs(
 ) -> None:
     """Validate grouped-response correlation inputs."""
     if not -1.0 <= minimum_correlation <= 1.0:
-        msg = f"minimum_correlation must be between -1 and 1; got {minimum_correlation}"
+        msg = f"minimum_correlation must be between -1 and 1. Got {minimum_correlation}"
         raise ValueError(msg)
     if reference not in {"epoch_mean", "epoch_peak"}:
         msg = f"Unknown correlation reference {reference!r}"

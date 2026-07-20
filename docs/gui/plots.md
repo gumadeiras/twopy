@@ -21,13 +21,13 @@ The same window values are used by **Save ROIs + analysis** so the saved plots m
 
 In **Plot** tab → **dF/F** section:
 
-- **Background correction**: `none`, `global percentile`, `shared y-stripe P%`, or `ROI y-stripe P%`. The y-stripe variants are designed for dense axon / dendrite fields. ROI y-stripe needs dim unlabeled background near each ROI; if that local band contains bright structures instead of additive background, it can subtract more than the ROI baseline and twopy stops before dF/F because zero or negative corrected baseline fluorescence would create artificial huge responses. Use **shared y-stripe P%** or **global percentile**, or leave local background gaps around each ROI.
+- **Background correction**: `none`, `global percentile`, `shared y-stripe P%`, or `ROI y-stripe P%`. Use the y-stripe methods for dense axon or dendrite fields. ROI y-stripe needs dim, unlabeled background near each ROI. A band with bright structures can subtract more than the ROI baseline. If this occurs, twopy stops before dF/F. A zero or negative corrected baseline can cause very large artificial responses. Use **shared y-stripe P%**, **global percentile**, or dim background gaps around each ROI.
 - **Baseline mode**: defaults to `baseline epoch`. Switching to `no baseline epoch` relabels the epoch selector to **First epoch** and fits a continuous span starting from that epoch.
 - **Baseline epoch**: defaults to the first epoch name containing `gray`, `grey`, or `interleave`. Falls back to epoch 1 when no name hints at a baseline.
 - **Fit mode**: `direct bounded tau`, `log-linear`, or `direct bounded tau and amplitude`. Direct bounded tau is the default.
 - **Motion masking** — masks motion-artifact frames out of trial averaging.
 
-The labels you see are the friendly names; the saved analysis file stores the canonical analysis values.
+The GUI shows readable labels. The saved analysis file stores the canonical analysis values.
 
 ### Smoothing
 
@@ -52,7 +52,7 @@ Scores grouped trials and stores the settings plus per-ROI scores in the analysi
 
 The Heatmaps tab paints a signed blue-black-orange response overlay on the mean image: black is no response, blue is suppression, orange is activation. Heatmaps are movie-level — they do not need any ROIs.
 
-For each photodiode-aligned epoch window, twopy averages a local pre-epoch baseline image and the response frames, then computes signed dF/F. The mean-image foreground percentile both masks dim background and sets the dF/F denominator floor, so low-signal background pixels cannot blow up by dividing through near-zero baseline. Motion-artifact frames are masked first. Repeated trials of the same epoch are averaged into one epoch map; all maps are saved with one shared absolute normalization, and `response_scale` in `response_heatmaps.h5` records the original dF/F magnitude that maps to value 1.
+For each photodiode-aligned epoch window, twopy averages a local baseline image and the response frames. Then, it calculates signed dF/F. The mean-image foreground percentile masks dim background and sets the minimum dF/F denominator. Thus, a near-zero baseline cannot make low-signal pixels very large. twopy masks motion-artifact frames first. It averages repeated trials of the same epoch into one map. All maps use one shared absolute normalization. In `response_heatmaps.h5`, `response_scale` records the original dF/F magnitude that maps to 1.
 
 ### Heatmap modes (Plot tab → Response Map options)
 
@@ -62,6 +62,6 @@ For each photodiode-aligned epoch window, twopy averages a local pre-epoch basel
 
 ### Color limits
 
-Color limits are display-only. twopy uses the 95th percentile of finite absolute responses to ignore outlier pixels. The **Shared limits** checkbox controls whether that percentile is pooled across all epochs or computed per visible epoch; toggling it repaints cached heatmaps without recomputing.
+Color limits are display-only. twopy uses the 95th percentile of finite absolute responses to ignore outlier pixels. **Shared limits** calculates that percentile across all epochs or for each visible epoch. A change repaints cached heatmaps without a new calculation.
 
 Heatmap data is saved by **Save ROIs + analysis** into `response_heatmaps.h5`. The Export tab can write the visible heatmaps as PDF and PNG under `exports/response_heatmaps/`.

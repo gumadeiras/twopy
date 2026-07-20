@@ -1,6 +1,6 @@
 # Writing custom workflows
 
-A custom workflow is a Python file twopy can load into the **Custom** tab. It runs against the active recording's converted data and current ROIs, and it can write files, return tables, draw line plots, replace the ROI set, or update the response-plot visibility.
+A custom workflow is a Python file that twopy can load into the **Custom** tab. It uses the active recording's converted data and current ROIs. It can write files, return tables, draw line plots, replace ROIs, or change response-plot visibility.
 
 If you only want to *use* the Custom tab, see [Running custom workflows](gui/custom_tab.md). If you want to run the same workflows from a script, see [Run a custom workflow from Python](python_api.md#run-a-custom-workflow-from-python).
 
@@ -16,7 +16,7 @@ custom_workflow_paths:
   - /Volumes/magic/clarklab/shared/twopy_workflows
 ```
 
-Each folder is scanned for top-level `.py` files. Helper modules can sit beside workflow files; prefix helper filenames with `_` to keep them out of the dropdown. Invalid workflows are listed in the Custom tab status text and excluded from the dropdown.
+twopy scans each folder for top-level `.py` files. Helper modules can be next to workflow files. Start a helper file name with `_` to keep it out of the dropdown. The Custom tab status text lists invalid workflows. The dropdown does not show them.
 
 ## The minimum a workflow needs
 
@@ -72,7 +72,7 @@ def run(ctx: CustomRunContext, params: DirectionSelectivityParams) -> CustomResu
 
 Required at the decorator: `id`, `name`, `version`, `description`, `params`. Required on the function: an exact `CustomRunContext` first argument, the params dataclass as second, and `CustomResult` as the return type. Versions must use `X.Y` (`1.0`, `2.3`, ...).
 
-twopy rejects workflows that are missing any of those, that use a non-frozen params dataclass, that have parameters without defaults, or that use unsupported parameter types or unknown roles.
+twopy rejects a workflow if required items are missing. It also rejects a mutable params dataclass, parameters without defaults, unsupported parameter types, and unknown roles.
 
 ## CustomRunContext
 
@@ -82,7 +82,7 @@ ROIs and responses:
 
 - `ctx.current_rois()` — current ROI masks, or a clear error if none.
 - `ctx.rois_for_selector(selector)` — pass the value of a `roi_selector` parameter (`"all_rois"` or `"visible_rois"`).
-- `ctx.roi_indices_for_selector(selector)` — matching zero-based ROI rows from the full set, useful when a workflow computes on a subset but needs to update the existing Plot-tab visibility without replacing plot data.
+- `ctx.roi_indices_for_selector(selector)` — gives matching zero-based ROI rows from the full set. Use it to calculate a subset and change Plot-tab visibility without new plot data.
 - `ctx.compute_standard_responses(rois)` — runs the same dF/F and trial grouping the Plot tab uses.
 
 Recording metadata:
@@ -118,7 +118,7 @@ Helpers from `twopy.custom`:
 
 The Custom tab renders dataclass fields as form controls. Supported field types are `bool`, `int`, `float`, `str`, `Path`, `Literal[...]`, and `Enum`. Field metadata can set `label`, `description`, `min`, `max`, `step`, and `decimals`.
 
-`twopy_role` declares standard controls and validation. Unknown roles reject the workflow before it appears in the GUI; mismatched role/type pairs also reject (e.g. `twopy_role="epoch"` on a `float` field).
+`twopy_role` specifies standard controls and checks. An unknown role stops the workflow before it appears in the GUI. A role and type mismatch also stops it. For example, `twopy_role="epoch"` cannot be on a `float` field.
 
 | `twopy_role` | Field type | GUI behavior |
 | --- | --- | --- |
@@ -145,12 +145,12 @@ Roles are tied to declared `metadata`, not field names. A field named `start`, `
 - `message` — short status string.
 - `files=(path, ...)` — non-HDF5 files to attach metadata to.
 - `tables=(CustomTable(name, path, highlighted_rows=(...)), ...)` — CSV/TSV tables previewed in the Custom tab. `highlighted_rows` marks zero-based data rows.
-- `plots=(CustomLinePlot(name, x, y, labels, y_label=..., colors=..., bands=(CustomLineBand(...),)), ...)` — line plots. `colors` accepts `#RRGGBB` strings; `CustomLineBand` draws filled uncertainty bands behind a series.
+- `plots=(CustomLinePlot(name, x, y, labels, y_label=..., colors=..., bands=(CustomLineBand(...),)), ...)` — line plots. `colors` accepts `#RRGGBB` strings. `CustomLineBand` draws filled uncertainty bands behind a series.
 - `rois=RoiSet(...)` — replace the current Labels layer ROI set.
 - `visible_roi_indices=(...)` — change the Plot-tab and ROIs-tab visibility without replacing the plot data.
 - `response_plot_data=ctx.response_plot_data(...)` — replacement response plot data.
 
-All file and table outputs must live below `ctx.output_dir`; using `ctx.output_path("name.csv")` enforces this.
+All file and table outputs must be below `ctx.output_dir`. Use `ctx.output_path("name.csv")` to enforce this rule.
 
 ## Provenance
 
@@ -159,7 +159,7 @@ twopy records what ran:
 - For CSV, PDF, PNG, and other non-HDF5 outputs, twopy writes a sidecar like `direction_selectivity.twopy-workflow.yml`.
 - For HDF5 outputs, twopy writes a `twopy_workflow` metadata group inside the file.
 
-Both record the workflow id, name, version, source file path, source hash, twopy version, run time, parameters, and recording path. Files written via `ctx.write_roi_table()` and `ctx.write_matrix_csv()` get metadata automatically; files returned in `CustomResult.files` or `CustomResult.tables` get metadata after the workflow returns.
+Both record the workflow ID, name, version, source path, source hash, twopy version, run time, parameters, and recording path. `ctx.write_roi_table()` and `ctx.write_matrix_csv()` add metadata automatically. Returned `CustomResult.files` and `CustomResult.tables` get metadata after the workflow is complete.
 
 With analysis caching on, custom outputs and their metadata sync to `analysis_output` through the same path **Save ROIs + analysis** uses.
 

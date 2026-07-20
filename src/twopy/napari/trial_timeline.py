@@ -4,7 +4,7 @@ Inputs: converted recordings, napari movie layers, and viewer dimension events.
 Outputs: a compact bottom timeline plus current trial text in the viewer.
 
 This module owns presentation and viewer lifecycle for trial-structure display.
-The scientific timing still comes from ``twopy.analysis``; this file only turns
+The scientific timing still comes from ``twopy.analysis``. This file only turns
 those frame windows into a lightweight navigation aid while users scroll the
 recording stack.
 """

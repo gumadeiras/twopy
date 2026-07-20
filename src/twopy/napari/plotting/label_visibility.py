@@ -66,7 +66,7 @@ def apply_roi_visibility_to_labels_layer(
     Returns:
         None.
 
-    Deselected ROIs keep their label pixels in ``layer.data``; only their
+    Deselected ROIs keep their label pixels in ``layer.data``. Only their
     display alpha is reduced. Future labels stay drawable because the direct
     colormap contains napari-style colors for a broad range of label values
     instead of a single fallback color.

@@ -37,7 +37,7 @@ def validate_database_access(database_access: DatabaseAccess) -> None:
         ValueError: If the mode is not ``direct`` or ``copy``.
     """
     if database_access not in {"direct", "copy"}:
-        msg = f"database_access must be 'direct' or 'copy'; got {database_access!r}"
+        msg = f"database_access must be 'direct' or 'copy'. Got {database_access!r}"
         raise ValueError(msg)
 
 

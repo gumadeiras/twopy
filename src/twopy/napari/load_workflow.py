@@ -6,7 +6,7 @@ Outputs: loaded recordings, structured failures, and source-cache warnings.
 This module owns the non-Qt decisions in the Load workflow: source or converted
 path resolution, duplicate selection, selected-row replacement, loaded-count
 accounting, and per-path failure collection. The controls module chooses paths
-and renders dialogs; this module changes the recording session.
+and renders dialogs. This module changes the recording session.
 """
 
 from __future__ import annotations
@@ -181,9 +181,9 @@ def load_recording_paths(
         roi_file_to_load: Optional ROI path for single-recording loads.
         replace_selected: Whether a single load should replace the selected row.
         resolve_recording: Recording path resolver. Tests can provide a local
-            fake; production uses ``resolve_or_convert_recording``.
+            fake. Production uses ``resolve_or_convert_recording``.
         prepare_view_data: Worker-safe view-data reader. Tests can provide a
-            fake; production reads converted HDF5 files.
+            fake. Production reads converted HDF5 files.
 
     Returns:
         Structured load result with new-recording count, failures, source-cache
@@ -455,11 +455,11 @@ def reconvert_selected_recording(
 
     Args:
         state: Mutable napari session state.
-        reconvert_recording: Conversion callback. Tests can provide a fake;
-            production rewrites the selected output folder from source data
+        reconvert_recording: Conversion callback. Tests can provide a fake.
+            Production rewrites the selected output folder from source data
             while preserving the selected recording's output route.
         prepare_view_data: Worker-safe view-data reader. Tests can provide a
-            fake; production reads converted HDF5 files.
+            fake. Production reads converted HDF5 files.
 
     Returns:
         Structured result with status text or one failure.

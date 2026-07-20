@@ -94,7 +94,7 @@ Observed example contents:
 - Compression: gzip.
 - Chunking: `(1, 64, 127)`.
 
-Use this for ROI drawing and fluorescence trace extraction. Load lazily with HDF5/chunked reads; do not load the full movie into memory unless the caller explicitly requests it.
+Use this dataset to draw ROIs and extract fluorescence traces. Use lazy HDF5 or chunked reads. Load the full movie only when the caller requests it.
 
 ### `*.tif`
 
@@ -178,7 +178,7 @@ Observed example contents:
   - `motor.absYPosition`: `-4694.3`
   - `motor.absZPosition`: `-8503.4`
 
-Use this as the canonical source for acquisition settings. Values vary with the recording. Physical pixel size is not directly established from the inspected fields; it needs scanner/objective calibration. twopy can use converted fields such as `configName`, `acq.zoomFactor`, scanner labels, timing, and run-level rig names to preselect a pixel-calibration profile when that evidence identifies one measured calibration group; measured pixel size still comes from the tracked calibration registry.
+Use this as the main source for acquisition settings. Values are different for each recording. The inspected fields do not directly give physical pixel size. That value needs scanner and objective calibration. Converted fields can select a pixel-calibration profile when they identify one measured group. These fields include `configName`, `acq.zoomFactor`, scanner labels, timing, and run-level rig names. The tracked calibration registry gives the measured pixel size.
 
 ### `imagingResPd.mat`
 
@@ -301,7 +301,7 @@ Observed example contents:
 - Column 1, `time_seconds`: stimulus-computer time in seconds, written as `Q.timing.flipt - Q.timing.t0`.
 - Column 2, `stimulus_frame_number`: stimulus-computer frame number, written as `Q.timing.framenumber`.
 - Column 3, `epoch_number`: current stimulus epoch number, written as `Q.stims.currStimNum`.
-- Columns 4-13, `closed_loop_01` through `closed_loop_10`: closed-loop slots written from `Q.stims.stimData.cl(1:10)`. They are initialized as zeros in `SetupLEDStimulus.m`; whether they are meaningful depends on the stimulus code used during the recording.
+- Columns 4-13, `closed_loop_01` through `closed_loop_10`: closed-loop slots written from `Q.stims.stimData.cl(1:10)`. `SetupLEDStimulus.m` sets their initial value to zero. Their meaning depends on the stimulus code that the recording used.
 - Columns 14-33, `stimulus_specific_01` through `stimulus_specific_20`: stimulus-specific slots written from `Q.stims.stimData.mat(1:20)`. Their meaning is defined by the MATLAB stimulus function used for that epoch.
 - Column 34, `photodiode_flash`: photodiode flash value written from `Q.stims.stimData.flash`. In `RunLEDStimulus.m`, this is set high while `framesSinceEpochChange < 11`, and the stimulus function can pass it to the LabJack photodiode output.
 - Column 35, `trailing_empty`: trailing empty CSV field caused by `WriteStimData.m` writing a final comma after `photodiode_flash`. Do not interpret this as stimulus data.
@@ -426,13 +426,13 @@ Minimum source-file load set for conversion:
 
 twopy reads this set with `load_source_conversion_inputs(recording_dir)` and writes converted HDF5 files with `convert_recording_to_twopy(...)`. The source files are read-only conversion inputs. Response analysis should use the converted HDF5 files rather than reading MATLAB files directly.
 
-This load set is smaller than the full required top-level folder list. The raw `*.tif` movie and `defaultAlignChannel.txt` are still required in the source recording because they support raw-data access, metadata audits, and alignment review, but normal conversion does not need to read them.
+This load set is smaller than the full required top-level folder list. The source recording must still contain the raw `*.tif` movie and `defaultAlignChannel.txt`. These files support raw-data access, metadata audits, and alignment review. Normal conversion does not read them.
 
 The converted `recording_data.h5` file contains:
 
 - `movie`: attributes pointing to the separate aligned movie file and dataset.
 - `movie/mean_image`: uncompressed mean image generated during conversion in Python image order matching MATLAB display, with `spatial_orientation=matlab_display`. This is one image, so compression is unnecessary complexity.
-- `movie/alignment_valid_crop`: half-open spatial crop bounds computed from stimulus-bounded alignment offsets and mapped into the converted Python image axes. The converted aligned movie stays full-frame; analysis code uses this crop when it should ignore invalid motion-border pixels. The group stores `alignment_shift_pixels` as the total movement magnitude per frame and `motion_artifact_mask` as the high-motion frame mask. New converted files also store `alignment_offset_pixels` as one signed `[x, y]` row per movie frame.
+- `movie/alignment_valid_crop`: half-open spatial crop bounds from stimulus-bounded alignment offsets in the converted Python image axes. The converted aligned movie stays full-frame. Analysis code uses this crop to ignore invalid motion-border pixels. The group stores total movement per frame in `alignment_shift_pixels`. It stores the high-motion frame mask in `motion_artifact_mask`. New converted files also store one signed `[x, y]` row per movie frame in `alignment_offset_pixels`.
 - `metadata`: selected acquisition fields as HDF5 attributes.
 - `run`: stimulus-run metadata from `runDetails.mat`, converted to snake_case twopy field names such as `rig_name`, `run_number`, `fly_id`, and `rig_temperature`.
 - `stimulus/data`: numeric stimulus data.
@@ -453,7 +453,7 @@ The twopy ROI HDF5 file contains:
 - root attribute `spatial_orientation`: `matlab_display`, meaning the array uses Python image order matching MATLAB display.
 - `masks`: boolean ROI masks with shape `(rois, y, x)` in converted aligned-movie coordinates. The dataset also carries `spatial_orientation=matlab_display` so extracted masks remain auditable when inspected outside twopy.
 - `labels`: one human-readable label per ROI.
-- `roi_generation`: optional group with scalar attributes describing the ROIs-tab mode and settings for the saved masks. `schema_version=1` identifies the metadata shape. Every group has `roi_mode`, one of `manual`, `grid`, `watershed`, or `response_watershed`. `grid` stores `units`; pixel grids store `grid_size_pixels`, while micron grids store `micron_grid_size`, `rig`, `calibration_mode`, `scanner`, `zoom`, and `allow_extrapolation`. `watershed` stores `watershed_min_pixels` and `watershed_smoothing_sigma`. `response_watershed` stores `response_watershed_min_pixels`, `response_watershed_smoothing_sigma`, `response_watershed_fill_holes`, and `response_watershed_closing_radius`. Generated modes may also store `edited_after_generation=True` when the user changed the Labels masks by hand after creating them.
+- `roi_generation`: optional group with scalar attributes for the ROIs-tab mode and saved-mask settings. `schema_version=1` identifies the metadata shape. Each group has a `roi_mode`: `manual`, `grid`, `watershed`, or `response_watershed`. `grid` stores `units`. Pixel grids store `grid_size_pixels`. Micron grids store `micron_grid_size`, `rig`, `calibration_mode`, `scanner`, `zoom`, and `allow_extrapolation`. `watershed` stores `watershed_min_pixels` and `watershed_smoothing_sigma`. `response_watershed` stores its minimum pixels, smoothing, fill holes, and closing radius values. Generated modes can store `edited_after_generation=True` after a manual Labels-mask edit.
 
 When `analysis_outputs.h5` includes `roi_set`, that group and its `roi_set/masks` dataset carry the same `spatial_orientation=matlab_display` marker. The marker means those masks use Python image order matching MATLAB display. The other arrays in `analysis_outputs.h5` are trace, response, timing, and settings arrays indexed by frame, timepoint, ROI, or epoch rather than spatial image pixels.
 
@@ -490,9 +490,9 @@ Raw-data fallback/audit:
 
 ## Analysis Output Paths
 
-twopy reads config from `TWOPY_CONFIG`, local `./config.yml`, or the user config file created by `twopy config setup`. On macOS and Linux that user file is `~/.config/twopy/config.yml`; on Windows it is under `%APPDATA%\twopy\config.yml`. The file contains ordered `data_paths`, `analysis_caching`, `analysis_cache_dir`, `analysis_cache_max_gb`, and `analysis_output`.
+twopy reads config from `TWOPY_CONFIG`, local `./config.yml`, or the user config file from `twopy config setup`. On macOS and Linux, the user file is `~/.config/twopy/config.yml`. On Windows, it is under `%APPDATA%\twopy\config.yml`. The file contains ordered `data_paths`, `analysis_caching`, `analysis_cache_dir`, `analysis_cache_max_gb`, and `analysis_output`.
 
-- `data_paths` lists source recording roots in preference order. Database recording lookup checks each root and uses the first existing recording; if none exists, twopy reports the path under the first root.
+- `data_paths` lists source recording roots in preference order. Database recording lookup checks each root and uses the first existing recording. If none exists, twopy reports the path under the first root.
 - `analysis_caching: true` keeps converted recordings and interactive analysis work under `analysis_cache_dir`, mirrored relative to the matched `data_paths` root for normal lab recordings. Recordings outside `data_paths` use a stable `_external` cache folder. The napari load and save workflows copy converted HDF5 files and saved analysis outputs back to `analysis_output`.
 - `analysis_cache_max_gb` defaults to `33` when omitted. After conversion, localization, save, or export writes grow the local cache, twopy removes old cache entries until the known cache size is under this limit. It only removes entries whose files already exist in the final output folder, and skips active, unsynced, stale, source-unavailable, or unmapped entries.
 - `analysis_caching: false` uses `analysis_output` directly as the work directory.

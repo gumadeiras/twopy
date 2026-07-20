@@ -6,7 +6,7 @@ Outputs: ROI dF/F traces, fitted baselines, shared exponential tau, and
 per-ROI amplitudes.
 
 This module owns ROI-level dF/F calculation from twopy Python objects. It does
-not decide which stimulus events are baseline epochs; callers pass explicit
+not decide which stimulus events are baseline epochs. Callers pass explicit
 baseline windows derived from converted data and photodiode alignment.
 """
 
@@ -200,8 +200,8 @@ def _validate_dff_inputs(
         raise ValueError(msg)
     if traces.corrected_values.shape[1] != len(traces.labels):
         msg = (
-            "ROI labels must match corrected_values width; "
-            f"got {len(traces.labels)} labels for "
+            "ROI labels must match corrected_values width. "
+            f"Got {len(traces.labels)} labels for "
             f"{traces.corrected_values.shape[1]} ROIs"
         )
         raise ValueError(msg)
@@ -209,12 +209,12 @@ def _validate_dff_inputs(
         msg = "At least one baseline window is required for dF/F"
         raise ValueError(msg)
     if data_rate_hz <= 0:
-        msg = f"data_rate_hz must be positive; got {data_rate_hz}"
+        msg = f"data_rate_hz must be positive. Got {data_rate_hz}"
         raise ValueError(msg)
     if baseline_sample_seconds is not None and baseline_sample_seconds <= 0:
         msg = (
-            "baseline_sample_seconds must be positive or None; "
-            f"got {baseline_sample_seconds}"
+            "baseline_sample_seconds must be positive or None. "
+            f"Got {baseline_sample_seconds}"
         )
         raise ValueError(msg)
     if fit_mode not in _FIT_MODES:
@@ -267,7 +267,7 @@ def _baseline_samples(
         duration = sample_stop - sample_start
         absolute_sample_start = trace_start_frame + sample_start
         # The fit uses one-based movie frame numbers centered on the averaged
-        # half-open sample range. Local indices slice the trace array; absolute
+        # half-open sample range. Local indices slice the trace array. Absolute
         # frame numbers preserve the recording-wide time coordinate.
         frame_numbers.append(float(absolute_sample_start + 1) + (duration / 2.0))
         values.append(fluorescence[sample_start:sample_stop, :].mean(axis=0))
@@ -298,7 +298,7 @@ def _validate_baseline_samples_for_background_method(
     minimum = float(np.nanmin(baseline_samples.values[:, roi_indices]))
     msg = (
         "ROI y-stripe P% background subtraction over-subtracted baseline "
-        f"fluorescence for {labels}; minimum corrected baseline sample is "
+        f"fluorescence for {labels}. Minimum corrected baseline sample is "
         f"{minimum:.6g}. dF/F needs positive baseline fluorescence, so the "
         "local y-stripe pixels are not a valid additive background for those "
         "ROIs. Use shared y-stripe P%, global percentile, or revise the ROIs "
@@ -383,10 +383,10 @@ def _fit_shared_tau(
         Shared exponential ``tau``.
 
     The fit model is ``exp(tau * t + b)`` on the ROI-averaged baseline trace.
-    Only ``tau`` is shared; per-ROI amplitudes are computed in a separate
+    Only ``tau`` is shared. Per-ROI amplitudes are computed in a separate
     transparent step. ``direct_bounded_tau`` handles nonpositive outliers
-    defensively; ``direct_bounded_tau_and_log_amplitude`` preserves a bounded
-    log-amplitude contract; and ``log_linear`` fits in log space.
+    defensively. ``direct_bounded_tau_and_log_amplitude`` preserves a bounded
+    log-amplitude contract. The ``log_linear`` method fits in log space.
     """
     if fit_mode == "log_linear":
         return _fit_shared_tau_log_linear(
@@ -532,8 +532,8 @@ def _fit_shared_tau_with_bounded_log_amplitude(
         msg = (
             "direct_bounded_tau_and_log_amplitude dF/F fit requires first "
             "baseline fluorescence greater than 1.0 to define an ordered "
-            "log-amplitude bound; "
-            f"got {first_value}"
+            "log-amplitude bound. "
+            f"Got {first_value}"
         )
         raise ValueError(msg)
     if np.any(mean_fluorescence <= 0):

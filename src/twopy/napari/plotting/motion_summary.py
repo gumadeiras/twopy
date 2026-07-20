@@ -164,8 +164,8 @@ def _motion_summary_text(recording: RecordingData) -> str:
         f"from a {crop.original_shape[1]} x {crop.original_shape[0]} px frame\n"
         "Removed border: "
         f"left {left} px, right {right} px, top {top} px, bottom {bottom} px\n"
-        f"Total movement: 95% of frames moved <= {p95:.2f} px; "
-        f"max {max_shift:.2f} px; high-motion {bad_count}/{frame_count} frames\n"
+        f"Total movement: 95% of frames moved <= {p95:.2f} px. "
+        f"Max {max_shift:.2f} px. High-motion {bad_count}/{frame_count} frames\n"
         + _plot_description(recording)
     )
 

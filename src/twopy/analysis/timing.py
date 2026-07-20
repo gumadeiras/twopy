@@ -245,7 +245,7 @@ def _interpolate_epoch_numbers(
 ) -> npt.NDArray[np.int64]:
     """Interpolate positive stimulus epochs onto imaging-frame slots."""
     if frame_count < 1:
-        msg = f"frame_count must be positive; got {frame_count}"
+        msg = f"frame_count must be positive. Got {frame_count}"
         raise ValueError(msg)
 
     positive = epoch_values != 0

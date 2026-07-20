@@ -433,8 +433,8 @@ def _skipped_segments_message(kernels: RecordingKernelFit) -> str:
     if skipped == 0:
         return f"Fitted {fitted} regular stimulus segments."
     return (
-        f"Skipped {skipped} irregular stimulus segments; "
-        f"fitted {fitted} regular segments."
+        f"Skipped {skipped} irregular stimulus segments. "
+        f"Fitted {fitted} regular segments."
     )
 
 

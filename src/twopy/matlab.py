@@ -36,7 +36,7 @@ class MatlabVariableSummary:
     Inputs: one variable loaded from or discovered inside a MATLAB file.
     Outputs: name, Python-facing type, shape, dtype, and whether it is a group.
 
-    This object keeps inspection results small and auditable; large arrays stay
+    This object keeps inspection results small and auditable. Large arrays stay
     on disk unless later conversion code explicitly asks to load them.
     """
 

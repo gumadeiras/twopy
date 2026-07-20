@@ -124,7 +124,7 @@ def save_current_roi_analysis(
             run.response_summary_grouped_csv_path,
         ),
     )
-    status_text = f"{status_text}; {_sync_status_suffix(route, sync_plan)}"
+    status_text = f"{status_text}. {_sync_status_suffix(route, sync_plan)}"
     return SaveAnalysisResult(
         roi_output_path=roi_output_path,
         analysis_output_path=run.output_path,
@@ -140,10 +140,10 @@ def _sync_status_suffix(
 ) -> str:
     """Return the save-status suffix for one route and optional sync plan."""
     if sync_plan is not None:
-        return f"syncing to {sync_plan.publish_root}"
+        return f"Syncing to {sync_plan.publish_root}"
     if same_output_path(route.local_root, route.publish_root):
-        return f"saved directly to {route.publish_root}"
-    return f"no syncable files under {route.local_root}"
+        return f"Saved directly to {route.publish_root}"
+    return f"No syncable files under {route.local_root}"
 
 
 def _save_response_heatmaps(

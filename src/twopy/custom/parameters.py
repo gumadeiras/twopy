@@ -365,7 +365,7 @@ def _require_role_kind(
     if kind in allowed:
         return
     allowed_text = " or ".join(allowed)
-    msg = f"parameter {name!r} role {role!r} requires {allowed_text}; got {kind}"
+    msg = f"parameter {name!r} role {role!r} requires {allowed_text}. Got {kind}"
     raise CustomParameterError(msg)
 
 

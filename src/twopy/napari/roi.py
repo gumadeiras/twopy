@@ -342,7 +342,7 @@ def validate_roi_layer_matches_recording_crop(
         msg = (
             "ROI Labels layer must use the cropped recording view. "
             f"Expected display shape {expected_shape} from "
-            f"{crop.source}; got {display_labels.shape}."
+            f"{crop.source}. Got {display_labels.shape}."
         )
         raise ValueError(msg)
 

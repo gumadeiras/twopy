@@ -133,7 +133,7 @@ class ConvertedMovie:
             context="converted movie frame range",
         )
         if chunk_frames < 1:
-            msg = f"chunk_frames must be at least 1; got {chunk_frames}"
+            msg = f"chunk_frames must be at least 1. Got {chunk_frames}"
             raise ValueError(msg)
         crop = _normalize_spatial_crop(self.shape[1:], spatial_crop)
 
@@ -326,8 +326,8 @@ def recording_hemisphere(recording: RecordingData) -> Hemisphere:
     if database_value is not None:
         return database_value
     msg = (
-        "Converted recording metadata does not include hemisphere; "
-        "set run metadata field 'hemisphere' before using metadata defaults."
+        "Converted recording metadata does not include hemisphere. "
+        "Set run metadata field 'hemisphere' before using metadata defaults."
     )
     raise ValueError(msg)
 
@@ -418,27 +418,27 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
     frame_count = recording.movie.shape[0]
     if recording.imaging_res_pd.shape != (frame_count,):
         msg = (
-            "imaging_res_pd must have one sample per aligned movie frame; "
-            f"got {recording.imaging_res_pd.shape} for {frame_count} frames"
+            "imaging_res_pd must have one sample per aligned movie frame. "
+            f"Got {recording.imaging_res_pd.shape} for {frame_count} frames"
         )
         raise ValueError(msg)
     if len(recording.stimulus_data_column_names) != recording.stimulus_data.shape[1]:
         msg = (
-            "stimulus data column names must match data width; "
-            f"got {len(recording.stimulus_data_column_names)} names for "
+            "stimulus data column names must match data width. "
+            f"Got {len(recording.stimulus_data_column_names)} names for "
             f"{recording.stimulus_data.shape[1]} columns"
         )
         raise ValueError(msg)
     if recording.mean_image.shape != recording.movie.shape[1:]:
         msg = (
-            "movie/mean_image shape must match movie spatial shape; "
-            f"got {recording.mean_image.shape} and {recording.movie.shape[1:]}"
+            "movie/mean_image shape must match movie spatial shape. "
+            f"Got {recording.mean_image.shape} and {recording.movie.shape[1:]}"
         )
         raise ValueError(msg)
     if recording.alignment_valid_crop.original_shape != recording.movie.shape[1:]:
         msg = (
-            "alignment_valid_crop original shape must match movie spatial shape; "
-            f"got {recording.alignment_valid_crop.original_shape} and "
+            "alignment_valid_crop original shape must match movie spatial shape. "
+            f"Got {recording.alignment_valid_crop.original_shape} and "
             f"{recording.movie.shape[1:]}"
         )
         raise ValueError(msg)
@@ -447,20 +447,20 @@ def _validate_loaded_recording(recording: RecordingData) -> None:
         and recording.alignment_offset_pixels.shape != (frame_count, 2)
     ):
         msg = (
-            "alignment_offset_pixels must have x/y values for each movie frame; "
-            f"got {recording.alignment_offset_pixels.shape} for {frame_count} frames"
+            "alignment_offset_pixels must have x/y values for each movie frame. "
+            f"Got {recording.alignment_offset_pixels.shape} for {frame_count} frames"
         )
         raise ValueError(msg)
     if recording.alignment_shift_pixels.shape != (frame_count,):
         msg = (
-            "alignment_shift_pixels must have one value per movie frame; "
-            f"got {recording.alignment_shift_pixels.shape} for {frame_count} frames"
+            "alignment_shift_pixels must have one value per movie frame. "
+            f"Got {recording.alignment_shift_pixels.shape} for {frame_count} frames"
         )
         raise ValueError(msg)
     if recording.motion_artifact_mask.shape != (frame_count,):
         msg = (
-            "motion_artifact_mask must have one value per movie frame; "
-            f"got {recording.motion_artifact_mask.shape} for {frame_count} frames"
+            "motion_artifact_mask must have one value per movie frame. "
+            f"Got {recording.motion_artifact_mask.shape} for {frame_count} frames"
         )
         raise ValueError(msg)
 
@@ -503,7 +503,7 @@ def _require_format(h5_file: h5py.File, *, expected: str, path: Path) -> None:
     """
     actual = _read_str_attr(h5_file, "twopy_format")
     if actual != expected:
-        msg = f"Expected {expected!r} HDF5 file at {path}; got {actual!r}"
+        msg = f"Expected {expected!r} HDF5 file at {path}. Got {actual!r}"
         raise ValueError(msg)
 
 

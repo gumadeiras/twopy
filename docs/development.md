@@ -24,7 +24,7 @@ micromamba run -n twopy pre-commit run --all-files
 
 The installed pre-commit hook runs ruff, ty, and unit tests before each commit. The unittest hook uses the timing helper's discover mode, so the full suite runs once and records a rolling local timing history in `.git/twopy-test-timings.json`.
 
-GUI tests set `QT_QPA_PLATFORM=offscreen`, `QT_LOGGING_RULES=qt.qpa.*=false`, and `MPLBACKEND=Agg` by default before importing Qt, napari, or matplotlib, so widget coverage should not draw windows, steal focus, or print Qt platform noise. Set those environment variables explicitly before a test command when you need a different backend for debugging.
+GUI tests set `QT_QPA_PLATFORM=offscreen`, `QT_LOGGING_RULES=qt.qpa.*=false`, and `MPLBACKEND=Agg` before they import Qt, napari, or matplotlib. Thus, widget tests do not draw windows, take focus, or print Qt platform noise. Set these environment variables before a test command if you must use a different backend for debugging.
 
 ## Targeted test runs while iterating
 
@@ -53,6 +53,6 @@ micromamba run -n twopy python scripts/function_inventory.py --format csv > buil
 micromamba run -n twopy python scripts/function_inventory.py --format markdown --limit 25
 ```
 
-The inventory reports action-oriented columns only: code lines, docstring lines, direct static call sites, direct test functions, lightweight complexity, API-surface classification, domain bucket, git file churn, current-body blame span, and a risk score. Direct test attribution follows normal `twopy` imports plus local `tests.*` helper re-exports when the called function name resolves uniquely, so shared test fixtures do not hide existing coverage.
+The inventory reports only columns that help you take action. These columns include code lines, docstring lines, direct call sites, direct test functions, complexity, API class, domain, git churn, blame span, and risk. Direct test attribution follows normal `twopy` imports and local `tests.*` helper re-exports. It applies when the called function name has one unique match. Thus, shared test fixtures do not hide existing coverage.
 
-The risk score is a review-prioritization heuristic: `(code_lines + 5 * complexity) * api_weight * test_gap_weight * churn_weight`. Exported API is weighted above public internal code, functions without direct static tests are doubled, and file commit count raises the score up to a capped churn multiplier. Complexity is a lightweight cyclomatic estimate (one base path plus branches, loops, exception handlers, boolean decision operands, match cases, and ternary expressions).
+The risk score helps you select code for review: `(code_lines + 5 * complexity) * api_weight * test_gap_weight * churn_weight`. Exported API has more weight than public internal code. Functions without direct static tests have twice the weight. File commit count increases the score to a set maximum. Complexity counts one base path, branches, loops, exception handlers, Boolean decisions, match cases, and ternary expressions.

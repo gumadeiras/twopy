@@ -71,7 +71,7 @@ def map_stimulus_specific_column(
     meaning from the backed-up MATLAB code.
     """
     if not stable_column_name.startswith("stimulus_specific_"):
-        msg = f"Expected stimulus_specific_* column; got {stable_column_name!r}"
+        msg = f"Expected stimulus_specific_* column. Got {stable_column_name!r}"
         raise ValueError(msg)
 
     selected_stimtypes = _selected_stimtypes(recording, stimtype)
@@ -232,6 +232,6 @@ def _required_int(value: object) -> int:
         ValueError: If the value cannot honestly be read as an integer.
     """
     if isinstance(value, bool) or not isinstance(value, int | str):
-        msg = f"Expected integer metadata value; got {value!r}"
+        msg = f"Expected integer metadata value. Got {value!r}"
         raise ValueError(msg)
     return int(value)

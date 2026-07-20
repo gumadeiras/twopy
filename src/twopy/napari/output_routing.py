@@ -63,7 +63,7 @@ def default_output_route(
             or ``None`` when a converted file has no source metadata.
         fallback_publish_root: Folder to use when config routing cannot map
             the source. Manual converted loads pass the selected converted
-            folder; manual source loads pass ``source/twopy``.
+            folder. Manual source loads pass ``source/twopy``.
         config_path: YAML config path used for normal ``analysis_output``.
 
     Returns:

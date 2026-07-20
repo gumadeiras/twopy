@@ -321,17 +321,17 @@ def _export_status(
     folder = format_output_folder(result[0].parent, recording)
     status = f"Saved {counted_noun(len(result), 'file')} to {folder}"
     if isinstance(sync_result, str):
-        return f"{status}; {sync_result}"
+        return f"{status}. {sync_result}"
     if sync_result is None:
         return status
     if len(sync_result.copied_paths) == 0:
-        return f"{status}; sync already current"
+        return f"{status}. Sync already current"
     if len(sync_result.removed_local_paths) > 0:
         return (
             f"Synced {counted_noun(len(sync_result.copied_paths), 'file')} "
-            f"to {sync_result.publish_root}; removed local cache copies"
+            f"to {sync_result.publish_root}. Removed local cache copies"
         )
     return (
-        f"{status}; synced {counted_noun(len(sync_result.copied_paths), 'file')} "
+        f"{status}. Synced {counted_noun(len(sync_result.copied_paths), 'file')} "
         f"to {sync_result.publish_root}"
     )

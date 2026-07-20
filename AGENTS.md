@@ -2,7 +2,7 @@
 
 ## Git
 
-- Commit with `scripts/committer "<subject>" -- <path>...`; it stages only listed paths. Use `--body` or `--body-file` for commit bodies.
+- Commit with `scripts/committer "<subject>" -- <path>...`. It stages only the listed paths. Use `--body` or `--body-file` for commit bodies.
 
 twopy is a two-photon imaging analysis tool.
 
@@ -27,7 +27,7 @@ twopy is a two-photon imaging analysis tool.
 - Write computationally efficient code. Treat CPU time, memory use, and disk I/O as real constraints because imaging data can be large.
 - Avoid unnecessary copies of large arrays. Prefer views, streaming, chunked I/O, and explicit data shapes when they keep behavior simple and auditable.
 - Use vectorized NumPy/SciPy operations where they make the logic clearer and faster than Python loops.
-- Use GPU acceleration when the workload is a good fit, the dependency cost is justified, and there is a CPU fallback or a clear hardware requirement.
+- Use GPU acceleration when the workload is suitable and the dependency cost is justified. Provide a CPU fallback or state the hardware requirement.
 - Benchmark or profile before adding complex optimization code.
 
 ## GUI
@@ -35,8 +35,8 @@ twopy is a two-photon imaging analysis tool.
 - Use napari for the user interface.
 - Keep core modules GUI-independent. Session discovery, MATLAB loading, data conversion, and analysis code must not import napari.
 - Keep napari code thin: load recordings, display movies, collect or select ROIs, call documented analysis functions, and display responses.
-- Continue building napari support in this repo for now, but structure it so a future napari plugin can wrap it. Put reusable GUI workflow code in typed `twopy.napari` helpers; a future plugin should be menus/widgets only.
-- Design the napari workflow around the planned loop: query the lab database, choose a recording, load converted twopy data, draw or edit Labels ROIs, run analysis, and inspect responses. Keep each step as a small helper so widgets stay thin.
+- Continue to build napari support in this repo, but let a future napari plugin wrap it. Put reusable GUI workflow code in typed `twopy.napari` helpers. A future plugin must contain only menus and widgets.
+- Design the napari workflow around this loop: query the lab database, choose a recording, and load converted twopy data. Then, draw or edit Labels ROIs, run analysis, and inspect responses. Keep each step in a small helper so widgets stay thin.
 - Use magicgui for small napari control panels until a custom QWidget or plugin is justified by real workflow complexity.
 - Do not hide analysis decisions inside napari callbacks. Put scientific logic in typed, tested modules.
 - Use napari image layers for recordings and Labels layers for ROI drawing or editing. ROI analysis operates on pixel masks, so Labels are the primary ROI UI contract.
@@ -71,7 +71,7 @@ twopy is a two-photon imaging analysis tool.
 
 - Read microscope source data through a MATLAB file layer.
 - Never perform analysis directly on source MATLAB or raw TIFF files.
-- Always convert source recording data into twopy-owned files first; all analysis and processing must operate on those converted files.
+- Always convert source recording data into twopy-owned files first. All analysis and processing must use those converted files.
 - Persist converted data as HDF5 files with gzip compression.
 - Store the aligned movie in a separate converted HDF5 file because it usually dominates file size.
 - During initial conversion, generate a mean image of the aligned movie. Default to the full movie and allow callers to choose a frame range.
@@ -82,11 +82,11 @@ twopy is a two-photon imaging analysis tool.
 
 - `twopy.conversion` owns reading source microscope outputs such as MAT files, raw TIFF files, stimulus backups, and text metadata.
 - `twopy.analysis` owns scientific calculations over converted twopy objects and HDF5 files. Analysis code must not read source MAT/TIFF files directly.
-- GUI selects analysis parameters; workflow owns execution; processing modules own math; persistence owns the audit trail.
+- The GUI selects analysis parameters. The workflow controls execution. Processing modules control calculations. Persistence controls the audit trail.
 - `twopy.parity` owns read-only comparison helpers for prior `savedAnalysis/` outputs and external analysis stacks. Normal conversion, analysis, and napari code should not import parity helpers.
 - When implementing behavior inspired by psycho5, make it a native twopy feature with twopy names, twopy defaults, and twopy docs. Do not add psycho5 compatibility APIs, wrappers, aliases, flags, or defaults to normal twopy modules.
 - Code whose only purpose is to reproduce or compare psycho5 behavior belongs under `twopy.parity` and must stay out of conversion, analysis, persistence, and napari runtime paths.
-- If a feature needs source data, add it to conversion and persist the needed plain twopy object first; then analyze the converted object.
+- If a feature needs source data, add it to conversion and save the required plain twopy object first. Then, analyze the converted object.
 
 ## Environment
 
@@ -98,7 +98,7 @@ twopy is a two-photon imaging analysis tool.
 ## Configuration
 
 - Keep machine-local variables in `config.yml`.
-- Never track `config.yml`; track `config.example.yml` as the documented template for creating it.
+- Never track `config.yml`. Track `config.example.yml` as the documented template.
 - Load config through typed Python helpers instead of reading YAML ad hoc.
 - Initial config keys: `database_path`, `data_path`, `database_access`, and `analysis_output`.
 - Default `database_access` to `copy` unless a task explicitly needs direct mounted DB reads. This mode exists because database queries over the network can be slow, while transferring the DB file locally is usually fast.
@@ -115,10 +115,10 @@ twopy is a two-photon imaging analysis tool.
 ## Documentation
 
 - Keep `roadmap.md` updated as work lands.
-- Roadmap updates should be high signal and low noise: record completed progress, explicit next work, and decisions; avoid speculative feature lists.
-- Keep `CHANGELOG.md` updated for user-facing changes. If a commit adds a feature, fix, behavior change, CLI change, GUI change, output-format change, or other user-visible change, add or update an entry under the top `Unreleased` section in the same commit.
+- Keep roadmap updates useful and concise. Record completed work, specified next work, and decisions. Do not add speculative feature lists.
+- Keep `CHANGELOG.md` updated for user-facing changes. In the same commit, add or update an entry under the top `Unreleased` section.
 - Never edit released changelog sections for current work. Corrections, renames, and behavior changes after a release must be recorded only under the top `Unreleased` section unless Gustavo explicitly asks for release-history repair.
-- Follow the changelog structure from `RELEASE.md`: use `Features`, `Fixes`, and `Changes` sections when they apply, omit empty sections, and write user-facing entries instead of repository chore notes.
+- Follow the changelog structure from `RELEASE.md`. Use the `Features`, `Fixes`, and `Changes` sections when they apply. Omit empty sections. Write user-facing entries instead of repository chore notes.
 - Do not hard-wrap Markdown prose or other text docs. Keep each paragraph or list item on one source line, and use manual line breaks only for headings, lists, tables, code fences, and intentional structure.
 - Every file must start with a plain-language docstring explaining its purpose.
 - Every public function, class, and method must document:
@@ -126,29 +126,35 @@ twopy is a two-photon imaging analysis tool.
   - outputs
   - what it does
   - why it exists in the analysis workflow
-- Always use ASD-STE100 Simplified Technical English in docs, docstrings, comments, and user-facing messages. Use short, direct sentences and simple approved words. Stay accurate, and use a technical term only when it is the subject.
-- Write documentation and comments from the reader's concrete object first: say what the user sees, what data value is used, and why it stays correct; avoid dense phrases that combine implementation jargon such as "factory", "derive", "identity", or "contract" unless those words are the subject being explained.
+- Always use ASD-STE100 Simplified Technical English in docs, docstrings, comments, and user-facing messages:
+  - Use short, direct sentences and approved words. Use a technical term only for its technical meaning.
+  - Use the active voice. Use the imperative form for instructions.
+  - Use a maximum of 20 words in an instruction and 25 words in a descriptive sentence.
+  - Do not use semicolons or contractions.
+  - Use one term for one meaning. Use the same term for the same item or action.
+  - Do not change literal GUI labels, identifiers, API names, file names, or quoted external text to satisfy language rules.
+- Start documentation and comments with the object that the reader sees. State the data value and explain why it is correct. Avoid dense implementation terms such as "factory", "derive", "identity", or "contract" unless the term is the subject.
 - Key analysis code must include inline comments that explain the reasoning behind the logic.
 - Comments should clarify scientific or data-processing intent. Do not restate obvious syntax.
 
 ### User-facing docs site (`docs/`)
 
-The user-facing docs live under `docs/` and are published with Sphinx + MyST + Furo to `twopy.gumadeiras.com`. Treat the code (and the actual GUI behavior it produces) as the source of truth, not the previous doc. When the code changes a button label, a tab order, a parameter default, or a public API name, update the affected page in the same change.
+The user-facing docs are in `docs/`. Sphinx, MyST, and Furo publish them to `twopy.gumadeiras.com`. The code and its GUI behavior are the source of truth. When the code changes a GUI label, tab order, default value, or public API name, update the related page.
 
 **Audience and file layout.** Each page has one audience and one job. Do not merge audiences.
 
-- `docs/index.md` — short landing page that routes readers to the right track (GUI user, Python scripter, workflow author, reference). Keep it brief; link out.
+- `docs/index.md` — short landing page that routes readers to the correct track (GUI user, Python scripter, workflow author, or reference). Keep it brief and link to detailed pages.
 - `docs/getting_started.md` — install → configure → launch → first save, for any new user. About ten minutes end-to-end.
 - `docs/gui/*.md` — one page per user task in the napari app (`loading.md`, `rois.md`, `plots.md`, `custom_tab.md`, `group_matching.md`, `saving.md`). Do **not** recreate a monolithic `gui.md`. New GUI surface gets a new task page or extends an existing one.
 - `docs/python_api.md` — task-oriented Python scripting guide. Organize by what the user wants to do (find recordings, convert, extract traces, save, …), not by twopy module.
-- `docs/writing_custom_workflows.md` — developer guide for people adding workflows. Usage of the Custom tab belongs in `docs/gui/custom_tab.md`; cross-link both directions.
+- `docs/writing_custom_workflows.md` — developer guide for people who add workflows. Put Custom tab instructions in `docs/gui/custom_tab.md`. Link the two pages to each other.
 - `docs/development.md` — for people working on twopy itself only.
 - `docs/input_data_spec.md` — short high-level contract.
 - `docs/recording_file_schema.md` — long developer / auditor reference.
 
 When in doubt, split. A page that mixes "click here" with "import this" with "the converted HDF5 layout" is doing three jobs.
 
-**Page shape.** Lead with a one-sentence hook stating what the page is for, then jump straight into action-oriented H2 sections. No long preambles, no "background" sections at the top, no restating what the project is on every page. Reference details (parameter tables, file layouts, edge cases) go at the bottom of the page they belong to, never as the first thing the reader sees.
+**Page shape.** Start with one sentence that states the purpose of the page. Then, start the action-oriented H2 sections. Do not add a long preamble, a top-level background section, or a repeated project description. Put reference details at the end of the related page.
 
 **Walls of text are bugs.** Break dense prose with subheadings, bulleted lists, or tables. If a paragraph runs past four or five sentences, split it or convert it. The user should be able to scan the page in seconds and find what they need.
 
@@ -169,7 +175,7 @@ When in doubt, split. A page that mixes "click here" with "import this" with "th
 
 **Sphinx / MyST hygiene.**
 
-- `docs/conf.py` sets `myst_heading_anchors = 3`, so use plain `[link text](page.md#heading-slug)` for in-page jumps; do not hand-roll anchors.
+- `docs/conf.py` sets `myst_heading_anchors = 3`. Use plain `[link text](page.md#heading-slug)` for in-page links. Do not make anchors manually.
 - Each top-level grouping in `index.md` gets its own `{toctree}` with a `:caption:`. Pages inside a subdirectory (`docs/gui/`) need their own `index.md` with a nested toctree so the navigation tree stays usable.
 - The site must build cleanly with `sphinx-build -W -b html docs build/docs`. Treat warnings as errors locally before shipping.
 
@@ -185,7 +191,7 @@ When in doubt, split. A page that mixes "click here" with "import this" with "th
 - Do not use `cast(Any, ...)` to silence the checker. Parse the value explicitly or define the smallest useful Protocol/helper for the operation being used.
 - When a cast remains necessary, keep it narrow and local. Avoid passing a casted object deeper into the code than the exact operation that needs it.
 - Use standard library types where possible.
-- Type checking is part of the gate. Run `ty` only through the micromamba command below. Do not use a raw interpreter path such as `/Users/.../envs/twopy/bin/python -m ty check`; `ty` can then resolve Homebrew/global site-packages instead of the micromamba environment and report bogus unresolved imports for installed dependencies.
+- Type checking is part of the gate. Run `ty` only with the micromamba command below. Do not use a raw interpreter path such as `/Users/.../envs/twopy/bin/python -m ty check`. A raw path can use Homebrew or global site packages and report incorrect unresolved imports.
 
 ```sh
 micromamba run -n twopy python -m ty check

@@ -330,7 +330,7 @@ class NapariExportTest(NapariAdapterTestCase):
                 ).is_file(),
             )
             self.assertIsNotNone(status)
-            self.assertIn("removed local cache copies", status.text())
+            self.assertIn("Removed local cache copies", status.text())
 
     def test_export_roi_contours_keep_display_orientation(self) -> None:
         """Confirm exported ROI contours keep the same top-origin view as napari.

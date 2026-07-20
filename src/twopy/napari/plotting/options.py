@@ -123,7 +123,7 @@ def visibility_options_widget(
             Select all or None. This prevents one bulk click from redrawing the
             plots once per checkbox.
         keys: Optional stable callback keys matching ``labels``. Labels stay
-            human-readable; keys prevent duplicate display names from toggling
+            human-readable. Keys prevent duplicate display names from toggling
             the wrong underlying item.
         colors: Optional swatch colors matching ``labels`` by position.
         details: Optional right-aligned text matching ``labels`` by position.

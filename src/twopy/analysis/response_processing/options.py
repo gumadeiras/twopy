@@ -156,25 +156,25 @@ def _validate_smoothing_options(options: SmoothingOptions) -> None:
         msg = f"Unknown smoothing method {options.method!r}"
         raise ValueError(msg)
     if options.window_frames < 1:
-        msg = f"smoothing window_frames must be at least 1; got {options.window_frames}"
+        msg = f"smoothing window_frames must be at least 1. Got {options.window_frames}"
         raise ValueError(msg)
     if options.polynomial_order < 0:
         msg = (
-            "smoothing polynomial_order must be non-negative; "
-            f"got {options.polynomial_order}"
+            "smoothing polynomial_order must be non-negative. "
+            f"Got {options.polynomial_order}"
         )
         raise ValueError(msg)
     if options.method == "savgol":
         if options.window_frames % 2 == 0:
             msg = (
-                "Savitzky-Golay smoothing window_frames must be odd; "
-                f"got {options.window_frames}"
+                "Savitzky-Golay smoothing window_frames must be odd. "
+                f"Got {options.window_frames}"
             )
             raise ValueError(msg)
         if options.polynomial_order >= options.window_frames:
             msg = (
-                "Savitzky-Golay polynomial_order must be below window_frames; "
-                f"got order {options.polynomial_order} and window "
+                "Savitzky-Golay polynomial_order must be below window_frames. "
+                f"Got order {options.polynomial_order} and window "
                 f"{options.window_frames}"
             )
             raise ValueError(msg)
@@ -190,7 +190,7 @@ def _validate_low_pass_options(
         msg = f"Unknown low-pass method {options.method!r}"
         raise ValueError(msg)
     if options.order < 1:
-        msg = f"low-pass order must be at least 1; got {options.order}"
+        msg = f"low-pass order must be at least 1. Got {options.order}"
         raise ValueError(msg)
     if options.method == "none":
         return
@@ -199,13 +199,13 @@ def _validate_low_pass_options(
         raise ValueError(msg)
     if data_rate_hz is not None:
         if data_rate_hz <= 0:
-            msg = f"data_rate_hz must be positive; got {data_rate_hz}"
+            msg = f"data_rate_hz must be positive. Got {data_rate_hz}"
             raise ValueError(msg)
         nyquist_hz = data_rate_hz / 2.0
         if options.cutoff_hz >= nyquist_hz:
             msg = (
-                "low-pass cutoff_hz must be below Nyquist; "
-                f"got {options.cutoff_hz} Hz for {data_rate_hz} Hz data"
+                "low-pass cutoff_hz must be below Nyquist. "
+                f"Got {options.cutoff_hz} Hz for {data_rate_hz} Hz data"
             )
             raise ValueError(msg)
 
@@ -216,7 +216,7 @@ def _validate_normalization_options(options: NormalizationOptions) -> None:
         msg = f"Unknown normalization method {options.method!r}"
         raise ValueError(msg)
     if options.epoch_number is not None and options.epoch_number < 1:
-        msg = f"normalization epoch_number must be positive; got {options.epoch_number}"
+        msg = f"normalization epoch_number must be positive. Got {options.epoch_number}"
         raise ValueError(msg)
     if options.method == "epoch_abs_peak" and options.epoch_number is None:
         msg = "response-size normalization requires an epoch_number"
@@ -230,16 +230,16 @@ def _validate_correlation_options(options: CorrelationFilterOptions) -> None:
         raise ValueError(msg)
     if not -1.0 <= options.minimum_correlation <= 1.0:
         msg = (
-            "minimum_correlation must be between -1 and 1; "
-            f"got {options.minimum_correlation}"
+            "minimum_correlation must be between -1 and 1. "
+            f"Got {options.minimum_correlation}"
         )
         raise ValueError(msg)
     start_seconds, stop_seconds = options.window_seconds
     if start_seconds is not None and not np.isfinite(start_seconds):
-        msg = f"correlation window start must be finite or None; got {start_seconds}"
+        msg = f"correlation window start must be finite or None. Got {start_seconds}"
         raise ValueError(msg)
     if stop_seconds is not None and not np.isfinite(stop_seconds):
-        msg = f"correlation window stop must be finite or None; got {stop_seconds}"
+        msg = f"correlation window stop must be finite or None. Got {stop_seconds}"
         raise ValueError(msg)
     if (
         start_seconds is not None
@@ -247,7 +247,7 @@ def _validate_correlation_options(options: CorrelationFilterOptions) -> None:
         and start_seconds >= stop_seconds
     ):
         msg = (
-            "correlation window start must be before stop; "
-            f"got ({start_seconds}, {stop_seconds})"
+            "correlation window start must be before stop. "
+            f"Got ({start_seconds}, {stop_seconds})"
         )
         raise ValueError(msg)

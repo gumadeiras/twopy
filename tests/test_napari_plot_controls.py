@@ -153,7 +153,7 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             "Removed border: left 2 px, right 1 px, top 1 px, bottom 1 px",
             labels[0].text(),
         )
-        self.assertIn("high-motion 1/4 frames", labels[0].text())
+        self.assertIn("High-motion 1/4 frames", labels[0].text())
         self.assertIn(
             "Plot: left-right movement in blue, up-down movement in yellow",
             labels[0].text(),
@@ -238,7 +238,7 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
         labels = widget.findChildren(SidebarTextLabel)
         self.assertEqual(len(labels), 1)
         self.assertIn("95% of frames moved <= 1.90 px", labels[0].text())
-        self.assertIn("max 2.00 px", labels[0].text())
+        self.assertIn("Max 2.00 px", labels[0].text())
         layout = widget.layout()
         if layout is None:
             self.fail("Motion summary is missing a layout")
@@ -279,7 +279,7 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
         motion_widget = response_widget._motion_summary_widget
         labels = motion_widget.findChildren(SidebarTextLabel)
         self.assertEqual(len(labels), 1)
-        self.assertIn("high-motion 1/3 frames", labels[0].text())
+        self.assertIn("High-motion 1/3 frames", labels[0].text())
 
     def test_plot_tab_option_sections_have_expected_order(self) -> None:
         """Confirm the Plot tab presents response options in workflow order.

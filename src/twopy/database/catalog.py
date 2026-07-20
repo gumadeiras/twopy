@@ -84,7 +84,7 @@ def _read_direct_database_catalog(database_dir: Path) -> DatabaseCatalog:
     )
     if not sqlite_files:
         expected = ", ".join(DEFAULT_DATABASE_FILES)
-        msg = f"No known SQLite database files found in {root}; expected {expected}"
+        msg = f"No known SQLite database files found in {root}. Expected {expected}"
         raise FileNotFoundError(msg)
 
     return DatabaseCatalog(database_dir=root, sqlite_files=sqlite_files)

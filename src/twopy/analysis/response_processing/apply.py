@@ -367,8 +367,8 @@ def _normalization_factors(
     if len(bad_indices) > 0:
         bad_labels = ", ".join(grouped.roi_labels[index] for index in bad_indices)
         msg = (
-            "Normalization epoch must have a nonzero response for every ROI; "
-            f"invalid ROI labels: {bad_labels}"
+            "Normalization epoch must have a nonzero response for every ROI. "
+            f"Invalid ROI labels: {bad_labels}"
         )
         raise ValueError(msg)
     return RoiNormalizationFactors(
@@ -387,8 +387,8 @@ def _mask_excluded_rois(
     """Return grouped responses with excluded ROI columns set to NaN."""
     if included_mask.shape != (len(grouped.roi_labels),):
         msg = (
-            "included_mask must match ROI label count; "
-            f"got {included_mask.shape} for {len(grouped.roi_labels)} labels"
+            "included_mask must match ROI label count. "
+            f"Got {included_mask.shape} for {len(grouped.roi_labels)} labels"
         )
         raise ValueError(msg)
     trials: list[RoiResponseTrial] = []
@@ -427,7 +427,7 @@ def _copy_trial_with_values(
 def _validate_dff_for_processing(dff: RoiDeltaFOverF) -> None:
     """Validate a dF/F object before value-only processing."""
     if dff.values.ndim != 2:
-        msg = f"dF/F values must have shape (frames, rois); got {dff.values.shape}"
+        msg = f"dF/F values must have shape (frames, rois). Got {dff.values.shape}"
         raise ValueError(msg)
     if dff.values.shape[1] != len(dff.labels):
         msg = (

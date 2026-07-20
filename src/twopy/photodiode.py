@@ -80,7 +80,7 @@ def photodiode_threshold(
     """
     values = _photodiode_values(signal)
     if not 0.0 <= fraction <= 1.0:
-        msg = f"Photodiode threshold fraction must be in [0, 1]; got {fraction}"
+        msg = f"Photodiode threshold fraction must be in [0, 1]. Got {fraction}"
         raise ValueError(msg)
     if values.size == 0:
         return 0.0
@@ -225,7 +225,7 @@ def _photodiode_values(signal: npt.ArrayLike) -> npt.NDArray[np.float64]:
     """
     values = np.asarray(signal, dtype=np.float64)
     if values.ndim != 1:
-        msg = f"Photodiode signal must be one-dimensional; got {values.shape}"
+        msg = f"Photodiode signal must be one-dimensional. Got {values.shape}"
         raise ValueError(msg)
     return values
 
@@ -245,7 +245,7 @@ def _high_res_samples_per_frame(
         Integer high-rate samples per imaging frame.
     """
     if movie_frame_count <= 0:
-        msg = f"movie_frame_count must be positive; got {movie_frame_count}"
+        msg = f"movie_frame_count must be positive. Got {movie_frame_count}"
         raise ValueError(msg)
     if high_res_sample_count % movie_frame_count != 0:
         msg = (

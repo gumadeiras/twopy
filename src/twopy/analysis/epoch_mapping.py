@@ -118,7 +118,7 @@ def _interpolate_epoch_numbers(
         Integer epoch number per imaging frame.
     """
     if frame_count < 1:
-        msg = f"frame_count must be positive; got {frame_count}"
+        msg = f"frame_count must be positive. Got {frame_count}"
         raise ValueError(msg)
 
     positive = epoch_values != 0

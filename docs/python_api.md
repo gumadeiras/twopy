@@ -69,9 +69,9 @@ print(converted.path)         # recording_data.h5
 print(converted.movie_path)   # aligned_movie.h5
 ```
 
-Conversion writes `recording_data.h5` (metadata, stimulus tables, photodiode signals, mean image) plus a separate `aligned_movie.h5` for the big movie array. The mean image defaults to the full movie; pass `mean_start_frame` / `mean_stop_frame` to use a frame range.
+Conversion writes `recording_data.h5` for metadata, stimulus tables, photodiode signals, and the mean image. It writes the large movie array to `aligned_movie.h5`. By default, the mean image uses the full movie. Set `mean_start_frame` and `mean_stop_frame` to use a frame range.
 
-By default twopy decides the output folder using your `config.yml`. With `analysis_caching: true`, `convert_recording_to_twopy(...)` writes converted files into your local `analysis_cache_dir`, mirrored under the matched `data_paths` root (or under `_external` for paths outside `data_paths`). The local cache defaults to a 33 GB limit from `analysis_cache_max_gb`; after cache writes and output copies, twopy removes old cache entries only when their files already exist in the final output folder. With `analysis_caching: false`, conversion writes straight to `analysis_output`. The napari loading workflow copies cached converted files to `analysis_output` after conversion. Python conversion returns the paths for `recording_data.h5` and `aligned_movie.h5`; when caching is on, it can also update the cache inventory and remove older cache entries whose files already exist in the final output folder. Pass `output_dir=...` only when you need one call to use a different output folder; that explicit path also lets conversion run without config-backed output routing.
+By default, twopy gets the output folder from `config.yml`. With `analysis_caching: true`, conversion writes files to the local `analysis_cache_dir` mirror. The mirror uses the matched `data_paths` root. Paths outside `data_paths` use `_external`. `analysis_cache_max_gb` sets a default cache limit of 33 GB. After writes and copies, twopy removes an old entry only if its files exist in the final folder. With `analysis_caching: false`, conversion writes directly to `analysis_output`. The napari load workflow copies cached converted files to `analysis_output`. Python conversion returns the `recording_data.h5` and `aligned_movie.h5` paths. It can also update the cache inventory and remove eligible old entries. Use `output_dir=...` only when one call must use a different folder. This explicit path also permits conversion without config output rules.
 
 ## Load a converted recording
 
@@ -86,7 +86,7 @@ print(recording_frame_rate_hz(recording))
 print(recording_hemisphere(recording))
 ```
 
-`recording.movie` streams from `aligned_movie.h5`; `recording.mean_image`, `recording.stimulus_table`, and `recording.photodiode` are loaded eagerly.
+`recording.movie` streams from `aligned_movie.h5`. twopy loads `recording.mean_image`, `recording.stimulus_table`, and `recording.photodiode` immediately.
 
 ## Make ROIs
 
@@ -158,9 +158,9 @@ response_watershed = extract_response_watershed_rois(
 )
 ```
 
-`grid_roi_set_microns` converts a physical width to pixels with `floor(micron_grid_size / pixel_size_um)`. Pixel-size calibration is loaded from a dated CSV registry and resolved by exact rig/mode/scanner/zoom match when available, interpolation within the same group when the zoom is inside the measured range, and extrapolation only when explicitly allowed.
+`grid_roi_set_microns` changes a physical width to pixels with `floor(micron_grid_size / pixel_size_um)`. Pixel-size calibration comes from a dated CSV registry. twopy first uses an exact rig, mode, scanner, and zoom match. If necessary, it interpolates inside the measured range of the same group. It extrapolates only when you permit it.
 
-`extract_response_watershed_rois` builds per-pixel response-amplitude, local response-coherence, and split-half reliability maps, combines them into a score image, then watersheds and trims it into full-frame ROI masks. It returns both the `RoiSet` and audit score images; use `response_watershed_roi_set` when you only need the masks.
+`extract_response_watershed_rois` makes response-amplitude, local response-coherence, and split-half reliability maps for each pixel. It combines them into a score image. Then, it makes watershed segments and trims them into full-frame ROI masks. It returns the `RoiSet` and audit score images. Use `response_watershed_roi_set` when you only need the masks.
 
 ## Extract traces and dF/F
 
@@ -190,8 +190,8 @@ dff = compute_roi_delta_f_over_f(
 
 A few details worth knowing:
 
-- Trace extraction streams the movie in chunks and uses the saved alignment-valid crop by default. Pass `spatial_domain="full_frame"` only when you need explicit full-frame extraction; `extract_roi_traces` is the lower-level full-frame raw primitive.
-- For dense axon / dendrite fields, `method="movie_y_stripe_percentile"` estimates a low-percentile background per frame and y-stripe along the displayed y axis, then subtracts by position. `method="roi_y_stripe_percentile"` builds a per-ROI background from displayed rows near each ROI center, excluding ROI pixels — it needs dim unlabeled local background pixels. If nearby unlabeled pixels are bright cells, processes, or stimulus bleedthrough instead of additive background, ROI y-stripe can subtract more than the ROI baseline; twopy then stops before dF/F because dividing by a zero or negative corrected baseline would create artificial huge responses. Use `movie_y_stripe_percentile` or `movie_global_percentile`, or redraw ROIs so each ROI has dim local background gaps.
+- Trace extraction streams the movie in chunks and uses the saved alignment-valid crop by default. Set `spatial_domain="full_frame"` only when you need full-frame extraction. `extract_roi_traces` is the low-level function for raw full-frame extraction.
+- For dense axon or dendrite fields, `method="movie_y_stripe_percentile"` estimates a low-percentile background for each frame and y-stripe. Then, it subtracts the background by position. `method="roi_y_stripe_percentile"` uses displayed rows near each ROI center and excludes ROI pixels. It needs dim, unlabeled local background pixels. Bright cells, processes, or stimulus bleedthrough can make it subtract more than the ROI baseline. If this occurs, twopy stops before dF/F. A zero or negative corrected baseline can cause very large artificial responses. Use `movie_y_stripe_percentile`, `movie_global_percentile`, or dim local background gaps around each ROI.
 - The dF/F fit defaults to `direct_bounded_tau`. Use `log_linear` for a log-space linear fit, or `direct_bounded_tau_and_log_amplitude` when both tau and log-amplitude should be bounded.
 - When you do not pass `baseline_windows`, twopy picks the first epoch name containing `gray`, `grey`, or `interleave`, falling back to epoch 1. For stimuli with no distinct baseline epoch, pass `baseline_mode="no_baseline_epoch"` plus the first epoch number to include and twopy fits one continuous span.
 
@@ -203,7 +203,7 @@ print(timing.source)
 print(timing.epoch_windows)
 ```
 
-Native timing prefers classified photodiode boundary evidence when the stimulus table has one active `photodiode_flash` segment for each epoch boundary plus start and end, uses interpolation for recordings without flash rows or with older flash-train rows, and rejects incomplete boundary-flash evidence. `timing.source` and `timing.metadata` record the chosen path so it stays auditable.
+Native timing uses classified photodiode boundaries when evidence is complete. The stimulus table must have one active `photodiode_flash` segment for each boundary, start, and end. twopy uses interpolation for recordings without flash rows or with old flash-train rows. It rejects incomplete boundary evidence. `timing.source` and `timing.metadata` record the selected method for audits.
 
 ## Save analysis outputs
 
@@ -216,7 +216,7 @@ run = analyze_recording_responses(recording, rois)
 save_analysis_outputs(Path("/path/to/analysis_outputs.h5"), run)
 ```
 
-`analyze_recording_responses` is the single-call equivalent of the **Save ROIs + analysis** button. It chains background correction, dF/F, trial grouping, and (optionally) processing. Pass `ResponseProcessingOptions(...)` to set smoothing, low-pass filtering, response-size normalization, or correlation QC; processing runs are stored in the saved HDF5 file.
+`analyze_recording_responses` is the single-call equivalent of **Save ROIs + analysis**. It runs background correction, dF/F, trial grouping, and optional processing. Use `ResponseProcessingOptions(...)` to set smoothing, low-pass filtering, response-size normalization, or correlation QC. The saved HDF5 file contains the processing settings.
 
 For finer control, `compute_recording_responses(recording, rois, options=...)` returns the same computation object without writing it.
 
@@ -226,7 +226,7 @@ A few invariants you can rely on:
 - Response-size normalization runs **after** trial grouping. The selected epoch and per-ROI scale factors are saved with the outputs.
 - Correlation filtering scores grouped trials and saves the settings plus per-ROI scores.
 - Use `finite_mean_and_sem(values, axis=...)` for the same finite-sample mean / sample-SEM convention used by twopy's response plots and CSV exports.
-- Call `validate_grouped_roi_responses(...)` when you build grouped response objects by hand — processing, persistence, and CSV exports all run the same validator before trusting the time / frame / ROI axes.
+- Call `validate_grouped_roi_responses(...)` when you build grouped response objects manually. Processing, persistence, and CSV exports use the same check before they use the time, frame, and ROI axes.
 
 ## Run a custom workflow from Python
 
@@ -259,7 +259,7 @@ print(run.result.message)
 print(run.output_dir)
 ```
 
-The runner builds the same `CustomRunContext` used by the GUI, fills omitted parameters from the workflow defaults, validates the returned `CustomResult`, writes workflow provenance for returned files, and returns tables, plots, ROI updates, and response-plot data for your script to handle.
+The runner builds the same `CustomRunContext` that the GUI uses. It fills omitted parameters with workflow defaults and validates the returned `CustomResult`. It writes workflow source information for returned files. Then, it returns tables, plots, ROI updates, and response-plot data to your script.
 
 ## Movie-level response heatmaps
 
@@ -293,7 +293,7 @@ window_maps = compute_recording_response_maps(
 How the data is built:
 
 - **Pixel mode** computes one signed dF/F value per foreground pixel with optional NaN-aware Gaussian smoothing.
-- **Window mode** averages baseline and response intensity inside each square window before dF/F, paints that value back over the covered pixels, and averages overlapping windows.
+- **Window mode** averages baseline and response intensity in each square window before dF/F. It puts that value on the covered pixels. Then, it averages overlapping windows.
 - The mean-image foreground percentile both masks dim background and sets the dF/F denominator floor, so near-zero baseline pixels cannot create artificial hot spots.
 - Saved epoch maps are scaled by the largest absolute finite response across all epochs. Multiply `epoch.response_values` by `map_data.response_scale` to recover original dF/F units.
 - Saved heatmap images use the same Python image order as converted movies and ROI masks.
@@ -301,7 +301,7 @@ How the data is built:
 
 ## Random-noise temporal kernels
 
-The kernel fitter runs on the same computed-response object. It keeps complete regular stimulus streams for selected non-baseline epochs, groups them by unique name, uses photodiode-aligned frame windows for sparse ROI response times, and maps raw left / right kernels to ipsi / contra using the recording's hemisphere.
+The kernel fitter uses the same computed-response object. It keeps complete, regular stimulus streams for selected non-baseline epochs. It groups the streams by unique name. It uses photodiode-aligned frame windows for sparse ROI response times. The recording hemisphere maps raw left and right kernels to ipsi and contra.
 
 ```python
 from twopy import (
@@ -323,10 +323,10 @@ print(kernels.ipsilateral.shape)        # (epoch_names, rois, lags)
 
 Modality-specific notes:
 
-- The default `stimulus_specific_05` column is chosen from `stimulus_modality`. For `olfaction`, it matches the random-noise workflow's `antenna_stim` value after conversion; LED recordings encode `0=left`, `1=both`, `2=right`, `3=blank` and twopy derives raw left and raw right streams before ipsi/contra mapping. For `vision`, the same column is interpreted as signed visual contrast (e.g. `-0.2/+0.2` or `-0.9/+0.9`) and stored in `kernels.contrast` without hemisphere mapping.
+- `stimulus_modality` selects the default `stimulus_specific_05` column. For `olfaction`, it matches the converted `antenna_stim` value of the random-noise workflow. LED recordings use `0=left`, `1=both`, `2=right`, and `3=blank`. twopy makes raw left and right streams before ipsi/contra mapping. For `vision`, the same column contains signed visual contrast, such as `-0.2/+0.2`. twopy stores it in `kernels.contrast` without hemisphere mapping.
 - Pass `stimulus_column="..."` only to override the modality default. Pass `hemisphere="left"` or `hemisphere="right"` only to override audited olfactory metadata.
 - `kernels.fitted_stimulus_segment_counts` and `kernels.skipped_irregular_stimulus_segment_counts` report how many selected segments were used or skipped because their sample times were too irregular for fixed-lag fitting.
-- Negative kernel times are future stimulus samples — useful for timing QC. Native fitting is frame-aligned; per-ROI line timing maps are not yet part of converted HDF5 files.
+- Negative kernel times are future stimulus samples. You can use them for timing QC. Native fitting aligns with frames. Converted HDF5 files do not contain per-ROI line timing maps.
 
 ## Manual FOV and ROI match tables
 

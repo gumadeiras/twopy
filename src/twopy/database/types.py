@@ -64,7 +64,7 @@ class DatabaseTable:
     Inputs: SQLite database path, table name, and discovered columns.
     Outputs: immutable table metadata for query planning and GUI display.
 
-    This is a small schema snapshot; it does not include table rows.
+    This is a small schema snapshot. It does not include table rows.
     """
 
     database_path: Path

@@ -65,7 +65,7 @@ def resolve_response_window_seconds(
         ValueError: If any supplied window duration is negative.
     """
     if max_window_seconds is not None and max_window_seconds < 0.0:
-        msg = f"max_window_seconds must be non-negative; got {max_window_seconds}"
+        msg = f"max_window_seconds must be non-negative. Got {max_window_seconds}"
         raise ValueError(msg)
     if options.auto:
         pre = _validate_non_negative(
@@ -94,6 +94,6 @@ def _validate_non_negative(value: float, *, name: str) -> float:
     """Return ``value`` as a float after enforcing the response-window domain."""
     resolved = float(value)
     if resolved < 0.0:
-        msg = f"{name} must be non-negative; got {resolved}"
+        msg = f"{name} must be non-negative. Got {resolved}"
         raise ValueError(msg)
     return resolved

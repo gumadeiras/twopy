@@ -393,7 +393,7 @@ def _validate_range(name: str, value: int, minimum: int, maximum: int) -> None:
         ValueError: If the value falls outside the accepted range.
     """
     if not minimum <= value <= maximum:
-        msg = f"{name} must be between {minimum} and {maximum}; got {value}"
+        msg = f"{name} must be between {minimum} and {maximum}. Got {value}"
         raise ValueError(msg)
 
 

@@ -197,7 +197,7 @@ def selected_response_visibility_status(
         return f"Showing all {selected_traces}."
     total_traces = counted_noun(total_count, "selected ROI trace")
     hidden_traces = counted_noun(total_count - visible_count, "ROI trace")
-    return f"Showing {visible_count} of {total_traces}; {hidden_traces} hidden."
+    return f"Showing {visible_count} of {total_traces}. {hidden_traces} hidden."
 
 
 def _matching_epoch(

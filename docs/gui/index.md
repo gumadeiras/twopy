@@ -20,8 +20,8 @@ Run `twopy` (optionally with a recording path) and napari opens with four docks 
 
 - **Top — `twopy responses`**: response trace plots and a Heatmaps tab. Reads from the current ROIs and processing settings.
 - **Right — `twopy`**: the tabbed control sidebar. Tabs in order: **Load**, **Metadata**, **Plot**, **ROIs**, **Epochs**, **Custom**, **Export**.
-- **Center — viewer layers**: before you load data, twopy shows a short Load-tab prompt; after loading, this area shows `mean image`, optional `aligned movie`, and an editable `rois` Labels layer.
-- **Bottom — `twopy trial timeline`**: shows stimulus epochs across the recording. Click or drag the rail to seek the movie; gray / interleave epochs render as neutral gray. The viewer HUD reports the current trial and epoch.
+- **Center — viewer layers**: Before you load data, twopy shows a short Load-tab prompt. After loading, this area shows `mean image`, optional `aligned movie`, and an editable `rois` Labels layer.
+- **Bottom — `twopy trial timeline`**: Shows stimulus epochs across the recording. Click or drag the rail to move through the movie. Gray and interleave epochs use neutral gray. The viewer HUD shows the current trial and epoch.
 
 If no recording is loaded yet, the docks still appear and the center viewer shows the twopy prompt. When PyPI has a newer twopy release, this prompt also shows `python -m pip install -U twopy`. Pick a recording from the **Load** tab to populate the viewer.
 
@@ -40,4 +40,4 @@ If no recording is loaded yet, the docks still appear and the center viewer show
 
 ## The two-photon timing contract
 
-Imaging and stimulus presentation run on separate computers. The photodiode signal in the recording is the bridge: twopy uses it to align stimulus events to imaging frames. You can ignore this when using the app — twopy aligns the timing for you — but it explains why ROI responses use photodiode-aligned epoch windows rather than nominal frame rates. See [Input data spec](../input_data_spec.md) for the contract.
+Imaging and stimulus presentation run on separate computers. twopy uses the recorded photodiode signal to align stimulus events with imaging frames. twopy does this alignment for you. This process explains why ROI responses use photodiode-aligned epoch windows instead of nominal frame rates. See [Input data spec](../input_data_spec.md) for the data requirements.

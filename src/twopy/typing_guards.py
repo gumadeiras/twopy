@@ -163,7 +163,7 @@ def require_string_choice[TextChoice: str](
         return cast(TextChoice, text)
 
     allowed_text = ", ".join(repr(item) for item in sorted(allowed))
-    msg = f"{name} must be one of {allowed_text}; got {text!r}"
+    msg = f"{name} must be one of {allowed_text}. Got {text!r}"
     raise ValueError(msg)
 
 
@@ -248,8 +248,8 @@ def _require_array_contract(
 ) -> None:
     """Validate the dtype and rank expected for a persisted array."""
     if array.dtype != dtype:
-        msg = f"{name} must have dtype {dtype.name}; got {array.dtype}"
+        msg = f"{name} must have dtype {dtype.name}. Got {array.dtype}"
         raise ValueError(msg)
     if ndim is not None and array.ndim != ndim:
-        msg = f"{name} must have {ndim} dimension(s); got shape {array.shape}"
+        msg = f"{name} must have {ndim} dimension(s). Got shape {array.shape}"
         raise ValueError(msg)
