@@ -126,7 +126,7 @@ twopy is a two-photon imaging analysis tool.
   - outputs
   - what it does
   - why it exists in the analysis workflow
-- Use simple human language in docs, docstrings, comments, and user-facing messages. Make it easy to read and understand. Stay accurate, but avoid jargon unless the term is the actual subject being explained.
+- Always use ASD-STE100 Simplified Technical English in docs, docstrings, comments, and user-facing messages. Use short, direct sentences and simple approved words. Stay accurate, and use a technical term only when it is the subject.
 - Write documentation and comments from the reader's concrete object first: say what the user sees, what data value is used, and why it stays correct; avoid dense phrases that combine implementation jargon such as "factory", "derive", "identity", or "contract" unless those words are the subject being explained.
 - Key analysis code must include inline comments that explain the reasoning behind the logic.
 - Comments should clarify scientific or data-processing intent. Do not restate obvious syntax.
