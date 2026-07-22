@@ -26,6 +26,7 @@ from twopy.napari.group_matching.images import (
 from twopy.napari.group_matching.style import group_matching_button
 from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.text import configure_placeholder
+from twopy.napari.theme import TWOPY_CONTROL_HEIGHT
 
 __all__ = [
     "FOV_CARD_WIDTH",
@@ -33,7 +34,14 @@ __all__ = [
 ]
 
 FOV_CARD_WIDTH = THUMBNAIL_SIZE + 72
-_FOV_CARD_HEIGHT = THUMBNAIL_SIZE + 90
+_FOV_CARD_MARGIN = 10
+_FOV_CARD_SPACING = 6
+_FOV_CARD_HEIGHT = (
+    THUMBNAIL_SIZE
+    + 2 * TWOPY_CONTROL_HEIGHT
+    + 2 * _FOV_CARD_MARGIN
+    + 2 * _FOV_CARD_SPACING
+)
 
 
 class FovRecordingCard(QFrame):
@@ -58,9 +66,11 @@ class FovRecordingCard(QFrame):
         self._recording_label = format_recording_minute_label(self.recording_path)
         self._mean_image_layer = recording.mean_image_layer
         self._image_label = QLabel()
+        self._image_label.setObjectName("fov_mean_image_preview")
         self._overlay_label = QLabel()
         self._note_edit = QLineEdit(note)
         self._note_edit.setObjectName("fov_recording_note")
+        self._note_edit.setFixedHeight(TWOPY_CONTROL_HEIGHT)
         configure_placeholder(self._note_edit, "Optional note")
         self._select_button = group_matching_button("Select", role="quiet")
         self._select_button.setCheckable(True)
@@ -85,8 +95,13 @@ class FovRecordingCard(QFrame):
         preview_row.addWidget(self._contrast_slider)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(
+            _FOV_CARD_MARGIN,
+            _FOV_CARD_MARGIN,
+            _FOV_CARD_MARGIN,
+            _FOV_CARD_MARGIN,
+        )
+        layout.setSpacing(_FOV_CARD_SPACING)
         layout.addLayout(preview_row)
         layout.addWidget(self._note_edit)
         layout.addWidget(self._select_button)

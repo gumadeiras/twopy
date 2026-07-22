@@ -23,6 +23,7 @@
 - Standardized manual and CSV loading on one themed picker and restored their independent folder histories.
 - Prevented concurrent napari preference writes from removing another saved setting.
 - Kept the available-update notice visible in the shorter center preview area.
+- Prevented FOV card note fields from covering the bottom of mean-image previews.
 
 ### Changes
 

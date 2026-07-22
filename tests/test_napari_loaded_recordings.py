@@ -265,6 +265,39 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
                     fov_card.maximumWidth(),
                     group_matching_fov.FOV_CARD_WIDTH,
                 )
+                image_label = fov_card.findChild(
+                    QLabel,
+                    "fov_mean_image_preview",
+                )
+                note_edit = fov_card.findChild(
+                    QLineEdit,
+                    "fov_recording_note",
+                )
+                select_button = next(
+                    button
+                    for button in fov_card.findChildren(QPushButton)
+                    if button.text() in {"Select", "Selected"}
+                )
+                assert image_label is not None
+                assert note_edit is not None
+                image_bottom = image_label.mapTo(
+                    fov_card,
+                    image_label.rect().bottomLeft(),
+                ).y()
+                note_top = note_edit.mapTo(
+                    fov_card,
+                    note_edit.rect().topLeft(),
+                ).y()
+                note_bottom = note_edit.mapTo(
+                    fov_card,
+                    note_edit.rect().bottomLeft(),
+                ).y()
+                button_top = select_button.mapTo(
+                    fov_card,
+                    select_button.rect().topLeft(),
+                ).y()
+                self.assertLess(image_bottom, note_top)
+                self.assertLess(note_bottom, button_top)
             self.assertTrue(
                 all(" - FOV ID:" in label.text() for label in overlay_labels),
             )
