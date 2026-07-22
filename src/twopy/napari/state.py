@@ -11,6 +11,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 
 __all__ = [
     "read_last_recording_csv_folder",
@@ -28,6 +29,7 @@ LAST_RECORDING_FOLDER_KEY = "last_recording_folder"
 LAST_RECORDING_CSV_FOLDER_KEY = "last_recording_csv_folder"
 VERSION_CHECKED_AT_KEY = "version_check_checked_at"
 VERSION_LATEST_VERSION_KEY = "version_check_latest_version"
+_STATE_WRITE_LOCK = Lock()
 
 
 @dataclass(frozen=True)
@@ -141,10 +143,13 @@ def write_version_check_cache(
     Returns:
         None.
     """
-    data = _read_state_data(state_file)
-    data[VERSION_CHECKED_AT_KEY] = cache.checked_at
-    data[VERSION_LATEST_VERSION_KEY] = cache.latest_version
-    _write_state_data(data, state_file)
+    _update_state_data(
+        {
+            VERSION_CHECKED_AT_KEY: cache.checked_at,
+            VERSION_LATEST_VERSION_KEY: cache.latest_version,
+        },
+        state_file,
+    )
 
 
 def recording_folder_for_state(selected_path: Path, recording_data_path: Path) -> Path:
@@ -208,9 +213,21 @@ def _write_folder(key: str, folder: Path, state_file: Path | None) -> None:
     Returns:
         None.
     """
-    data = _read_state_data(state_file)
-    data[key] = str(folder.expanduser().resolve())
-    _write_state_data(data, state_file)
+    _update_state_data(
+        {key: str(folder.expanduser().resolve())},
+        state_file,
+    )
+
+
+def _update_state_data(
+    values: dict[str, object],
+    state_file: Path | None,
+) -> None:
+    """Update local state keys without losing concurrent thread writes."""
+    with _STATE_WRITE_LOCK:
+        data = _read_state_data(state_file)
+        data.update(values)
+        _write_state_data(data, state_file)
 
 
 def _read_state_data(state_file: Path | None) -> dict[str, object]:

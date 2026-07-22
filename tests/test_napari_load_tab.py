@@ -492,27 +492,68 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             }
 
             with patch.object(
-                napari_controls.QFileDialog,
-                "getOpenFileNames",
-                return_value=([str(csv_path)], ""),
+                napari_controls,
+                "choose_loaded_recording_csvs",
+                return_value=(csv_path,),
             ) as choose_csv:
                 load_buttons["Load CSV list"].click()
                 process_qt_events_until(lambda: len(viewer.images) == 2)
 
-            first_call_args = choose_csv.call_args.args
-            self.assertEqual(first_call_args[2], "")
+            self.assertEqual(choose_csv.call_args.args, (None,))
             self.assertEqual(read_last_recording_folder(), manual_folder.resolve())
             self.assertEqual(read_last_recording_csv_folder(), csv_folder.resolve())
 
             with patch.object(
-                napari_controls.QFileDialog,
-                "getOpenFileNames",
-                return_value=([], ""),
+                napari_controls,
+                "choose_loaded_recording_csvs",
+                return_value=(),
             ) as choose_csv_again:
                 load_buttons["Load CSV list"].click()
 
-            second_call_args = choose_csv_again.call_args.args
-            self.assertEqual(second_call_args[2], str(csv_folder.resolve()))
+            self.assertEqual(
+                choose_csv_again.call_args.args,
+                (csv_folder.resolve(),),
+            )
+
+    def test_manual_load_remembers_accepted_browse_folder_immediately(self) -> None:
+        """Confirm manual selection memory does not depend on load success.
+
+        Inputs: one accepted recording folder and a deferred recording load.
+        Outputs: the next picker starts in the selection's containing folder.
+        """
+        _ = QApplication.instance() or QApplication([])
+        with temporary_directory() as temp_dir:
+            root = Path(temp_dir)
+            browse_folder = root / "recordings"
+            selected_folder = browse_folder / "recording_a"
+            selected_folder.mkdir(parents=True)
+            viewer = _FakeViewer()
+            control_docks = add_twopy_magicgui_controls(
+                viewer,
+                roi_labels_layer=None,
+                roi_save_file=Path("unused.h5"),
+            )
+            load_panel = cast(QWidget, control_docks.load_widget)
+            load_buttons = {
+                button.text(): button for button in load_panel.findChildren(QPushButton)
+            }
+
+            with (
+                patch.object(
+                    napari_controls,
+                    "choose_recording_folders",
+                    return_value=(selected_folder,),
+                ),
+                patch.object(
+                    napari_controls,
+                    "_load_selected_recording_paths",
+                ) as load_paths,
+            ):
+                load_buttons["Load manually"].click()
+
+            self.assertEqual(read_last_recording_folder(), browse_folder.resolve())
+            self.assertEqual(load_paths.call_args.args[1], (selected_folder,))
+            self.assertFalse(load_paths.call_args.kwargs["remember_selected_folder"])
 
     def test_loaded_recording_csv_prefers_valid_recording_data_path(self) -> None:
         """Confirm saved CSVs reload valid converted files directly.

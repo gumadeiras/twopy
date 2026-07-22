@@ -15,14 +15,11 @@ from typing import cast
 
 from magicgui.widgets import FileEdit
 from qtpy.QtWidgets import (
-    QAbstractItemView,
     QFileDialog,
     QLabel,
-    QListView,
     QMessageBox,
     QPushButton,
     QSizePolicy,
-    QTreeView,
     QVBoxLayout,
     QWidget,
 )
@@ -31,6 +28,11 @@ from twopy.converted import RecordingData
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.group_matching import GroupMatchingPanel
 from twopy.napari.load_controller import RecordingLoadController
+from twopy.napari.load_picker import (
+    choose_loaded_recording_csvs,
+    choose_recording_folders,
+    selected_browse_folder,
+)
 from twopy.napari.load_workflow import (
     RecordingLoadFailure,
     RecordingLoadResult,
@@ -67,9 +69,9 @@ from twopy.napari.state import (
     read_last_recording_csv_folder,
     read_last_recording_folder,
     write_last_recording_csv_folder,
+    write_last_recording_folder,
 )
 from twopy.napari.theme import (
-    apply_twopy_theme,
     style_action_button,
     style_caption,
     style_section_title,
@@ -547,10 +549,11 @@ def _load_manual_recordings_from_dialog(state: NapariControlState) -> None:
         None.
     """
     selected_paths = _choose_recording_paths(state)
+    _remember_manual_recording_folder(selected_paths)
     _load_selected_recording_paths(
         state,
         selected_paths,
-        remember_selected_folder=True,
+        remember_selected_folder=False,
     )
 
 
@@ -651,43 +654,35 @@ def _choose_recording_paths(state: NapariControlState) -> tuple[Path, ...]:
     Returns:
         Selected folder paths, or an empty tuple when the user cancels.
 
-    Directory loading keeps a standard file dialog with normal navigation and
-    places/sidebar affordances. The CSV path stays separate because Qt's normal
-    dialog API does not support selecting directories and files in one clean mode.
+    Manual and CSV loading use the same dialog surface. Their starting folders
+    stay separate because recordings and saved lists usually have different roots.
     """
-    dialog = QFileDialog()
-    apply_twopy_theme(dialog, name="twopy_recording_folder_dialog")
-    dialog.setWindowTitle("Choose recording folders")
     start_path = _manual_recording_start_path(state)
-    if start_path is not None:
-        dialog.setDirectory(start_path)
-    dialog.setFileMode(QFileDialog.FileMode.Directory)
-    dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
-    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-    _allow_extended_dialog_selection(dialog)
-    if dialog.exec() != QFileDialog.DialogCode.Accepted:
-        return ()
-    return tuple(Path(path).expanduser() for path in dialog.selectedFiles())
+    return choose_recording_folders(
+        None if start_path is None else Path(start_path),
+    )
 
 
 def _choose_recording_csv_paths(_state: NapariControlState) -> tuple[Path, ...]:
     """Return selected loaded-recordings CSV files."""
-    selected_paths, _selected_filter = QFileDialog.getOpenFileNames(
-        None,
-        "Choose loaded-recordings CSV",
-        _recording_csv_start_path() or "",
-        "CSV files (*.csv);;All files (*)",
+    start_path = _recording_csv_start_path()
+    return choose_loaded_recording_csvs(
+        None if start_path is None else Path(start_path),
     )
-    return tuple(Path(path).expanduser() for path in selected_paths)
+
+
+def _remember_manual_recording_folder(paths: tuple[Path, ...]) -> None:
+    """Persist the folder that contained a manual dialog selection."""
+    folder = selected_browse_folder(paths)
+    if folder is not None:
+        write_last_recording_folder(folder)
 
 
 def _remember_recording_csv_folder(paths: tuple[Path, ...]) -> None:
     """Persist the folder that owns a selected loaded-recordings CSV."""
-    if len(paths) == 0:
-        return
-    first_path = paths[0].expanduser()
-    folder = first_path if first_path.is_dir() else first_path.parent
-    write_last_recording_csv_folder(folder)
+    folder = selected_browse_folder(paths)
+    if folder is not None:
+        write_last_recording_csv_folder(folder)
 
 
 def _recording_paths_from_manual_selections(
@@ -802,12 +797,6 @@ def _show_selection_error(paths: tuple[Path, ...], error: Exception) -> None:
             ),
         ),
     )
-
-
-def _allow_extended_dialog_selection(dialog: QFileDialog) -> None:
-    """Allow selecting more than one row in a non-native file dialog."""
-    for view in (*dialog.findChildren(QListView), *dialog.findChildren(QTreeView)):
-        view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
 
 def _show_load_errors(result: RecordingLoadResult) -> None:

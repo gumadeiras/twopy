@@ -29,11 +29,11 @@ Buttons: **Search** runs the query. **Load selected** loads everything under the
 
 ## Load manually
 
-Pick one or more source folders, converted folders, or `recording_data.h5` files. They all open into the same viewer. Loading a folder you already have open just selects the existing row instead of duplicating it.
+Pick one or more source or converted recording folders. They all open into the same viewer. Loading a folder you already have open just selects the existing row instead of duplicating it. The picker reopens in the folder that contained your last accepted selection.
 
 ## Load CSV list
 
-Reopen a session list that you wrote with **Save loaded list**. If `recording_data_path` is valid, twopy opens that converted HDF5 file. If it is not valid, twopy uses the source path in `recording_path`. [Group Matching](group_matching.md) uses the CSV folder for its default `fov_groups.csv` and `roi_matches.csv` files. If these files exist, twopy loads their rows. This picker remembers its last folder separately from **Load manually**. Source recordings and saved CSV lists usually use different folders.
+Reopen a session list that you wrote with **Save loaded list**. If `recording_data_path` is valid, twopy opens that converted HDF5 file. If it is not valid, twopy uses the source path in `recording_path`. [Group Matching](group_matching.md) uses the CSV folder for its default `fov_groups.csv` and `roi_matches.csv` files. If these files exist, twopy loads their rows. This action uses the same picker design as **Load manually**. It remembers its last folder separately because recording folders and saved lists usually have different roots.
 
 ## Use Loaded recordings
 
