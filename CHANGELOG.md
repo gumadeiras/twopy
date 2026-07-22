@@ -24,6 +24,7 @@
 - Prevented concurrent napari preference writes from removing another saved setting.
 - Kept the available-update notice visible in the shorter center preview area.
 - Prevented FOV card note fields from covering the bottom of mean-image previews.
+- Reduced FOV ID chevrons and added clear spacing between FOV sidebar sections.
 
 ### Changes
 

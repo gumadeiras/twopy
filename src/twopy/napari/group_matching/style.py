@@ -125,6 +125,7 @@ QToolButton#fov_id_step_button {
     color: $button_text;
     border: 1px solid $button_border;
     border-radius: 7px;
+    font-size: 16px;
     padding: 0px;
 }
 QToolButton#fov_id_step_button:hover {

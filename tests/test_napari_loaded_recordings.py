@@ -4,7 +4,7 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
-from qtpy.QtWidgets import QHeaderView
+from qtpy.QtWidgets import QHeaderView, QToolButton
 
 from tests.napari_support import (
     Any,
@@ -248,6 +248,28 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             )
             self.assertEqual(len(fov_cards), 2)
             fov_view = cast(Any, group_matching_widget)._fov_view
+            step_buttons = fov_view.findChildren(
+                QToolButton,
+                "fov_id_step_button",
+            )
+            self.assertEqual(len(step_buttons), 2)
+            self.assertEqual({button.text() for button in step_buttons}, {"⌃", "⌄"})
+            self.assertTrue(
+                all(
+                    button.width() == 40 and button.height() == 40
+                    for button in step_buttons
+                )
+            )
+            self.assertTrue(
+                all(
+                    button.arrowType() == Qt.ArrowType.NoArrow
+                    for button in step_buttons
+                )
+            )
+            self.assertEqual(
+                {button.accessibleName() for button in step_buttons},
+                {"Increment FOV ID", "Decrement FOV ID"},
+            )
             self.assertEqual(
                 fov_view._card_grid_columns,
                 group_matching_cards.card_columns_for_width(
@@ -311,6 +333,9 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             assert left_scroll is not None
             left_scroll_widget = left_scroll.widget()
             assert left_scroll_widget is not None
+            left_scroll_layout = left_scroll_widget.layout()
+            assert left_scroll_layout is not None
+            self.assertEqual(left_scroll_layout.spacing(), 16)
             fov_id_label = left_scroll_widget.findChild(QLabel, "fov_id_label")
             assert fov_id_label is not None
             self.assertEqual(fov_id_label.text(), "FOV ID")

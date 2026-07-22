@@ -66,6 +66,7 @@ FOV_GROUP_TABLE_FILENAME = "fov_groups.csv"
 _FOV_TABLE_VISIBLE_ROWS = 4
 _FOV_TABLE_ROW_HEIGHT = 24
 _FOV_ID_STEP_BUTTON_SIZE = 40
+_FOV_SIDEBAR_SECTION_SPACING = 16
 
 
 class FovAssignmentView(QWidget):
@@ -237,7 +238,7 @@ class FovAssignmentView(QWidget):
         card_section_layout.addWidget(scroll_area)
 
         left_column = QVBoxLayout()
-        left_column.setSpacing(10)
+        left_column.setSpacing(_FOV_SIDEBAR_SECTION_SPACING)
         left_column.addWidget(title)
         left_column.addWidget(self._instruction_label)
         left_column.addWidget(group_matching_section("FOV file", path_controls))
@@ -662,15 +663,16 @@ class FovAssignmentView(QWidget):
 
 
 def _fov_id_step_button(arrow_type: Qt.ArrowType) -> QToolButton:
-    """Return a compact native-arrow button for stepping the FOV id."""
+    """Return a compact chevron button for stepping the FOV id."""
     button = QToolButton()
     button.setObjectName("fov_id_step_button")
-    button.setArrowType(arrow_type)
+    button.setText("⌃" if arrow_type == Qt.ArrowType.UpArrow else "⌄")
     button.setFixedSize(_FOV_ID_STEP_BUTTON_SIZE, _FOV_ID_STEP_BUTTON_SIZE)
     tooltip = (
         "Increment FOV ID" if arrow_type == Qt.ArrowType.UpArrow else "Decrement FOV ID"
     )
     button.setToolTip(tooltip)
+    button.setAccessibleName(tooltip)
     return button
 
 
