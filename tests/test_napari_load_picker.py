@@ -13,6 +13,7 @@ from qtpy.QtWidgets import (
     QApplication,
     QFileDialog,
     QListView,
+    QSplitter,
     QTreeView,
 )
 
@@ -90,6 +91,7 @@ class NapariLoadPickerTest(unittest.TestCase):
                 start_folder.resolve(),
             )
             self._assert_file_views_allow_multiple_selection(dialog)
+            self._assert_dialog_layout(dialog)
 
     def test_csv_dialog_has_the_shared_configuration(self) -> None:
         """Confirm the CSV picker uses the real shared dialog settings."""
@@ -122,6 +124,7 @@ class NapariLoadPickerTest(unittest.TestCase):
                 start_folder.resolve(),
             )
             self._assert_file_views_allow_multiple_selection(dialog)
+            self._assert_dialog_layout(dialog)
 
     def test_selected_browse_folder_uses_the_selection_parent(self) -> None:
         """Confirm a picker reopens beside the last selected item.
@@ -155,6 +158,32 @@ class NapariLoadPickerTest(unittest.TestCase):
         self.assertEqual(
             tree_view.selectionMode(),
             QAbstractItemView.SelectionMode.ExtendedSelection,
+        )
+
+    def _assert_dialog_layout(self, dialog: QFileDialog) -> None:
+        """Confirm shared panes and detail columns open at readable sizes."""
+        sidebar = dialog.findChild(QListView, "sidebar")
+        splitter = dialog.findChild(QSplitter, "splitter")
+        tree_view = dialog.findChild(QTreeView, "treeView")
+        self.assertIsNotNone(sidebar)
+        self.assertIsNotNone(splitter)
+        self.assertIsNotNone(tree_view)
+        assert sidebar is not None
+        assert splitter is not None
+        assert tree_view is not None
+        header = tree_view.header()
+        assert header is not None
+        self.assertEqual(dialog.width(), 960)
+        self.assertEqual(dialog.height(), 600)
+        self.assertEqual(sidebar.minimumWidth(), 180)
+        self.assertFalse(splitter.isCollapsible(0))
+        self.assertEqual(
+            [header.sectionSize(index) for index in range(header.count())],
+            [320, 90, 140, 180],
+        )
+        self.assertIn(
+            "QFileDialog#twopy_load_path_dialog QTreeView#treeView",
+            dialog.styleSheet(),
         )
 
 

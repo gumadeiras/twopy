@@ -25,6 +25,7 @@
 - Kept the available-update notice visible in the shorter center preview area.
 - Prevented FOV card note fields from covering the bottom of mean-image previews.
 - Reduced FOV ID chevrons and added clear spacing between FOV sidebar sections.
+- Opened load pickers with readable folder and file-detail widths and consistent rounded pane corners.
 
 ### Changes
 
