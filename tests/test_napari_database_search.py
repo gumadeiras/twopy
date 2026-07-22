@@ -4,6 +4,9 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from napari.settings import get_settings
+from napari.settings._fields import Theme as NapariThemeId
+from napari.utils.theme import get_theme
 from qtpy.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt
 from qtpy.QtGui import QKeyEvent
 
@@ -38,6 +41,7 @@ from tests.napari_support import (
     unittest,
     update_database_search_favorite,
 )
+from twopy.napari.database_search import _TreeBranchStyle
 
 
 class NapariDatabaseSearchTest(NapariAdapterTestCase):
@@ -87,6 +91,38 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
 
         self.assertEqual(dialog.events, ["search"])
 
+    def test_database_tree_chevron_follows_napari_theme(self) -> None:
+        """Confirm branch chevrons use readable colors in light and dark themes.
+
+        Inputs: one database dialog while napari changes theme.
+        Outputs: branch color matching the active napari text color.
+        """
+        application = QApplication.instance() or QApplication([])
+        settings = get_settings()
+        original_theme = settings.appearance.theme
+        dialog = ExperimentSearchDialog(
+            on_load_recording_paths=lambda paths: RecordingLoadResult(
+                loaded_count=len(paths),
+            ),
+        )
+        try:
+            settings.appearance.theme = NapariThemeId("light")
+            application.processEvents()
+            self.assertEqual(
+                dialog._tree_branch_style._color.name(),
+                get_theme("light").text.as_hex(),
+            )
+
+            settings.appearance.theme = NapariThemeId("dark")
+            application.processEvents()
+            self.assertEqual(
+                dialog._tree_branch_style._color.name(),
+                get_theme("dark").text.as_hex(),
+            )
+        finally:
+            settings.appearance.theme = original_theme
+            application.processEvents()
+
     def test_database_search_dialog_loads_selected_hierarchy_paths(self) -> None:
         """Confirm DB search selections resolve to configured source paths.
 
@@ -124,10 +160,47 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
             dialog._date_filter.setText("2023/10/17")
             dialog.search()
 
-            self.assertIsNotNone(dialog.findChild(QSplitter))
+            splitter = dialog.findChild(QSplitter)
+            if splitter is None:
+                self.fail("Database search dialog did not create its splitter.")
+            self.assertEqual(splitter.objectName(), "database_search_splitter")
+            self.assertEqual(splitter.handleWidth(), 12)
             self.assertEqual(
                 dialog._tree.selectionMode(),
                 QAbstractItemView.SelectionMode.ExtendedSelection,
+            )
+            self.assertEqual(dialog._tree.objectName(), "database_experiment_tree")
+            self.assertIsInstance(dialog._tree_branch_style, _TreeBranchStyle)
+            header_style = dialog.styleSheet().split(
+                "QTreeWidget#database_experiment_tree QHeaderView {",
+                maxsplit=1,
+            )[1]
+            header_section_style = dialog.styleSheet().split(
+                "QTreeWidget#database_experiment_tree QHeaderView::section {",
+                maxsplit=1,
+            )[1]
+            self.assertIn(
+                "border-radius: 0",
+                header_style.split("}", maxsplit=1)[0],
+            )
+            self.assertIn(
+                "border-radius: 0",
+                header_section_style.split("}", maxsplit=1)[0],
+            )
+            self.assertEqual(
+                dialog._favorites_list.objectName(),
+                "database_favorites_list",
+            )
+            self.assertTrue(dialog._favorites_list.uniformItemSizes())
+            self.assertEqual(dialog._favorites_list.spacing(), 0)
+            self.assertGreaterEqual(dialog._favorites_list.minimumHeight(), 140)
+            self.assertEqual(
+                dialog._favorites_list.verticalScrollMode(),
+                QAbstractItemView.ScrollMode.ScrollPerPixel,
+            )
+            self.assertEqual(
+                dialog._favorites_list.horizontalScrollBarPolicy(),
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
             )
             self.assertEqual(dialog._user_filter.placeholderText(), "gustavo...")
             self.assertEqual(dialog._cell_type_filter.placeholderText(), "ALPN...")
@@ -156,18 +229,19 @@ class NapariDatabaseSearchTest(NapariAdapterTestCase):
                 for button in dialog.findChildren(QPushButton)
                 if button.text() in {"Load selected", "Close"}
             ]
-            self.assertEqual(bottom_buttons, ["Load selected", "Close"])
+            self.assertEqual(bottom_buttons, ["Close", "Load selected"])
             search_buttons = {
                 button.text(): button
                 for button in dialog.findChildren(QPushButton)
                 if button.text() in {"Search", "Save as favorite..."}
             }
-            self.assertIn(
-                "background-color: #f2f2f2", search_buttons["Search"].styleSheet()
+            self.assertEqual(
+                search_buttons["Search"].property("twopyRole"),
+                "primary",
             )
-            self.assertIn(
-                "background-color: #2d7dd2",
-                search_buttons["Save as favorite..."].styleSheet(),
+            self.assertEqual(
+                search_buttons["Save as favorite..."].property("twopyRole"),
+                "secondary",
             )
 
             result = dialog._tree.topLevelItem(0)

@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from napari.settings import get_settings
 from qtpy.QtCore import QEvent, QObject, Qt
-from qtpy.QtGui import QKeyEvent
+from qtpy.QtGui import QColor, QKeyEvent, QPainter, QPainterPath, QPen
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -28,8 +29,11 @@ from qtpy.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPlainTextEdit,
+    QProxyStyle,
     QPushButton,
     QSplitter,
+    QStyle,
+    QStyleOption,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -63,6 +67,14 @@ from twopy.napari.database_favorites import (
 from twopy.napari.errors import exception_message_for_user
 from twopy.napari.load_workflow import RecordingLoadFailure, RecordingLoadResult
 from twopy.napari.text import configure_placeholder
+from twopy.napari.theme import (
+    TwopyThemeColors,
+    active_twopy_theme_colors,
+    apply_twopy_theme,
+    style_action_button,
+    style_caption,
+    style_section_title,
+)
 
 __all__ = [
     "ExperimentFavoriteErrorDialog",
@@ -75,34 +87,6 @@ COUNT_COLUMN_WIDTH = 72
 FILTER_PANEL_WIDTH = 340
 FAVORITE_NAME_DIALOG_WIDTH = FILTER_PANEL_WIDTH * 3
 TEXT_FIELD_MARGIN_PX = 6
-PRIMARY_ACTION_BUTTON_STYLE = (
-    "QPushButton {"
-    "background-color: #2d7dd2;"
-    "color: white;"
-    "border: 1px solid #1f5f9f;"
-    "border-radius: 4px;"
-    "padding: 4px 10px;"
-    "}"
-    "QPushButton:disabled {"
-    "background-color: #8fb5d8;"
-    "color: #edf4fb;"
-    "border-color: #7aa6cc;"
-    "}"
-)
-SECONDARY_ACTION_BUTTON_STYLE = (
-    "QPushButton {"
-    "background-color: #f2f2f2;"
-    "color: #202020;"
-    "border: 1px solid #a8a8a8;"
-    "border-radius: 4px;"
-    "padding: 4px 10px;"
-    "}"
-    "QPushButton:disabled {"
-    "background-color: #eeeeee;"
-    "color: #8a8a8a;"
-    "border-color: #c8c8c8;"
-    "}"
-)
 
 FILTER_HINTS = {
     "user": "gustavo",
@@ -119,6 +103,65 @@ class _ResolvedExperimentPaths:
 
     paths: tuple[Path, ...]
     failures: tuple[RecordingLoadFailure, ...] = ()
+
+
+class _TreeBranchStyle(QProxyStyle):
+    """Draw database-tree chevrons with the active napari text color."""
+
+    def __init__(self, tree: QTreeWidget) -> None:
+        """Create a branch style that follows live napari theme changes."""
+        super().__init__()
+        self.setParent(tree)
+        self._tree = tree
+        self._color = QColor()
+        get_settings().appearance.events.theme.connect(self._theme_changed)
+        self._theme_changed()
+
+    def _theme_changed(self, _event: object | None = None) -> None:
+        """Refresh the chevron color and repaint visible branches."""
+        theme = active_twopy_theme_colors(self._tree.palette())
+        self._color = QColor(theme.text)
+        viewport = self._tree.viewport()
+        if viewport is not None:
+            viewport.update()
+
+    def drawPrimitive(
+        self,
+        element: QStyle.PrimitiveElement,
+        option: QStyleOption | None,
+        painter: QPainter | None,
+        widget: QWidget | None = None,
+    ) -> None:
+        """Draw one branch chevron or use the base style for other elements."""
+        if (
+            element != QStyle.PrimitiveElement.PE_IndicatorBranch
+            or option is None
+            or painter is None
+        ):
+            super().drawPrimitive(element, option, painter, widget)
+            return
+        if not option.state & QStyle.StateFlag.State_Children:
+            return
+
+        center = option.rect.center()
+        path = QPainterPath()
+        if option.state & QStyle.StateFlag.State_Open:
+            path.moveTo(float(center.x() - 4), float(center.y() - 2))
+            path.lineTo(float(center.x()), float(center.y() + 2))
+            path.lineTo(float(center.x() + 4), float(center.y() - 2))
+        else:
+            path.moveTo(float(center.x() - 2), float(center.y() - 4))
+            path.lineTo(float(center.x() + 2), float(center.y()))
+            path.lineTo(float(center.x() - 2), float(center.y() + 4))
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(self._color, 1.6)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.drawPath(path)
+        painter.restore()
 
 
 class ExperimentSearchDialog(QDialog):
@@ -167,6 +210,9 @@ class ExperimentSearchDialog(QDialog):
             self._update_favorite_action_states,
         )
         self._tree = QTreeWidget()
+        self._tree.setObjectName("database_experiment_tree")
+        self._tree_branch_style = _TreeBranchStyle(self._tree)
+        self._tree.setStyle(self._tree_branch_style)
         self._tree.setHeaderLabels(("Experiment", "Count"))
         self._tree.setSelectionMode(
             QAbstractItemView.SelectionMode.ExtendedSelection,
@@ -174,22 +220,29 @@ class ExperimentSearchDialog(QDialog):
         self._configure_result_columns()
         self._tree.itemActivated.connect(self._load_tree_item)
         self._tree.installEventFilter(self)
+        self._result_status = QLabel("Set filters, then select Search.")
+        style_caption(self._result_status)
 
         search_button = QPushButton("Search")
-        search_button.setStyleSheet(SECONDARY_ACTION_BUTTON_STYLE)
+        style_action_button(search_button, role="primary")
         search_button.clicked.connect(self.search)
         self._save_favorite_button = QPushButton("Save as favorite...")
-        self._save_favorite_button.setStyleSheet(PRIMARY_ACTION_BUTTON_STYLE)
+        style_action_button(self._save_favorite_button)
         self._save_favorite_button.clicked.connect(self.save_current_favorite)
         self._use_favorite_button = QPushButton("Use")
+        style_action_button(self._use_favorite_button)
         self._use_favorite_button.clicked.connect(self.use_selected_favorite)
         self._edit_favorite_button = QPushButton("Edit...")
+        style_action_button(self._edit_favorite_button, role="quiet")
         self._edit_favorite_button.clicked.connect(self.edit_selected_favorite)
         self._remove_favorite_button = QPushButton("Remove")
+        style_action_button(self._remove_favorite_button, role="danger")
         self._remove_favorite_button.clicked.connect(self.remove_selected_favorite)
         load_button = QPushButton("Load selected")
+        style_action_button(load_button, role="primary")
         load_button.clicked.connect(self.load_selected)
         close_button = QPushButton("Close")
+        style_action_button(close_button, role="quiet")
         close_button.clicked.connect(self.reject)
         for button in (
             search_button,
@@ -209,16 +262,29 @@ class ExperimentSearchDialog(QDialog):
         self._update_favorite_action_states()
 
         self.setWindowTitle("Search database")
-        self.resize(1040, 560)
+        self.resize(1040, 640)
 
         layout = QVBoxLayout()
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setObjectName("database_search_splitter")
+        splitter.setHandleWidth(12)
         splitter.addWidget(self._filter_panel(search_button))
-        splitter.addWidget(self._tree)
+        results_panel = QWidget()
+        results_layout = QVBoxLayout(results_panel)
+        results_layout.setContentsMargins(0, 0, 0, 0)
+        results_layout.setSpacing(8)
+        results_layout.addWidget(self._result_status)
+        results_layout.addWidget(self._tree)
+        splitter.addWidget(results_panel)
         splitter.setSizes((FILTER_PANEL_WIDTH, 700))
         layout.addWidget(splitter)
         layout.addLayout(_bottom_button_row(load_button, close_button))
         self.setLayout(layout)
+        apply_twopy_theme(
+            self,
+            name="twopy_database_search",
+            additional_style=_database_search_style,
+        )
 
     def eventFilter(self, a0: QObject | None, a1: QEvent | None) -> bool:
         """Load selected search results when Return is pressed in the result tree.
@@ -275,10 +341,15 @@ class ExperimentSearchDialog(QDialog):
             )
         except (FileNotFoundError, OSError, ValueError) as error:
             self._tree.clear()
+            self._result_status.setText("Search failed.")
             self._show_search_error(error)
             return
 
         self._render_tree(build_experiment_search_tree(experiments))
+        count = len(experiments)
+        self._result_status.setText(
+            f"{count} recording{'s' if count != 1 else ''} found."
+        )
 
     def save_current_favorite(self) -> None:
         """Save the current search filters as a reusable favorite.
@@ -498,8 +569,7 @@ class ExperimentSearchDialog(QDialog):
         layout = QVBoxLayout()
         layout.addLayout(self._filter_form())
         layout.addLayout(action_layout)
-        layout.addWidget(self._favorites_panel())
-        layout.addStretch(1)
+        layout.addWidget(self._favorites_panel(), 1)
         panel.setLayout(layout)
         return panel
 
@@ -520,8 +590,10 @@ class ExperimentSearchDialog(QDialog):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 8, 0, 0)
         layout.setSpacing(6)
-        layout.addWidget(QLabel("Favorites"))
-        layout.addWidget(self._favorites_list)
+        title = QLabel("Favorites")
+        style_section_title(title)
+        layout.addWidget(title)
+        layout.addWidget(self._favorites_list, 1)
 
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
@@ -536,6 +608,20 @@ class ExperimentSearchDialog(QDialog):
 
     def _configure_favorites_list(self) -> None:
         """Configure the favorites list for explicit internal row moves."""
+        self._favorites_list.setObjectName("database_favorites_list")
+        self._favorites_list.setAccessibleName("Saved database searches")
+        self._favorites_list.setToolTip(
+            "Double-click a saved search to use it. Drag rows to reorder them."
+        )
+        self._favorites_list.setMinimumHeight(140)
+        self._favorites_list.setUniformItemSizes(True)
+        self._favorites_list.setSpacing(0)
+        self._favorites_list.setVerticalScrollMode(
+            QAbstractItemView.ScrollMode.ScrollPerPixel,
+        )
+        self._favorites_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
         self._favorites_list.setDragEnabled(True)
         self._favorites_list.setAcceptDrops(True)
         self._favorites_list.setDropIndicatorShown(True)
@@ -821,6 +907,48 @@ class ExperimentSearchDialog(QDialog):
         ExperimentFavoriteErrorDialog(error, parent=self.parentWidget()).exec()
 
 
+def _database_search_style(color: TwopyThemeColors) -> str:
+    """Return compact database-search styles from the active theme.
+
+    Args:
+        color: Active twopy colors from napari.
+
+    Returns:
+        Styles for the search splitter and favorites list.
+
+    The styles keep the resize gutter quiet and make favorite rows easy to scan.
+    """
+    return f"""
+QSplitter#database_search_splitter::handle {{
+    background: transparent;
+}}
+QListWidget#database_favorites_list {{
+    background: {color.field};
+    border: 1px solid {color.control_outline};
+    border-radius: 7px;
+}}
+QListWidget#database_favorites_list::item {{
+    min-height: 24px;
+    padding: 2px 7px;
+    border-bottom: 1px solid {color.divider};
+}}
+QTreeWidget#database_experiment_tree {{
+    border-radius: 0;
+}}
+QTreeWidget#database_experiment_tree QHeaderView {{
+    background: {color.surface};
+    border: none;
+    border-bottom: 1px solid {color.control_outline};
+    border-radius: 0;
+}}
+QTreeWidget#database_experiment_tree QHeaderView::section {{
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}}
+"""
+
+
 def _bottom_button_row(
     load_button: QPushButton, close_button: QPushButton
 ) -> QHBoxLayout:
@@ -838,8 +966,8 @@ def _bottom_button_row(
     """
     layout = QHBoxLayout()
     layout.addStretch(1)
-    layout.addWidget(load_button)
     layout.addWidget(close_button)
+    layout.addWidget(load_button)
     return layout
 
 
@@ -898,6 +1026,7 @@ class ExperimentSearchErrorDialog(QDialog):
         layout.addWidget(_read_only_details(exception_message_for_user(error)))
         layout.addWidget(_close_button_box(self))
         self.setLayout(layout)
+        apply_twopy_theme(self, name="twopy_database_search_error")
 
 
 class ExperimentFavoriteErrorDialog(QDialog):
@@ -928,6 +1057,7 @@ class ExperimentFavoriteErrorDialog(QDialog):
         layout.addWidget(_read_only_details(exception_message_for_user(error)))
         layout.addWidget(_close_button_box(self))
         self.setLayout(layout)
+        apply_twopy_theme(self, name="twopy_database_favorite_error")
 
 
 class RecordingLoadErrorDialog(QDialog):
@@ -958,6 +1088,7 @@ class RecordingLoadErrorDialog(QDialog):
         layout.addWidget(_read_only_details(_load_failure_text(result.failures)))
         layout.addWidget(_close_button_box(self))
         self.setLayout(layout)
+        apply_twopy_theme(self, name="twopy_recording_load_error")
 
 
 def _load_failure_summary(result: RecordingLoadResult) -> str:

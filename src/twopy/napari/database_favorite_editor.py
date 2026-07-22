@@ -23,6 +23,7 @@ from twopy.napari.database_favorites import (
     ExperimentSearchFavorite,
     normalized_database_search_favorite,
 )
+from twopy.napari.theme import apply_twopy_theme
 
 __all__ = ["ExperimentFavoriteEditDialog"]
 
@@ -80,6 +81,7 @@ class ExperimentFavoriteEditDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(buttons)
         self.setLayout(layout)
+        apply_twopy_theme(self, name="twopy_database_favorite_editor")
 
     def favorite(self) -> ExperimentSearchFavorite:
         """Return the favorite currently shown in the editor fields.
