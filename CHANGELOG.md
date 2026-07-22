@@ -20,6 +20,9 @@
 - Made selected tabs use the theme highlight while unselected tabs match the napari window.
 - Made section backgrounds match the napari window so their outlines provide the visual structure.
 - Made all twopy views follow live napari dark, light, system, and custom theme changes, including plot backgrounds and text.
+- Standardized manual and CSV loading on one themed picker and restored their independent folder histories.
+- Prevented concurrent napari preference writes from removing another saved setting.
+- Kept the available-update notice visible in the shorter center preview area.
 
 ### Changes
 
