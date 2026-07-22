@@ -601,7 +601,7 @@ class _ResponsePlotWidget(QWidget):
         if self._viewer is not None:
             refresh_empty_viewer_message(
                 self._viewer,
-                update_command=notice.text,
+                update_notice=notice.summary_text,
             )
 
     def _ignore_update_notice_error(self, _error: Exception) -> None:

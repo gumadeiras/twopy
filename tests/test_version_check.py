@@ -41,6 +41,10 @@ class VersionCheckTest(unittest.TestCase):
                 "python -m pip install -U twopy"
             ),
         )
+        self.assertEqual(
+            notice.summary_text,
+            "Update available: 0.3.3\npython -m pip install -U twopy",
+        )
 
     def test_same_or_older_release_returns_no_notice(self) -> None:
         """Confirm current installs do not show an update command."""

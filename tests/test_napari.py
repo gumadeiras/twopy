@@ -53,6 +53,7 @@ from twopy.napari.empty_state import (
     empty_viewer_message,
     hide_empty_viewer_message,
     refresh_empty_viewer_message,
+    show_empty_viewer_message,
 )
 from twopy.napari.plotting.docks.response_plot_widget import (
     _custom_workflow_display_result,
@@ -474,16 +475,27 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
 
         refresh_empty_viewer_message(
             viewer,
-            update_command="python -m pip install -U twopy",
+            update_notice=("Update available: 0.3.9\npython -m pip install -U twopy"),
         )
 
         self.assertEqual(
             viewer.text_overlay.text,
-            f"{EMPTY_VIEWER_MESSAGE}\n\npython -m pip install -U twopy",
+            (
+                f"twopy {__version__}\n"
+                "Update available: 0.3.9\n"
+                "python -m pip install -U twopy\n\n"
+                "Getting Started\n\n"
+                "Search or load recordings manually\n"
+                "using the Load tab on the right."
+            ),
         )
         self.assertEqual(
             viewer.text_overlay.text,
-            empty_viewer_message(update_command="python -m pip install -U twopy"),
+            empty_viewer_message(
+                update_notice=(
+                    "Update available: 0.3.9\npython -m pip install -U twopy"
+                ),
+            ),
         )
         hide_empty_viewer_message(viewer)
         self.assertEqual(viewer.text_overlay.text, "")
@@ -497,11 +509,15 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
 
         refresh_empty_viewer_message(
             viewer,
-            update_command="python -m pip install -U twopy",
+            update_notice=("Update available: 0.3.9\npython -m pip install -U twopy"),
         )
 
         self.assertEqual(viewer.text_overlay.text, "existing HUD")
         self.assertTrue(viewer.text_overlay.visible)
+
+        show_empty_viewer_message(viewer)
+
+        self.assertIn("Update available: 0.3.9", viewer.text_overlay.text)
 
     def test_cleared_recording_selection_restores_empty_viewer_message(self) -> None:
         """Confirm no-recording selection brings back the twopy empty canvas.

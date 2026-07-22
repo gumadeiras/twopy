@@ -19,12 +19,13 @@ __all__ = [
     "show_empty_viewer_message",
 ]
 
-_BASE_EMPTY_VIEWER_MESSAGE = (
-    f"twopy {__version__}\n\n"
+_EMPTY_VIEWER_GUIDANCE = (
     "Getting Started\n\n"
     "Search or load recordings manually\n"
     "using the Load tab on the right."
 )
+_BASE_EMPTY_VIEWER_MESSAGE = f"twopy {__version__}\n\n{_EMPTY_VIEWER_GUIDANCE}"
+_UPDATE_NOTICE_ATTRIBUTE = "_twopy_empty_viewer_update_notice"
 EMPTY_VIEWER_MESSAGE = _BASE_EMPTY_VIEWER_MESSAGE
 
 
@@ -59,13 +60,13 @@ class _TextOverlay(Protocol):
 
 
 def show_empty_viewer_message(
-    viewer: object, *, update_command: str | None = None
+    viewer: object, *, update_notice: str | None = None
 ) -> None:
     """Show twopy's empty-recording message on a napari viewer.
 
     Args:
         viewer: Napari viewer or test double.
-        update_command: Optional pip command shown when a newer twopy release is
+        update_notice: Optional compact notice shown when a newer twopy release is
             known.
 
     Returns:
@@ -82,7 +83,8 @@ def show_empty_viewer_message(
     overlay = _text_overlay(viewer)
     if overlay is None:
         return
-    overlay.text = empty_viewer_message(update_command=update_command)
+    resolved_notice = update_notice or _stored_update_notice(viewer)
+    overlay.text = empty_viewer_message(update_notice=resolved_notice)
     overlay.visible = True
     overlay.position = "top_center"
     overlay.font_size = 18
@@ -113,35 +115,43 @@ def hide_empty_viewer_message(viewer: object) -> None:
 def refresh_empty_viewer_message(
     viewer: object,
     *,
-    update_command: str | None,
+    update_notice: str | None,
 ) -> None:
     """Update twopy's empty-recording message when it already owns the overlay.
 
     Args:
         viewer: Napari viewer or test double.
-        update_command: Optional pip command shown when a newer twopy release is
+        update_notice: Optional compact notice shown when a newer twopy release is
             known.
 
     Returns:
         None.
     """
+    setattr(viewer, _UPDATE_NOTICE_ATTRIBUTE, update_notice)
     overlay = _text_overlay(viewer)
     if overlay is None or not _is_empty_viewer_message(overlay.text):
         return
-    overlay.text = empty_viewer_message(update_command=update_command)
+    overlay.text = empty_viewer_message(update_notice=update_notice)
 
 
-def empty_viewer_message(*, update_command: str | None = None) -> str:
+def empty_viewer_message(*, update_notice: str | None = None) -> str:
     """Return the empty-viewer text for the current update state."""
-    if not update_command:
+    if not update_notice:
         return _BASE_EMPTY_VIEWER_MESSAGE
-    return f"{_BASE_EMPTY_VIEWER_MESSAGE}\n\n{update_command}"
+    return f"twopy {__version__}\n{update_notice}\n\n{_EMPTY_VIEWER_GUIDANCE}"
+
+
+def _stored_update_notice(viewer: object) -> str | None:
+    """Return the compact update notice stored on one viewer."""
+    notice = getattr(viewer, _UPDATE_NOTICE_ATTRIBUTE, None)
+    return notice if isinstance(notice, str) else None
 
 
 def _is_empty_viewer_message(text: str) -> bool:
     """Return whether text is owned by twopy's empty-recording overlay."""
-    return text == EMPTY_VIEWER_MESSAGE or text.startswith(
-        f"{EMPTY_VIEWER_MESSAGE}\n\n"
+    return text == EMPTY_VIEWER_MESSAGE or (
+        text.startswith(f"twopy {__version__}\n")
+        and text.endswith(_EMPTY_VIEWER_GUIDANCE)
     )
 
 

@@ -115,6 +115,11 @@ class UpdateNotice:
             f"{self.command}"
         )
 
+    @property
+    def summary_text(self) -> str:
+        """Return the compact update notice for the center viewer."""
+        return f"Update available: {self.latest_version}\n{self.command}"
+
 
 def check_for_update(
     *,
