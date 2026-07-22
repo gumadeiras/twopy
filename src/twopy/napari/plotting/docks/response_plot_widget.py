@@ -20,7 +20,7 @@ from typing import cast
 
 import numpy as np
 import numpy.typing as npt
-from qtpy.QtCore import QTimer
+from qtpy.QtCore import Qt, QTimer
 from qtpy.QtGui import QCloseEvent, QColor
 from qtpy.QtWidgets import (
     QApplication,
@@ -135,6 +135,7 @@ from twopy.napari.roi import (
     remove_roi_label_values_from_layer,
     set_roi_label_image_on_layer,
 )
+from twopy.napari.theme import apply_twopy_theme
 from twopy.napari.version_check import UpdateNotice, check_for_update
 from twopy.pixel_calibration import load_pixel_calibrations
 from twopy.pixel_calibration_profiles import (
@@ -305,6 +306,15 @@ class _ResponsePlotWidget(QWidget):
             self._custom_workflow_panel,
             "Custom",
         )
+        apply_twopy_theme(self, name="twopy_response_view")
+        plot_tab_bar = self._plot_tabs.tabBar()
+        if plot_tab_bar is None:
+            msg = "Twopy response view expected its tab bar."
+            raise RuntimeError(msg)
+        plot_tab_bar.setElideMode(Qt.TextElideMode.ElideNone)
+        plot_tab_bar.setExpanding(False)
+        plot_tab_bar.setUsesScrollButtons(True)
+        self._plot_tabs.setMinimumWidth(plot_tab_bar.sizeHint().width() + 16)
         self._add_default_plot_display_options()
         self._schedule_update_notice_check()
 

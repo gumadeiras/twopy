@@ -40,6 +40,7 @@ from twopy.napari.plotting.export import (
 )
 from twopy.napari.plotting.panels import SidebarTextLabel, scrolling_tab
 from twopy.napari.text import counted_noun
+from twopy.napari.theme import style_action_button
 
 __all__ = ["ResponseExportState", "create_response_export_tab"]
 
@@ -215,6 +216,7 @@ def _button(
         Configured Qt button.
     """
     button = QPushButton(text)
+    style_action_button(button)
 
     def run_export() -> None:
         """Run the export action and show a short status."""

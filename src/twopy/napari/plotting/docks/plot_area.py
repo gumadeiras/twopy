@@ -8,7 +8,7 @@ This module owns the mutable Qt plot cache so the dock widget can coordinate
 analysis state without also managing layout internals.
 """
 
-from qtpy.QtCore import QTimer
+from qtpy.QtCore import Qt, QTimer
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QWidget
 
@@ -38,8 +38,10 @@ class ResponsePlotArea:
         self._render_cache_timer.setInterval(10)
         self._render_cache_timer.timeout.connect(self._prepare_next_render_cache)
         self._status_label = QLabel(initial_status)
+        self._status_label.setWordWrap(True)
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._layout = QHBoxLayout()
-        self._layout.addWidget(self._status_label)
+        self._layout.addWidget(self._status_label, 1)
 
         plot_content = QWidget()
         plot_content.setLayout(self._layout)
@@ -60,8 +62,8 @@ class ResponsePlotArea:
         clear_layout(self._layout)
         self._status_label = QLabel(text)
         self._status_label.setWordWrap(True)
-        self._layout.addWidget(self._status_label)
-        self._layout.addStretch(1)
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._layout.addWidget(self._status_label, 1)
 
     def clear(self) -> None:
         """Delete cached plots and clear all widgets from the plot strip."""

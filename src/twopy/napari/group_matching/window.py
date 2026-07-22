@@ -12,7 +12,6 @@ matching across fields of view should not be the default path.
 from dataclasses import dataclass
 from pathlib import Path
 
-from qtpy.QtCore import QEvent
 from qtpy.QtWidgets import (
     QStackedWidget,
     QVBoxLayout,
@@ -114,7 +113,6 @@ class GroupMatchingPanel(QWidget):
         self._fov_notes: dict[Path, str] = {}
         self._current_rois: dict[Path, tuple[str, ...]] = {}
         self._csv_paths = GroupMatchingCsvPaths.default()
-        self._theme_style_refreshing = False
         self._stack = QStackedWidget()
         self._fov_view = FovAssignmentView(
             state=state,
@@ -152,21 +150,6 @@ class GroupMatchingPanel(QWidget):
         self._load_fov_groups_if_available()
         self._fov_view.refresh()
         self._roi_view.refresh()
-
-    def changeEvent(self, a0: QEvent | None) -> None:  # noqa: N802
-        """Refresh palette-derived styling when napari changes theme."""
-        super().changeEvent(a0)
-        if a0 is not None and a0.type() in (
-            QEvent.Type.ApplicationPaletteChange,
-            QEvent.Type.PaletteChange,
-        ):
-            if self._theme_style_refreshing:
-                return
-            self._theme_style_refreshing = True
-            try:
-                style_group_matching_panel(self)
-            finally:
-                self._theme_style_refreshing = False
 
     def finalize_fov_assignments(self) -> None:
         """Save current FOV assignments and switch to ROI assignment."""

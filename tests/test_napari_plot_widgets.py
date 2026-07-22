@@ -4,8 +4,10 @@ Inputs: shared fake napari state and tiny converted recordings.
 Outputs: assertions for one napari workflow area.
 """
 
+from napari.settings import get_settings
+from napari.settings._fields import Theme as NapariThemeId
+from napari.utils.theme import get_theme
 from qtpy.QtCore import QRectF
-from qtpy.QtGui import QPalette
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -58,6 +60,7 @@ from tests.napari_support import (
     roi_colors_from_layer,
     temporary_directory,
     unittest,
+    visibility_options_widget,
 )
 from twopy.analysis.group_matching import ManualRoiMatchRow, save_manual_roi_match_rows
 from twopy.custom import CustomResult, CustomTable
@@ -77,6 +80,54 @@ from twopy.napari.session import LoadedNapariRecording
 
 class NapariPlotWidgetTest(NapariAdapterTestCase):
     """Napari response plot widget tests."""
+
+    def test_response_tabs_keep_full_labels(self) -> None:
+        """Confirm response tabs never shorten their visible names.
+
+        Inputs: a new response plot widget.
+        Outputs: full tab labels, natural tab widths, and overflow controls.
+        """
+        _ = QApplication.instance() or QApplication([])
+        response_widget = cast(Any, create_response_plot_widget(None))
+        tab_bar = response_widget._plot_tabs.tabBar()
+        if tab_bar is None:
+            self.fail("Response plot widget did not create its tab bar.")
+
+        self.assertEqual(
+            tuple(
+                response_widget._plot_tabs.tabText(index)
+                for index in range(response_widget._plot_tabs.count())
+            ),
+            ("Responses", "Heatmaps"),
+        )
+        self.assertEqual(tab_bar.elideMode(), Qt.TextElideMode.ElideNone)
+        self.assertFalse(tab_bar.expanding())
+        self.assertTrue(tab_bar.usesScrollButtons())
+        self.assertGreaterEqual(
+            response_widget._plot_tabs.minimumWidth(),
+            tab_bar.sizeHint().width() + 16,
+        )
+        self.assertEqual(
+            response_widget._custom_workflow_panel._reload_button.property("twopyRole"),
+            "secondary",
+        )
+
+    def test_visibility_actions_use_standard_button_states(self) -> None:
+        """Confirm ROI and epoch bulk actions use standard button styling.
+
+        Inputs: one visibility control group.
+        Outputs: Select all and None use the secondary action role.
+        """
+        widget = visibility_options_widget(
+            title="ROIs",
+            labels=("ROI 1",),
+            visibility={"ROI 1": True},
+            on_change=lambda _label, _visible: None,
+        )
+        actions = {button.text(): button for button in widget.findChildren(QPushButton)}
+
+        self.assertEqual(actions["Select all"].property("twopyRole"), "secondary")
+        self.assertEqual(actions["None"].property("twopyRole"), "secondary")
 
     def test_epoch_visibility_toggle_is_idempotent_by_row_index(self) -> None:
         """Confirm hiding and showing an epoch restores the same row.
@@ -1272,27 +1323,31 @@ class NapariPlotWidgetTest(NapariAdapterTestCase):
 
         self.assertEqual(view._hidden_responses, set())
 
-    def test_group_matching_style_uses_active_qt_palette(self) -> None:
-        """Confirm Group Matching colors follow the current Qt theme.
+    def test_group_matching_style_uses_active_napari_theme(self) -> None:
+        """Confirm Group Matching colors follow the current napari theme.
 
-        Inputs: one widget with a dark palette.
-        Outputs: the applied stylesheet uses palette colors instead of fixed
-        light-card colors.
+        Inputs: one widget while napari changes from dark to light.
+        Outputs: the applied stylesheet uses each selected theme.
         """
-        _ = QApplication.instance() or QApplication([])
-        widget = QWidget()
-        palette = widget.palette()
-        palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
-        palette.setColor(QPalette.ColorRole.Base, QColor("#303030"))
-        palette.setColor(QPalette.ColorRole.WindowText, QColor("#eeeeee"))
-        widget.setPalette(palette)
+        application = QApplication.instance() or QApplication([])
+        settings = get_settings()
+        original_theme = settings.appearance.theme
+        try:
+            settings.appearance.theme = NapariThemeId("dark")
+            widget = QWidget()
+            style_group_matching_panel(widget)
+            dark_style = widget.styleSheet()
 
-        style_group_matching_panel(widget)
+            settings.appearance.theme = NapariThemeId("light")
+            application.processEvents()
+            light_style = widget.styleSheet()
 
-        stylesheet = widget.styleSheet()
-        self.assertIn("#202020", stylesheet)
-        self.assertIn("#303030", stylesheet)
-        self.assertNotIn("#fffefa", stylesheet)
+            self.assertIn(get_theme("dark").background.as_hex(), dark_style)
+            self.assertIn(get_theme("light").background.as_hex(), light_style)
+            self.assertNotEqual(dark_style, light_style)
+        finally:
+            settings.appearance.theme = original_theme
+            application.processEvents()
 
     def test_group_matching_roi_preview_omits_interleave_epochs(self) -> None:
         """Confirm ROI matching response plots omit interleave epochs.

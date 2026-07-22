@@ -29,6 +29,7 @@ from twopy.napari.plotting.form_controls import (
     plot_form_layout,
     set_plot_control_width,
 )
+from twopy.napari.theme import style_action_button
 
 __all__ = [
     "plot_display_options_group",
@@ -153,7 +154,9 @@ def visibility_options_widget(
     layout.addLayout(title_row)
     button_row = QHBoxLayout()
     all_button = QPushButton("Select all")
+    style_action_button(all_button)
     none_button = QPushButton("None")
+    style_action_button(none_button)
     button_row.addWidget(all_button)
     button_row.addWidget(none_button)
     layout.addLayout(button_row)
@@ -262,9 +265,8 @@ def _color_swatch(color: QColor) -> QWidget:
     """
     swatch = QWidget()
     swatch.setFixedSize(12, 12)
-    swatch.setStyleSheet(
-        f"background-color: {color.name()}; border: 1px solid #cfd6df;"
-    )
+    swatch.setProperty("twopyRole", "colorSwatch")
+    swatch.setStyleSheet(f"background-color: {color.name()};")
     return swatch
 
 

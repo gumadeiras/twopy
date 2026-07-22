@@ -65,7 +65,7 @@ __all__ = [
 FOV_GROUP_TABLE_FILENAME = "fov_groups.csv"
 _FOV_TABLE_VISIBLE_ROWS = 4
 _FOV_TABLE_ROW_HEIGHT = 24
-_FOV_ID_STEP_BUTTON_SIZE = 26
+_FOV_ID_STEP_BUTTON_SIZE = 40
 
 
 class FovAssignmentView(QWidget):
@@ -96,6 +96,7 @@ class FovAssignmentView(QWidget):
         self._fov_groups = fov_groups
         self._fov_notes = fov_notes
         self._cards: list[FovRecordingCard] = []
+        self._empty_workspace_label: QLabel | None = None
         self._card_grid_rows = 0
         self._card_grid_columns = 0
         self._on_output_path_changed = on_output_path_changed
@@ -283,6 +284,7 @@ class FovAssignmentView(QWidget):
     def refresh(self) -> None:
         """Refresh mean-image cards from currently loaded recordings."""
         clear_card_grid_layout(self._grid, delete_widgets=True)
+        self._empty_workspace_label = None
         self._cards.clear()
         for recording in self._state.loaded_recordings:
             recording_path = recording.recording.source_session_dir.expanduser()
@@ -302,6 +304,21 @@ class FovAssignmentView(QWidget):
             self._grid.setRowStretch(row_index, 0)
         for column_index in range(self._card_grid_columns):
             self._grid.setColumnStretch(column_index, 0)
+        if len(self._cards) == 0:
+            if self._empty_workspace_label is None:
+                self._empty_workspace_label = QLabel(
+                    "Load recordings before you assign FOV groups.",
+                )
+                self._empty_workspace_label.setObjectName("group_matching_subtitle")
+                self._empty_workspace_label.setAlignment(
+                    Qt.AlignmentFlag.AlignCenter,
+                )
+            self._grid.addWidget(self._empty_workspace_label, 0, 0)
+            self._grid.setRowStretch(1, 1)
+            self._grid.setColumnStretch(0, 1)
+            self._card_grid_columns = 1
+            self._card_grid_rows = 1
+            return
         columns = card_columns_for_width(
             self._workspace_viewport.width(),
             card_width=FOV_CARD_WIDTH,

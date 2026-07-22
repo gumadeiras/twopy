@@ -33,6 +33,7 @@ from twopy.napari.group_matching.images import (
 )
 from twopy.napari.protocols import NapariLayerWithData
 from twopy.napari.session import LoadedNapariRecording
+from twopy.napari.theme import readable_text_color
 
 __all__ = [
     "ROI_CARD_HEIGHT",
@@ -45,8 +46,8 @@ __all__ = [
 ]
 
 ROI_CARD_WIDTH = THUMBNAIL_SIZE + 24
-ROI_CARD_HEIGHT = THUMBNAIL_SIZE + 92
-ROI_CONTROL_HEIGHT = 28
+ROI_CARD_HEIGHT = THUMBNAIL_SIZE + 140
+ROI_CONTROL_HEIGHT = 40
 VISIBLE_SELECTED_ROI_CHIPS = 4
 
 
@@ -230,7 +231,7 @@ class RoiRecordingCard(QFrame):
             roi_id = roi_label_display_id(roi_label)
             button = QPushButton(f"ROI {roi_id}")
             button.setObjectName("selected_roi_chip")
-            button.setFixedHeight(22)
+            button.setFixedHeight(40)
             button.setIcon(_remove_roi_icon())
             button.setToolTip(f"Remove ROI {roi_id}")
             button.setAccessibleName(f"Remove ROI {roi_id}")
@@ -417,7 +418,7 @@ def _trace_label_style(color: QColor) -> str:
     return (
         "QLabel {"
         f"background-color: {color.name()};"
-        "color: white;"
+        f"color: {readable_text_color(color)};"
         "font-weight: bold;"
         "padding: 0px 6px;"
         "border-radius: 3px;"

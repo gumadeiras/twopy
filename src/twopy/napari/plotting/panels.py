@@ -50,8 +50,7 @@ class SidebarTextLabel(QLabel):
         super().__init__()
         self._plain_text = ""
         self._configure_text_label()
-        if text:
-            self.setText(text)
+        self.setText(text)
 
     def setText(self, a0: str | None) -> None:
         """Replace the visible text with plain copyable text.
@@ -64,6 +63,7 @@ class SidebarTextLabel(QLabel):
         """
         self._plain_text = a0 or ""
         super().setText(_sidebar_label_markup(self._plain_text))
+        self.setVisible(bool(self._plain_text))
 
     def text(self) -> str:
         """Return the plain text currently visible in the label.
@@ -120,6 +120,7 @@ def epoch_plot_panel(*, title: str, plot: EpochPlotWidget) -> QWidget:
     panel = QWidget()
     layout = QVBoxLayout()
     title_label = QLabel(title)
+    title_label.setObjectName("twopy_plot_title")
     title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
     layout.addWidget(title_label)
     layout.addWidget(plot)
@@ -163,7 +164,17 @@ def response_metadata_tab(
     if motion_summary_widget is not None:
         layout.addWidget(motion_summary_widget)
     layout.addStretch(1)
-    return scrolling_tab(layout)
+    tab = scrolling_tab(layout)
+    for label in (
+        recording_summary_label,
+        microscope_summary_label,
+        analysis_output_label,
+        roi_output_label,
+        status_label,
+        update_notice_label,
+    ):
+        label.setVisible(bool(label.text()))
+    return tab
 
 
 def _metadata_group(title: str, *labels: SidebarTextLabel) -> QGroupBox:
@@ -171,9 +182,9 @@ def _metadata_group(title: str, *labels: SidebarTextLabel) -> QGroupBox:
     group = QGroupBox(title)
     layout = QVBoxLayout()
     layout.setSpacing(4)
+    group.setLayout(layout)
     for label in labels:
         layout.addWidget(label)
-    group.setLayout(layout)
     return group
 
 

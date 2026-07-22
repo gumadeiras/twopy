@@ -36,6 +36,7 @@ from twopy.napari.plotting.roi_generation.options import (
     RoiGenerationOptions,
     RoiGenerationUnits,
 )
+from twopy.napari.theme import style_action_button
 from twopy.pixel_calibration import PixelCalibrationRow
 from twopy.pixel_calibration_profiles import (
     PixelCalibrationGroup,
@@ -151,6 +152,7 @@ class RoiGenerationControls(QGroupBox):
         self._status = QLabel("")
         self._status.setWordWrap(True)
         self._create_button = QPushButton("Create ROIs")
+        style_action_button(self._create_button, role="primary")
 
         self._populate_calibration_choices()
         self._roi_mode.currentIndexChanged.connect(self._sync_mode)

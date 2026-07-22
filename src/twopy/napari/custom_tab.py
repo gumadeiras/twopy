@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
+from napari.settings import get_settings
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QPalette, QWheelEvent
+from qtpy.QtGui import QColor, QPalette, QWheelEvent
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -50,6 +51,12 @@ from twopy.custom import (
     parameter_specs,
 )
 from twopy.napari.text import configure_placeholder
+from twopy.napari.theme import (
+    TwopyThemeColors,
+    active_twopy_theme_colors,
+    style_action_button,
+    style_caption,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -69,9 +76,6 @@ _CUSTOM_CHOICE_LABELS = {
     "visible_epochs": "visible epochs",
     "visible_rois": "visible ROIs",
 }
-_PLOT_BACKGROUND = "#20252d"
-_PLOT_AXIS_COLOR = "#cfd6df"
-_PLOT_GRID_COLOR = "#6d7683"
 _PLOT_TRACE_COLORS = (
     "#4cc9f0",
     "#f72585",
@@ -114,17 +118,21 @@ class CustomWorkflowPanel(QScrollArea):
             self._selected_workflow_changed
         )
         self._reload_button = QPushButton("Reload workflows")
+        style_action_button(self._reload_button)
         self._reload_button.clicked.connect(self.reload_workflows)
         self._description_label = QLabel("")
         self._description_label.setWordWrap(True)
         self._version_label = QLabel("")
         self._version_label.setWordWrap(True)
+        style_caption(self._version_label)
         self._status_label = QLabel("")
         self._status_label.setWordWrap(True)
+        self._status_label.setProperty("twopyRole", "status")
         self._parameter_group = QGroupBox("Parameters")
         self._parameter_layout = QFormLayout()
         self._parameter_group.setLayout(self._parameter_layout)
         self._run_button = QPushButton("Run")
+        style_action_button(self._run_button, role="primary")
         self._run_button.clicked.connect(self._run_selected_workflow)
         self._result_layout = QVBoxLayout()
         self._result_group = QGroupBox("Result")
@@ -500,10 +508,11 @@ def _line_plot_widget(
     """Create a matplotlib widget for one custom line plot."""
     from matplotlib.figure import Figure
 
-    figure = Figure(figsize=(3.8, 3.35), dpi=100, facecolor=_PLOT_BACKGROUND)
+    theme = active_twopy_theme_colors(QPalette())
+    figure = Figure(figsize=(3.8, 3.35), dpi=100, facecolor=theme.window)
     axes = figure.add_subplot(111)
-    figure.patch.set_facecolor(_PLOT_BACKGROUND)
-    axes.set_facecolor(_PLOT_BACKGROUND)
+    figure.patch.set_facecolor(theme.window)
+    axes.set_facecolor(theme.window)
     y_values = plot.y.reshape(1, -1) if plot.y.ndim == 1 else plot.y
     labels = plot.labels or tuple(
         f"series {index + 1}" for index in range(y_values.shape[0])
@@ -520,9 +529,14 @@ def _line_plot_widget(
         )
     if y_bounds is not None:
         axes.set_ylim(*y_bounds)
-    _style_line_plot_axes(axes, title=plot.title, y_label=plot.y_label)
+    _style_line_plot_axes(
+        axes,
+        title=plot.title,
+        y_label=plot.y_label,
+        theme=theme,
+    )
     if y_values.shape[0] <= 12:
-        _style_line_plot_legend(axes)
+        _style_line_plot_legend(axes, theme=theme)
     figure.tight_layout()
     return _line_plot_canvas(figure)
 
@@ -589,6 +603,19 @@ def _line_plot_canvas(figure: Figure) -> QWidget:
     class WheelPassthroughCanvas(FigureCanvasQTAgg):
         """Matplotlib canvas that does not consume Custom-tab wheel scrolling."""
 
+        def __init__(self, plot_figure: Figure) -> None:
+            """Create the canvas and follow future napari theme changes."""
+            super().__init__(plot_figure)
+            get_settings().appearance.events.theme.connect(self._theme_changed)
+
+        def _theme_changed(self, _event: object | None = None) -> None:
+            """Apply the active napari colors to the existing plot."""
+            _apply_line_plot_theme(
+                self.figure,
+                active_twopy_theme_colors(self.palette()),
+            )
+            self.draw_idle()
+
         def wheelEvent(self, event: QWheelEvent) -> None:
             """Ignore wheel events so the surrounding scroll area can handle them."""
             event.ignore()
@@ -600,44 +627,78 @@ def _line_plot_canvas(figure: Figure) -> QWidget:
     return canvas
 
 
-def _style_line_plot_axes(axes: Axes, *, title: str, y_label: str) -> None:
+def _style_line_plot_axes(
+    axes: Axes,
+    *,
+    title: str,
+    y_label: str,
+    theme: TwopyThemeColors,
+) -> None:
     """Apply the response-widget plot palette to a matplotlib axes."""
-    axes.set_title(title, color=_PLOT_AXIS_COLOR, fontsize=10)
-    axes.set_xlabel("Time (s)", color=_PLOT_AXIS_COLOR)
-    axes.set_ylabel(y_label, color=_PLOT_AXIS_COLOR)
-    axes.tick_params(colors=_PLOT_AXIS_COLOR, labelsize=8)
+    axes.set_title(title, color=theme.text, fontsize=10)
+    axes.set_xlabel("Time (s)", color=theme.text)
+    axes.set_ylabel(y_label, color=theme.text)
+    axes.tick_params(colors=theme.text, labelsize=8)
     axes.spines["top"].set_visible(False)
     axes.spines["right"].set_visible(False)
     for side in ("left", "bottom"):
-        axes.spines[side].set_color(_PLOT_AXIS_COLOR)
+        axes.spines[side].set_color(theme.text)
         axes.spines[side].set_linewidth(1.0)
     x_min, x_max = axes.get_xlim()
     y_min, y_max = axes.get_ylim()
     if x_min <= 0.0 <= x_max:
-        _draw_zero_reference_line(axes, axis="x")
+        _draw_zero_reference_line(axes, axis="x", color=theme.divider)
     if y_min <= 0.0 <= y_max:
-        _draw_zero_reference_line(axes, axis="y")
+        _draw_zero_reference_line(axes, axis="y", color=theme.divider)
 
 
-def _style_line_plot_legend(axes: Axes) -> None:
+def _style_line_plot_legend(axes: Axes, *, theme: TwopyThemeColors) -> None:
     """Apply the response-widget palette to a small matplotlib legend."""
     legend = axes.legend(loc="best", fontsize=7)
-    legend.get_frame().set_facecolor(_PLOT_BACKGROUND)
-    legend.get_frame().set_edgecolor(_PLOT_AXIS_COLOR)
+    legend.get_frame().set_facecolor(theme.window)
+    legend.get_frame().set_edgecolor(theme.text)
     for text in legend.get_texts():
-        text.set_color(_PLOT_AXIS_COLOR)
+        text.set_color(theme.text)
 
 
-def _draw_zero_reference_line(axes: Axes, *, axis: Literal["x", "y"]) -> None:
+def _draw_zero_reference_line(
+    axes: Axes,
+    *,
+    axis: Literal["x", "y"],
+    color: str,
+) -> None:
     """Draw one dashed zero-reference line with response-plot styling."""
     draw = axes.axvline if axis == "x" else axes.axhline
-    draw(
+    line = draw(
         0.0,
-        color=_PLOT_GRID_COLOR,
+        color=color,
         linewidth=1.4,
         linestyle=(0, (5, 4)),
         zorder=0,
     )
+    line.set_gid("twopy_zero_reference")
+
+
+def _apply_line_plot_theme(figure: Figure, theme: TwopyThemeColors) -> None:
+    """Apply active napari colors to one existing custom plot."""
+    figure.patch.set_facecolor(theme.window)
+    for axes in figure.axes:
+        axes.set_facecolor(theme.window)
+        axes.title.set_color(theme.text)
+        axes.xaxis.label.set_color(theme.text)
+        axes.yaxis.label.set_color(theme.text)
+        axes.tick_params(colors=theme.text)
+        for side in ("left", "bottom"):
+            axes.spines[side].set_color(theme.text)
+        for line in axes.lines:
+            if line.get_gid() == "twopy_zero_reference":
+                line.set_color(theme.divider)
+        legend = axes.get_legend()
+        if legend is not None:
+            legend.get_frame().set_facecolor(theme.window)
+            legend.get_frame().set_edgecolor(theme.text)
+            for text in legend.get_texts():
+                text.set_color(theme.text)
 
 
 def _wrapped_label(text: str) -> QLabel:
@@ -650,6 +711,31 @@ def _wrapped_label(text: str) -> QLabel:
     return label
 
 
+class _ThemeAwareTableWidget(QTableWidget):
+    """Table that updates semantic row highlights with the napari theme."""
+
+    def __init__(
+        self,
+        row_count: int,
+        column_count: int,
+        highlighted_rows: set[int],
+    ) -> None:
+        """Create a table and store rows that need semantic emphasis."""
+        super().__init__(row_count, column_count)
+        self._highlighted_rows = highlighted_rows
+        get_settings().appearance.events.theme.connect(self._theme_changed)
+
+    def _theme_changed(self, _event: object | None = None) -> None:
+        """Update highlighted cells with the active napari colors."""
+        theme = active_twopy_theme_colors(self.palette())
+        for row_index in self._highlighted_rows:
+            for column_index in range(self.columnCount()):
+                item = self.item(row_index, column_index)
+                if item is not None:
+                    item.setBackground(QColor(theme.selected_surface))
+                    item.setForeground(QColor(theme.text))
+
+
 def _table_widget(table_result: CustomTable) -> QWidget:
     """Return a Qt table preview for one CSV or TSV table path."""
     path = table_result.path
@@ -659,7 +745,12 @@ def _table_widget(table_result: CustomTable) -> QWidget:
         return _wrapped_label(f"Could not preview table: {error}")
     if len(header) == 0:
         return _wrapped_label("Table is empty.")
-    table = QTableWidget(len(rows), len(header))
+    highlighted_rows = {
+        row_index
+        for row_index in table_result.highlighted_rows
+        if 0 <= row_index < len(rows)
+    }
+    table = _ThemeAwareTableWidget(len(rows), len(header), highlighted_rows)
     table.setHorizontalHeaderLabels(header)
     table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     table.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
@@ -668,26 +759,13 @@ def _table_widget(table_result: CustomTable) -> QWidget:
     if header_view is not None:
         header_view.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     table.setWordWrap(True)
-    highlighted_rows = {
-        row_index
-        for row_index in table_result.highlighted_rows
-        if 0 <= row_index < len(rows)
-    }
     for row_index, row in enumerate(rows):
         for column_index, value in enumerate(row):
             item = QTableWidgetItem(value)
-            if row_index in highlighted_rows:
-                _apply_table_highlight(item, table)
             table.setItem(row_index, column_index, item)
+    table._theme_changed()
     table.setMinimumHeight(min(360, 44 + 28 * max(1, len(rows))))
     return table
-
-
-def _apply_table_highlight(item: QTableWidgetItem, table: QTableWidget) -> None:
-    """Apply theme-aware highlight colors to one table item."""
-    palette = table.palette()
-    item.setBackground(palette.color(QPalette.ColorRole.Highlight))
-    item.setForeground(palette.color(QPalette.ColorRole.HighlightedText))
 
 
 def _table_display_path(table: CustomTable) -> Path:

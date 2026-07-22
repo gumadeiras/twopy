@@ -9,8 +9,13 @@ change FOV or ROI matching data, and they do not read or write CSV decisions.
 
 from string import Template
 
-from qtpy.QtGui import QColor, QPalette
 from qtpy.QtWidgets import QGroupBox, QLayout, QPushButton, QWidget
+
+from twopy.napari.theme import (
+    TwopyThemeColors,
+    apply_twopy_theme,
+    style_action_button,
+)
 
 __all__ = [
     "GROUP_MATCHING_OUTER_MARGIN",
@@ -19,7 +24,7 @@ __all__ = [
     "style_group_matching_panel",
 ]
 
-GROUP_MATCHING_OUTER_MARGIN = 4
+GROUP_MATCHING_OUTER_MARGIN = 8
 
 _STYLE_TEMPLATE = Template(
     """
@@ -55,27 +60,26 @@ QLabel#fov_id_value {
     min-width: 28px;
 }
 QGroupBox#group_matching_section {
-    background: $base;
+    background: $window;
     border: 1px solid $border;
-    border-radius: 6px;
-    margin-top: 12px;
-    padding: 12px 8px 8px 8px;
+    border-radius: 10px;
+    margin-top: 14px;
+    padding: 14px 10px 10px 10px;
 }
 QGroupBox#group_matching_section::title {
     color: $text;
     font-weight: 700;
     left: 10px;
-    background: $title_pill;
-    border: 1px solid $border;
-    border-radius: 4px;
-    padding: 2px 8px;
+    background: $window;
+    border: none;
+    padding: 2px 7px;
     subcontrol-origin: margin;
 }
 QFrame#fov_recording_card,
 QFrame#roi_assignment_card {
     background: $base;
     border: 1px solid $border;
-    border-radius: 6px;
+    border-radius: 8px;
 }
 QFrame#fov_recording_card[selected="true"] {
     border: 2px solid $highlight;
@@ -91,9 +95,9 @@ QPushButton#group_matching_primary_button {
     background: $highlight;
     color: $highlighted_text;
     border: 1px solid $highlight_border;
-    border-radius: 4px;
+    border-radius: 7px;
     font-weight: 700;
-    padding: 6px 12px;
+    padding: 0px 14px;
 }
 QPushButton#group_matching_primary_button:hover {
     background: $highlight_hover;
@@ -101,9 +105,9 @@ QPushButton#group_matching_primary_button:hover {
 QPushButton#group_matching_secondary_button {
     background: $button;
     color: $button_text;
-    border: 1px solid $border;
-    border-radius: 4px;
-    padding: 5px 10px;
+    border: 1px solid $button_border;
+    border-radius: 7px;
+    padding: 0px 12px;
 }
 QPushButton#group_matching_secondary_button:hover,
 QPushButton#group_matching_quiet_button:hover {
@@ -112,25 +116,15 @@ QPushButton#group_matching_quiet_button:hover {
 QPushButton#group_matching_quiet_button {
     background: $button;
     color: $button_text;
-    border: 1px solid $border;
-    border-radius: 4px;
-    padding: 5px 10px;
-}
-QPushButton#group_matching_danger_button {
-    background: $danger_base;
-    color: $danger_text;
-    border: 1px solid $danger_border;
-    border-radius: 4px;
-    padding: 5px 10px;
-}
-QPushButton#group_matching_danger_button:hover {
-    background: $danger_hover;
+    border: 1px solid $button_border;
+    border-radius: 7px;
+    padding: 0px 12px;
 }
 QToolButton#fov_id_step_button {
     background: $button;
     color: $button_text;
-    border: 1px solid $border;
-    border-radius: 4px;
+    border: 1px solid $button_border;
+    border-radius: 7px;
     padding: 0px;
 }
 QToolButton#fov_id_step_button:hover {
@@ -143,14 +137,15 @@ QPushButton#group_matching_danger_button:disabled,
 QToolButton#fov_id_step_button:disabled {
     background: $disabled_base;
     color: $disabled_text;
-    border-color: $border;
+    border-color: $button_border;
+    font-weight: 400;
 }
 QLineEdit, QSpinBox {
     background: $input_base;
     color: $text;
     border: 1px solid $border;
-    border-radius: 4px;
-    padding: 3px 5px;
+    border-radius: 7px;
+    padding: 4px 7px;
 }
 QLineEdit:disabled, QSpinBox:disabled {
     background: $disabled_base;
@@ -160,8 +155,8 @@ QLineEdit:disabled, QSpinBox:disabled {
 QTableWidget {
     background: $input_base;
     color: $text;
-    border: 1px solid $border;
-    gridline-color: $border;
+    border: 1px solid $button_border;
+    gridline-color: $button_border;
 }
 """
 )
@@ -176,8 +171,11 @@ def style_group_matching_panel(widget: QWidget) -> None:
     Returns:
         None.
     """
-    widget.setObjectName("group_matching_panel")
-    widget.setStyleSheet(_style_from_palette(widget.palette()))
+    apply_twopy_theme(
+        widget,
+        name="group_matching_panel",
+        additional_style=_style_from_theme,
+    )
 
 
 def group_matching_button(text: str, *, role: str = "secondary") -> QPushButton:
@@ -193,7 +191,7 @@ def group_matching_button(text: str, *, role: str = "secondary") -> QPushButton:
     """
     button = QPushButton(text)
     button.setObjectName(f"group_matching_{role}_button")
-    button.setMinimumHeight(30)
+    style_action_button(button, role=role)
     return button
 
 
@@ -213,57 +211,24 @@ def group_matching_section(title: str, layout: QLayout) -> QGroupBox:
     return group
 
 
-def _style_from_palette(palette: QPalette) -> str:
-    """Return a stylesheet whose colors come from the active Qt palette."""
-    window = palette.window().color()
-    base = palette.base().color()
-    alternate_base = palette.alternateBase().color()
-    text = palette.windowText().color()
-    button = palette.button().color()
-    button_text = palette.buttonText().color()
-    highlight = palette.highlight().color()
-    highlighted_text = palette.highlightedText().color()
-    border = palette.mid().color()
-    is_dark = window.lightness() < 128
+def _style_from_theme(theme: TwopyThemeColors) -> str:
+    """Return group-matching styles from the active napari theme."""
     return _STYLE_TEMPLATE.substitute(
-        window=_css_color(window),
-        base=_css_color(base),
-        text=_css_color(text),
-        muted_text=_css_color(_blend(text, window, 0.42)),
-        border=_css_color(border),
-        title_pill=_css_color(_blend(base, highlight, 0.10)),
-        selected_base=_css_color(_blend(base, highlight, 0.18)),
-        highlight=_css_color(highlight),
-        highlight_hover=_css_color(
-            highlight.lighter(118) if is_dark else highlight.darker(110),
-        ),
-        highlighted_text=_css_color(highlighted_text),
-        highlight_border=_css_color(
-            highlight.darker(125) if is_dark else highlight.darker(145),
-        ),
-        button=_css_color(button),
-        button_hover=_css_color(button.lighter(125) if is_dark else button.darker(108)),
-        button_text=_css_color(button_text),
-        danger_base=_css_color(_blend(alternate_base, QColor("#d95f02"), 0.18)),
-        danger_hover=_css_color(_blend(alternate_base, QColor("#d95f02"), 0.32)),
-        danger_text=_css_color(QColor("#ffb199") if is_dark else QColor("#7f2d1c")),
-        danger_border=_css_color(QColor("#bf6b55") if is_dark else QColor("#c58d7d")),
-        disabled_base=_css_color(_blend(button, window, 0.35)),
-        disabled_text=_css_color(_blend(button_text, window, 0.45)),
-        input_base=_css_color(base),
+        window=theme.window,
+        base=theme.surface,
+        text=theme.text,
+        muted_text=theme.muted_text,
+        border=theme.control_outline,
+        selected_base=theme.selected_surface,
+        highlight=theme.accent,
+        highlight_hover=theme.accent_hover,
+        highlighted_text=theme.accent_text,
+        highlight_border=theme.primary_outline,
+        button=theme.button,
+        button_hover=theme.button_hover,
+        button_text=theme.text,
+        button_border=theme.control_outline,
+        disabled_base=theme.disabled_surface,
+        disabled_text=theme.disabled_text,
+        input_base=theme.field,
     )
-
-
-def _blend(first: QColor, second: QColor, second_weight: float) -> QColor:
-    """Return a weighted blend of two colors."""
-    first_weight = 1.0 - second_weight
-    return QColor(
-        round(first.red() * first_weight + second.red() * second_weight),
-        round(first.green() * first_weight + second.green() * second_weight),
-        round(first.blue() * first_weight + second.blue() * second_weight),
-    )
-
-
-def _css_color(color: QColor) -> str:
-    """Return one color formatted for Qt stylesheets."""
-    return color.name()

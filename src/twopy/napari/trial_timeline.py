@@ -30,6 +30,7 @@ from twopy.napari.protocols import (
     NapariViewer,
     NapariViewerWithDims,
 )
+from twopy.napari.theme import active_twopy_theme_colors
 from twopy.typing_guards import int_or_none, string_key_mapping_or_none
 
 __all__ = [
@@ -331,7 +332,8 @@ class TrialTimelineWidget(QWidget):
 
     def _paint_background(self, painter: QPainter) -> None:
         """Paint the rail background."""
-        painter.fillRect(self.rect(), QColor(31, 35, 42))
+        theme = active_twopy_theme_colors(self.palette())
+        painter.fillRect(self.rect(), QColor(theme.window))
 
     def _paint_windows(
         self,
@@ -355,7 +357,8 @@ class TrialTimelineWidget(QWidget):
     def _paint_cursor(self, painter: QPainter, timeline: TrialTimelineData) -> None:
         """Paint the current-frame cursor above the trial blocks."""
         x = self._x_from_frame(self._current_frame, timeline)
-        pen = QPen(QColor(245, 245, 245))
+        theme = active_twopy_theme_colors(self.palette())
+        pen = QPen(QColor(theme.text))
         pen.setWidth(2)
         painter.setPen(pen)
         painter.drawLine(x, 1, x, max(1, self.height() - 2))
@@ -369,7 +372,9 @@ class TrialTimelineWidget(QWidget):
         visible_stop = self._visible_frame_stop
         if visible_stop is None:
             return
-        shade = QColor(0, 0, 0, 120)
+        theme = active_twopy_theme_colors(self.palette())
+        shade = QColor(theme.window)
+        shade.setAlpha(180)
         start_x = self._x_from_frame(self._visible_frame_start, timeline)
         stop_x = self._x_from_frame(visible_stop, timeline)
         if start_x > 0:

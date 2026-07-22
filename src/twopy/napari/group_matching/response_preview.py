@@ -35,6 +35,7 @@ from twopy.napari.group_matching.roi_cards import (
 from twopy.napari.roi import roi_label_image_from_layer_for_recording
 from twopy.napari.session import LoadedNapariRecording
 from twopy.napari.text import counted_noun
+from twopy.napari.theme import readable_text_color
 
 SelectedRoiKey = tuple[Path, str]
 
@@ -329,14 +330,22 @@ def _new_response_legend_row(
 
 def trace_button_style(color: QColor, *, visible: bool) -> str:
     """Return stylesheet text for one clickable trace visibility chip."""
-    background = color.name() if visible else "#555555"
+    if not visible:
+        return (
+            "QPushButton {"
+            "background-color: transparent;"
+            "font-weight: normal;"
+            "padding: 2px 6px;"
+            "border-radius: 3px;"
+            "}"
+        )
     return (
         "QPushButton {"
-        f"background-color: {background};"
-        "color: white;"
+        f"background-color: {color.name()};"
+        f"color: {readable_text_color(color)};"
         "font-weight: bold;"
         "padding: 2px 6px;"
         "border-radius: 3px;"
-        "border: 0;"
+        f"border: 1px solid {readable_text_color(color)};"
         "}"
     )

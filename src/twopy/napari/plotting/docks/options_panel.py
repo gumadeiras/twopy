@@ -41,6 +41,7 @@ from twopy.napari.plotting.roi_generation import (
     RoiGenerationControls,
     RoiGenerationOptions,
 )
+from twopy.napari.theme import style_action_button
 from twopy.pixel_calibration import PixelCalibrationRow
 from twopy.pixel_calibration_profiles import PixelCalibrationProfileMapping
 
@@ -146,8 +147,10 @@ def create_response_options_panel(
     """
     tabs = QTabWidget()
     reload_saved_button = QPushButton("Reload saved analysis")
+    style_action_button(reload_saved_button)
     reload_saved_button.clicked.connect(on_reload_saved)
     save_analysis_button = QPushButton("Save ROIs + analysis")
+    style_action_button(save_analysis_button, role="primary")
     save_analysis_button.clicked.connect(on_save_analysis)
 
     recording_summary_label = SidebarTextLabel("No recording loaded.")

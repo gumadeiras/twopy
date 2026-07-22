@@ -59,8 +59,9 @@ class ResponseMapArea:
         self._epoch_keys: dict[int, tuple[int, str]] = {}
         self._status_label = QLabel(initial_status)
         self._status_label.setWordWrap(True)
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._layout = QHBoxLayout()
-        self._layout.addWidget(self._status_label)
+        self._layout.addWidget(self._status_label, 1)
 
         content = QWidget()
         content.setLayout(self._layout)
@@ -74,8 +75,8 @@ class ResponseMapArea:
         clear_layout(self._layout)
         self._status_label = QLabel(text)
         self._status_label.setWordWrap(True)
-        self._layout.addWidget(self._status_label)
-        self._layout.addStretch(1)
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._layout.addWidget(self._status_label, 1)
 
     def clear(self) -> None:
         """Clear all heatmap widgets."""
@@ -325,6 +326,7 @@ def _epoch_map_panel(
     layout = QVBoxLayout()
     layout.setSpacing(_MAP_COLORBAR_SPACING)
     title_label = QLabel(title)
+    title_label.setObjectName("twopy_plot_title")
     title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
     layout.addWidget(title_label)
     layout.addWidget(map_widget)

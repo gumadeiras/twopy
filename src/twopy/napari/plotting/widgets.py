@@ -17,6 +17,7 @@ from qtpy.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixma
 from qtpy.QtWidgets import QLayout, QSizePolicy, QWidget
 
 from twopy.analysis.response_plotting import EpochResponsePlotData, ResponsePlotData
+from twopy.napari.theme import TwopyThemeColors, active_twopy_theme_colors
 
 DEFAULT_VALUE_BOUNDS = (-1.0, 1.0)
 _LEFT_MARGIN = 56.0
@@ -97,6 +98,7 @@ class EpochPlotWidget(QWidget):
         self._cached_pixmap: QPixmap | None = None
         self._cached_pixmap_size: QSize | None = None
         self._cached_device_pixel_ratio: float | None = None
+        self._cached_theme: tuple[str, str, str] | None = None
         self.setFixedSize(self._plot_size, _plot_widget_height(self._plot_size))
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
@@ -186,6 +188,7 @@ class EpochPlotWidget(QWidget):
         self._cached_pixmap = None
         self._cached_pixmap_size = None
         self._cached_device_pixel_ratio = None
+        self._cached_theme = None
         self.update()
 
     def prepare_render_cache(self) -> None:
@@ -207,10 +210,13 @@ class EpochPlotWidget(QWidget):
         """Return a cached raster rendering for the current display state."""
         pixel_ratio = float(self.devicePixelRatioF())
         logical_size = QSize(self.size())
+        theme = active_twopy_theme_colors(self.palette())
+        theme_signature = (theme.window, theme.text, theme.divider)
         if (
             self._cached_pixmap is not None
             and self._cached_pixmap_size == logical_size
             and self._cached_device_pixel_ratio == pixel_ratio
+            and self._cached_theme == theme_signature
         ):
             return self._cached_pixmap
 
@@ -220,23 +226,24 @@ class EpochPlotWidget(QWidget):
         )
         pixmap = QPixmap(physical_size)
         pixmap.setDevicePixelRatio(pixel_ratio)
-        pixmap.fill(QColor("#20252d"))
+        pixmap.fill(QColor(theme.window))
         painter = QPainter(pixmap)
-        self._render_plot(painter)
+        self._render_plot(painter, theme)
         painter.end()
         self._cached_pixmap = pixmap
         self._cached_pixmap_size = logical_size
         self._cached_device_pixel_ratio = pixel_ratio
+        self._cached_theme = theme_signature
         return pixmap
 
-    def _render_plot(self, painter: QPainter) -> None:
+    def _render_plot(self, painter: QPainter, theme: TwopyThemeColors) -> None:
         """Draw the current response plot into an active paint device."""
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         font = painter.font()
         font.setPixelSize(_plot_text_pixel_size(self._plot_size))
         painter.setFont(font)
         plot_rect = _square_plot_rect(QRectF(self.rect()))
-        painter.fillRect(self.rect(), QColor("#20252d"))
+        painter.fillRect(self.rect(), QColor(theme.window))
         _draw_axes(
             painter=painter,
             rect=plot_rect,
@@ -244,6 +251,8 @@ class EpochPlotWidget(QWidget):
             time_max=self._time_max,
             value_min=self._value_min,
             value_max=self._value_max,
+            axis_color=QColor(theme.text),
+            grid_color=QColor(theme.divider),
         )
         _draw_epoch_time_spans(
             painter=painter,
@@ -595,6 +604,8 @@ def _draw_axes(
     time_max: float,
     value_min: float,
     value_max: float,
+    axis_color: QColor,
+    grid_color: QColor,
 ) -> None:
     """Draw x/y axes, ticks, labels, and the zero-response line.
 
@@ -605,12 +616,12 @@ def _draw_axes(
         time_max: X-axis maximum.
         value_min: Y-axis minimum.
         value_max: Y-axis maximum.
+        axis_color: Axis and label color from the active napari theme.
+        grid_color: Reference-line color from the active napari theme.
 
     Returns:
         None.
     """
-    axis_color = QColor("#cfd6df")
-    grid_color = QColor("#6d7683")
     painter.setPen(QPen(axis_color, 1))
     painter.drawLine(rect.bottomLeft(), rect.bottomRight())
     painter.drawLine(rect.bottomLeft(), rect.topLeft())

@@ -23,6 +23,7 @@ from twopy.napari.plotting.widgets import (
     global_time_bounds,
     global_value_bounds,
 )
+from twopy.napari.theme import style_action_button
 
 
 def clear_dynamic_option_tabs(
@@ -214,9 +215,11 @@ def render_roi_options(
     )
     roi_options_layout.addWidget(roi_widget)
     merge_button = QPushButton("Merge Selected")
+    style_action_button(merge_button)
     merge_button.clicked.connect(on_merge_selected_rois)
     roi_options_layout.addWidget(merge_button)
     remove_button = QPushButton("Remove Selected")
+    style_action_button(remove_button, role="danger")
     remove_button.clicked.connect(on_remove_selected_rois)
     roi_options_layout.addWidget(remove_button)
     roi_options_layout.addStretch(1)

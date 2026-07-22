@@ -4,6 +4,9 @@ Inputs: shared fake napari state and tiny response data.
 Outputs: assertions for plot-control behavior.
 """
 
+from napari.settings import get_settings
+from napari.settings._fields import Theme as NapariThemeId
+from napari.utils.theme import get_theme
 from qtpy.QtCore import Qt
 
 from tests.napari_support import (
@@ -320,10 +323,12 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
         self.assertEqual(epoch_widget.currentData(), "visible_epochs")
 
     def test_custom_line_plot_uses_response_plot_style(self) -> None:
-        """Confirm custom line plots share the response-widget visual palette."""
+        """Confirm custom line plots follow live napari theme changes."""
         from matplotlib.colors import to_hex
 
-        _ = QApplication.instance() or QApplication([])
+        application = QApplication.instance() or QApplication([])
+        settings = get_settings()
+        original_theme = settings.appearance.theme
         plot = CustomLinePlot(
             "Kernel",
             np.array([-1.0, 0.0, 1.0], dtype=np.float64),
@@ -332,18 +337,37 @@ class NapariProcessingControlsTest(NapariAdapterTestCase):
             y_label="Weight",
         )
 
-        widget = cast(Any, _line_plot_widget(plot, y_bounds=(-2.0, 2.0)))
-        axes = widget.figure.axes[0]
+        try:
+            settings.appearance.theme = NapariThemeId("dark")
+            widget = cast(Any, _line_plot_widget(plot, y_bounds=(-2.0, 2.0)))
+            axes = widget.figure.axes[0]
+            dark_background = get_theme("dark").background.as_hex()
 
-        self.assertEqual(to_hex(widget.figure.get_facecolor()), "#20252d")
-        self.assertEqual(to_hex(axes.get_facecolor()), "#20252d")
-        self.assertFalse(axes.spines["top"].get_visible())
-        self.assertFalse(axes.spines["right"].get_visible())
-        self.assertEqual(to_hex(axes.lines[0].get_color()), "#4cc9f0")
-        self.assertEqual(axes.get_ylabel(), "Weight")
-        self.assertEqual(tuple(float(value) for value in axes.get_ylim()), (-2.0, 2.0))
-        self.assertEqual(widget.focusPolicy(), Qt.FocusPolicy.NoFocus)
-        self.assertGreaterEqual(len(axes.lines), 3)
+            self.assertEqual(to_hex(widget.figure.get_facecolor()), dark_background)
+            self.assertEqual(to_hex(axes.get_facecolor()), dark_background)
+
+            settings.appearance.theme = NapariThemeId("light")
+            application.processEvents()
+            light_theme = get_theme("light")
+
+            self.assertEqual(
+                to_hex(widget.figure.get_facecolor()),
+                light_theme.background.as_hex(),
+            )
+            self.assertEqual(to_hex(axes.title.get_color()), light_theme.text.as_hex())
+            self.assertFalse(axes.spines["top"].get_visible())
+            self.assertFalse(axes.spines["right"].get_visible())
+            self.assertEqual(to_hex(axes.lines[0].get_color()), "#4cc9f0")
+            self.assertEqual(axes.get_ylabel(), "Weight")
+            self.assertEqual(
+                tuple(float(value) for value in axes.get_ylim()),
+                (-2.0, 2.0),
+            )
+            self.assertEqual(widget.focusPolicy(), Qt.FocusPolicy.NoFocus)
+            self.assertGreaterEqual(len(axes.lines), 3)
+        finally:
+            settings.appearance.theme = original_theme
+            application.processEvents()
 
     def test_custom_line_plot_draws_filled_bands(self) -> None:
         """Confirm custom line plot bands render as filled uncertainty regions."""

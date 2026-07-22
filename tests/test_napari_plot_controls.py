@@ -66,7 +66,7 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
             SidebarTextLabel("Microscope: scan settings"),
             SidebarTextLabel(analysis_text),
             SidebarTextLabel("ROI output: /very/long/path/to/rois.h5"),
-            SidebarTextLabel("Saved analysis."),
+            SidebarTextLabel(""),
             SidebarTextLabel(
                 "Update available!\n"
                 "Latest version is 0.3.6.\n"
@@ -103,13 +103,16 @@ class NapariPlotControlsTest(NapariAdapterTestCase):
                 & Qt.TextInteractionFlag.TextSelectableByMouse,
             )
             self.assertTrue(label.wordWrap())
-            self.assertTrue(label.hasHeightForWidth())
+            self.assertTrue(label.hasHeightForWidth() or not label.text())
             self.assertEqual(
                 label.sizePolicy().horizontalPolicy(),
                 QSizePolicy.Policy.Ignored,
             )
             self.assertEqual(label.minimumWidth(), 1)
         self.assertEqual(labels[2].text(), analysis_text)
+        self.assertTrue(labels[4].isHidden())
+        labels[4].setText("Analysis saved.")
+        self.assertFalse(labels[4].isHidden())
         self.assertGreater(
             labels[2].heightForWidth(90),
             labels[2].heightForWidth(400),

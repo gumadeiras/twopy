@@ -13,6 +13,7 @@ from qtpy.QtWidgets import QGroupBox, QSizePolicy, QVBoxLayout, QWidget
 
 from twopy.converted import RecordingData
 from twopy.napari.plotting.panels import SidebarTextLabel
+from twopy.napari.theme import active_twopy_theme_colors
 
 __all__ = ["MotionSummaryWidget"]
 
@@ -126,9 +127,10 @@ class _MotionPlotWidget(QWidget):
         del a0
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#20252d"))
+        theme = active_twopy_theme_colors(self.palette())
+        painter.fillRect(self.rect(), QColor(theme.window))
         if self._values.size == 0:
-            painter.setPen(QColor("#a9b4c0"))
+            painter.setPen(QColor(theme.muted_text))
             painter.drawText(
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
@@ -142,6 +144,8 @@ class _MotionPlotWidget(QWidget):
             self._values,
             self._motion_mask,
             has_xy_offsets=self._has_xy_offsets,
+            axis_color=QColor(theme.text),
+            grid_color=QColor(theme.divider),
         )
         painter.end()
 
@@ -187,10 +191,19 @@ def _draw_motion_plot(
     motion_mask: npt.NDArray[np.bool_],
     *,
     has_xy_offsets: bool,
+    axis_color: QColor,
+    grid_color: QColor,
 ) -> None:
     """Draw axes, movement trace, and high-motion markers."""
     if not has_xy_offsets:
-        _draw_magnitude_plot(painter, widget_rect, values[:, 0], motion_mask)
+        _draw_magnitude_plot(
+            painter,
+            widget_rect,
+            values[:, 0],
+            motion_mask,
+            axis_color=axis_color,
+            grid_color=grid_color,
+        )
         return
     rect = widget_rect
     plot_left = float(rect.left()) + 42.0
@@ -201,7 +214,7 @@ def _draw_motion_plot(
     y_mid = plot_top + plot_height / 2.0
     y_abs_max = max(1.0, float(np.max(np.abs(values))))
 
-    painter.setPen(QPen(QColor("#697584"), 1))
+    painter.setPen(QPen(grid_color, 1))
     painter.drawLine(
         int(plot_left),
         int(plot_bottom),
@@ -209,7 +222,7 @@ def _draw_motion_plot(
         int(plot_bottom),
     )
     painter.drawLine(int(plot_left), int(plot_top), int(plot_left), int(plot_bottom))
-    painter.setPen(QColor("#a9b4c0"))
+    painter.setPen(axis_color)
     painter.drawText(2, int(plot_top + 8), f"+{y_abs_max:.1f}")
     painter.drawText(2, int(y_mid + 4), "0")
     painter.drawText(2, int(plot_bottom), f"-{y_abs_max:.1f}")
@@ -257,6 +270,9 @@ def _draw_magnitude_plot(
     widget_rect: QRect,
     shift_pixels: npt.NDArray[np.float64],
     motion_mask: npt.NDArray[np.bool_],
+    *,
+    axis_color: QColor,
+    grid_color: QColor,
 ) -> None:
     """Draw one total movement magnitude trace."""
     rect = widget_rect
@@ -267,7 +283,7 @@ def _draw_magnitude_plot(
     plot_bottom = plot_top + plot_height
     y_max = max(1.0, float(np.max(shift_pixels)))
 
-    painter.setPen(QPen(QColor("#697584"), 1))
+    painter.setPen(QPen(grid_color, 1))
     painter.drawLine(
         int(plot_left),
         int(plot_bottom),
@@ -275,7 +291,7 @@ def _draw_magnitude_plot(
         int(plot_bottom),
     )
     painter.drawLine(int(plot_left), int(plot_top), int(plot_left), int(plot_bottom))
-    painter.setPen(QColor("#a9b4c0"))
+    painter.setPen(axis_color)
     painter.drawText(2, int(plot_top + 8), f"{y_max:.1f}")
     painter.drawText(2, int(plot_bottom), "0")
 
