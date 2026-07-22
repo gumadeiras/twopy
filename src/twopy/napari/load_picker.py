@@ -90,6 +90,27 @@ def _choose_existing_paths(
     name_filters: tuple[str, ...] = (),
 ) -> tuple[Path, ...]:
     """Choose paths through the shared twopy load dialog."""
+    dialog = _build_load_dialog(
+        title=title,
+        start_folder=start_folder,
+        file_mode=file_mode,
+        show_directories_only=show_directories_only,
+        name_filters=name_filters,
+    )
+    if dialog.exec() != QFileDialog.DialogCode.Accepted:
+        return ()
+    return tuple(Path(path).expanduser() for path in dialog.selectedFiles())
+
+
+def _build_load_dialog(
+    *,
+    title: str,
+    start_folder: Path | None,
+    file_mode: QFileDialog.FileMode,
+    show_directories_only: bool,
+    name_filters: tuple[str, ...] = (),
+) -> QFileDialog:
+    """Return one fully configured twopy load dialog."""
     dialog = QFileDialog()
     apply_twopy_theme(dialog, name="twopy_load_path_dialog")
     dialog.setWindowTitle(title)
@@ -104,9 +125,7 @@ def _choose_existing_paths(
         dialog.setNameFilters(list(name_filters))
         dialog.selectNameFilter(name_filters[0])
     _allow_extended_selection(dialog)
-    if dialog.exec() != QFileDialog.DialogCode.Accepted:
-        return ()
-    return tuple(Path(path).expanduser() for path in dialog.selectedFiles())
+    return dialog
 
 
 def _allow_extended_selection(dialog: QFileDialog) -> None:
