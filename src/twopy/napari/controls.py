@@ -68,6 +68,12 @@ from twopy.napari.state import (
     read_last_recording_folder,
     write_last_recording_csv_folder,
 )
+from twopy.napari.theme import (
+    apply_twopy_theme,
+    style_action_button,
+    style_caption,
+    style_section_title,
+)
 
 __all__ = ["NapariSidebarWidgets", "add_twopy_magicgui_controls"]
 
@@ -467,18 +473,30 @@ class LoadRecordingPanel(QWidget):
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
         title = QLabel("Load Recording")
         title.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        style_section_title(title)
         layout.addWidget(title)
 
+        caption = QLabel("Find one recording or load a saved recording list.")
+        caption.setWordWrap(True)
+        style_caption(caption)
+        layout.addWidget(caption)
+
         search_button = QPushButton("Search database")
+        style_action_button(search_button, role="primary")
+        search_button.setToolTip("Search the lab database with recording metadata.")
         search_button.clicked.connect(on_search_database)
         layout.addWidget(search_button)
         load_manually_button = QPushButton("Load manually")
+        style_action_button(load_manually_button)
+        load_manually_button.setToolTip("Choose one or more recording folders.")
         load_manually_button.clicked.connect(lambda _checked=False: on_load_manually())
         layout.addWidget(load_manually_button)
         load_csv_button = QPushButton("Load CSV list")
+        style_action_button(load_csv_button)
+        load_csv_button.setToolTip("Load recordings from a saved CSV list.")
         load_csv_button.clicked.connect(lambda _checked=False: on_load_csv_list())
         layout.addWidget(load_csv_button)
         self.setLayout(layout)
@@ -638,6 +656,7 @@ def _choose_recording_paths(state: NapariControlState) -> tuple[Path, ...]:
     dialog API does not support selecting directories and files in one clean mode.
     """
     dialog = QFileDialog()
+    apply_twopy_theme(dialog, name="twopy_recording_folder_dialog")
     dialog.setWindowTitle("Choose recording folders")
     start_path = _manual_recording_start_path(state)
     if start_path is not None:

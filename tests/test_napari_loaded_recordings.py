@@ -837,7 +837,8 @@ class NapariLoadedRecordingsTest(NapariAdapterTestCase):
             self.assertTrue(viewer.labels[0].visible)
             remaining_item = loaded_list.item(0)
             assert remaining_item is not None
-            self.assertIn(str(second), remaining_item.text())
+            self.assertIn(second.name, remaining_item.text())
+            self.assertEqual(remaining_item.toolTip(), str(second))
             self.assertIn(
                 second.name, str(load_widget.recording_folder.line_edit.value)
             )

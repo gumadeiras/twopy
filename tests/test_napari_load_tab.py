@@ -644,7 +644,8 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             self.assertEqual(loaded_list.count(), 1)
             loaded_item = loaded_list.item(0)
             assert loaded_item is not None
-            self.assertEqual(loaded_item.text(), str(source_dir))
+            self.assertIn(source_dir.name, loaded_item.text())
+            self.assertEqual(loaded_item.toolTip(), str(source_dir))
             self.assertEqual(len(viewer.images), 2)
             self.assertEqual(len(viewer.labels), 1)
             self.assertFalse(missing_recording_data_path.exists())
@@ -722,7 +723,8 @@ class NapariLoadTabTest(NapariAdapterTestCase):
             assert loaded_item is not None
             self.assertIn(source_dir.name, picker_text)
             self.assertNotIn(str(root / "cache"), picker_text)
-            self.assertEqual(loaded_item.text(), str(source_dir))
+            self.assertIn(source_dir.name, loaded_item.text())
+            self.assertEqual(loaded_item.toolTip(), str(source_dir))
             with csv_path.open("r", encoding="utf-8", newline="") as csv_file:
                 rows = list(csv.DictReader(csv_file))
             self.assertEqual(rows[0]["recording_path"], str(source_dir))

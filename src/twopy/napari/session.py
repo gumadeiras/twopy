@@ -14,16 +14,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from twopy.converted import RecordingData
+from twopy.napari.display_paths import format_recording_queue_path
 from twopy.napari.empty_state import (
     hide_empty_viewer_message,
     show_empty_viewer_message,
@@ -32,6 +35,7 @@ from twopy.napari.output_routing import NapariOutputRoute
 from twopy.napari.plotting import refresh_response_plot_widget
 from twopy.napari.protocols import NapariViewer
 from twopy.napari.roi import select_next_roi_label_value
+from twopy.napari.theme import style_action_button, style_caption, style_section_title
 from twopy.napari.types import NapariRecordingView
 
 __all__ = [
@@ -176,18 +180,37 @@ class LoadedRecordingsPanel(QWidget):
         self._on_unload = on_unload
         self._on_unload_all = on_unload_all
         self._list = QListWidget()
+        self._list.setWordWrap(False)
+        self._list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        self._list.setMinimumHeight(96)
+        self._list.setMaximumHeight(220)
+        self._list.hide()
         self._list.currentRowChanged.connect(self._select_row)
-        unload_button = QPushButton("Unload selected")
-        unload_button.clicked.connect(self._unload_selected)
-        unload_all_button = QPushButton("Unload all")
-        unload_all_button.clicked.connect(self._unload_all)
+        self._unload_button = QPushButton("Unload selected")
+        style_action_button(self._unload_button)
+        self._unload_button.setEnabled(False)
+        self._unload_button.clicked.connect(self._unload_selected)
+        self._unload_all_button = QPushButton("Unload all")
+        style_action_button(self._unload_all_button, role="danger")
+        self._unload_all_button.setEnabled(False)
+        self._unload_all_button.clicked.connect(self._unload_all)
+
+        title = QLabel("Loaded recordings")
+        style_section_title(title)
+        self._count_label = QLabel("No recordings loaded.")
+        style_caption(self._count_label)
 
         button_layout = QHBoxLayout()
-        button_layout.addWidget(unload_button)
-        button_layout.addWidget(unload_all_button)
+        button_layout.addWidget(self._unload_button)
+        button_layout.addWidget(self._unload_all_button)
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("Loaded Recordings"))
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(title)
+        layout.addWidget(self._count_label)
         layout.addWidget(self._list)
         layout.addLayout(button_layout)
         self.setLayout(layout)
@@ -211,9 +234,21 @@ class LoadedRecordingsPanel(QWidget):
         try:
             self._list.clear()
             for recording in recordings:
-                self._list.addItem(
-                    str(recording.recording.source_session_dir.expanduser())
-                )
+                path = recording.recording.source_session_dir.expanduser()
+                item = QListWidgetItem(format_recording_queue_path(path))
+                item.setToolTip(str(path))
+                self._list.addItem(item)
+            count = len(recordings)
+            self._list.setVisible(count > 0)
+            self._unload_all_button.setEnabled(count > 0)
+            self._unload_button.setEnabled(
+                selected_index is not None and 0 <= selected_index < count
+            )
+            self._count_label.setText(
+                "No recordings loaded."
+                if count == 0
+                else f"{count} recording{'s' if count != 1 else ''} in this session."
+            )
             if selected_index is None:
                 self._list.setCurrentRow(-1)
             else:
@@ -235,6 +270,7 @@ class LoadedRecordingsPanel(QWidget):
 
     def _select_row(self, row: int) -> None:
         """Forward list selection changes to the control state."""
+        self._unload_button.setEnabled(row >= 0)
         self._on_select(row if row >= 0 else None)
 
     def _unload_selected(self) -> None:

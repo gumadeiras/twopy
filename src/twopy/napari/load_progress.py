@@ -10,7 +10,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QColor, QPalette
 from qtpy.QtWidgets import (
     QDialog,
     QFrame,
@@ -30,6 +29,7 @@ from twopy.napari.display_paths import (
     format_recording_read_folder,
     recording_path_display_summary,
 )
+from twopy.napari.theme import TwopyThemeColors, apply_twopy_theme, style_action_button
 
 __all__ = ["RecordingLoadProgressDialog"]
 
@@ -110,9 +110,14 @@ class RecordingLoadProgressDialog(QDialog):
         self._hint.setWordWrap(True)
         self._cancel_button = QPushButton("Cancel pending")
         self._cancel_button.setObjectName("recording_load_danger_button")
+        style_action_button(self._cancel_button, role="danger")
         self._cancel_button.clicked.connect(self._cancel_pending_loads)
 
-        self.setStyleSheet(_style_sheet(self.palette()))
+        apply_twopy_theme(
+            self,
+            name="twopy_recording_load_progress",
+            additional_style=_style_sheet,
+        )
         self.setLayout(self._layout())
         self.update_progress(
             completed_count=0,
@@ -561,44 +566,20 @@ def _repolish(widget: QWidget) -> None:
     style.polish(widget)
 
 
-def _style_sheet(palette: QPalette) -> str:
-    """Return a palette-aware stylesheet for the progress dialog."""
-    window_color = palette.window().color()
-    base_color = palette.base().color()
-    text_color = palette.windowText().color()
-    accent_color = palette.highlight().color()
-    highlighted_text_color = palette.highlightedText().color()
-    is_dark = window_color.lightness() < 128
-
-    panel_color = _mixed_qcolor(
-        base_color,
-        window_color,
-        0.18 if is_dark else 0.10,
-    )
-    surface_color = _mixed_qcolor(
-        base_color,
-        window_color,
-        0.72 if is_dark else 0.82,
-    )
-    active_surface_color = _mixed_qcolor(
-        accent_color,
-        panel_color,
-        0.26 if is_dark else 0.14,
-    )
-
-    window = window_color.name()
-    panel = panel_color.name()
-    surface = surface_color.name()
-    active_surface = active_surface_color.name()
-    text = text_color.name()
-    muted = _mixed_color(text_color, window_color, 0.62 if is_dark else 0.50)
-    border = _mixed_color(text_color, window_color, 0.24 if is_dark else 0.20)
-    accent = accent_color.name()
-    highlighted_text = highlighted_text_color.name()
-    queued = _mixed_color(text_color, surface_color, 0.18 if is_dark else 0.10)
-    danger = "#ff7a7a" if is_dark else "#d95757"
-    danger_fill = "#9f4d4d" if is_dark else "#f0b5b5"
-    warning_fill = "#8b733d" if is_dark else "#ead19b"
+def _style_sheet(theme: TwopyThemeColors) -> str:
+    """Return progress-dialog styles from the active napari theme."""
+    window = theme.window
+    panel = theme.window
+    surface = theme.field
+    active_surface = theme.selected_surface
+    text = theme.text
+    muted = theme.muted_text
+    border = theme.control_outline
+    accent = theme.accent
+    highlighted_text = theme.accent_text
+    queued = theme.disabled_surface
+    failed_fill = theme.raised_surface
+    skipped_fill = theme.surface
     return f"""
 QDialog {{
     background: {window};
@@ -607,7 +588,7 @@ QDialog {{
 QFrame#recording_load_panel {{
     background: {panel};
     border: 1px solid {border};
-    border-radius: 8px;
+    border-radius: 10px;
 }}
 QLabel#recording_load_section_title {{
     color: {text};
@@ -629,12 +610,12 @@ QFrame#recording_load_queue_header {{
 QFrame#recording_load_queue_row {{
     background: {surface};
     border: 1px solid {border};
-    border-radius: 6px;
+    border-radius: 8px;
 }}
 QFrame#recording_load_queue_row_active {{
     background: {active_surface};
     border: 1px solid {accent};
-    border-radius: 6px;
+    border-radius: 8px;
 }}
 QLabel#recording_load_recording {{
     color: {text};
@@ -654,17 +635,17 @@ QLabel#recording_load_state[load_state="queued"] {{
     color: {text};
 }}
 QLabel#recording_load_state[load_state="failed"] {{
-    background: {danger_fill};
+    background: {failed_fill};
     color: {text};
 }}
 QLabel#recording_load_state[load_state="skipped"] {{
-    background: {warning_fill};
+    background: {skipped_fill};
     color: {text};
 }}
 QFrame#recording_load_path_panel {{
     background: {surface};
     border: 1px solid {border};
-    border-radius: 6px;
+    border-radius: 8px;
 }}
 QLabel#recording_load_path_key {{
     color: {muted};
@@ -686,18 +667,6 @@ QProgressBar {{
 QProgressBar::chunk {{
     background: {accent};
     border-radius: 4px;
-}}
-QPushButton#recording_load_danger_button {{
-    background: transparent;
-    color: {danger};
-    border: 1px solid {danger};
-    border-radius: 5px;
-    font-weight: 700;
-    padding: 6px 14px;
-}}
-QPushButton#recording_load_danger_button:disabled {{
-    color: {muted};
-    border-color: {border};
 }}
 QScrollArea {{
     background: transparent;
@@ -725,34 +694,3 @@ QScrollBar::sub-page:vertical {{
     background: transparent;
 }}
 """
-
-
-def _mixed_color(
-    foreground: QColor,
-    background: QColor,
-    foreground_weight: float,
-) -> str:
-    """Return a color mixed from two palette colors."""
-    return _mixed_qcolor(foreground, background, foreground_weight).name()
-
-
-def _mixed_qcolor(
-    foreground: QColor,
-    background: QColor,
-    foreground_weight: float,
-) -> QColor:
-    """Return a QColor mixed from two palette colors."""
-    background_weight = 1.0 - foreground_weight
-    return QColor(
-        round(
-            foreground.red() * foreground_weight + background.red() * background_weight,
-        ),
-        round(
-            foreground.green() * foreground_weight
-            + background.green() * background_weight,
-        ),
-        round(
-            foreground.blue() * foreground_weight
-            + background.blue() * background_weight,
-        ),
-    )

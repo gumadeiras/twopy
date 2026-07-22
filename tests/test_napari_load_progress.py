@@ -15,6 +15,7 @@ from twopy.napari.display_paths import (
     recording_path_display_summary,
 )
 from twopy.napari.load_progress import RecordingLoadProgressDialog, _style_sheet
+from twopy.napari.theme import twopy_theme_colors
 
 
 class RecordingLoadProgressDialogTest(unittest.TestCase):
@@ -330,7 +331,7 @@ class RecordingLoadProgressDialogTest(unittest.TestCase):
         palette.setColor(QPalette.ColorRole.Highlight, QColor("#374f6d"))
         palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
 
-        stylesheet = _style_sheet(palette)
+        stylesheet = _style_sheet(twopy_theme_colors(palette))
 
         self.assertIn("#323232", stylesheet)
         self.assertNotIn("#989898", stylesheet)

@@ -444,7 +444,7 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
         self.assertTrue(viewer.text_overlay.visible)
         self.assertEqual(viewer.text_overlay.position, "top_center")
         self.assertEqual(viewer.text_overlay.font_size, 18)
-        self.assertEqual(viewer.text_overlay.color, "#c8cdd3")
+        self.assertIsNone(viewer.text_overlay.color)
         self.assertFalse(viewer.text_overlay.box)
         icon = viewer.window._qt_window.window_icon
         self.assertIsNotNone(icon)
@@ -595,12 +595,35 @@ class CoreNapariAdapterTest(NapariAdapterTestCase):
                 load_buttons,
                 ["Search database", "Load manually", "Load CSV list"],
             )
+            load_actions = {
+                button.text(): button for button in load_panel.findChildren(QPushButton)
+            }
+            self.assertEqual(
+                load_actions["Load manually"].property("twopyRole"),
+                "secondary",
+            )
+            self.assertEqual(
+                load_actions["Load CSV list"].property("twopyRole"),
+                "secondary",
+            )
             sidebar_tabs = cast(QTabWidget, opened.twopy_sidebar_widget)
             self.assertIs(sidebar_tabs, opened.response_options_widget)
+            tab_bar = sidebar_tabs.tabBar()
+            if tab_bar is None:
+                self.fail("Twopy sidebar did not create its tab bar.")
             self.assertEqual(
                 sidebar_tabs.minimumWidth(),
-                TWOPY_SIDEBAR_MINIMUM_WIDTH,
+                max(
+                    TWOPY_SIDEBAR_MINIMUM_WIDTH,
+                    tab_bar.sizeHint().width() + 16,
+                ),
             )
+            self.assertEqual(
+                tab_bar.elideMode(),
+                Qt.TextElideMode.ElideNone,
+            )
+            self.assertFalse(tab_bar.expanding())
+            self.assertTrue(tab_bar.usesScrollButtons())
             self.assertEqual(sidebar_tabs.currentIndex(), 0)
             options_widget = cast(QTabWidget, opened.response_options_widget)
             self.assertEqual(

@@ -10,10 +10,13 @@ screens. A single tabbed twopy dock keeps resizing predictable while leaving
 napari's built-in layer controls alone.
 """
 
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QScreen
 from qtpy.QtWidgets import (
     QApplication,
     QDialog,
+    QHBoxLayout,
+    QLabel,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -22,6 +25,12 @@ from qtpy.QtWidgets import (
 )
 
 from twopy.napari.group_matching.style import GROUP_MATCHING_OUTER_MARGIN
+from twopy.napari.theme import (
+    apply_twopy_theme,
+    style_action_button,
+    style_caption,
+    style_section_title,
+)
 
 __all__ = [
     "GroupMatchingWindowButton",
@@ -29,7 +38,7 @@ __all__ = [
     "create_twopy_sidebar_widget",
 ]
 
-TWOPY_SIDEBAR_MINIMUM_WIDTH = 420
+TWOPY_SIDEBAR_MINIMUM_WIDTH = 480
 
 
 def create_twopy_sidebar_widget(
@@ -64,7 +73,6 @@ def create_twopy_sidebar_widget(
     their existing modules.
     """
     sidebar_tabs = _response_options_tabs(response_options_widget)
-    sidebar_tabs.setMinimumWidth(TWOPY_SIDEBAR_MINIMUM_WIDTH)
     sidebar_tabs.insertTab(
         0,
         _load_tab(
@@ -78,6 +86,17 @@ def create_twopy_sidebar_widget(
         "Load",
     )
     sidebar_tabs.setCurrentIndex(0)
+    apply_twopy_theme(sidebar_tabs, name="twopy_sidebar")
+    tab_bar = sidebar_tabs.tabBar()
+    if tab_bar is None:
+        msg = "Twopy sidebar expected its tab bar."
+        raise RuntimeError(msg)
+    tab_bar.setElideMode(Qt.TextElideMode.ElideNone)
+    tab_bar.setExpanding(False)
+    tab_bar.setUsesScrollButtons(True)
+    sidebar_tabs.setMinimumWidth(
+        max(TWOPY_SIDEBAR_MINIMUM_WIDTH, tab_bar.sizeHint().width() + 16)
+    )
     return sidebar_tabs
 
 
@@ -107,18 +126,39 @@ def _load_tab(
     """
     content = QWidget()
     layout = QVBoxLayout()
-    layout.setContentsMargins(8, 8, 8, 8)
-    layout.setSpacing(12)
+    layout.setContentsMargins(12, 12, 12, 12)
+    layout.setSpacing(14)
     layout.addWidget(_qt_widget(load_widget))
     layout.addWidget(_qt_widget(loaded_recordings_widget))
-    if save_recording_list_button is not None:
-        layout.addWidget(_qt_widget(save_recording_list_button))
+    action_title = QLabel("Recording actions")
+    style_section_title(action_title)
+    layout.addWidget(action_title)
+    action_caption = QLabel(
+        "Reload data, manage the session, or prepare matching groups.",
+    )
+    action_caption.setWordWrap(True)
+    style_caption(action_caption)
+    layout.addWidget(action_caption)
     if response_load_button is not None:
+        if isinstance(response_load_button, QPushButton):
+            style_action_button(response_load_button)
         layout.addWidget(_qt_widget(response_load_button))
-    if reconvert_recording_button is not None:
-        layout.addWidget(_qt_widget(reconvert_recording_button))
     if group_matching_button is not None:
+        if isinstance(group_matching_button, QPushButton):
+            style_action_button(group_matching_button, role="primary")
         layout.addWidget(_qt_widget(group_matching_button))
+    maintenance_row = QHBoxLayout()
+    maintenance_row.setSpacing(8)
+    if save_recording_list_button is not None:
+        if isinstance(save_recording_list_button, QPushButton):
+            style_action_button(save_recording_list_button, role="quiet")
+        maintenance_row.addWidget(_qt_widget(save_recording_list_button))
+    if reconvert_recording_button is not None:
+        if isinstance(reconvert_recording_button, QPushButton):
+            style_action_button(reconvert_recording_button, role="quiet")
+        maintenance_row.addWidget(_qt_widget(reconvert_recording_button))
+    if maintenance_row.count() > 0:
+        layout.addLayout(maintenance_row)
     layout.addStretch(1)
     content.setLayout(layout)
 
@@ -138,8 +178,11 @@ class GroupMatchingWindowButton(QPushButton):
             group_matching_widget: Widget to place inside the popup window.
         """
         super().__init__("Open Group Matching")
+        self.setToolTip("Match fields of view and ROIs across loaded recordings.")
+        self.setAccessibleName("Open Group Matching")
         self._group_matching_widget = group_matching_widget
         self._dialog = QDialog()
+        apply_twopy_theme(self._dialog, name="twopy_group_matching_dialog")
         self._dialog.setWindowTitle("twopy Group Matching")
         layout = QVBoxLayout()
         layout.setContentsMargins(
