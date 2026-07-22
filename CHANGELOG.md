@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-07-22
+
 ### Fixes
 
 - Kept all sidebar tab names visible, matched the CSV and manual load actions, and removed bold text from disabled actions.
