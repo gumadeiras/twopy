@@ -35,13 +35,13 @@ Pick one or more source folders, converted folders, or `recording_data.h5` files
 
 Reopen a session list that you wrote with **Save loaded list**. If `recording_data_path` is valid, twopy opens that converted HDF5 file. If it is not valid, twopy uses the source path in `recording_path`. [Group Matching](group_matching.md) uses the CSV folder for its default `fov_groups.csv` and `roi_matches.csv` files. If these files exist, twopy loads their rows. This picker remembers its last folder separately from **Load manually**. Source recordings and saved CSV lists usually use different folders.
 
-## The Loaded Recordings pane
+## Use Loaded recordings
 
-Each loaded recording is in a row below the load buttons. Click a row to make that recording active. The plot dock and **ROIs** tab use the active recording. twopy also selects its `rois` Labels layer. The paint label changes to the first unused ROI number. Thus, manual edits make a new ROI on the same recording.
+Each loaded recording is in a row below the load buttons. Each row shows a short path tail. Pause on a row to see its full source path. Click a row to make that recording active. The plot dock and **ROIs** tab use the active recording. twopy also selects its `rois` Labels layer. The paint label changes to the first unused ROI number. Thus, manual edits make a new ROI on the same recording.
 
 The **Metadata** tab updates for the active recording. Its **Motion** section shows crop size, removed border pixels, total movement, and high-motion frame count. It also shows movement over time. New converted recordings show left-right movement in blue and up-down movement in yellow. Older files show only total movement. The tab tells you to reconvert them for separate x/y pixel movement.
 
-Buttons under the list (disabled until at least one recording is loaded):
+Buttons under the list are disabled when their action is not available:
 
 - **Save loaded list** — Write a CSV of source paths for the loaded recordings. When possible, `recording_data_path` points to the final HDF5 file in `analysis_output`.
 - **Reload saved analysis** — reread `analysis_outputs.h5` and `rois.h5` for the active recording.

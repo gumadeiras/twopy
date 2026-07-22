@@ -75,7 +75,7 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 - Initial magicgui dock panel for napari can start from an empty napari window and load a converted recording automatically after folder selection.
 - Napari Load Recording control accepts a converted output folder or source recording folder, auto-detects `recording_data.h5`, `aligned_movie.h5`, and `rois.h5`, and always loads the full movie.
 - Napari controls use intuitive ROI file labels and no frame-range control in the Load tab.
-- Napari has a compact top response dock and a tabbed right `twopy` sidebar. The sidebar contains Load, Metadata, Plot, ROIs, Epochs, and Export. Plots use square horizontal panels, shared axes, ROI colors, visibility controls, and manual axis controls. They keep stimulus context and can reload saved analysis. ROI visibility also controls the Labels overlay without a change to label pixels.
+- Napari has a compact top response dock and a tabbed right `twopy` sidebar. One visual system follows live napari theme changes across the sidebar, plots, dialogs, custom workflows, and Group Matching. The sidebar contains Load, Metadata, Plot, ROIs, Epochs, Custom, and Export. Plots use square horizontal panels, shared axes, ROI colors, visibility controls, and manual axis controls. They keep stimulus context and can reload saved analysis. ROI visibility also controls the Labels overlay without a change to label pixels.
 - Napari has a **Custom** tab for built-in and trusted local workflows from `custom_workflow_paths`. Native workflows calculate direction selectivity and random-noise response kernels. The workflow system checks inputs and outputs, makes controls from supported dataclass parameters, and uses one script and GUI runner. It records workflow source information and copies outputs through the analysis cache route.
 - Napari recording controls show the loaded path tail instead of `default` after a selection.
 - Napari sessions can contain multiple recordings. The **Loaded Recordings** panel lists paths, selects the active recording, saves reusable CSV lists, and unloads recordings. A selection shows its layers and hides the other recording layers.
@@ -139,7 +139,6 @@ twopy is a simple, auditable two-photon imaging analysis tool with a napari inte
 ## Next
 
 - Add protocol-specific photodiode classifiers for recordings with extra within-epoch alignment flashes.
-- Add napari database search and recording selection with typed database helpers. Then, send selected recordings to the existing conversion, Labels ROI, analysis, persistence, and inspection workflow.
 - Group or facet responses by recording and stimulus metadata beyond the current epoch, trial, and ROI groupings.
 - Build downstream group-analysis loaders that consume `fov_groups.csv` and `roi_matches.csv` alongside per-recording analysis outputs for matched-cell and pooled-ROI summaries.
 

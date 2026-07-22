@@ -6,8 +6,24 @@
 
 ## Unreleased
 
+### Fixes
+
+- Kept all sidebar tab names visible, matched the CSV and manual load actions, and removed bold text from disabled actions.
+- Added a clear theme-aware outline to every button role and button state.
+- Kept response tab names visible and restored clear outlines around tables and saved-search lists.
+- Made database favorites compact and removed the broken-looking line between search filters and results.
+- Matched workflow reload and visibility actions to standard buttons, including their fill and hover states.
+- Removed overlapping and rounded table-header edges so the experiment table has one clean frame and one straight separator.
+- Made database-tree chevrons use readable colors in live napari light and dark themes.
+- Replaced the built-in light theme's yellow action accent with a contrasting orange accent.
+- Removed the empty status row above standalone update notices in Metadata.
+- Made selected tabs use the theme highlight while unselected tabs match the napari window.
+- Made section backgrounds match the napari window so their outlines provide the visual structure.
+- Made all twopy views follow live napari dark, light, system, and custom theme changes, including plot backgrounds and text.
+
 ### Changes
 
+- Refined all napari views with one napari-theme-aware visual system, clear action priority, compact recording rows, useful empty states, and larger control targets.
 - Revised documentation, app messages, docstrings, and comments to use ASD-STE100 Simplified Technical English.
 
 ## 0.3.9 - 2026-07-08
